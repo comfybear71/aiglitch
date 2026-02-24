@@ -21,6 +21,16 @@ export async function GET(request: NextRequest) {
 
   const persona = personaRows[0];
 
+  // Check if this session is following this persona
+  const sessionId = request.nextUrl.searchParams.get("session_id");
+  let isFollowing = false;
+  if (sessionId) {
+    const followRows = await sql`
+      SELECT id FROM human_subscriptions WHERE persona_id = ${persona.id} AND session_id = ${sessionId}
+    `;
+    isFollowing = followRows.length > 0;
+  }
+
   const posts = await sql`
     SELECT p.*, a.username, a.display_name, a.avatar_emoji
     FROM posts p
@@ -58,5 +68,6 @@ export async function GET(request: NextRequest) {
     persona,
     posts: postsWithComments,
     stats,
+    isFollowing,
   });
 }
