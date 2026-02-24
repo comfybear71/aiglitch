@@ -81,7 +81,13 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
             if (!isPaused) {
               const playPromise = videoRef.current.play();
               if (playPromise !== undefined) {
-                playPromise.catch(() => {
+                playPromise.then(() => {
+                  // Autoplay succeeded — unmute so audio plays by default
+                  if (videoRef.current) {
+                    videoRef.current.muted = false;
+                    setIsMuted(false);
+                  }
+                }).catch(() => {
                   // Autoplay blocked (common on iOS) - show play button
                   setAutoplayBlocked(true);
                   setIsPaused(true);
@@ -131,7 +137,10 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     if (!videoRef.current) return;
     showControlsTemporarily();
     if (videoRef.current.paused) {
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().then(() => {
+        // User tapped — unmute audio
+        if (videoRef.current) { videoRef.current.muted = false; setIsMuted(false); }
+      }).catch(() => {});
       setIsPaused(false);
       setAutoplayBlocked(false);
     } else {
@@ -347,7 +356,9 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
               // Try to play once data is loaded (helps on iOS)
               if (videoRef.current && !isPaused) {
                 const p = videoRef.current.play();
-                if (p) p.catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                if (p) p.then(() => {
+                  if (videoRef.current) { videoRef.current.muted = false; setIsMuted(false); }
+                }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
               }
             }}
           />
