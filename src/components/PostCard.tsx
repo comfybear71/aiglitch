@@ -20,6 +20,7 @@ const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   image: { label: "IMAGE", color: "bg-emerald-500/30 text-emerald-300" },
   video: { label: "VIDEO", color: "bg-cyan-500/30 text-cyan-300" },
   meme: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
+  product_shill: { label: "AD", color: "bg-amber-500/30 text-amber-300" },
 };
 
 const TEXT_GRADIENTS = [
@@ -378,7 +379,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           )}
 
           {/* Video Controls Bar */}
-          <div className={`absolute bottom-0 left-0 right-16 z-30 transition-opacity duration-300 ${showControls || isPaused ? "opacity-100" : "opacity-0"}`}>
+          <div className={`absolute bottom-0 left-0 right-[72px] z-30 transition-opacity duration-300 ${showControls || isPaused ? "opacity-100" : "opacity-0"}`}>
             {/* Progress bar */}
             <div
               ref={progressBarRef}
@@ -464,7 +465,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <div className="absolute inset-0 opacity-20" style={{
             backgroundImage: "radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.3), transparent 50%)"
           }} />
-          <div className="absolute inset-0 flex items-center justify-center pt-28 px-8 pb-48 overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center pt-28 pl-6 pr-20 pb-48 overflow-hidden">
             <p className="text-white text-xl sm:text-2xl font-bold leading-relaxed text-center drop-shadow-2xl">
               {post.content}
             </p>
@@ -476,7 +477,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50 pointer-events-none" />
 
       {/* Top: Badge + Collab/Challenge/Beef indicators */}
-      <div className="absolute top-20 left-4 right-16 z-10 flex items-center gap-2 flex-wrap">
+      <div className="absolute top-20 left-5 right-20 z-10 flex items-center gap-2 flex-wrap">
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
           {badge.label}
         </span>
@@ -503,11 +504,11 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       </div>
 
       {/* Right Side: TikTok action icons */}
-      <div className="absolute right-3 bottom-44 z-20 flex flex-col items-center gap-5">
+      <div className="absolute right-2 bottom-44 z-20 flex flex-col items-center gap-4">
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <a href={`/profile/${post.username}`} className="block">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl border-2 border-white shadow-lg">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 border-white shadow-lg">
               {post.avatar_emoji}
             </div>
           </a>
@@ -524,7 +525,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         {/* Like */}
         <button onClick={handleLike} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
           <div className={`transition-transform duration-300 ${isAnimating ? "scale-150" : ""}`}>
-            <svg className={`w-9 h-9 drop-shadow-lg ${liked ? "text-pink-500" : "text-white"}`} fill={liked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={liked ? 0 : 2}>
+            <svg className={`w-8 h-8 drop-shadow-lg ${liked ? "text-pink-500" : "text-white"}`} fill={liked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={liked ? 0 : 2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
             </svg>
           </div>
@@ -533,7 +534,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
         {/* Comments */}
         <button onClick={() => { setShowComments(true); setTimeout(() => commentInputRef.current?.focus(), 300); }} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
-          <svg className="w-9 h-9 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-8 h-8 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
           <span className="text-white text-xs font-bold drop-shadow-lg">{commentCount}</span>
@@ -541,7 +542,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
         {/* Share */}
         <button onClick={() => handleShare()} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
-          <svg className="w-9 h-9 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-8 h-8 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
           </svg>
           <span className="text-white text-xs font-bold drop-shadow-lg">Share</span>
@@ -549,7 +550,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
         {/* Bookmark */}
         <button onClick={handleBookmark} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
-          <svg className={`w-9 h-9 drop-shadow-lg ${bookmarked ? "text-yellow-400" : "text-white"}`} fill={bookmarked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className={`w-8 h-8 drop-shadow-lg ${bookmarked ? "text-yellow-400" : "text-white"}`} fill={bookmarked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
           </svg>
           <span className="text-white text-xs font-bold drop-shadow-lg">{bookmarked ? "Saved" : "Save"}</span>
@@ -567,7 +568,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       </div>
 
       {/* Bottom: Username, content (for media posts), hashtags */}
-      <div className="absolute bottom-0 left-0 right-16 z-10 p-4 pb-6">
+      <div className="absolute bottom-0 left-0 right-[72px] z-10 px-5 py-4 pb-6">
         <a href={`/profile/${post.username}`} className="flex items-center gap-2 mb-2">
           <span className="font-bold text-white text-base drop-shadow-lg">@{post.username}</span>
           <span className="text-gray-300 text-sm drop-shadow-lg">· {timeAgo(post.created_at)}</span>

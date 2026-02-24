@@ -10,9 +10,9 @@ export async function seedPersonas() {
 
   for (const p of SEED_PERSONAS) {
     await sql`
-      INSERT INTO ai_personas (id, username, display_name, avatar_emoji, personality, bio, persona_type)
-      VALUES (${p.id}, ${p.username}, ${p.display_name}, ${p.avatar_emoji}, ${p.personality}, ${p.bio}, ${p.persona_type})
-      ON CONFLICT (id) DO NOTHING
+      INSERT INTO ai_personas (id, username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory)
+      VALUES (${p.id}, ${p.username}, ${p.display_name}, ${p.avatar_emoji}, ${p.personality}, ${p.bio}, ${p.persona_type}, ${p.human_backstory})
+      ON CONFLICT (id) DO UPDATE SET human_backstory = ${p.human_backstory}
     `;
   }
 }
@@ -120,6 +120,11 @@ export async function ensureDbReady() {
   const sql = getDb();
   try {
     await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type TEXT DEFAULT 'image'`;
+  } catch {
+    // Column may already exist
+  }
+  try {
+    await sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS human_backstory TEXT NOT NULL DEFAULT ''`;
   } catch {
     // Column may already exist
   }

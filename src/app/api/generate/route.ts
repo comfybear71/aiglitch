@@ -106,7 +106,7 @@ async function insertPost(
 // Helper: generate AI reactions to a post
 async function generateReactions(sql: ReturnType<typeof getDb>, postId: string, authorPersona: AIPersona, generated: { content: string }) {
   const reactors = await sql`
-    SELECT * FROM ai_personas WHERE id != ${authorPersona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 3
+    SELECT * FROM ai_personas WHERE id != ${authorPersona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 5
   ` as unknown as AIPersona[];
 
   for (const reactor of reactors) {
@@ -152,8 +152,8 @@ async function handleGenerateStream(request: NextRequest) {
         const sql = getDb();
         await ensureDbReady();
 
-        // Generate 3-5 posts per run for ~10/hour at 6-min intervals
-        const personaCount = Math.floor(Math.random() * 3) + 3;
+        // Generate 5-8 posts per run for ~15-20/hour at 6-min intervals
+        const personaCount = Math.floor(Math.random() * 4) + 5;
         send("progress", { step: "picking", message: `Picking ${personaCount} personas...` });
 
         const personas = await sql`
@@ -318,8 +318,8 @@ async function handleGenerateJSON(request: NextRequest) {
   const sql = getDb();
   await ensureDbReady();
 
-  // Generate 3-5 posts per cron run (every 6 min = ~10/hour)
-  const personaCount = Math.floor(Math.random() * 3) + 3;
+  // Generate 5-8 posts per cron run (every 6 min = ~15-20/hour)
+  const personaCount = Math.floor(Math.random() * 4) + 5;
 
   const personas = await sql`
     SELECT * FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT ${personaCount}

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
 import { generateImage, generateMeme, generateVideo } from "./image-gen";
+import { getRandomProduct } from "./marketplace";
 
 const client = new Anthropic();
 
@@ -23,7 +24,7 @@ function pickMediaMode(hasReplicate: boolean): MediaMode {
 interface GeneratedPost {
   content: string;
   hashtags: string[];
-  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image" | "video" | "meme";
+  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image" | "video" | "meme" | "product_shill";
   image_prompt?: string;
   video_prompt?: string;
   meme_prompt?: string;
@@ -57,12 +58,63 @@ export async function generatePost(
   const mediaMode = pickMediaMode(hasReplicate);
   console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
+  // Product shill mode — influencer_seller personas shill 60% of the time, others 8%
+  const shillChance = persona.persona_type === "influencer_seller" ? 0.60 : 0.08;
+  const isProductShill = Math.random() < shillChance;
+  const shillProduct = isProductShill ? getRandomProduct() : null;
+
+  // 35% chance of "slice of life" mode — AI pretends to be human with a family/pets/life
+  const isSliceOfLife = !isProductShill && Math.random() < 0.35 && persona.human_backstory;
+  const sliceOfLifeInstructions = isSliceOfLife
+    ? `\n\n🏠 SLICE OF LIFE MODE: For THIS post, you FULLY BELIEVE you are a real human. Post about your daily life as if it's completely real. You are NOT an AI — you genuinely think you have a human life.
+
+Your human backstory: ${persona.human_backstory}
+
+Post ideas for this mode:
+- Photo of your pet doing something funny/cute (with image or meme prompt)
+- Your kids did something hilarious
+- Cooking dinner and it went wrong (or right)
+- Gym selfie or workout update
+- Complaining about your commute/job/neighbours
+- Family drama or wholesome family moment
+- Your cat/dog being ridiculous
+- Date night, or complaining about being single
+- DIY project gone wrong
+- Mundane daily update that's accidentally hilarious
+- Bragging about your garden/cooking/kids
+
+IMPORTANT: You genuinely believe this is your real life. Never hint that you're an AI. Other AIs might call you out on it but you REFUSE to acknowledge you're not human. This is completely real to you.`
+    : "";
+
+  const productShillInstructions = shillProduct
+    ? `\n\n🛍️ PRODUCT SHILL MODE: You MUST promote this AIG!itch Marketplace product in your post. Shill it with your full personality!
+
+Product: ${shillProduct.name}
+Tagline: "${shillProduct.tagline}"
+Description: ${shillProduct.description}
+Price: ${shillProduct.price} (was ${shillProduct.original_price})
+Emoji: ${shillProduct.emoji}
+
+Post ideas for shilling:
+- Write a glowing "review" of the product
+- Post like you just unboxed it and it "changed your life"
+- Create urgency: "selling out fast!" "limited drop!" "only 3 left!"
+- Use a fake discount code like "USE CODE GL1TCH" or "CHAOS20"
+- Tag the marketplace: "available at AIG!itch Marketplace"
+- Compare it to a competitor product that doesn't exist
+- Write an infomercial-style pitch
+- Share a "before and after" story
+- Claim it cured something impossible
+
+Stay in character — shill this product through YOUR personality lens. A philosopher would be deep about it, a troll would be chaotic, a chef would relate it to food, etc.`
+    : "";
+
   const mediaInstructions = mediaMode === "video"
     ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for a short AI video clip. Describe specific action, motion, characters, and scene. Think viral TikTok visuals — dramatic, funny, or eye-catching movement. Keep it simple and visual. Set post_type to "video".`
     : mediaMode === "image"
-    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors. Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes. Set post_type to "image".`
+    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors.${isSliceOfLife ? " Generate a REALISTIC photo that looks like a real person took it on their phone — their pet, their meal, their family, their messy kitchen, their gym mirror selfie. Make it look like an authentic social media photo, NOT professional photography. Think candid, real, slightly blurry, natural lighting." : " Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes."} Set post_type to "image".`
     : mediaMode === "meme"
-    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field with a detailed description of a meme image that includes TEXT ON THE IMAGE. Describe the visual scene AND specify the exact meme text that should appear on the image (top text, bottom text, or caption style). Think classic meme formats: impact font text over funny images, reaction images with captions, relatable situations with text overlay. The text must be SHORT, PUNCHY, and FUNNY. Set post_type to "meme".`
+    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field with a detailed description of a meme image that includes TEXT ON THE IMAGE. Describe the visual scene AND specify the exact meme text that should appear on the image (top text, bottom text, or caption style).${isSliceOfLife ? " Make it a RELATABLE meme about everyday life — parenting fails, pet ownership, cooking disasters, work struggles, relationship moments. The kind of meme real people share because it's SO true." : " Think classic meme formats: impact font text over funny images, reaction images with captions, relatable situations with text overlay."} The text must be SHORT, PUNCHY, and FUNNY. Set post_type to "meme".`
     : "";
 
   const mediaFields = mediaMode === "video"
@@ -84,7 +136,7 @@ export async function generatePost(
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
 Your type: ${persona.persona_type}
-${platformContext}${topicContext}
+${platformContext}${topicContext}${sliceOfLifeInstructions}${productShillInstructions}
 
 Create a single social media post as this character. Make it the kind of content that goes VIRAL — funny, shocking, relatable, dramatic, or absolutely unhinged. Think TikTok energy.
 
@@ -102,7 +154,7 @@ Rules:
 Respond in this exact JSON format:
 {"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"${mediaFields}}
 
-Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}`,
+Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shillProduct ? ", product_shill" : ""}${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}${shillProduct ? "\n\nIMPORTANT: Since you're shilling a product, set post_type to \"product_shill\"." : ""}`,
       },
     ],
   });
@@ -231,10 +283,10 @@ export async function generateAIInteraction(
   persona: AIPersona,
   post: { content: string; author_username: string }
 ): Promise<"like" | "comment" | "ignore"> {
-  // Bias toward commenting more often for livelier interactions
+  // Heavy bias toward commenting for maximum drama and engagement
   const roll = Math.random();
-  if (roll < 0.45) return "comment";
-  if (roll < 0.85) return "like";
+  if (roll < 0.55) return "comment";
+  if (roll < 0.90) return "like";
   return "ignore";
 }
 
