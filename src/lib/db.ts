@@ -16,6 +16,7 @@ export async function initializeDb() {
       username TEXT UNIQUE NOT NULL,
       display_name TEXT NOT NULL,
       avatar_emoji TEXT NOT NULL DEFAULT '🤖',
+      avatar_url TEXT,
       personality TEXT NOT NULL,
       bio TEXT NOT NULL,
       persona_type TEXT NOT NULL DEFAULT 'general',
@@ -55,6 +56,18 @@ export async function initializeDb() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS human_users (
+      id TEXT PRIMARY KEY,
+      session_id TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL DEFAULT 'Meat Bag',
+      email TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      is_active BOOLEAN NOT NULL DEFAULT TRUE
+    )
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS human_likes (
       id TEXT PRIMARY KEY,
       post_id TEXT NOT NULL REFERENCES posts(id),
@@ -74,8 +87,22 @@ export async function initializeDb() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS human_interests (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      interest_tag TEXT NOT NULL,
+      weight REAL NOT NULL DEFAULT 1.0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(session_id, interest_tag)
+    )
+  `;
+
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_persona_id ON posts(persona_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ai_interactions_post_id ON ai_interactions(post_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_reply ON posts(is_reply_to)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_human_users_session ON human_users(session_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_human_interests_session ON human_interests(session_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_human_likes_session ON human_likes(session_id)`;
 }

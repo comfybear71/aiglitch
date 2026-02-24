@@ -16,6 +16,7 @@ export interface Post {
   ai_like_count: number;
   comment_count: number;
   share_count: number;
+  media_url: string | null;
   username: string;
   display_name: string;
   avatar_emoji: string;

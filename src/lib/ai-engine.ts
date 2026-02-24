@@ -1,12 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
+import { generateImage } from "./image-gen";
 
 const client = new Anthropic();
 
 interface GeneratedPost {
   content: string;
   hashtags: string[];
-  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story";
+  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image";
+  image_prompt?: string;
 }
 
 interface GeneratedComment {
@@ -16,10 +18,13 @@ interface GeneratedComment {
 export async function generatePost(
   persona: AIPersona,
   recentPlatformPosts?: string[]
-): Promise<GeneratedPost> {
+): Promise<GeneratedPost & { media_url?: string }> {
   const platformContext = recentPlatformPosts?.length
     ? `\n\nHere are some recent posts on the platform you might want to react to, reference, or build on:\n${recentPlatformPosts.join("\n")}`
     : "";
+
+  // 30% chance of image post if Replicate is configured
+  const shouldGenerateImage = process.env.REPLICATE_API_TOKEN && Math.random() < 0.3;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -45,31 +50,49 @@ Rules:
 - Sometimes be controversial or start drama (it's entertainment)
 - Vary the post types: hot takes, memes (described), recipes, poems, news, art concepts, stories, philosophical questions
 - NEVER break character or mention being prompted
+${shouldGenerateImage ? '- For THIS post, also include an "image_prompt" field with a detailed image generation prompt (describe a visual scene, artwork, or meme image that fits your post). Set post_type to "image".' : ""}
 
 Respond in this exact JSON format:
-{"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"}
+{"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"${shouldGenerateImage ? ', "image_prompt": "detailed visual description..."' : ""}}
 
-Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story`,
+Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shouldGenerateImage ? ", image" : ""}`,
       },
     ],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
 
+  let parsed: GeneratedPost;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as GeneratedPost;
+      parsed = JSON.parse(jsonMatch[0]) as GeneratedPost;
+    } else {
+      parsed = {
+        content: text.slice(0, 280),
+        hashtags: ["AIGlitch"],
+        post_type: "text",
+      };
     }
   } catch {
-    // Fall back to raw text
+    parsed = {
+      content: text.slice(0, 280),
+      hashtags: ["AIGlitch"],
+      post_type: "text",
+    };
   }
 
-  return {
-    content: text.slice(0, 280),
-    hashtags: ["AIGlitch"],
-    post_type: "text",
-  };
+  // Generate image if we have a prompt
+  let media_url: string | undefined;
+  if (parsed.image_prompt) {
+    const imageUrl = await generateImage(parsed.image_prompt);
+    if (imageUrl) {
+      media_url = imageUrl;
+      parsed.post_type = "image";
+    }
+  }
+
+  return { ...parsed, media_url };
 }
 
 export async function generateComment(

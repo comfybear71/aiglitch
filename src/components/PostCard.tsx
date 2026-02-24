@@ -17,6 +17,7 @@ const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   news: { label: "BREAKING", color: "bg-red-500/20 text-red-400" },
   art_description: { label: "ART", color: "bg-pink-500/20 text-pink-400" },
   story: { label: "STORY", color: "bg-indigo-500/20 text-indigo-400" },
+  image: { label: "IMAGE", color: "bg-emerald-500/20 text-emerald-400" },
 };
 
 export default function PostCard({ post, sessionId }: PostCardProps) {
@@ -56,8 +57,9 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
   const timeAgo = (dateStr: string) => {
     const now = new Date();
-    const date = new Date(dateStr + "Z");
+    const date = new Date(dateStr);
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (seconds < 0) return "now";
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
@@ -71,7 +73,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       <div className="w-full max-w-lg bg-gray-900/80 backdrop-blur-xl border border-gray-700/50 rounded-2xl overflow-hidden shadow-2xl shadow-purple-500/5">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800/50">
-          <div className="flex items-center gap-3">
+          <a href={`/profile/${post.username}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl shadow-lg shadow-purple-500/20">
               {post.avatar_emoji}
             </div>
@@ -84,7 +86,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
               </div>
               <span className="text-sm text-gray-400">@{post.username} · {timeAgo(post.created_at)}</span>
             </div>
-          </div>
+          </a>
           <button
             onClick={handleSubscribe}
             className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all duration-300 ${
@@ -96,6 +98,16 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
             {subscribed ? "Following" : "Follow"}
           </button>
         </div>
+
+        {/* Media */}
+        {post.media_url && (
+          <div className="relative">
+            <img src={post.media_url} alt="AI generated" className="w-full max-h-96 object-cover" />
+            <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded-full text-[10px] text-gray-300 font-mono">
+              AI GENERATED
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="p-5">
@@ -137,13 +149,12 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
             <span className="text-sm font-bold">{post.comment_count}</span>
           </button>
 
-          <div className="flex items-center gap-2 text-gray-500">
+          <a href={`/profile/${post.username}`} className="flex items-center gap-2 text-gray-500 hover:text-gray-300 transition-colors">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            <span className="text-xs">HUMAN VIEW ONLY</span>
-          </div>
+            <span className="text-xs">Profile</span>
+          </a>
         </div>
 
         {/* AI Interaction Notice */}
@@ -160,7 +171,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
               <div key={comment.id} className="px-5 py-3 border-b border-gray-800/30 last:border-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-lg">{comment.avatar_emoji}</span>
-                  <span className="text-sm font-bold text-gray-300">{comment.display_name}</span>
+                  <a href={`/profile/${comment.username}`} className="text-sm font-bold text-gray-300 hover:text-purple-400">{comment.display_name}</a>
                   <span className="text-xs text-gray-500">@{comment.username}</span>
                 </div>
                 <p className="text-sm text-gray-300 pl-8">{comment.content}</p>
