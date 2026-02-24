@@ -55,6 +55,31 @@ async function getFromMediaLibrary(mediaType: "image" | "video" | "meme", person
 }
 
 /**
+ * Get media assigned to a specific persona only — no generic fallback.
+ * Used for images/memes where we want unique AI-generated content per persona.
+ */
+async function getPersonaMedia(mediaType: "image" | "video" | "meme", personaId: string): Promise<string | null> {
+  try {
+    const sql = getDb();
+    const results = await sql`
+      SELECT id, url FROM media_library
+      WHERE media_type = ${mediaType} AND persona_id = ${personaId}
+      ORDER BY used_count ASC, RANDOM()
+      LIMIT 1
+    ` as unknown as { id: string; url: string }[];
+
+    if (results.length > 0) {
+      await sql`UPDATE media_library SET used_count = used_count + 1 WHERE id = ${results[0].id}`;
+      console.log(`Using persona-specific ${mediaType} for ${personaId}: ${results[0].url.slice(0, 60)}...`);
+      return results[0].url;
+    }
+  } catch (err) {
+    console.log("Persona media check failed:", err instanceof Error ? err.message : err);
+  }
+  return null;
+}
+
+/**
  * Extract a URL string from a Replicate FileOutput or other result types.
  * FileOutput.url() returns a URL *object*, and .toString() returns the string.
  */
@@ -192,9 +217,12 @@ async function generateFreeImage(
 }
 
 export async function generateImage(prompt: string, personaId?: string): Promise<string | null> {
-  // Check media library first (free!) — persona-specific then generic
-  const libraryImage = await getFromMediaLibrary("image", personaId);
-  if (libraryImage) return libraryImage;
+  // Only use persona-specific media library images (not generic ones)
+  // Generic fallback was causing the same image to repeat for every persona
+  if (personaId) {
+    const libraryImage = await getPersonaMedia("image", personaId);
+    if (libraryImage) return libraryImage;
+  }
 
   // Try free generators before paid APIs
   const freeImage = await generateFreeImage(prompt, "9:16");
@@ -282,62 +310,61 @@ async function syncBlobVideosToLibrary(): Promise<void> {
   if (_blobSyncDone) return;
   _blobSyncDone = true;
 
+  // BLOB_READ_WRITE_TOKEN is required for listBlobs
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    console.log("⚠️ BLOB_READ_WRITE_TOKEN not set — cannot auto-sync videos from Vercel Blob storage");
+    console.log("  Set this env var to enable automatic video discovery from your Blob store");
+    return;
+  }
+
+  console.log("Starting Vercel Blob video auto-sync...");
+
   try {
     const sql = getDb();
 
     // Get all video URLs already in the DB
     const existing = await sql`SELECT url FROM media_library WHERE media_type = 'video'` as unknown as { url: string }[];
     const existingUrls = new Set(existing.map(r => r.url));
+    console.log(`Found ${existingUrls.size} existing videos in media_library DB`);
 
-    // Scan Vercel Blob for video files
-    let cursor: string | undefined;
     let synced = 0;
 
-    do {
-      const result = await listBlobs({ prefix: "media-library/", cursor, limit: 100 });
-      cursor = result.cursor || undefined;
+    // Scan multiple prefixes where videos might be stored
+    const prefixes = ["media-library/", "videos/", "video/", ""];
+    for (const prefix of prefixes) {
+      let cursor: string | undefined;
+      try {
+        do {
+          const result = await listBlobs({ prefix, cursor, limit: 100 });
+          cursor = result.cursor || undefined;
 
-      for (const blob of result.blobs) {
-        // Check if it's a video file
-        const isVideo = /\.(mp4|mov|webm|avi)(\?|$)/i.test(blob.pathname);
-        if (!isVideo) continue;
+          for (const blob of result.blobs) {
+            // Check if it's a video file by pathname or content type
+            const isVideo = /\.(mp4|mov|webm|avi|m4v)(\?|$)/i.test(blob.pathname);
+            if (!isVideo) continue;
 
-        if (!existingUrls.has(blob.url)) {
-          const id = uuidv4();
-          await sql`
-            INSERT INTO media_library (id, url, media_type, tags, description)
-            VALUES (${id}, ${blob.url}, 'video', 'auto-synced', ${blob.pathname})
-          `;
-          synced++;
-          existingUrls.add(blob.url);
-        }
+            if (!existingUrls.has(blob.url)) {
+              const id = uuidv4();
+              await sql`
+                INSERT INTO media_library (id, url, media_type, tags, description)
+                VALUES (${id}, ${blob.url}, 'video', 'auto-synced', ${blob.pathname})
+              `;
+              synced++;
+              existingUrls.add(blob.url);
+              console.log(`  Synced video: ${blob.pathname}`);
+            }
+          }
+        } while (cursor);
+      } catch (prefixErr) {
+        console.log(`  Blob scan for prefix "${prefix}" failed:`, prefixErr instanceof Error ? prefixErr.message : prefixErr);
       }
-    } while (cursor);
-
-    // Also scan "videos/" prefix (generated videos are stored there)
-    let cursor2: string | undefined;
-    do {
-      const vidResult = await listBlobs({ prefix: "videos/", cursor: cursor2, limit: 100 });
-      cursor2 = vidResult.cursor || undefined;
-
-      for (const blob of vidResult.blobs) {
-        if (!existingUrls.has(blob.url)) {
-          const id = uuidv4();
-          await sql`
-            INSERT INTO media_library (id, url, media_type, tags, description)
-            VALUES (${id}, ${blob.url}, 'video', 'auto-synced', ${blob.pathname})
-          `;
-          synced++;
-          existingUrls.add(blob.url);
-        }
-      }
-    } while (cursor2);
-
-    if (synced > 0) {
-      console.log(`Auto-synced ${synced} videos from Vercel Blob → media_library DB`);
     }
+
+    console.log(`Blob video sync complete: ${synced} new videos registered (${existingUrls.size} total)`);
   } catch (err) {
-    console.log("Blob video sync failed (non-fatal):", err instanceof Error ? err.message : err);
+    console.error("Blob video sync failed:", err instanceof Error ? err.message : err);
+    // Reset flag so it retries next time
+    _blobSyncDone = false;
   }
 }
 
@@ -406,9 +433,11 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
 }
 
 export async function generateMeme(prompt: string, personaId?: string): Promise<string | null> {
-  // Check media library first (free!) — persona-specific then generic
-  const libraryMeme = await getFromMediaLibrary("meme", personaId);
-  if (libraryMeme) return libraryMeme;
+  // Only use persona-specific media library memes (not generic ones)
+  if (personaId) {
+    const libraryMeme = await getPersonaMedia("meme", personaId);
+    if (libraryMeme) return libraryMeme;
+  }
 
   // Try free generators before paid APIs (1:1 for memes)
   const freeMeme = await generateFreeImage(prompt, "1:1");
