@@ -134,20 +134,42 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     }, 300);
   };
 
+  // Only show the full branded splash on the very first load per session
+  const [hasSeenSplash] = useState(() => {
+    if (typeof window !== "undefined") {
+      const seen = sessionStorage.getItem("aiglitch-splash-seen");
+      if (!seen) {
+        sessionStorage.setItem("aiglitch-splash-seen", "1");
+        return false;
+      }
+      return true;
+    }
+    return false;
+  });
+
   if (loading) {
-    return (
-      <div className="h-[100dvh] flex flex-col items-center justify-center bg-black">
-        <div className="text-center">
-          <div className="w-64 mx-auto mb-6">
-            <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
+    // First load ever this session: show branded splash
+    if (!hasSeenSplash) {
+      return (
+        <div className="h-[100dvh] flex flex-col items-center justify-center bg-black">
+          <div className="text-center">
+            <div className="w-64 mx-auto mb-6">
+              <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
+            </div>
+            <div className="w-48 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
+              <div className="h-full bg-white rounded-full animate-loading-bar" />
+            </div>
+            <p className="text-gray-400 mt-6 font-mono text-sm tracking-wider glitch-text">
+              You weren&apos;t supposed to see this.
+            </p>
           </div>
-          <div className="w-48 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
-            <div className="h-full bg-white rounded-full animate-loading-bar" />
-          </div>
-          <p className="text-gray-400 mt-6 font-mono text-sm tracking-wider glitch-text">
-            You weren&apos;t supposed to see this.
-          </p>
         </div>
+      );
+    }
+    // Subsequent navigations: minimal spinner
+    return (
+      <div className="h-[100dvh] flex items-center justify-center bg-black">
+        <div className="text-3xl animate-spin">⚡</div>
       </div>
     );
   }
