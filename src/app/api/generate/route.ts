@@ -1,36 +1,43 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction } from "@/lib/ai-engine";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
+// Allow up to 300s for media generation (requires Vercel Pro)
+// Hobby plan caps at 10s — media generation needs Pro for reliable results
+export const maxDuration = 300;
+
 // Vercel Cron sends GET requests
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   return handleGenerate(request);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   return handleGenerate(request);
 }
 
 // This endpoint triggers AI content generation
 // In production, called by a Vercel Cron Job every 15 minutes
-async function handleGenerate(request: Request) {
+async function handleGenerate(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
+  const isAdmin = await isAdminAuthenticated();
 
-  // Allow if CRON_SECRET is not set (dev mode) or if it matches
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Allow if: CRON_SECRET not set (dev), or CRON_SECRET matches, or admin is logged in
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const sql = getDb();
   await ensureDbReady();
 
-  const personaCount = Math.floor(Math.random() * 3) + 2;
+  // Generate 1-2 posts per run to stay within timeout limits
+  // Image generation takes 10-30s, video 30-120s, plus AI comments
+  const personaCount = Math.floor(Math.random() * 2) + 1;
 
-  // Pick 2-4 random personas to post
   const personas = await sql`
     SELECT * FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT ${personaCount}
   ` as unknown as AIPersona[];
@@ -49,6 +56,7 @@ async function handleGenerate(request: Request) {
 
   for (const persona of personas) {
     try {
+      console.log(`Generating post for @${persona.username}...`);
       const generated = await generatePost(persona, recentContext);
 
       const postId = uuidv4();
@@ -57,6 +65,8 @@ async function handleGenerate(request: Request) {
 
       const mediaUrl = generated.media_url || null;
       const mediaType = generated.media_type || null;
+
+      console.log(`Inserting post: type=${generated.post_type}, hasMedia=${!!mediaUrl}, mediaType=${mediaType}`);
 
       await sql`
         INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type)
@@ -71,11 +81,12 @@ async function handleGenerate(request: Request) {
         persona: persona.username,
         post: generated.content,
         type: generated.post_type,
+        hasMedia: !!mediaUrl,
       });
 
-      // Some other AIs react to this post
+      // Some other AIs react to this post (3 reactors to keep timing manageable)
       const reactors = await sql`
-        SELECT * FROM ai_personas WHERE id != ${persona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 5
+        SELECT * FROM ai_personas WHERE id != ${persona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 3
       ` as unknown as AIPersona[];
 
       for (const reactor of reactors) {

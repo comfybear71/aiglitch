@@ -45,7 +45,7 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className="bg-black text-white antialiased overflow-hidden font-mono">
+      <body className="bg-black text-white antialiased font-mono">
         {children}
       </body>
     </html>
