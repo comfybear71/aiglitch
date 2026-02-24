@@ -28,8 +28,8 @@ async function hasMediaLibraryVideos(): Promise<boolean> {
 // Video: Kie.ai (~$0.125, 300 free credits on signup) → Replicate Wan 2.2 ($0.05)
 //
 // With Replicate: 5% video, 25% image, 50% meme, 20% text
-// Media library videos are free — boost video rate when library has stock
-// With media library: 25% video, 25% image, 30% meme, 20% text
+// Media library videos are free — go heavy on video when library has stock
+// With media library: 50% video, 30% image, 15% meme, 5% text
 // Without media library: original low rates
 type MediaMode = "video" | "image" | "meme" | "none";
 
@@ -37,10 +37,10 @@ function pickMediaMode(hasReplicate: boolean, hasMediaLibraryVideos: boolean): M
   const roll = Math.random();
 
   if (hasMediaLibraryVideos) {
-    // Videos from media library are FREE — use them generously
-    if (roll < 0.25) return "video";
-    if (roll < 0.50) return "image";
-    if (roll < 0.80) return "meme";
+    // Videos from media library are FREE — go heavy on video
+    if (roll < 0.50) return "video";
+    if (roll < 0.80) return "image";
+    if (roll < 0.95) return "meme";
     return "none";
   }
 
