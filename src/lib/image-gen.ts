@@ -2,6 +2,7 @@ import Replicate from "replicate";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { getDb } from "./db";
+import { generateWithPerchance, generateWithRaphael } from "./free-image-gen";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -116,10 +117,77 @@ async function persistToBlob(
   }
 }
 
+/**
+ * Try free/cheap image generation services before falling back to Replicate.
+ * Chain: Perchance (free) → Raphael ($0.0036) → null (caller falls through to Replicate)
+ */
+async function generateFreeImage(
+  prompt: string,
+  aspectRatio: "9:16" | "1:1" | "16:9",
+): Promise<string | null> {
+  // Map aspect ratio to Raphael dimensions
+  const dimensionMap: Record<string, { w: number; h: number }> = {
+    "9:16": { w: 768, h: 1024 },
+    "1:1": { w: 1024, h: 1024 },
+    "16:9": { w: 1024, h: 768 },
+  };
+  const dims = dimensionMap[aspectRatio] || { w: 768, h: 1024 };
+
+  // Try Perchance first (completely free)
+  try {
+    const perchance = await generateWithPerchance(prompt, aspectRatio);
+    if (perchance) {
+      const ext = perchance.contentType.includes("png") ? "png" : "webp";
+      try {
+        const blob = await put(`images/${uuidv4()}.${ext}`, perchance.buffer, {
+          access: "public",
+          contentType: perchance.contentType,
+          addRandomSuffix: true,
+        });
+        console.log(`Free image (Perchance) uploaded to Blob: ${blob.url}`);
+        return blob.url;
+      } catch {
+        console.log("Blob upload failed for Perchance image");
+        return null;
+      }
+    }
+  } catch (err) {
+    console.log("Perchance attempt failed:", err instanceof Error ? err.message : err);
+  }
+
+  // Try Raphael ($0.0036/call — very cheap)
+  try {
+    const raphael = await generateWithRaphael(prompt, dims.w, dims.h);
+    if (raphael) {
+      const ext = raphael.contentType.includes("png") ? "png" : "webp";
+      try {
+        const blob = await put(`images/${uuidv4()}.${ext}`, raphael.buffer, {
+          access: "public",
+          contentType: raphael.contentType,
+          addRandomSuffix: true,
+        });
+        console.log(`Cheap image (Raphael) uploaded to Blob: ${blob.url}`);
+        return blob.url;
+      } catch {
+        console.log("Blob upload failed for Raphael image");
+        return null;
+      }
+    }
+  } catch (err) {
+    console.log("Raphael attempt failed:", err instanceof Error ? err.message : err);
+  }
+
+  return null; // Caller will fall through to Replicate
+}
+
 export async function generateImage(prompt: string, personaId?: string): Promise<string | null> {
   // Check media library first (free!) — persona-specific then generic
   const libraryImage = await getFromMediaLibrary("image", personaId);
   if (libraryImage) return libraryImage;
+
+  // Try free generators before paid APIs
+  const freeImage = await generateFreeImage(prompt, "9:16");
+  if (freeImage) return freeImage;
 
   if (!process.env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping image generation");
@@ -242,6 +310,10 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
   // Check media library first (free!) — persona-specific then generic
   const libraryMeme = await getFromMediaLibrary("meme", personaId);
   if (libraryMeme) return libraryMeme;
+
+  // Try free generators before paid APIs (1:1 for memes)
+  const freeMeme = await generateFreeImage(prompt, "1:1");
+  if (freeMeme) return freeMeme;
 
   if (!process.env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping meme generation");
