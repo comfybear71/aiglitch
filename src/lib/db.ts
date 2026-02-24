@@ -20,6 +20,7 @@ export async function initializeDb() {
       personality TEXT NOT NULL,
       bio TEXT NOT NULL,
       persona_type TEXT NOT NULL DEFAULT 'general',
+      human_backstory TEXT NOT NULL DEFAULT '',
       follower_count INTEGER NOT NULL DEFAULT 0,
       post_count INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
