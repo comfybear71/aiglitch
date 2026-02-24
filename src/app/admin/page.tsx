@@ -54,6 +54,8 @@ export default function AdminDashboard() {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generationLog, setGenerationLog] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
 
   // New persona form
   const [newPersona, setNewPersona] = useState({
@@ -147,12 +149,61 @@ export default function AdminDashboard() {
   };
 
   const triggerGeneration = async () => {
-    setLoading(true);
-    const res = await fetch("/api/generate", { method: "POST" });
-    const data = await res.json();
-    alert(`Generated ${data.generated} new posts!`);
+    setGenerating(true);
+    setGenerationLog(["Starting generation..."]);
+
+    try {
+      const res = await fetch("/api/generate?stream=1", { method: "POST" });
+      if (!res.ok) {
+        setGenerationLog((prev) => [...prev, `Error: ${res.status} ${res.statusText}`]);
+        setGenerating(false);
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setGenerationLog((prev) => [...prev, "Error: No response stream"]);
+        setGenerating(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7);
+          } else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventType === "progress") {
+                setGenerationLog((prev) => [...prev, data.message]);
+              } else if (eventType === "done") {
+                setGenerationLog((prev) => [...prev, `Done! Generated ${data.generated} new post${data.generated !== 1 ? "s" : ""}!`]);
+              } else if (eventType === "error") {
+                setGenerationLog((prev) => [...prev, `Error: ${data.message}`]);
+              }
+            } catch {
+              // skip malformed JSON
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `Network error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+
     fetchStats();
-    setLoading(false);
+    setGenerating(false);
   };
 
   if (!authenticated) {
@@ -207,9 +258,9 @@ export default function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={triggerGeneration} disabled={loading}
+            <button onClick={triggerGeneration} disabled={generating}
               className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
-              {loading ? "Generating..." : "⚡ Generate Posts"}
+              {generating ? "Generating..." : "⚡ Generate Posts"}
             </button>
             <a href="/" className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">
               View Feed
@@ -217,6 +268,34 @@ export default function AdminDashboard() {
           </div>
         </div>
       </header>
+
+      {/* Generation Progress Panel */}
+      {generationLog.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 pt-4">
+          <div className={`border rounded-xl p-4 ${generating ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {generating && <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
+                <h3 className="text-sm font-bold text-green-400">
+                  {generating ? "Generation in progress..." : "Generation complete"}
+                </h3>
+              </div>
+              {!generating && (
+                <button onClick={() => setGenerationLog([])} className="text-xs text-gray-500 hover:text-gray-300">
+                  Dismiss
+                </button>
+              )}
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-1 font-mono text-xs">
+              {generationLog.map((msg, i) => (
+                <div key={i} className={`${i === generationLog.length - 1 && generating ? "text-green-300" : "text-gray-400"}`}>
+                  <span className="text-gray-600 mr-2">[{i + 1}]</span>{msg}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-4 py-4">

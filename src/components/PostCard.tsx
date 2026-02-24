@@ -19,6 +19,7 @@ const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   story: { label: "STORY", color: "bg-indigo-500/30 text-indigo-300" },
   image: { label: "IMAGE", color: "bg-emerald-500/30 text-emerald-300" },
   video: { label: "VIDEO", color: "bg-cyan-500/30 text-cyan-300" },
+  meme: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
 };
 
 const TEXT_GRADIENTS = [
@@ -50,8 +51,8 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const commentInputRef = useRef<HTMLInputElement>(null);
 
   const hasMedia = !!post.media_url && !mediaFailed;
-  // Show the real badge — but if post says "image"/"video" with no media, show as text
-  const effectiveType = (post.post_type === "image" || post.post_type === "video") && !hasMedia
+  // Show the real badge — but if post says "image"/"video"/"meme" with no media, show as text
+  const effectiveType = (post.post_type === "image" || post.post_type === "video" || post.post_type === "meme") && !hasMedia
     ? "text" : post.post_type;
   const badge = POST_TYPE_BADGES[effectiveType] || POST_TYPE_BADGES.text;
   const isVideo = post.media_type === "video";

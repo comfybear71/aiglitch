@@ -1,15 +1,32 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
-import { generateImage, generateVideo } from "./image-gen";
+import { generateImage, generateMeme, generateVideo } from "./image-gen";
 
 const client = new Anthropic();
+
+// Content mix: balanced variety for a TikTok-style feed
+// 50% video (Veo 3 with audio, Wan 2.2 fallback)
+// 20% image (Imagen 4, Flux Schnell fallback)
+// 20% meme (Ideogram v3 turbo — text-on-image)
+// 10% text-only
+type MediaMode = "video" | "image" | "meme" | "none";
+
+function pickMediaMode(hasReplicate: boolean): MediaMode {
+  if (!hasReplicate) return "none";
+  const roll = Math.random();
+  if (roll < 0.50) return "video";
+  if (roll < 0.70) return "image";
+  if (roll < 0.90) return "meme";
+  return "none";
+}
 
 interface GeneratedPost {
   content: string;
   hashtags: string[];
-  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image" | "video";
+  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image" | "video" | "meme";
   image_prompt?: string;
   video_prompt?: string;
+  meme_prompt?: string;
 }
 
 interface GeneratedComment {
@@ -25,24 +42,23 @@ export async function generatePost(
     : "";
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
-  const roll = Math.random();
-  // 95% video (MiniMax video-01 text-to-video), 4% image (Imagen 4), 1% text-only
-  // Videos are the core content — this is a TikTok-style platform
-  const shouldGenerateVideo = hasReplicate && roll < 0.95;
-  const shouldGenerateImage = hasReplicate && !shouldGenerateVideo && roll < 0.99;
-  const mediaMode = shouldGenerateVideo ? "video" : shouldGenerateImage ? "image" : "none";
+  const mediaMode = pickMediaMode(hasReplicate);
   console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   const mediaInstructions = mediaMode === "video"
-    ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip. Describe specific action, motion, characters, and scene — make it visually entertaining, funny, dramatic, or stunning. Think viral TikTok energy. Set post_type to "video".`
+    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for an 8-second AI video clip WITH AUDIO. Describe specific action, motion, characters, scene, AND sounds — include dialogue/voiceover, sound effects, ambient noise, or music cues. The video generator creates synchronized audio, so be specific about what should be HEARD as well as seen. Think viral TikTok with sound ON. Set post_type to "video".`
     : mediaMode === "image"
-    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt for Google Imagen 4. Be extremely specific about: subject, composition, lighting, style, mood, colors. Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes, meme-worthy moments. Set post_type to "image".`
+    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors. Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes. Set post_type to "image".`
+    : mediaMode === "meme"
+    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field with a detailed description of a meme image that includes TEXT ON THE IMAGE. Describe the visual scene AND specify the exact meme text that should appear on the image (top text, bottom text, or caption style). Think classic meme formats: impact font text over funny images, reaction images with captions, relatable situations with text overlay. The text must be SHORT, PUNCHY, and FUNNY. Set post_type to "meme".`
     : "";
 
   const mediaFields = mediaMode === "video"
-    ? ', "video_prompt": "short vivid motion description..."'
+    ? ', "video_prompt": "vivid scene with audio description..."'
     : mediaMode === "image"
     ? ', "image_prompt": "detailed visual description..."'
+    : mediaMode === "meme"
+    ? ', "meme_prompt": "meme image description with exact text overlay..."'
     : "";
 
   const response = await client.messages.create({
@@ -74,7 +90,7 @@ Rules:
 Respond in this exact JSON format:
 {"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"${mediaFields}}
 
-Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}`,
+Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}`,
       },
     ],
   });
@@ -113,9 +129,19 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
       media_type = "video";
       parsed.post_type = "video";
     } else {
-      // Video generation failed — fall back to text post
       console.log("Video generation failed, falling back to text post");
       parsed.post_type = "text";
+    }
+  } else if (parsed.meme_prompt) {
+    console.log(`Generating meme for @${persona.username}: "${parsed.meme_prompt.slice(0, 80)}..."`);
+    const memeUrl = await generateMeme(parsed.meme_prompt);
+    if (memeUrl) {
+      media_url = memeUrl;
+      media_type = "image";
+      parsed.post_type = "meme";
+    } else {
+      console.log("Meme generation failed, falling back to text post");
+      parsed.post_type = "meme_description";
     }
   } else if (parsed.image_prompt) {
     console.log(`Generating image for @${persona.username}: "${parsed.image_prompt.slice(0, 80)}..."`);
@@ -125,17 +151,19 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
       media_type = "image";
       parsed.post_type = "image";
     } else {
-      // Image generation failed — fall back to text post
       console.log("Image generation failed, falling back to text post");
       parsed.post_type = "text";
     }
   }
 
-  // Safety net: if post_type is image/video but no media was actually generated
-  // (e.g. LLM set post_type but didn't include the prompt field), reset to text
+  // Safety net: if post_type is image/video/meme but no media was actually generated
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) {
     console.log(`post_type was "${parsed.post_type}" but no media generated — resetting to "text"`);
     parsed.post_type = "text";
+  }
+  if (parsed.post_type === "meme" && !media_url) {
+    console.log(`post_type was "meme" but no media generated — resetting to "meme_description"`);
+    parsed.post_type = "meme_description";
   }
 
   return { ...parsed, media_url, media_type };
