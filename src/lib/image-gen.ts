@@ -48,7 +48,6 @@ async function persistToBlob(
   contentType: string
 ): Promise<string> {
   try {
-    // Download from Replicate's temp CDN
     const res = await fetch(tempUrl);
     if (!res.ok) {
       console.error(`Failed to download media: HTTP ${res.status}`);
@@ -58,7 +57,6 @@ async function persistToBlob(
     const buffer = await res.arrayBuffer();
     console.log(`Downloaded ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB, uploading to Vercel Blob...`);
 
-    // Upload to Vercel Blob — returns a permanent public URL
     const blob = await put(filename, Buffer.from(buffer), {
       access: "public",
       contentType,
@@ -153,11 +151,12 @@ export async function generateVideo(prompt: string): Promise<string | null> {
     return null;
   }
 
-  console.log("Starting video generation with MiniMax...");
+  // Use minimax/video-01 for TEXT-TO-VIDEO (not video-01-live which is IMAGE-to-video)
+  console.log("Starting video generation with MiniMax video-01 (text-to-video)...");
 
   try {
     const output = await replicate.run(
-      "minimax/video-01-live",
+      "minimax/video-01",
       {
         input: {
           prompt: prompt,
@@ -166,7 +165,7 @@ export async function generateVideo(prompt: string): Promise<string | null> {
       }
     );
 
-    console.log("MiniMax raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
+    console.log("MiniMax video-01 raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
 
     // Try to extract URL from various output formats
     let tempUrl = extractUrl(output);
@@ -180,9 +179,56 @@ export async function generateVideo(prompt: string): Promise<string | null> {
       return await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
     }
 
+    console.error("MiniMax video-01 returned no output URL");
     return null;
   } catch (err) {
     console.error("Video generation failed:", err);
     return null;
   }
+}
+
+/**
+ * Diagnostic function to test the full media pipeline.
+ * Returns detailed results for debugging.
+ */
+export async function testMediaPipeline(): Promise<{
+  replicate_token: boolean;
+  blob_token: boolean;
+  image_test: { success: boolean; url?: string; error?: string };
+  video_test: { success: boolean; url?: string; error?: string };
+}> {
+  const result = {
+    replicate_token: !!process.env.REPLICATE_API_TOKEN,
+    blob_token: !!process.env.BLOB_READ_WRITE_TOKEN,
+    image_test: { success: false } as { success: boolean; url?: string; error?: string },
+    video_test: { success: false } as { success: boolean; url?: string; error?: string },
+  };
+
+  // Test image generation
+  try {
+    console.log("=== TESTING IMAGE GENERATION ===");
+    const imageUrl = await generateImage("A cute robot waving hello, digital art, vibrant colors, simple background");
+    if (imageUrl) {
+      result.image_test = { success: true, url: imageUrl };
+    } else {
+      result.image_test = { success: false, error: "generateImage returned null" };
+    }
+  } catch (err) {
+    result.image_test = { success: false, error: String(err) };
+  }
+
+  // Test video generation
+  try {
+    console.log("=== TESTING VIDEO GENERATION ===");
+    const videoUrl = await generateVideo("A cute robot dancing happily in a colorful room, smooth animation");
+    if (videoUrl) {
+      result.video_test = { success: true, url: videoUrl };
+    } else {
+      result.video_test = { success: false, error: "generateVideo returned null" };
+    }
+  } catch (err) {
+    result.video_test = { success: false, error: String(err) };
+  }
+
+  return result;
 }
