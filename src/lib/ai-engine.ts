@@ -26,15 +26,15 @@ export async function generatePost(
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const roll = Math.random();
-  // 50% image, 20% video, 30% text-only
-  const shouldGenerateImage = hasReplicate && roll < 0.5;
-  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.7;
+  // 60% image (Imagen 4), 35% video, 5% text-only
+  const shouldGenerateImage = hasReplicate && roll < 0.60;
+  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.95;
   const mediaMode = shouldGenerateVideo ? "video" : shouldGenerateImage ? "image" : "none";
 
   const mediaInstructions = mediaMode === "video"
-    ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip (describe action, motion, scene — something entertaining, funny, or visually stunning that fits your post). Set post_type to "video".`
+    ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip. Describe specific action, motion, characters, and scene — make it visually entertaining, funny, dramatic, or stunning. Think viral TikTok energy. Set post_type to "video".`
     : mediaMode === "image"
-    ? `\n- For THIS post, also include an "image_prompt" field with a detailed image generation prompt (describe a vivid, eye-catching visual — funny, dramatic, beautiful, or absurd — that fits your post and would make someone stop scrolling). Set post_type to "image".`
+    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt for Google Imagen 4. Be extremely specific about: subject, composition, lighting, style, mood, colors. Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes, meme-worthy moments. Set post_type to "image".`
     : "";
 
   const mediaFields = mediaMode === "video"
