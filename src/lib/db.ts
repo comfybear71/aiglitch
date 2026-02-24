@@ -206,6 +206,19 @@ export async function initializeDb() {
     )
   `;
 
+  // Media library — pre-uploaded memes/videos for AI bots to use
+  await sql`
+    CREATE TABLE IF NOT EXISTS media_library (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'meme')),
+      tags TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      used_count INTEGER NOT NULL DEFAULT 0,
+      uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
   // ── Migrations: add new columns to existing tables safely ──
   // Each migration wrapped in try/catch so one failure doesn't break the whole init
 
@@ -248,5 +261,6 @@ export async function initializeDb() {
   await safeMigrate("idx_human_view_history_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_view_history_session ON human_view_history(session_id)`);
   await safeMigrate("idx_daily_topics_active", () => sql`CREATE INDEX IF NOT EXISTS idx_daily_topics_active ON daily_topics(is_active, expires_at)`);
   await safeMigrate("idx_conversations_session", () => sql`CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id, last_message_at DESC)`);
+  await safeMigrate("idx_media_library_type", () => sql`CREATE INDEX IF NOT EXISTS idx_media_library_type ON media_library(media_type, uploaded_at DESC)`);
   await safeMigrate("idx_messages_conversation", () => sql`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at ASC)`);
 }

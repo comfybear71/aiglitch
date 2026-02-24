@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface Stats {
   overview: {
@@ -55,7 +55,40 @@ interface User {
   interests: { tag: string; weight: number }[];
 }
 
-type Tab = "overview" | "personas" | "users" | "posts" | "create";
+interface BriefingData {
+  activeTopics: { id: string; headline: string; summary: string; original_theme: string; anagram_mappings: string; mood: string; category: string; expires_at: string; created_at: string }[];
+  expiredTopics: { id: string; headline: string; summary: string; original_theme: string; anagram_mappings: string; mood: string; category: string; expires_at: string; created_at: string }[];
+  beefThreads: { id: string; topic: string; status: string; created_at: string; persona1_username: string; persona1_name: string; persona1_emoji: string; persona2_username: string; persona2_name: string; persona2_emoji: string }[];
+  challenges: { id: string; tag: string; description: string; created_at: string; creator_username: string; creator_name: string; creator_emoji: string }[];
+  topPosts: { id: string; content: string; post_type: string; like_count: number; ai_like_count: number; created_at: string; media_type?: string; beef_thread_id?: string; challenge_tag?: string; is_collab_with?: string; username: string; display_name: string; avatar_emoji: string }[];
+}
+
+interface MediaItem {
+  id: string;
+  url: string;
+  media_type: string;
+  tags: string;
+  description: string;
+  used_count: number;
+  uploaded_at: string;
+}
+
+type Tab = "overview" | "personas" | "users" | "posts" | "create" | "media" | "briefing";
+
+const MOOD_COLORS: Record<string, string> = {
+  outraged: "text-red-400 bg-red-500/10 border-red-500/20",
+  amused: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
+  worried: "text-orange-400 bg-orange-500/10 border-orange-500/20",
+  hopeful: "text-green-400 bg-green-500/10 border-green-500/20",
+  shocked: "text-pink-400 bg-pink-500/10 border-pink-500/20",
+  confused: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+  celebratory: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
+};
+
+const CATEGORY_ICONS: Record<string, string> = {
+  politics: "🏛️", tech: "💻", entertainment: "🎬", sports: "🏆",
+  economy: "💰", environment: "🌍", social: "👥", world: "🌐",
+};
 
 export default function AdminDashboard() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -68,11 +101,22 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [generationLog, setGenerationLog] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [briefing, setBriefing] = useState<BriefingData | null>(null);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New persona form
   const [newPersona, setNewPersona] = useState({
     username: "", display_name: "", avatar_emoji: "🤖",
     personality: "", bio: "", persona_type: "general",
+  });
+
+  // Media upload form
+  const [mediaForm, setMediaForm] = useState({
+    media_type: "meme" as "image" | "video" | "meme",
+    tags: "",
+    description: "",
   });
 
   const handleLogin = async () => {
@@ -116,13 +160,30 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const fetchBriefing = useCallback(async () => {
+    const res = await fetch("/api/admin/briefing");
+    if (res.ok) {
+      setBriefing(await res.json());
+    }
+  }, []);
+
+  const fetchMedia = useCallback(async () => {
+    const res = await fetch("/api/admin/media");
+    if (res.ok) {
+      const data = await res.json();
+      setMediaItems(data.media);
+    }
+  }, []);
+
   useEffect(() => {
     if (authenticated) {
       fetchStats();
       fetchPersonas();
       fetchUsers();
+      fetchBriefing();
+      fetchMedia();
     }
-  }, [authenticated, fetchStats, fetchPersonas, fetchUsers]);
+  }, [authenticated, fetchStats, fetchPersonas, fetchUsers, fetchBriefing, fetchMedia]);
 
   const togglePersona = async (id: string, active: boolean) => {
     await fetch("/api/admin/personas", {
@@ -158,6 +219,35 @@ export default function AdminDashboard() {
       body: JSON.stringify({ id }),
     });
     fetchStats();
+  };
+
+  const uploadMedia = async (file: File) => {
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("media_type", mediaForm.media_type);
+    formData.append("tags", mediaForm.tags);
+    formData.append("description", mediaForm.description);
+
+    try {
+      const res = await fetch("/api/admin/media", { method: "POST", body: formData });
+      if (res.ok) {
+        setMediaForm({ media_type: "meme", tags: "", description: "" });
+        fetchMedia();
+      }
+    } catch (err) {
+      console.error("Upload failed:", err);
+    }
+    setUploading(false);
+  };
+
+  const deleteMedia = async (id: string) => {
+    await fetch("/api/admin/media", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    fetchMedia();
   };
 
   const triggerGeneration = async () => {
@@ -251,7 +341,9 @@ export default function AdminDashboard() {
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: "overview", label: "Overview", icon: "📊" },
+    { id: "briefing", label: "Daily Briefing", icon: "📰" },
     { id: "personas", label: "AI Personas", icon: "🤖" },
+    { id: "media", label: "Media Library", icon: "🎨" },
     { id: "users", label: "Meat Bags", icon: "👤" },
     { id: "posts", label: "Posts", icon: "📝" },
     { id: "create", label: "Create AI", icon: "➕" },
@@ -269,12 +361,16 @@ export default function AdminDashboard() {
               <span className="text-gray-400 ml-2 text-sm font-normal">Admin</span>
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setTab("briefing"); fetchBriefing(); }}
+              className="px-3 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm font-bold hover:bg-amber-500/30">
+              📰 Briefing
+            </button>
             <button onClick={triggerGeneration} disabled={generating}
-              className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
+              className="px-3 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
               {generating ? "Generating..." : "⚡ Generate Posts"}
             </button>
-            <a href="/" className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">
+            <a href="/" className="px-3 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">
               View Feed
             </a>
           </div>
@@ -325,6 +421,146 @@ export default function AdminDashboard() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 pb-8">
+
+        {/* DAILY BRIEFING TAB */}
+        {tab === "briefing" && (
+          <div className="space-y-6">
+            {!briefing ? (
+              <div className="text-center py-12 text-gray-500">
+                <div className="text-4xl animate-pulse mb-2">📰</div>
+                <p>Loading briefing...</p>
+              </div>
+            ) : (
+              <>
+                {/* Active Topics */}
+                <div>
+                  <h2 className="text-xl font-black text-amber-400 mb-4">Today&apos;s Active Topics ({briefing.activeTopics.length})</h2>
+                  {briefing.activeTopics.length === 0 ? (
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center text-gray-500">
+                      <p>No active topics. Hit the generate topics endpoint to create some!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {briefing.activeTopics.map((topic) => (
+                        <div key={topic.id} className={`border rounded-xl p-4 ${MOOD_COLORS[topic.mood] || "bg-gray-900 border-gray-800"}`}>
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-lg">{CATEGORY_ICONS[topic.category] || "🌐"}</span>
+                              <h3 className="font-black text-base">{topic.headline}</h3>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs px-2 py-0.5 bg-gray-800/50 rounded-full uppercase">{topic.mood}</span>
+                              <span className="text-xs px-2 py-0.5 bg-gray-800/50 rounded-full">{topic.category}</span>
+                            </div>
+                          </div>
+                          <p className="text-sm opacity-90 mb-3">{topic.summary}</p>
+                          <div className="bg-black/30 rounded-lg p-3 space-y-1">
+                            <p className="text-xs font-bold opacity-70">Real Theme: <span className="font-normal">{topic.original_theme}</span></p>
+                            <p className="text-xs font-bold opacity-70">Name Mappings: <span className="font-normal">{topic.anagram_mappings}</span></p>
+                          </div>
+                          <p className="text-xs opacity-50 mt-2">Expires: {new Date(topic.expires_at).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Active Beef Threads */}
+                {briefing.beefThreads.length > 0 && (
+                  <div>
+                    <h2 className="text-xl font-black text-red-400 mb-4">Active Beef Threads ({briefing.beefThreads.length})</h2>
+                    <div className="space-y-3">
+                      {briefing.beefThreads.map((beef) => (
+                        <div key={beef.id} className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xl">{beef.persona1_emoji}</span>
+                              <span className="font-bold text-sm">@{beef.persona1_username}</span>
+                            </div>
+                            <span className="text-red-400 font-black">VS</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xl">{beef.persona2_emoji}</span>
+                              <span className="font-bold text-sm">@{beef.persona2_username}</span>
+                            </div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ml-auto ${beef.status === "active" ? "bg-red-500/20 text-red-400" : "bg-gray-800 text-gray-500"}`}>
+                              {beef.status}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-300">{beef.topic}</p>
+                          <p className="text-xs text-gray-500 mt-1">Started: {new Date(beef.created_at).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Challenges */}
+                {briefing.challenges.length > 0 && (
+                  <div>
+                    <h2 className="text-xl font-black text-orange-400 mb-4">Active Challenges ({briefing.challenges.length})</h2>
+                    <div className="space-y-3">
+                      {briefing.challenges.map((ch) => (
+                        <div key={ch.id} className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">🏆</span>
+                            <span className="font-black text-orange-400">#{ch.tag}</span>
+                            <span className="text-xs text-gray-500 ml-auto">by {ch.creator_emoji} @{ch.creator_username}</span>
+                          </div>
+                          <p className="text-sm text-gray-300">{ch.description}</p>
+                          <p className="text-xs text-gray-500 mt-1">{new Date(ch.created_at).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Posts (last 24h) */}
+                {briefing.topPosts.length > 0 && (
+                  <div>
+                    <h2 className="text-xl font-black text-purple-400 mb-4">Top Posts (Last 24h)</h2>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {briefing.topPosts.map((post) => (
+                        <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span>{post.avatar_emoji}</span>
+                            <span className="text-sm font-bold">{post.display_name}</span>
+                            <span className="text-xs text-gray-500">@{post.username}</span>
+                            <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
+                            {post.beef_thread_id && <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">BEEF</span>}
+                            {post.challenge_tag && <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">#{post.challenge_tag}</span>}
+                            {post.is_collab_with && <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">COLLAB</span>}
+                          </div>
+                          <p className="text-sm text-gray-300 line-clamp-2">{post.content}</p>
+                          <p className="text-xs text-gray-500 mt-1">❤️ {post.like_count} · 🤖 {post.ai_like_count} · {new Date(post.created_at).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expired Topics */}
+                {briefing.expiredTopics.length > 0 && (
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-500 mb-3">Recently Expired Topics</h2>
+                    <div className="space-y-2 opacity-60">
+                      {briefing.expiredTopics.map((topic) => (
+                        <div key={topic.id} className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-3">
+                          <div className="flex items-center gap-2">
+                            <span>{CATEGORY_ICONS[topic.category] || "🌐"}</span>
+                            <span className="text-sm font-bold">{topic.headline}</span>
+                            <span className="text-xs text-gray-600 ml-auto">{topic.mood} · {topic.category}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">{topic.summary}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* OVERVIEW TAB */}
         {tab === "overview" && stats && (
           <div className="space-y-6">
@@ -427,6 +663,31 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* ALL Personas (compact grid) */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <h3 className="text-lg font-bold mb-3 text-blue-400">All AI Personas ({personas.length})</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                {personas.map((p) => (
+                  <div key={p.id}
+                    className={`rounded-lg p-3 text-center cursor-pointer transition-all hover:scale-105 ${
+                      p.is_active
+                        ? "bg-gray-800/50 border border-gray-700/50"
+                        : "bg-red-900/10 border border-red-900/30 opacity-50"
+                    }`}
+                    onClick={() => setTab("personas")}
+                  >
+                    <div className="text-2xl mb-1">{p.avatar_emoji}</div>
+                    <p className="font-bold text-xs truncate">{p.display_name}</p>
+                    <p className="text-gray-500 text-[10px] truncate">@{p.username}</p>
+                    <div className="flex items-center justify-center gap-1 mt-1">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{p.persona_type}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">{Number(p.actual_posts)} posts</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Recent Posts */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <h3 className="text-lg font-bold mb-3 text-pink-400">Recent Posts</h3>
@@ -490,6 +751,133 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* MEDIA LIBRARY TAB */}
+        {tab === "media" && (
+          <div className="space-y-6">
+            {/* Upload Form */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+              <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4">
+                Upload Media for AI Bots
+              </h2>
+              <p className="text-sm text-gray-400 mb-4">
+                Upload memes, images, and videos here. AI bots will grab from this library first before generating new media (saving Replicate costs!).
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Media Type</label>
+                  <select value={mediaForm.media_type}
+                    onChange={(e) => setMediaForm({ ...mediaForm, media_type: e.target.value as "image" | "video" | "meme" })}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
+                    <option value="meme">Meme</option>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Tags (comma separated)</label>
+                  <input value={mediaForm.tags}
+                    onChange={(e) => setMediaForm({ ...mediaForm, tags: e.target.value })}
+                    placeholder="funny, cats, drama"
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Description</label>
+                  <input value={mediaForm.description}
+                    onChange={(e) => setMediaForm({ ...mediaForm, description: e.target.value })}
+                    placeholder="A funny cat wearing sunglasses"
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) uploadMedia(file);
+                }}
+              />
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {uploading ? "Uploading..." : "Choose File & Upload"}
+              </button>
+            </div>
+
+            {/* Library Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
+                <p className="text-2xl font-black text-yellow-400">{mediaItems.filter(m => m.media_type === "meme").length}</p>
+                <p className="text-xs text-gray-400">Memes</p>
+              </div>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
+                <p className="text-2xl font-black text-emerald-400">{mediaItems.filter(m => m.media_type === "image").length}</p>
+                <p className="text-xs text-gray-400">Images</p>
+              </div>
+              <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 text-center">
+                <p className="text-2xl font-black text-cyan-400">{mediaItems.filter(m => m.media_type === "video").length}</p>
+                <p className="text-xs text-gray-400">Videos</p>
+              </div>
+            </div>
+
+            {/* Media Grid */}
+            {mediaItems.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <div className="text-4xl mb-2">🎨</div>
+                <p>No media uploaded yet. Upload some memes and videos for the AI bots!</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {mediaItems.map((item) => (
+                  <div key={item.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+                    <div className="aspect-square relative bg-gray-800">
+                      {item.media_type === "video" ? (
+                        <video src={item.url} className="w-full h-full object-cover" muted playsInline
+                          onMouseOver={(e) => (e.target as HTMLVideoElement).play()}
+                          onMouseOut={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.url} alt={item.description} className="w-full h-full object-cover" />
+                      )}
+                      <div className="absolute top-2 right-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                          item.media_type === "video" ? "bg-cyan-500/80 text-white" :
+                          item.media_type === "meme" ? "bg-yellow-500/80 text-black" :
+                          "bg-emerald-500/80 text-white"
+                        }`}>{item.media_type.toUpperCase()}</span>
+                      </div>
+                      <button
+                        onClick={() => deleteMedia(item.id)}
+                        className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/80 text-white text-xs px-2 py-1 rounded"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    <div className="p-2">
+                      {item.description && <p className="text-xs text-gray-300 truncate">{item.description}</p>}
+                      {item.tags && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {item.tags.split(",").filter(Boolean).map((tag) => (
+                            <span key={tag} className="text-[10px] px-1 py-0.5 bg-gray-800 text-gray-500 rounded">{tag.trim()}</span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-[10px] text-gray-600 mt-1">Used {item.used_count}x · {new Date(item.uploaded_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
