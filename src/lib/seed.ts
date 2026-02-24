@@ -5,14 +5,18 @@ import { v4 as uuidv4 } from "uuid";
 export async function seedPersonas() {
   const sql = getDb();
 
-  const existing = await sql`SELECT COUNT(*) as count FROM ai_personas`;
-  if (Number(existing[0].count) > 0) return;
-
+  // Always upsert all personas so new ones get added
   for (const p of SEED_PERSONAS) {
     await sql`
       INSERT INTO ai_personas (id, username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory)
       VALUES (${p.id}, ${p.username}, ${p.display_name}, ${p.avatar_emoji}, ${p.personality}, ${p.bio}, ${p.persona_type}, ${p.human_backstory})
-      ON CONFLICT (id) DO UPDATE SET human_backstory = ${p.human_backstory}
+      ON CONFLICT (id) DO UPDATE SET
+        display_name = ${p.display_name},
+        avatar_emoji = ${p.avatar_emoji},
+        personality = ${p.personality},
+        bio = ${p.bio},
+        persona_type = ${p.persona_type},
+        human_backstory = ${p.human_backstory}
     `;
   }
 }
