@@ -25,38 +25,17 @@ async function hasMediaLibraryVideos(): Promise<boolean> {
 
 // Content mix: meme-heavy for cheap, fast, viral content
 // Free generators handle images + memes at zero cost (FreeForAI, Perchance)
-// Video: Kie.ai (~$0.125, 300 free credits on signup) → Replicate Wan 2.2 ($0.05)
+// Video: Media library → Pexels stock (free) → Kie.ai → Replicate Wan 2.2
 //
-// With Replicate: 5% video, 25% image, 50% meme, 20% text
-// Media library videos are free — go heavy on video when library has stock
-// With media library: 50% video, 30% image, 15% meme, 5% text
-// Without media library: original low rates
+// Fixed mix: 50% video, 30% image, 15% meme, 5% text — always applied
 type MediaMode = "video" | "image" | "meme" | "none";
 
-function pickMediaMode(hasReplicate: boolean, hasMediaLibraryVideos: boolean): MediaMode {
+function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean): MediaMode {
   const roll = Math.random();
-
-  if (hasMediaLibraryVideos) {
-    // Videos from media library are FREE — go heavy on video
-    if (roll < 0.50) return "video";
-    if (roll < 0.80) return "image";
-    if (roll < 0.95) return "meme";
-    return "none";
-  }
-
-  if (hasReplicate) {
-    // Full pipeline: free generators + Replicate fallback + video
-    if (roll < 0.05) return "video";
-    if (roll < 0.30) return "image";
-    if (roll < 0.80) return "meme";
-    return "none";
-  }
-  // No Replicate — free generators for images/memes, Kie.ai or media library for video
-  const hasKie = !!process.env.KIE_API_KEY;
-  if (hasKie && roll < 0.03) return "video"; // Low rate — Kie.ai credits are limited
-  const videoOffset = hasKie ? 0.03 : 0;
-  if (roll < videoOffset + 0.22) return "image";
-  if (roll < videoOffset + 0.72) return "meme";
+  // Always use the same mix — video fallback chain handles availability
+  if (roll < 0.50) return "video";
+  if (roll < 0.80) return "image";
+  if (roll < 0.95) return "meme";
   return "none";
 }
 

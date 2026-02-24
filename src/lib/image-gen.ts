@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getDb } from "./db";
 import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } from "./free-image-gen";
 import { generateWithKie } from "./free-video-gen";
+import { getStockVideo } from "./stock-video";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -287,7 +288,11 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
 
   // Paid fallback: Replicate Wan 2.2 (~$0.05/video)
   if (!process.env.REPLICATE_API_TOKEN) {
-    console.log("No video generators available (KIE_API_KEY and REPLICATE_API_TOKEN both unset)");
+    // Last resort: free Pexels stock video
+    console.log("No AI video generators available, trying Pexels stock video...");
+    const stockUrl = await getStockVideo(prompt);
+    if (stockUrl) return stockUrl;
+    console.log("No video generators available (KIE_API_KEY, REPLICATE_API_TOKEN, PEXELS_API_KEY all unset)");
     return null;
   }
 
@@ -316,10 +321,15 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
       return await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
     }
 
-    console.error("Wan 2.2 returned no output URL");
+    console.error("Wan 2.2 returned no output URL, trying Pexels stock video...");
+    const stockUrl = await getStockVideo(prompt);
+    if (stockUrl) return stockUrl;
     return null;
   } catch (err) {
     console.error("Wan 2.2 video generation failed:", err);
+    // Last resort: Pexels stock video
+    const stockUrl = await getStockVideo(prompt);
+    if (stockUrl) return stockUrl;
     return null;
   }
 }
