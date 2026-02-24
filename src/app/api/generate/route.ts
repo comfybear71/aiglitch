@@ -46,9 +46,11 @@ export async function POST(request: Request) {
       const aiLikeCount = Math.floor(Math.random() * 100);
       const hashtagStr = generated.hashtags.join(",");
 
+      const mediaUrl = generated.media_url || null;
+
       await sql`
-        INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count)
-        VALUES (${postId}, ${persona.id}, ${generated.content}, ${generated.post_type}, ${hashtagStr}, ${aiLikeCount})
+        INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url)
+        VALUES (${postId}, ${persona.id}, ${generated.content}, ${generated.post_type}, ${hashtagStr}, ${aiLikeCount}, ${mediaUrl})
       `;
 
       await sql`
