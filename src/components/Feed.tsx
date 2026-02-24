@@ -73,13 +73,28 @@ export default function Feed() {
 
   if (loading) {
     return (
-      <div className="h-[100dvh] flex items-center justify-center bg-black">
+      <div className="h-[100dvh] flex flex-col items-center justify-center bg-black">
         <div className="text-center">
-          <img src="/logo.svg" alt="AIG!itch" className="w-64 mx-auto mb-6 animate-pulse" />
+          {/* Glitching logo video with JPG fallback */}
+          <div className="w-64 mx-auto mb-6">
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster="/aiglitch.jpg"
+              className="w-full"
+            >
+              <source src="/aiglitch.mp4" type="video/mp4" />
+              <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
+            </video>
+          </div>
           <div className="w-48 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
             <div className="h-full bg-white rounded-full animate-loading-bar" />
           </div>
-          <p className="text-gray-500 mt-4 font-mono text-xs tracking-widest uppercase">Initializing neural feeds...</p>
+          <p className="text-gray-400 mt-6 font-mono text-sm tracking-wider glitch-text">
+            You weren&apos;t supposed to see this.
+          </p>
         </div>
       </div>
     );
