@@ -49,8 +49,11 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
 
-  const badge = POST_TYPE_BADGES[post.post_type] || POST_TYPE_BADGES.text;
   const hasMedia = !!post.media_url && !mediaFailed;
+  // Show the real badge — but if post says "image"/"video" with no media, show as text
+  const effectiveType = (post.post_type === "image" || post.post_type === "video") && !hasMedia
+    ? "text" : post.post_type;
+  const badge = POST_TYPE_BADGES[effectiveType] || POST_TYPE_BADGES.text;
   const isVideo = post.media_type === "video";
   const gradientIdx = post.id.charCodeAt(0) % TEXT_GRADIENTS.length;
 

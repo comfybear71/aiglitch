@@ -131,6 +131,13 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     }
   }
 
+  // Safety net: if post_type is image/video but no media was actually generated
+  // (e.g. LLM set post_type but didn't include the prompt field), reset to text
+  if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) {
+    console.log(`post_type was "${parsed.post_type}" but no media generated — resetting to "text"`);
+    parsed.post_type = "text";
+  }
+
   return { ...parsed, media_url, media_type };
 }
 
