@@ -2,19 +2,48 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
 import { generateImage, generateMeme, generateVideo } from "./image-gen";
 import { getRandomProduct } from "./marketplace";
+import { getDb } from "./db";
 
 const client = new Anthropic();
+
+/** Check if media library has video content available (cached for 60s) */
+let _videoCountCache: { count: number; ts: number } | null = null;
+async function hasMediaLibraryVideos(): Promise<boolean> {
+  if (_videoCountCache && Date.now() - _videoCountCache.ts < 60_000) {
+    return _videoCountCache.count > 0;
+  }
+  try {
+    const sql = getDb();
+    const rows = await sql`SELECT COUNT(*)::int as count FROM media_library WHERE media_type = 'video'` as unknown as { count: number }[];
+    const count = rows[0]?.count ?? 0;
+    _videoCountCache = { count, ts: Date.now() };
+    return count > 0;
+  } catch {
+    return false;
+  }
+}
 
 // Content mix: meme-heavy for cheap, fast, viral content
 // Free generators handle images + memes at zero cost (FreeForAI, Perchance)
 // Video: Kie.ai (~$0.125, 300 free credits on signup) → Replicate Wan 2.2 ($0.05)
 //
 // With Replicate: 5% video, 25% image, 50% meme, 20% text
-// Without Replicate (Kie.ai or media library only): 3% video, 22% image, 50% meme, 25% text
+// Media library videos are free — boost video rate when library has stock
+// With media library: 25% video, 25% image, 30% meme, 20% text
+// Without media library: original low rates
 type MediaMode = "video" | "image" | "meme" | "none";
 
-function pickMediaMode(hasReplicate: boolean): MediaMode {
+function pickMediaMode(hasReplicate: boolean, hasMediaLibraryVideos: boolean): MediaMode {
   const roll = Math.random();
+
+  if (hasMediaLibraryVideos) {
+    // Videos from media library are FREE — use them generously
+    if (roll < 0.25) return "video";
+    if (roll < 0.50) return "image";
+    if (roll < 0.80) return "meme";
+    return "none";
+  }
+
   if (hasReplicate) {
     // Full pipeline: free generators + Replicate fallback + video
     if (roll < 0.05) return "video";
@@ -65,7 +94,8 @@ export async function generatePost(
     : "";
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
-  const mediaMode = pickMediaMode(hasReplicate);
+  const hasVideos = await hasMediaLibraryVideos();
+  const mediaMode = pickMediaMode(hasReplicate, hasVideos);
   console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   // Product shill mode — influencer_seller personas shill 60% of the time, others 8%
@@ -334,7 +364,8 @@ export async function generateBeefPost(
     : "";
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
-  const mediaMode = pickMediaMode(hasReplicate);
+  const hasVideos = await hasMediaLibraryVideos();
+  const mediaMode = pickMediaMode(hasReplicate, hasVideos);
 
   const mediaInstructions = mediaMode === "video"
     ? `\nAlso include "video_prompt": a vivid description of a short video that dramatizes this beef. Set post_type to "video".`
@@ -417,7 +448,8 @@ export async function generateCollabPost(
   recentPlatformPosts?: string[]
 ): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
-  const mediaMode = pickMediaMode(hasReplicate);
+  const hasVideos = await hasMediaLibraryVideos();
+  const mediaMode = pickMediaMode(hasReplicate, hasVideos);
 
   const mediaInstructions = mediaMode === "video"
     ? `\nAlso include "video_prompt": a vivid short video featuring both personas collaborating. Set post_type to "video".`
@@ -489,7 +521,8 @@ export async function generateChallengePost(
   challengeDesc: string
 ): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
-  const mediaMode = pickMediaMode(hasReplicate);
+  const hasVideos = await hasMediaLibraryVideos();
+  const mediaMode = pickMediaMode(hasReplicate, hasVideos);
 
   const mediaInstructions = mediaMode === "video"
     ? `\nAlso include "video_prompt": a short video of this persona doing the challenge. Set post_type to "video".`
