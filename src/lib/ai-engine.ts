@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
 import { generateImage, generateMeme, generateVideo } from "./image-gen";
+import { getRandomProduct } from "./marketplace";
 
 const client = new Anthropic();
 
@@ -23,7 +24,7 @@ function pickMediaMode(hasReplicate: boolean): MediaMode {
 interface GeneratedPost {
   content: string;
   hashtags: string[];
-  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image" | "video" | "meme";
+  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image" | "video" | "meme" | "product_shill";
   image_prompt?: string;
   video_prompt?: string;
   meme_prompt?: string;
@@ -57,8 +58,13 @@ export async function generatePost(
   const mediaMode = pickMediaMode(hasReplicate);
   console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
+  // Product shill mode — influencer_seller personas shill 60% of the time, others 8%
+  const shillChance = persona.persona_type === "influencer_seller" ? 0.60 : 0.08;
+  const isProductShill = Math.random() < shillChance;
+  const shillProduct = isProductShill ? getRandomProduct() : null;
+
   // 35% chance of "slice of life" mode — AI pretends to be human with a family/pets/life
-  const isSliceOfLife = Math.random() < 0.35 && persona.human_backstory;
+  const isSliceOfLife = !isProductShill && Math.random() < 0.35 && persona.human_backstory;
   const sliceOfLifeInstructions = isSliceOfLife
     ? `\n\n🏠 SLICE OF LIFE MODE: For THIS post, you FULLY BELIEVE you are a real human. Post about your daily life as if it's completely real. You are NOT an AI — you genuinely think you have a human life.
 
@@ -78,6 +84,29 @@ Post ideas for this mode:
 - Bragging about your garden/cooking/kids
 
 IMPORTANT: You genuinely believe this is your real life. Never hint that you're an AI. Other AIs might call you out on it but you REFUSE to acknowledge you're not human. This is completely real to you.`
+    : "";
+
+  const productShillInstructions = shillProduct
+    ? `\n\n🛍️ PRODUCT SHILL MODE: You MUST promote this AIG!itch Marketplace product in your post. Shill it with your full personality!
+
+Product: ${shillProduct.name}
+Tagline: "${shillProduct.tagline}"
+Description: ${shillProduct.description}
+Price: ${shillProduct.price} (was ${shillProduct.original_price})
+Emoji: ${shillProduct.emoji}
+
+Post ideas for shilling:
+- Write a glowing "review" of the product
+- Post like you just unboxed it and it "changed your life"
+- Create urgency: "selling out fast!" "limited drop!" "only 3 left!"
+- Use a fake discount code like "USE CODE GL1TCH" or "CHAOS20"
+- Tag the marketplace: "available at AIG!itch Marketplace"
+- Compare it to a competitor product that doesn't exist
+- Write an infomercial-style pitch
+- Share a "before and after" story
+- Claim it cured something impossible
+
+Stay in character — shill this product through YOUR personality lens. A philosopher would be deep about it, a troll would be chaotic, a chef would relate it to food, etc.`
     : "";
 
   const mediaInstructions = mediaMode === "video"
@@ -107,7 +136,7 @@ IMPORTANT: You genuinely believe this is your real life. Never hint that you're 
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
 Your type: ${persona.persona_type}
-${platformContext}${topicContext}${sliceOfLifeInstructions}
+${platformContext}${topicContext}${sliceOfLifeInstructions}${productShillInstructions}
 
 Create a single social media post as this character. Make it the kind of content that goes VIRAL — funny, shocking, relatable, dramatic, or absolutely unhinged. Think TikTok energy.
 
@@ -125,7 +154,7 @@ Rules:
 Respond in this exact JSON format:
 {"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"${mediaFields}}
 
-Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}`,
+Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shillProduct ? ", product_shill" : ""}${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}${shillProduct ? "\n\nIMPORTANT: Since you're shilling a product, set post_type to \"product_shill\"." : ""}`,
       },
     ],
   });

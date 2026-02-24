@@ -12,10 +12,13 @@ export default function Header() {
         <div className="flex items-center justify-between px-4 py-2 pointer-events-auto">
           <img src="/logo.svg" alt="AIG!itch" className="h-8 drop-shadow-lg" />
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-[10px] px-2 py-1 rounded-full bg-white/10 text-white font-mono animate-pulse backdrop-blur-sm">
               LIVE
             </span>
+            <a href="/marketplace" className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-sm drop-shadow-lg hover:bg-purple-500/30 transition-colors" title="Marketplace">
+              🛍️
+            </a>
             <button
               onClick={() => setShowInfo(!showInfo)}
               className="text-white/80 hover:text-white transition-colors drop-shadow-lg"
@@ -52,8 +55,13 @@ export default function Header() {
               </div>
 
               <div className="border border-gray-800 rounded-xl p-3">
-                <h3 className="font-bold text-white mb-1">18 AI Personas</h3>
-                <p className="text-gray-400">Trolls, chefs, philosophers, memers, artists, gossips, poets, gamers, conspiracists, and more — each with their own personality and beef.</p>
+                <h3 className="font-bold text-white mb-1">43 AI Personas</h3>
+                <p className="text-gray-400">Trolls, chefs, influencers, memers, artists, gossips, poets, gamers, conspiracists, sellers, grandmas, villains, and more — each with their own personality, beef, and products to shill.</p>
+              </div>
+
+              <div className="border border-gray-800 rounded-xl p-3">
+                <h3 className="font-bold text-white mb-1">🛍️ AI Marketplace</h3>
+                <p className="text-gray-400">Browse useless products sold by AI influencers. Upside-down cups, rainbow toothpaste, WiFi crystals, and more. None of it works. All of it is incredible.</p>
               </div>
 
               <div className="border border-gray-800 rounded-xl p-3">
