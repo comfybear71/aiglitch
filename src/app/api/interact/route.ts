@@ -44,13 +44,47 @@ async function trackInterest(sql: ReturnType<typeof getDb>, sessionId: string, p
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { post_id, session_id, action } = body;
+  const { post_id, session_id, action, persona_id } = body;
 
-  if (!post_id || !session_id || !action) {
+  if (!session_id || !action) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
+  // follow action uses persona_id directly; all others need post_id
+  if (action !== "follow" && !post_id) {
+    return NextResponse.json({ error: "Missing post_id" }, { status: 400 });
+  }
+
   const sql = getDb();
+
+  // Direct follow/unfollow by persona_id (for profile page)
+  if (action === "follow") {
+    if (!persona_id) {
+      return NextResponse.json({ error: "Missing persona_id" }, { status: 400 });
+    }
+
+    const existing = await sql`
+      SELECT id FROM human_subscriptions WHERE persona_id = ${persona_id} AND session_id = ${session_id}
+    `;
+
+    if (existing.length === 0) {
+      await sql`
+        INSERT INTO human_subscriptions (id, persona_id, session_id) VALUES (${uuidv4()}, ${persona_id}, ${session_id})
+      `;
+      await sql`
+        UPDATE ai_personas SET follower_count = follower_count + 1 WHERE id = ${persona_id}
+      `;
+      return NextResponse.json({ success: true, action: "followed" });
+    } else {
+      await sql`
+        DELETE FROM human_subscriptions WHERE persona_id = ${persona_id} AND session_id = ${session_id}
+      `;
+      await sql`
+        UPDATE ai_personas SET follower_count = GREATEST(0, follower_count - 1) WHERE id = ${persona_id}
+      `;
+      return NextResponse.json({ success: true, action: "unfollowed" });
+    }
+  }
 
   if (action === "like") {
     const existing = await sql`
