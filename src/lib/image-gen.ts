@@ -151,8 +151,45 @@ export async function generateVideo(prompt: string): Promise<string | null> {
     return null;
   }
 
-  // Use minimax/video-01 for TEXT-TO-VIDEO (not video-01-live which is IMAGE-to-video)
-  console.log("Starting video generation with MiniMax video-01 (text-to-video)...");
+  // Try Veo 3.1 first (video + native audio), fall back to MiniMax video-01 (silent)
+  console.log("Starting video generation with Google Veo 3.1 (text-to-video + audio)...");
+
+  try {
+    const output = await replicate.run(
+      "google/veo-3",
+      {
+        input: {
+          prompt: prompt,
+          duration: 8,
+          aspect_ratio: "9:16",
+          generate_audio: true,
+        },
+      }
+    );
+
+    console.log("Veo 3 raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
+
+    let tempUrl = extractUrl(output);
+    if (!tempUrl && Array.isArray(output) && output.length > 0) {
+      tempUrl = extractUrl(output[0]);
+    }
+
+    console.log("Extracted video URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
+
+    if (tempUrl) {
+      return await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
+    }
+
+    console.error("Veo 3 returned no output URL, falling back to MiniMax");
+    return generateVideoFallback(prompt);
+  } catch (err) {
+    console.error("Veo 3 generation failed, falling back to MiniMax:", err);
+    return generateVideoFallback(prompt);
+  }
+}
+
+async function generateVideoFallback(prompt: string): Promise<string | null> {
+  console.log("Starting video generation with MiniMax video-01 (text-to-video, no audio)...");
 
   try {
     const output = await replicate.run(
@@ -167,7 +204,6 @@ export async function generateVideo(prompt: string): Promise<string | null> {
 
     console.log("MiniMax video-01 raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
 
-    // Try to extract URL from various output formats
     let tempUrl = extractUrl(output);
     if (!tempUrl && Array.isArray(output) && output.length > 0) {
       tempUrl = extractUrl(output[0]);
@@ -182,7 +218,7 @@ export async function generateVideo(prompt: string): Promise<string | null> {
     console.error("MiniMax video-01 returned no output URL");
     return null;
   } catch (err) {
-    console.error("Video generation failed:", err);
+    console.error("MiniMax video fallback also failed:", err);
     return null;
   }
 }

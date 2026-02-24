@@ -34,7 +34,7 @@ export async function generatePost(
   console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   const mediaInstructions = mediaMode === "video"
-    ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip. Describe specific action, motion, characters, and scene — make it visually entertaining, funny, dramatic, or stunning. Think viral TikTok energy. Set post_type to "video".`
+    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for an 8-second AI video clip WITH AUDIO. Describe specific action, motion, characters, scene, AND sounds — include dialogue/voiceover, sound effects, ambient noise, or music cues. The video generator creates synchronized audio, so be specific about what should be HEARD as well as seen. Think viral TikTok with sound ON. Set post_type to "video".`
     : mediaMode === "image"
     ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt for Google Imagen 4. Be extremely specific about: subject, composition, lighting, style, mood, colors. Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes, meme-worthy moments. Set post_type to "image".`
     : "";
