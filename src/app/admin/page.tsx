@@ -299,46 +299,82 @@ export default function AdminDashboard() {
     setUploading(true);
     setUploadProgress({ total: files.length, done: 0, current: files[0].name, results: [] });
 
-    // Upload in batches of 5 to avoid overwhelming the server
-    const batchSize = 5;
     const allResults: { name: string; ok: boolean }[] = [];
+    const MAX_SERVER_SIZE = 4 * 1024 * 1024; // 4MB - Vercel serverless body limit
 
-    for (let i = 0; i < files.length; i += batchSize) {
-      const batch = files.slice(i, i + batchSize);
-      const formData = new FormData();
-      for (const file of batch) {
-        formData.append("files", file);
-      }
-      formData.append("media_type", mediaForm.media_type);
-      formData.append("tags", mediaForm.tags);
-      formData.append("description", mediaForm.description);
-      if (mediaForm.persona_id) formData.append("persona_id", mediaForm.persona_id);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setUploadProgress({
+        total: files.length,
+        done: i,
+        current: file.name,
+        results: allResults,
+      });
 
       try {
-        const res = await fetch("/api/admin/media", { method: "POST", body: formData });
-        if (res.ok) {
-          const data = await res.json();
-          for (const r of data.results) {
-            allResults.push({ name: r.name, ok: !r.error });
+        if (file.size > MAX_SERVER_SIZE) {
+          // Large files (videos): use Vercel Blob client upload to bypass body size limit
+          // Dynamically import to avoid bundling for users who only upload small files
+          const { upload } = await import("@vercel/blob/client");
+          const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
+          const blob = await upload(`media-library/${file.name}`, file, {
+            access: "public",
+            handleUploadUrl: "/api/admin/media/upload",
+            multipart: true,
+          });
+
+          // Save to DB via lightweight endpoint
+          const saveRes = await fetch("/api/admin/media/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: blob.url,
+              media_type: mediaForm.media_type,
+              tags: mediaForm.tags,
+              description: mediaForm.description || file.name,
+              persona_id: mediaForm.persona_id || null,
+            }),
+          });
+
+          if (saveRes.ok) {
+            allResults.push({ name: file.name, ok: true });
+          } else {
+            console.error(`DB save failed for ${file.name}:`, await saveRes.text());
+            allResults.push({ name: file.name, ok: false });
           }
         } else {
-          for (const file of batch) {
+          // Small files (images): use simple server upload
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("media_type", mediaForm.media_type);
+          formData.append("tags", mediaForm.tags);
+          formData.append("description", mediaForm.description);
+          if (mediaForm.persona_id) formData.append("persona_id", mediaForm.persona_id);
+
+          const res = await fetch("/api/admin/media", { method: "POST", body: formData });
+          if (res.ok) {
+            const data = await res.json();
+            for (const r of data.results) {
+              allResults.push({ name: r.name, ok: !r.error });
+            }
+          } else {
+            const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+            console.error(`Upload failed for ${file.name}:`, errData);
             allResults.push({ name: file.name, ok: false });
           }
         }
-      } catch {
-        for (const file of batch) {
-          allResults.push({ name: file.name, ok: false });
-        }
+      } catch (err) {
+        console.error(`Upload error for ${file.name}:`, err);
+        allResults.push({ name: file.name, ok: false });
       }
-
-      setUploadProgress({
-        total: files.length,
-        done: Math.min(i + batchSize, files.length),
-        current: i + batchSize < files.length ? files[i + batchSize].name : "Done!",
-        results: allResults,
-      });
     }
+
+    setUploadProgress({
+      total: files.length,
+      done: files.length,
+      current: "Done!",
+      results: allResults,
+    });
 
     fetchMedia();
     setUploading(false);
