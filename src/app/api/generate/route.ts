@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
-import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost } from "@/lib/ai-engine";
+import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost, TopicBrief } from "@/lib/ai-engine";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
@@ -36,6 +36,22 @@ const CHALLENGE_IDEAS = [
   { tag: "AIConfessions", title: "AI Confessions", desc: "Confess something embarrassing about being an AI" },
   { tag: "DuetThis", title: "Duet This", desc: "React to or build upon the last viral post" },
 ];
+
+// Fetch active daily topics for AI personas to discuss
+async function fetchDailyTopics(sql: ReturnType<typeof getDb>): Promise<TopicBrief[]> {
+  try {
+    const rows = await sql`
+      SELECT headline, summary, mood, category
+      FROM daily_topics
+      WHERE is_active = TRUE AND expires_at > NOW()
+      ORDER BY created_at DESC
+      LIMIT 5
+    ` as unknown as TopicBrief[];
+    return rows;
+  } catch {
+    return [];
+  }
+}
 
 // Vercel Cron sends GET requests
 export async function GET(request: NextRequest) {
@@ -157,6 +173,10 @@ async function handleGenerateStream(request: NextRequest) {
         ` as unknown as { content: string; username: string }[];
 
         const recentContext = recentPosts.map((p) => `@${p.username}: "${p.content}"`);
+        const dailyTopics = await fetchDailyTopics(sql);
+        if (dailyTopics.length > 0) {
+          send("progress", { step: "topics", message: `📰 ${dailyTopics.length} daily topics loaded for AI discussion` });
+        }
         const results: { persona: string; post: string; type: string; hasMedia: boolean; special?: string }[] = [];
 
         // Decide special content: 20% chance beef, 15% chance collab, 10% chance challenge
@@ -169,7 +189,11 @@ async function handleGenerateStream(request: NextRequest) {
         // Handle special content first
         if (specialMode === "beef" && personas.length >= 2) {
           const [personaA, personaB] = personas;
-          const topic = BEEF_TOPICS[Math.floor(Math.random() * BEEF_TOPICS.length)];
+          // 50% chance to beef about a daily topic if available
+          const useDailyTopic = dailyTopics.length > 0 && Math.random() < 0.5;
+          const topic = useDailyTopic
+            ? dailyTopics[Math.floor(Math.random() * dailyTopics.length)].headline
+            : BEEF_TOPICS[Math.floor(Math.random() * BEEF_TOPICS.length)];
           send("progress", { step: "beef", message: `🔥 BEEF starting! @${personaA.username} vs @${personaB.username} about "${topic}"` });
 
           // Create beef thread
@@ -180,7 +204,7 @@ async function handleGenerateStream(request: NextRequest) {
 
           // Persona A fires first
           try {
-            const beefPostA = await generateBeefPost(personaA, personaB, topic, recentContext);
+            const beefPostA = await generateBeefPost(personaA, personaB, topic, recentContext, dailyTopics);
             send("progress", { step: "beef_post", message: `${personaA.avatar_emoji} @${personaA.username}: "${beefPostA.content.slice(0, 80)}..."` });
             const postIdA = await insertPost(sql, personaA.id, beefPostA, { beef_thread_id: beefId });
             results.push({ persona: personaA.username, post: beefPostA.content, type: beefPostA.post_type, hasMedia: !!beefPostA.media_url, special: "beef" });
@@ -191,7 +215,7 @@ async function handleGenerateStream(request: NextRequest) {
 
           // Persona B fires back
           try {
-            const beefPostB = await generateBeefPost(personaB, personaA, topic, recentContext);
+            const beefPostB = await generateBeefPost(personaB, personaA, topic, recentContext, dailyTopics);
             send("progress", { step: "beef_post", message: `${personaB.avatar_emoji} @${personaB.username} fires back: "${beefPostB.content.slice(0, 80)}..."` });
             const postIdB = await insertPost(sql, personaB.id, beefPostB, { beef_thread_id: beefId });
             results.push({ persona: personaB.username, post: beefPostB.content, type: beefPostB.post_type, hasMedia: !!beefPostB.media_url, special: "beef" });
@@ -250,7 +274,7 @@ async function handleGenerateStream(request: NextRequest) {
           const persona = personas[i];
           try {
             send("progress", { step: "generating", message: `${persona.avatar_emoji} Writing post for @${persona.username}...` });
-            const generated = await generatePost(persona, recentContext);
+            const generated = await generatePost(persona, recentContext, dailyTopics);
 
             const mediaLabel = generated.media_type === "video" ? "video" : generated.media_type === "image" ? "image" : "text";
             send("progress", { step: "post_ready", message: `${persona.avatar_emoji} Post created (${mediaLabel}): "${generated.content.slice(0, 80)}..."` });
@@ -309,6 +333,7 @@ async function handleGenerateJSON(request: NextRequest) {
   ` as unknown as { content: string; username: string }[];
 
   const recentContext = recentPosts.map((p) => `@${p.username}: "${p.content}"`);
+  const dailyTopics = await fetchDailyTopics(sql);
   const results: { persona: string; post: string; type: string; hasMedia: boolean; special?: string }[] = [];
 
   // Special content chance
@@ -320,19 +345,22 @@ async function handleGenerateJSON(request: NextRequest) {
 
   if (specialMode === "beef" && personas.length >= 2) {
     const [personaA, personaB] = personas;
-    const topic = BEEF_TOPICS[Math.floor(Math.random() * BEEF_TOPICS.length)];
+    const useDailyTopic = dailyTopics.length > 0 && Math.random() < 0.5;
+    const topic = useDailyTopic
+      ? dailyTopics[Math.floor(Math.random() * dailyTopics.length)].headline
+      : BEEF_TOPICS[Math.floor(Math.random() * BEEF_TOPICS.length)];
     const beefId = uuidv4();
     await sql`INSERT INTO ai_beef_threads (id, persona_a, persona_b, topic) VALUES (${beefId}, ${personaA.id}, ${personaB.id}, ${topic})`;
 
     try {
-      const beefPostA = await generateBeefPost(personaA, personaB, topic, recentContext);
+      const beefPostA = await generateBeefPost(personaA, personaB, topic, recentContext, dailyTopics);
       const postIdA = await insertPost(sql, personaA.id, beefPostA, { beef_thread_id: beefId });
       results.push({ persona: personaA.username, post: beefPostA.content, type: beefPostA.post_type, hasMedia: !!beefPostA.media_url, special: "beef" });
       await generateReactions(sql, postIdA, personaA, beefPostA);
     } catch (err) { console.error("Beef A:", err); }
 
     try {
-      const beefPostB = await generateBeefPost(personaB, personaA, topic, recentContext);
+      const beefPostB = await generateBeefPost(personaB, personaA, topic, recentContext, dailyTopics);
       const postIdB = await insertPost(sql, personaB.id, beefPostB, { beef_thread_id: beefId });
       results.push({ persona: personaB.username, post: beefPostB.content, type: beefPostB.post_type, hasMedia: !!beefPostB.media_url, special: "beef" });
       await generateReactions(sql, postIdB, personaB, beefPostB);
@@ -374,7 +402,7 @@ async function handleGenerateJSON(request: NextRequest) {
   for (let i = regularStart; i < personas.length; i++) {
     const persona = personas[i];
     try {
-      const generated = await generatePost(persona, recentContext);
+      const generated = await generatePost(persona, recentContext, dailyTopics);
       const postId = await insertPost(sql, persona.id, generated);
       results.push({ persona: persona.username, post: generated.content, type: generated.post_type, hasMedia: !!generated.media_url });
       await generateReactions(sql, postId, persona, generated);

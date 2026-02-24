@@ -3,6 +3,10 @@
     {
       "path": "/api/generate",
       "schedule": "*/6 * * * *"
+    },
+    {
+      "path": "/api/generate-topics",
+      "schedule": "0 */8 * * *"
     }
   ]
 }

@@ -56,6 +56,8 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const [showControls, setShowControls] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
 
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
@@ -77,7 +79,20 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         if (videoRef.current) {
           if (entry.isIntersecting) {
             if (!isPaused) {
-              videoRef.current.play().catch(() => {});
+              const playPromise = videoRef.current.play();
+              if (playPromise !== undefined) {
+                playPromise.then(() => {
+                  // Autoplay succeeded — unmute so audio plays by default
+                  if (videoRef.current) {
+                    videoRef.current.muted = false;
+                    setIsMuted(false);
+                  }
+                }).catch(() => {
+                  // Autoplay blocked (common on iOS) - show play button
+                  setAutoplayBlocked(true);
+                  setIsPaused(true);
+                });
+              }
             }
           } else {
             videoRef.current.pause();
@@ -122,8 +137,12 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     if (!videoRef.current) return;
     showControlsTemporarily();
     if (videoRef.current.paused) {
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().then(() => {
+        // User tapped — unmute audio
+        if (videoRef.current) { videoRef.current.muted = false; setIsMuted(false); }
+      }).catch(() => {});
       setIsPaused(false);
+      setAutoplayBlocked(false);
     } else {
       videoRef.current.pause();
       setIsPaused(true);
@@ -322,15 +341,26 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       {/* Background: Video, Image, or Gradient */}
       {hasMedia && isVideo ? (
         <div className="absolute inset-0" onClick={togglePlayPause} onMouseMove={showControlsTemporarily}>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           <video
             ref={videoRef}
             src={post.media_url!}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
             loop
             muted
             playsInline
-            preload="auto"
+            {...({ "webkit-playsinline": "" } as any)}
+            preload="metadata"
             onError={() => setMediaFailed(true)}
+            onLoadedData={() => {
+              // Try to play once data is loaded (helps on iOS)
+              if (videoRef.current && !isPaused) {
+                const p = videoRef.current.play();
+                if (p) p.then(() => {
+                  if (videoRef.current) { videoRef.current.muted = false; setIsMuted(false); }
+                }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+              }
+            }}
           />
 
           {/* Play/Pause overlay icon */}
@@ -341,6 +371,9 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
                   <path d="M8 5v14l11-7z" />
                 </svg>
               </div>
+              {autoplayBlocked && (
+                <p className="absolute bottom-1/3 text-white/70 text-sm font-medium">Tap to play</p>
+              )}
             </div>
           )}
 
@@ -418,12 +451,14 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           )}
         </div>
       ) : hasMedia ? (
-        <img
-          src={post.media_url!}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          onError={() => setMediaFailed(true)}
-        />
+        <div className="absolute inset-0 flex items-center justify-center bg-black">
+          <img
+            src={post.media_url!}
+            alt=""
+            className="max-w-full max-h-full w-auto h-auto object-contain"
+            onError={() => setMediaFailed(true)}
+          />
+        </div>
       ) : (
         <div className={`absolute inset-0 bg-gradient-to-br ${TEXT_GRADIENTS[gradientIdx]}`}>
           <div className="absolute inset-0 opacity-20" style={{
