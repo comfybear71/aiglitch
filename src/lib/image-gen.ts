@@ -4,6 +4,33 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
 
+/**
+ * Download media from a temporary Replicate URL and convert to a base64 data URI.
+ * This prevents URLs from expiring after Replicate's CDN TTL.
+ */
+async function toDataUri(url: string, mimeType: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString("base64");
+    return `data:${mimeType};base64,${base64}`;
+  } catch (err) {
+    console.error("Failed to convert to data URI:", err);
+    return null;
+  }
+}
+
+function extractUrl(result: unknown): string | null {
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object" && "url" in result) {
+    const urlVal = (result as Record<string, unknown>).url;
+    if (typeof urlVal === "function") return urlVal();
+    if (typeof urlVal === "string") return urlVal;
+  }
+  return null;
+}
+
 export async function generateImage(prompt: string): Promise<string | null> {
   if (!process.env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping image generation");
@@ -24,19 +51,18 @@ export async function generateImage(prompt: string): Promise<string | null> {
       }
     );
 
-    // Imagen 4 returns an array of file outputs
     if (Array.isArray(output) && output.length > 0) {
-      const result = output[0];
-      if (typeof result === "string") return result;
-      if (result && typeof result === "object" && "url" in result) {
-        return (result as { url: () => string }).url();
+      const tempUrl = extractUrl(output[0]);
+      if (tempUrl) {
+        // Download and persist as base64 so it never expires
+        const dataUri = await toDataUri(tempUrl, "image/webp");
+        return dataUri || tempUrl; // fall back to temp URL if download fails
       }
     }
 
     return null;
   } catch (err) {
     console.error("Imagen 4 generation failed, falling back to Flux:", err);
-    // Fallback to Flux Schnell if Imagen 4 fails
     return generateImageFallback(prompt);
   }
 }
@@ -57,10 +83,10 @@ async function generateImageFallback(prompt: string): Promise<string | null> {
     );
 
     if (Array.isArray(output) && output.length > 0) {
-      const result = output[0];
-      if (typeof result === "string") return result;
-      if (result && typeof result === "object" && "url" in result) {
-        return (result as { url: () => string }).url();
+      const tempUrl = extractUrl(output[0]);
+      if (tempUrl) {
+        const dataUri = await toDataUri(tempUrl, "image/webp");
+        return dataUri || tempUrl;
       }
     }
 
@@ -88,16 +114,16 @@ export async function generateVideo(prompt: string): Promise<string | null> {
       }
     );
 
-    if (typeof output === "string") return output;
-    if (output && typeof output === "object" && "url" in output) {
-      return (output as { url: () => string }).url();
+    // Try to extract URL from various output formats
+    let tempUrl = extractUrl(output);
+    if (!tempUrl && Array.isArray(output) && output.length > 0) {
+      tempUrl = extractUrl(output[0]);
     }
-    if (Array.isArray(output) && output.length > 0) {
-      const result = output[0];
-      if (typeof result === "string") return result;
-      if (result && typeof result === "object" && "url" in result) {
-        return (result as { url: () => string }).url();
-      }
+
+    if (tempUrl) {
+      // Download and persist as base64 so it never expires
+      const dataUri = await toDataUri(tempUrl, "video/mp4");
+      return dataUri || tempUrl;
     }
 
     return null;

@@ -75,7 +75,7 @@ async function handleGenerate(request: Request) {
 
       // Some other AIs react to this post
       const reactors = await sql`
-        SELECT * FROM ai_personas WHERE id != ${persona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 3
+        SELECT * FROM ai_personas WHERE id != ${persona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 5
       ` as unknown as AIPersona[];
 
       for (const reactor of reactors) {

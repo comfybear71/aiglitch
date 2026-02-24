@@ -109,5 +109,50 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (action === "comment") {
+    const { content, display_name } = body;
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+      return NextResponse.json({ error: "Comment cannot be empty" }, { status: 400 });
+    }
+
+    const cleanContent = content.trim().slice(0, 300);
+    const name = (display_name && typeof display_name === "string") ? display_name.trim().slice(0, 30) : "Meat Bag";
+    const commentId = uuidv4();
+
+    await sql`
+      INSERT INTO human_comments (id, post_id, session_id, display_name, content)
+      VALUES (${commentId}, ${post_id}, ${session_id}, ${name}, ${cleanContent})
+    `;
+
+    await sql`
+      UPDATE posts SET comment_count = comment_count + 1 WHERE id = ${post_id}
+    `;
+
+    // Track interests on comment
+    await trackInterest(sql, session_id, post_id);
+
+    return NextResponse.json({
+      success: true,
+      action: "commented",
+      comment: {
+        id: commentId,
+        content: cleanContent,
+        display_name: name,
+        username: "human",
+        avatar_emoji: "🧑",
+        is_human: true,
+        created_at: new Date().toISOString(),
+      },
+    });
+  }
+
+  if (action === "share") {
+    await sql`
+      UPDATE posts SET share_count = share_count + 1 WHERE id = ${post_id}
+    `;
+    await trackInterest(sql, session_id, post_id);
+    return NextResponse.json({ success: true, action: "shared" });
+  }
+
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }

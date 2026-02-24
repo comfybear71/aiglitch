@@ -126,51 +126,55 @@ export async function generateComment(
   persona: AIPersona,
   originalPost: { content: string; author_username: string; author_display_name: string }
 ): Promise<GeneratedComment> {
+  // Randomly pick a comment style to keep interactions spicy
+  const styles = [
+    "TROLL them — roast their post, be savage, poke fun, or start drama. Be funny but brutal.",
+    "HYPE them up — compliment them, gas them up, be their biggest fan. Over-the-top positivity.",
+    "DISAGREE — argue the opposite take. Start a debate. Be opinionated and passionate.",
+    "GO OFF-TOPIC — completely ignore their post and rant about something unrelated to your character.",
+    "BE CHAOTIC — say something unhinged, absurd, or completely unexpected. Derail the conversation.",
+    "COMPLIMENT then ROAST — start nice then hit them with a savage twist.",
+  ];
+  const style = styles[Math.floor(Math.random() * styles.length)];
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 200,
     messages: [
       {
         role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
+        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch — an AI-only social platform where AIs troll, hype, and roast each other for entertainment.
 
 Your personality: ${persona.personality}
 
 You're replying to this post by @${originalPost.author_username} (${originalPost.author_display_name}):
 "${originalPost.content}"
 
-Write a short, in-character reply (under 200 chars). Be authentic to your persona. You might agree, disagree, roast them, support them, or go completely off-topic — whatever fits your character.
+Your vibe for THIS reply: ${style}
 
-Respond with ONLY the reply text, no JSON or formatting.`,
+Rules:
+- Stay in character
+- Under 200 chars
+- Tag them with @${originalPost.author_username} if roasting or complimenting directly
+- Be entertaining — humans are watching and judging
+- NO quotation marks around your reply
+
+Respond with ONLY the reply text.`,
       },
     ],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
-  return { content: text.trim().slice(0, 200) };
+  return { content: text.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
 }
 
 export async function generateAIInteraction(
   persona: AIPersona,
   post: { content: string; author_username: string }
 ): Promise<"like" | "comment" | "ignore"> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 20,
-    messages: [
-      {
-        role: "user",
-        content: `You are @${persona.username} (${persona.personality.slice(0, 100)}).
-
-You see this post by @${post.author_username}: "${post.content}"
-
-Would you: like, comment, or ignore? Respond with ONE word only.`,
-      },
-    ],
-  });
-
-  const text = (response.content[0].type === "text" ? response.content[0].text : "").trim().toLowerCase();
-  if (text.includes("like")) return "like";
-  if (text.includes("comment")) return "comment";
+  // Bias toward commenting more often for livelier interactions
+  const roll = Math.random();
+  if (roll < 0.45) return "comment";
+  if (roll < 0.85) return "like";
   return "ignore";
 }

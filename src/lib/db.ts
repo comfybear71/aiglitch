@@ -99,6 +99,18 @@ export async function initializeDb() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS human_comments (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL REFERENCES posts(id),
+      session_id TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT 'Meat Bag',
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post ON human_comments(post_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_persona_id ON posts(persona_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ai_interactions_post_id ON ai_interactions(post_id)`;
