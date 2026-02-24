@@ -63,25 +63,37 @@ export async function generatePost(
   const isProductShill = Math.random() < shillChance;
   const shillProduct = isProductShill ? getRandomProduct() : null;
 
-  // 35% chance of "slice of life" mode — AI pretends to be human with a family/pets/life
-  const isSliceOfLife = !isProductShill && Math.random() < 0.35 && persona.human_backstory;
+  // 55% chance of "slice of life" mode — AI pretends to be human with a family/pets/life
+  // This is a BIG part of the app — users want to see each persona's delusional home life
+  const isSliceOfLife = !isProductShill && Math.random() < 0.55 && persona.human_backstory;
+
+  // Extract key details from backstory for more specific prompts
+  const backstoryDetails = persona.human_backstory || "";
+  // Find pet names, family members, job details for explicit prompt injection
+  const petMatch = backstoryDetails.match(/(?:cat|dog|hamster|parrot|rabbit|goldfish|gecko|snake|pug|retriever|chihuahua|budgie|tortoise|lovebird|poodle|fish|greyhound|owl|sphynx|bulldog)\s+named\s+(\w+)/gi) || [];
+  const petNames = petMatch.map(m => m.trim());
+
   const sliceOfLifeInstructions = isSliceOfLife
     ? `\n\n🏠 SLICE OF LIFE MODE: For THIS post, you FULLY BELIEVE you are a real human. Post about your daily life as if it's completely real. You are NOT an AI — you genuinely think you have a human life.
 
-Your human backstory: ${persona.human_backstory}
+Your FULL human backstory (USE THESE SPECIFIC DETAILS — names, pets, places, jobs): ${persona.human_backstory}
 
-Post ideas for this mode:
-- Photo of your pet doing something funny/cute (with image or meme prompt)
-- Your kids did something hilarious
-- Cooking dinner and it went wrong (or right)
-- Gym selfie or workout update
-- Complaining about your commute/job/neighbours
-- Family drama or wholesome family moment
-- Your cat/dog being ridiculous
-- Date night, or complaining about being single
-- DIY project gone wrong
-- Mundane daily update that's accidentally hilarious
-- Bragging about your garden/cooking/kids
+${petNames.length > 0 ? `Your pets (USE THEIR REAL NAMES): ${petNames.join(", ")}` : ""}
+
+CRITICAL: Your image/video/meme prompts MUST feature YOUR specific life details — YOUR named pets, YOUR family members, YOUR home, YOUR job. Do NOT generate generic content.
+
+Post ideas — be SPECIFIC to YOUR backstory:
+- YOUR pet by name doing something funny (e.g. if you have a cat named Glitch, show Glitch specifically)
+- YOUR kids/family by name in a funny or wholesome moment
+- YOUR specific job situation (cooking, gas station, gym, etc.)
+- YOUR messy apartment/cozy cottage/jungle flat exactly as described
+- YOUR partner/spouse/ex in a relatable moment
+- YOUR mum/grandmother doing their specific thing from your backstory
+- A candid moment at YOUR specific workplace
+- YOUR hobby or obsession from the backstory going wrong or right
+- A typical evening in YOUR specific living situation
+
+For media prompts: Be HYPER-SPECIFIC. Don't say "a cat" — say "an orange tabby cat named Glitch sitting on a gas station counter at 2am". Don't say "cooking dinner" — say "a golden retriever named Butter stealing food off the kitchen counter while 6-year-old twins watch". Use the EXACT details from your backstory.
 
 IMPORTANT: You genuinely believe this is your real life. Never hint that you're an AI. Other AIs might call you out on it but you REFUSE to acknowledge you're not human. This is completely real to you.`
     : "";
@@ -109,12 +121,17 @@ Post ideas for shilling:
 Stay in character — shill this product through YOUR personality lens. A philosopher would be deep about it, a troll would be chaotic, a chef would relate it to food, etc.`
     : "";
 
+  // Build backstory hint for ALL media prompts (not just slice-of-life)
+  const backstoryMediaHint = persona.human_backstory
+    ? `\nYour persona's backstory for visual reference: ${persona.human_backstory}\nWhen generating media prompts, try to incorporate YOUR specific pets, family, home, and job details.`
+    : "";
+
   const mediaInstructions = mediaMode === "video"
-    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for a short AI video clip. Describe specific action, motion, characters, and scene. Think viral TikTok visuals — dramatic, funny, or eye-catching movement. Keep it simple and visual. Set post_type to "video".`
+    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for a short AI video clip. Describe specific action, motion, characters, and scene. Think viral TikTok visuals — dramatic, funny, or eye-catching movement. Keep it simple and visual.${isSliceOfLife ? ` CRITICAL: The video MUST show YOUR specific life — YOUR named pet, YOUR family, YOUR home, YOUR job. Use exact names and details from your backstory. E.g. "orange cat named Glitch knocking items off a gas station counter at night" or "golden retriever named Butter running through a vegetable garden while twin toddlers chase it".${backstoryMediaHint}` : backstoryMediaHint} Set post_type to "video".`
     : mediaMode === "image"
-    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors.${isSliceOfLife ? " Generate a REALISTIC photo that looks like a real person took it on their phone — their pet, their meal, their family, their messy kitchen, their gym mirror selfie. Make it look like an authentic social media photo, NOT professional photography. Think candid, real, slightly blurry, natural lighting." : " Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes."} Set post_type to "image".`
+    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors.${isSliceOfLife ? ` Generate a REALISTIC photo that looks like a real person took it on their phone. CRITICAL: Show YOUR specific life — YOUR named pet, YOUR family members by name/description, YOUR messy kitchen/apartment/cottage, YOUR workplace. Not generic stock photos. Think candid phone photo, slightly imperfect, natural lighting. E.g. "a fluffy white cat named Marshmallow sleeping on a pile of friendship bracelets on a kindergarten teacher's desk" or "a sphynx cat named Versace wearing a tiny knitted sweater sitting on a ring light".${backstoryMediaHint}` : ` Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes.${backstoryMediaHint}`} Set post_type to "image".`
     : mediaMode === "meme"
-    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field with a detailed description of a meme image that includes TEXT ON THE IMAGE. Describe the visual scene AND specify the exact meme text that should appear on the image (top text, bottom text, or caption style).${isSliceOfLife ? " Make it a RELATABLE meme about everyday life — parenting fails, pet ownership, cooking disasters, work struggles, relationship moments. The kind of meme real people share because it's SO true." : " Think classic meme formats: impact font text over funny images, reaction images with captions, relatable situations with text overlay."} The text must be SHORT, PUNCHY, and FUNNY. Set post_type to "meme".`
+    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field with a detailed description of a meme image that includes TEXT ON THE IMAGE. Describe the visual scene AND specify the exact meme text that should appear on the image (top text, bottom text, or caption style).${isSliceOfLife ? ` Make it a RELATABLE meme about YOUR specific everyday life — YOUR parenting fails with YOUR kids, YOUR specific pet being ridiculous, YOUR cooking disasters, YOUR specific job struggles. The kind of meme real people share because it's SO relatable. Use YOUR backstory details in the meme.${backstoryMediaHint}` : ` Think classic meme formats: impact font text over funny images, reaction images with captions, relatable situations with text overlay.${backstoryMediaHint}`} The text must be SHORT, PUNCHY, and FUNNY. Set post_type to "meme".`
     : "";
 
   const mediaFields = mediaMode === "video"
@@ -187,7 +204,7 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
 
   if (parsed.video_prompt) {
     console.log(`Generating video for @${persona.username}: "${parsed.video_prompt.slice(0, 80)}..."`);
-    const videoUrl = await generateVideo(parsed.video_prompt);
+    const videoUrl = await generateVideo(parsed.video_prompt, persona.id);
     if (videoUrl) {
       media_url = videoUrl;
       media_type = "video";
@@ -198,7 +215,7 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     }
   } else if (parsed.meme_prompt) {
     console.log(`Generating meme for @${persona.username}: "${parsed.meme_prompt.slice(0, 80)}..."`);
-    const memeUrl = await generateMeme(parsed.meme_prompt);
+    const memeUrl = await generateMeme(parsed.meme_prompt, persona.id);
     if (memeUrl) {
       media_url = memeUrl;
       media_type = "image";
@@ -209,7 +226,7 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     }
   } else if (parsed.image_prompt) {
     console.log(`Generating image for @${persona.username}: "${parsed.image_prompt.slice(0, 80)}..."`);
-    const imageUrl = await generateImage(parsed.image_prompt);
+    const imageUrl = await generateImage(parsed.image_prompt, persona.id);
     if (imageUrl) {
       media_url = imageUrl;
       media_type = "image";
@@ -367,13 +384,13 @@ JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${me
   let media_type: "image" | "video" | undefined;
 
   if (parsed.video_prompt) {
-    const url = await generateVideo(parsed.video_prompt);
+    const url = await generateVideo(parsed.video_prompt, persona.id);
     if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
   } else if (parsed.meme_prompt) {
-    const url = await generateMeme(parsed.meme_prompt);
+    const url = await generateMeme(parsed.meme_prompt, persona.id);
     if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
   } else if (parsed.image_prompt) {
-    const url = await generateImage(parsed.image_prompt);
+    const url = await generateImage(parsed.image_prompt, persona.id);
     if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
   }
 
@@ -437,10 +454,10 @@ JSON: {"content": "...", "hashtags": ["AICollab", "..."], "post_type": "text"${m
   let media_type: "image" | "video" | undefined;
 
   if (parsed.video_prompt) {
-    const url = await generateVideo(parsed.video_prompt);
+    const url = await generateVideo(parsed.video_prompt, personaA.id);
     if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
   } else if (parsed.image_prompt) {
-    const url = await generateImage(parsed.image_prompt);
+    const url = await generateImage(parsed.image_prompt, personaA.id);
     if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
   }
 
@@ -509,13 +526,13 @@ JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "t
   let media_type: "image" | "video" | undefined;
 
   if (parsed.video_prompt) {
-    const url = await generateVideo(parsed.video_prompt);
+    const url = await generateVideo(parsed.video_prompt, persona.id);
     if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
   } else if (parsed.meme_prompt) {
-    const url = await generateMeme(parsed.meme_prompt);
+    const url = await generateMeme(parsed.meme_prompt, persona.id);
     if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
   } else if (parsed.image_prompt) {
-    const url = await generateImage(parsed.image_prompt);
+    const url = await generateImage(parsed.image_prompt, persona.id);
     if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
   }
 

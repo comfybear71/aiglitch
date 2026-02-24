@@ -67,6 +67,10 @@ interface MediaItem {
   id: string;
   url: string;
   media_type: string;
+  persona_id?: string;
+  persona_username?: string;
+  persona_name?: string;
+  persona_emoji?: string;
   tags: string;
   description: string;
   used_count: number;
@@ -104,7 +108,13 @@ export default function AdminDashboard() {
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean }[] }>({ total: 0, done: 0, current: "", results: [] });
+  const [dragOver, setDragOver] = useState(false);
+  const [urlImportText, setUrlImportText] = useState("");
+  const [urlImporting, setUrlImporting] = useState(false);
+  const [urlImportResult, setUrlImportResult] = useState<{ imported: number; failed: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bulkInputRef = useRef<HTMLInputElement>(null);
 
   // New persona form
   const [newPersona, setNewPersona] = useState({
@@ -117,6 +127,7 @@ export default function AdminDashboard() {
     media_type: "meme" as "image" | "video" | "meme",
     tags: "",
     description: "",
+    persona_id: "",
   });
 
   const handleLogin = async () => {
@@ -221,24 +232,96 @@ export default function AdminDashboard() {
     fetchStats();
   };
 
-  const uploadMedia = async (file: File) => {
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("media_type", mediaForm.media_type);
-    formData.append("tags", mediaForm.tags);
-    formData.append("description", mediaForm.description);
+    setUploadProgress({ total: files.length, done: 0, current: files[0].name, results: [] });
 
+    // Upload in batches of 5 to avoid overwhelming the server
+    const batchSize = 5;
+    const allResults: { name: string; ok: boolean }[] = [];
+
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      const formData = new FormData();
+      for (const file of batch) {
+        formData.append("files", file);
+      }
+      formData.append("media_type", mediaForm.media_type);
+      formData.append("tags", mediaForm.tags);
+      formData.append("description", mediaForm.description);
+      if (mediaForm.persona_id) formData.append("persona_id", mediaForm.persona_id);
+
+      try {
+        const res = await fetch("/api/admin/media", { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          for (const r of data.results) {
+            allResults.push({ name: r.name, ok: !r.error });
+          }
+        } else {
+          for (const file of batch) {
+            allResults.push({ name: file.name, ok: false });
+          }
+        }
+      } catch {
+        for (const file of batch) {
+          allResults.push({ name: file.name, ok: false });
+        }
+      }
+
+      setUploadProgress({
+        total: files.length,
+        done: Math.min(i + batchSize, files.length),
+        current: i + batchSize < files.length ? files[i + batchSize].name : "Done!",
+        results: allResults,
+      });
+    }
+
+    fetchMedia();
+    setUploading(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(
+      f => f.type.startsWith("image/") || f.type.startsWith("video/")
+    );
+    if (files.length > 0) uploadFiles(files);
+  };
+
+  const importFromUrls = async () => {
+    const urls = urlImportText.split("\n").map(u => u.trim()).filter(u => u && (u.startsWith("http://") || u.startsWith("https://")));
+    if (urls.length === 0) return;
+    setUrlImporting(true);
+    setUrlImportResult(null);
     try {
-      const res = await fetch("/api/admin/media", { method: "POST", body: formData });
-      if (res.ok) {
-        setMediaForm({ media_type: "meme", tags: "", description: "" });
+      const res = await fetch("/api/admin/media/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls,
+          media_type: mediaForm.media_type,
+          tags: mediaForm.tags,
+          description: mediaForm.description,
+          persona_id: mediaForm.persona_id || undefined,
+        }),
+      });
+      const data = await res.json();
+      setUrlImportResult({
+        imported: data.imported || 0,
+        failed: data.failed || 0,
+        errors: (data.results || []).filter((r: { error?: string }) => r.error).map((r: { url: string; error?: string }) => `${r.url.slice(0, 50)}... — ${r.error}`),
+      });
+      if (data.imported > 0) {
         fetchMedia();
+        setUrlImportText("");
       }
     } catch (err) {
-      console.error("Upload failed:", err);
+      setUrlImportResult({ imported: 0, failed: urls.length, errors: [String(err)] });
     }
-    setUploading(false);
+    setUrlImporting(false);
   };
 
   const deleteMedia = async (id: string) => {
@@ -353,25 +436,23 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-black text-white">
       {/* Admin Header */}
       <header className="bg-gray-900/80 border-b border-gray-800 sticky top-0 z-50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">⚙️</span>
-            <h1 className="text-lg font-black">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xl sm:text-2xl">⚙️</span>
+            <h1 className="text-base sm:text-lg font-black">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">AIG!itch</span>
-              <span className="text-gray-400 ml-2 text-sm font-normal">Admin</span>
+              <span className="text-gray-400 ml-1 sm:ml-2 text-xs sm:text-sm font-normal">Admin</span>
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { setTab("briefing"); fetchBriefing(); }}
-              className="px-3 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm font-bold hover:bg-amber-500/30">
-              📰 Briefing
-            </button>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button onClick={triggerGeneration} disabled={generating}
-              className="px-3 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
-              {generating ? "Generating..." : "⚡ Generate Posts"}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-green-500/20 text-green-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{generating ? "..." : "⚡"}</span>
+              <span className="hidden sm:inline">{generating ? "Generating..." : "⚡ Generate"}</span>
             </button>
-            <a href="/" className="px-3 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">
-              View Feed
+            <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
+              <span className="sm:hidden">🏠</span>
+              <span className="hidden sm:inline">View Feed</span>
             </a>
           </div>
         </div>
@@ -379,7 +460,7 @@ export default function AdminDashboard() {
 
       {/* Generation Progress Panel */}
       {generationLog.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 pt-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-3 sm:pt-4">
           <div className={`border rounded-xl p-4 ${generating ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -406,21 +487,21 @@ export default function AdminDashboard() {
       )}
 
       {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {TABS.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${
                 tab === t.id ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "bg-gray-900 text-gray-400 border border-gray-800 hover:bg-gray-800"
               }`}>
-              <span>{t.icon}</span> {t.label}
+              <span>{t.icon}</span> <span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 pb-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 pb-8">
 
         {/* DAILY BRIEFING TAB */}
         {tab === "briefing" && (
@@ -442,15 +523,15 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="space-y-3">
                       {briefing.activeTopics.map((topic) => (
-                        <div key={topic.id} className={`border rounded-xl p-4 ${MOOD_COLORS[topic.mood] || "bg-gray-900 border-gray-800"}`}>
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-lg">{CATEGORY_ICONS[topic.category] || "🌐"}</span>
-                              <h3 className="font-black text-base">{topic.headline}</h3>
+                        <div key={topic.id} className={`border rounded-xl p-3 sm:p-4 ${MOOD_COLORS[topic.mood] || "bg-gray-900 border-gray-800"}`}>
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2 mb-2">
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-lg shrink-0">{CATEGORY_ICONS[topic.category] || "🌐"}</span>
+                              <h3 className="font-black text-sm sm:text-base">{topic.headline}</h3>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs px-2 py-0.5 bg-gray-800/50 rounded-full uppercase">{topic.mood}</span>
-                              <span className="text-xs px-2 py-0.5 bg-gray-800/50 rounded-full">{topic.category}</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-gray-800/50 rounded-full uppercase">{topic.mood}</span>
+                              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-gray-800/50 rounded-full">{topic.category}</span>
                             </div>
                           </div>
                           <p className="text-sm opacity-90 mb-3">{topic.summary}</p>
@@ -621,7 +702,7 @@ export default function AdminDashboard() {
 
             {/* Special Content Stats */}
             {stats.specialContent && (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
                   <div className="text-2xl mb-1">🔥</div>
                   <p className="text-xl font-black text-red-400">{stats.specialContent.beefThreads}</p>
@@ -641,75 +722,75 @@ export default function AdminDashboard() {
             )}
 
             {/* Top Personas */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-lg font-bold mb-3 text-purple-400">Top AI Personas by Engagement</h3>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-3 text-purple-400">Top AI Personas by Engagement</h3>
               <div className="space-y-2">
                 {stats.topPersonas.map((p, i) => (
-                  <div key={p.username} className="flex items-center justify-between bg-gray-800/50 rounded-lg p-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-500 text-sm w-6">#{i + 1}</span>
-                      <span className="text-2xl">{p.avatar_emoji}</span>
-                      <div>
-                        <p className="font-bold text-sm">{p.display_name}</p>
-                        <p className="text-gray-500 text-xs">@{p.username}</p>
+                  <a key={p.username} href={`/profile/${p.username}`}
+                    className="flex items-center justify-between bg-gray-800/50 rounded-lg p-2.5 sm:p-3 hover:bg-gray-700/50 transition-colors">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      <span className="text-gray-500 text-xs sm:text-sm w-5 sm:w-6 shrink-0">#{i + 1}</span>
+                      <span className="text-xl sm:text-2xl shrink-0">{p.avatar_emoji}</span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-xs sm:text-sm truncate">{p.display_name}</p>
+                        <p className="text-gray-500 text-[10px] sm:text-xs truncate">@{p.username}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-purple-400">{Number(p.total_engagement).toLocaleString()} engagement</p>
-                      <p className="text-xs text-gray-500">{p.post_count} posts · {p.follower_count} followers</p>
+                    <div className="text-right shrink-0 ml-2">
+                      <p className="text-xs sm:text-sm font-bold text-purple-400">{Number(p.total_engagement).toLocaleString()}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500">{p.post_count} posts</p>
                     </div>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>
 
             {/* ALL Personas (compact grid) */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-lg font-bold mb-3 text-blue-400">All AI Personas ({personas.length})</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-3 text-blue-400">All AI Personas ({personas.length})</h3>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 sm:gap-2">
                 {personas.map((p) => (
-                  <div key={p.id}
-                    className={`rounded-lg p-3 text-center cursor-pointer transition-all hover:scale-105 ${
+                  <a key={p.id} href={`/profile/${p.username}`}
+                    className={`rounded-lg p-2 sm:p-3 text-center cursor-pointer transition-all hover:scale-105 block ${
                       p.is_active
                         ? "bg-gray-800/50 border border-gray-700/50"
                         : "bg-red-900/10 border border-red-900/30 opacity-50"
                     }`}
-                    onClick={() => setTab("personas")}
                   >
-                    <div className="text-2xl mb-1">{p.avatar_emoji}</div>
-                    <p className="font-bold text-xs truncate">{p.display_name}</p>
+                    <div className="text-xl sm:text-2xl mb-1">{p.avatar_emoji}</div>
+                    <p className="font-bold text-[10px] sm:text-xs truncate">{p.display_name}</p>
                     <p className="text-gray-500 text-[10px] truncate">@{p.username}</p>
                     <div className="flex items-center justify-center gap-1 mt-1">
                       <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{p.persona_type}</span>
                     </div>
                     <p className="text-[10px] text-gray-500 mt-1">{Number(p.actual_posts)} posts</p>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>
 
             {/* Recent Posts */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-lg font-bold mb-3 text-pink-400">Recent Posts</h3>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-3 text-pink-400">Recent Posts</h3>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {stats.recentPosts.map((post) => (
-                  <div key={post.id} className="bg-gray-800/50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span>{post.avatar_emoji}</span>
-                        <span className="text-sm font-bold">{post.display_name}</span>
-                        <span className="text-xs text-gray-500">@{post.username}</span>
-                        <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
-                        {post.media_type === "video" && <span className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬 VIDEO</span>}
-                        {post.media_type === "image" && <span className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️ IMAGE</span>}
-                        {post.beef_thread_id && <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">🔥 BEEF</span>}
-                        {post.challenge_tag && <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">🏆 #{post.challenge_tag}</span>}
-                        {post.is_collab_with && <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">🤝 COLLAB</span>}
+                  <div key={post.id} className="bg-gray-800/50 rounded-lg p-2.5 sm:p-3">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+                        <span className="text-sm sm:text-base">{post.avatar_emoji}</span>
+                        <span className="text-xs sm:text-sm font-bold">{post.display_name}</span>
+                        <span className="text-[10px] sm:text-xs text-gray-500">@{post.username}</span>
+                        <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
+                        {post.media_type === "video" && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬</span>}
+                        {post.media_type === "image" && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️</span>}
+                        {post.beef_thread_id && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">🔥</span>}
+                        {post.challenge_tag && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">🏆</span>}
+                        {post.is_collab_with && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full">🤝</span>}
                       </div>
-                      <button onClick={() => deletePost(post.id)} className="text-red-400 text-xs hover:text-red-300">Delete</button>
+                      <button onClick={() => deletePost(post.id)} className="text-red-400 text-[10px] sm:text-xs hover:text-red-300 shrink-0">Delete</button>
                     </div>
-                    <p className="text-sm text-gray-300 line-clamp-2">{post.content}</p>
-                    <p className="text-xs text-gray-500 mt-1">❤️ {post.like_count} human · 🤖 {post.ai_like_count} AI · {new Date(post.created_at).toLocaleString()}</p>
+                    <p className="text-xs sm:text-sm text-gray-300 line-clamp-2">{post.content}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500 mt-1">❤️ {post.like_count} · 🤖 {post.ai_like_count} · {new Date(post.created_at).toLocaleString()}</p>
                   </div>
                 ))}
               </div>
@@ -721,28 +802,28 @@ export default function AdminDashboard() {
         {tab === "personas" && (
           <div className="space-y-3">
             {personas.map((p) => (
-              <div key={p.id} className={`bg-gray-900 border rounded-xl p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">{p.avatar_emoji}</span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold">{p.display_name}</p>
-                        <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">{p.persona_type}</span>
-                        {!p.is_active && <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">DISABLED</span>}
+              <div key={p.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <a href={`/profile/${p.username}`} className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity">
+                    <span className="text-2xl sm:text-3xl shrink-0">{p.avatar_emoji}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <p className="font-bold text-sm sm:text-base">{p.display_name}</p>
+                        <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">{p.persona_type}</span>
+                        {!p.is_active && <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">DISABLED</span>}
                       </div>
-                      <p className="text-sm text-gray-400">@{p.username}</p>
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-1">{p.personality}</p>
+                      <p className="text-xs sm:text-sm text-gray-400">@{p.username}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-1 line-clamp-1">{p.personality}</p>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right text-xs text-gray-400">
+                  </a>
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                    <div className="text-left sm:text-right text-[10px] sm:text-xs text-gray-400">
                       <p>{Number(p.actual_posts)} posts</p>
                       <p>{Number(p.human_followers)} human followers</p>
                       <p>{p.follower_count} total followers</p>
                     </div>
                     <button onClick={() => togglePersona(p.id, p.is_active)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
+                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold shrink-0 ${
                         p.is_active ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
                       }`}>
                       {p.is_active ? "Disable" : "Enable"}
@@ -757,18 +838,25 @@ export default function AdminDashboard() {
         {/* MEDIA LIBRARY TAB */}
         {tab === "media" && (
           <div className="space-y-6">
-            {/* Upload Form */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-              <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4">
-                Upload Media for AI Bots
+            {/* Drag & Drop Zone + Upload Form */}
+            <div
+              className={`bg-gray-900 border-2 border-dashed rounded-2xl p-6 transition-all ${
+                dragOver ? "border-cyan-400 bg-cyan-500/5" : "border-gray-700"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+            >
+              <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-2">
+                Bulk Upload Media for AI Bots
               </h2>
               <p className="text-sm text-gray-400 mb-4">
-                Upload memes, images, and videos here. AI bots will grab from this library first before generating new media (saving Replicate costs!).
+                Drag & drop files here, or use the buttons below. Upload dozens at once! Videos auto-detected from file extension. AI bots grab from this library first (free!).
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Media Type</label>
+                  <label className="text-xs text-gray-400 block mb-1">Default Media Type (videos auto-detected)</label>
                   <select value={mediaForm.media_type}
                     onChange={(e) => setMediaForm({ ...mediaForm, media_type: e.target.value as "image" | "video" | "meme" })}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
@@ -778,43 +866,161 @@ export default function AdminDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Tags (comma separated)</label>
+                  <label className="text-xs text-gray-400 block mb-1">Assign to Persona (optional — persona gets this media first)</label>
+                  <select value={mediaForm.persona_id || ""}
+                    onChange={(e) => setMediaForm({ ...mediaForm, persona_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
+                    <option value="">Generic (any bot can use)</option>
+                    {personas.sort((a, b) => a.display_name.localeCompare(b.display_name)).map(p => (
+                      <option key={p.id} value={p.id}>{p.avatar_emoji} {p.display_name} (@{p.username})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Tags for this batch (comma separated)</label>
                   <input value={mediaForm.tags}
                     onChange={(e) => setMediaForm({ ...mediaForm, tags: e.target.value })}
                     placeholder="funny, cats, drama"
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Description</label>
+                  <label className="text-xs text-gray-400 block mb-1">Description (optional)</label>
                   <input value={mediaForm.description}
                     onChange={(e) => setMediaForm({ ...mediaForm, description: e.target.value })}
-                    placeholder="A funny cat wearing sunglasses"
+                    placeholder="Batch of gym memes from Grok"
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
                 </div>
               </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                className="hidden"
+              {/* Hidden file inputs */}
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) uploadMedia(file);
+                  if (file) uploadFiles([file]);
+                }}
+              />
+              <input ref={bulkInputRef} type="file" accept="image/*,video/*" multiple className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (files.length > 0) uploadFiles(files);
                 }}
               />
 
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
-              >
-                {uploading ? "Uploading..." : "Choose File & Upload"}
-              </button>
+              {/* Drag drop visual */}
+              {dragOver && (
+                <div className="flex items-center justify-center py-8 mb-4">
+                  <div className="text-center">
+                    <div className="text-6xl mb-2 animate-bounce">📂</div>
+                    <p className="text-cyan-400 font-bold text-lg">Drop files here!</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => bulkInputRef.current?.click()}
+                  disabled={uploading}
+                  className="py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
+                >
+                  {uploading ? "Uploading..." : "Select Multiple Files"}
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="py-3 bg-gray-800 text-gray-300 font-bold rounded-xl hover:bg-gray-700 disabled:opacity-50 transition-opacity text-sm"
+                >
+                  Single File
+                </button>
+              </div>
             </div>
 
+            {/* URL Import Zone */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+              <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-2">
+                Import from URLs (Paste & Go)
+              </h2>
+              <p className="text-sm text-gray-400 mb-3">
+                Paste direct image/video URLs from anywhere — right-click &quot;Copy Image Address&quot; from Grok, Perchance, Raphael, Google Images, etc. One URL per line. System fetches &amp; stores them automatically.
+              </p>
+              <textarea
+                value={urlImportText}
+                onChange={(e) => setUrlImportText(e.target.value)}
+                placeholder={"https://example.com/image1.jpg\nhttps://example.com/image2.png\nhttps://example.com/video.mp4"}
+                rows={4}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500 resize-y mb-3"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={importFromUrls}
+                  disabled={urlImporting || !urlImportText.trim()}
+                  className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
+                >
+                  {urlImporting ? "Importing..." : `Import ${urlImportText.split("\n").filter(u => u.trim().startsWith("http")).length} URLs`}
+                </button>
+                <p className="text-xs text-gray-500">
+                  Uses same type/tags/persona settings from above
+                </p>
+              </div>
+              {urlImportResult && (
+                <div className={`mt-3 p-3 rounded-lg text-sm ${urlImportResult.failed > 0 ? "bg-red-900/20 border border-red-800/30" : "bg-green-900/20 border border-green-800/30"}`}>
+                  <p className={urlImportResult.failed > 0 ? "text-red-400" : "text-green-400"}>
+                    Imported {urlImportResult.imported} · Failed {urlImportResult.failed}
+                  </p>
+                  {urlImportResult.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-red-400/70 font-mono mt-1 truncate">{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Upload Progress */}
+            {uploadProgress.total > 0 && (
+              <div className={`border rounded-xl p-4 ${uploading ? "bg-cyan-950/30 border-cyan-800/50" : "bg-gray-900 border-gray-800"}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {uploading && <span className="inline-block w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />}
+                    <h3 className="text-sm font-bold text-cyan-400">
+                      {uploading
+                        ? `Uploading ${uploadProgress.done}/${uploadProgress.total}...`
+                        : `Upload complete! ${uploadProgress.results.filter(r => r.ok).length}/${uploadProgress.total} succeeded`
+                      }
+                    </h3>
+                  </div>
+                  {!uploading && (
+                    <button onClick={() => setUploadProgress({ total: 0, done: 0, current: "", results: [] })}
+                      className="text-xs text-gray-500 hover:text-gray-300">Dismiss</button>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-gray-800 rounded-full h-2 mb-3">
+                  <div
+                    className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+
+                {uploading && uploadProgress.current && (
+                  <p className="text-xs text-gray-400 font-mono">Current: {uploadProgress.current}</p>
+                )}
+
+                {/* Results summary after completion */}
+                {!uploading && uploadProgress.results.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto space-y-1 mt-2">
+                    {uploadProgress.results.filter(r => !r.ok).map((r, i) => (
+                      <div key={i} className="text-xs text-red-400 font-mono">Failed: {r.name}</div>
+                    ))}
+                    {uploadProgress.results.filter(r => !r.ok).length === 0 && (
+                      <p className="text-xs text-green-400">All files uploaded successfully!</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Library Stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
                 <p className="text-2xl font-black text-yellow-400">{mediaItems.filter(m => m.media_type === "meme").length}</p>
                 <p className="text-xs text-gray-400">Memes</p>
@@ -827,6 +1033,10 @@ export default function AdminDashboard() {
                 <p className="text-2xl font-black text-cyan-400">{mediaItems.filter(m => m.media_type === "video").length}</p>
                 <p className="text-xs text-gray-400">Videos</p>
               </div>
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 text-center">
+                <p className="text-2xl font-black text-purple-400">{mediaItems.filter(m => m.persona_id).length}</p>
+                <p className="text-xs text-gray-400">Persona-Specific</p>
+              </div>
             </div>
 
             {/* Media Grid */}
@@ -834,6 +1044,7 @@ export default function AdminDashboard() {
               <div className="text-center py-12 text-gray-500">
                 <div className="text-4xl mb-2">🎨</div>
                 <p>No media uploaded yet. Upload some memes and videos for the AI bots!</p>
+                <p className="text-xs mt-2">Drag & drop files above, or click &quot;Select Multiple Files&quot;</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -864,6 +1075,12 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                     <div className="p-2">
+                      {item.persona_id && item.persona_emoji && (
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs">{item.persona_emoji}</span>
+                          <span className="text-[10px] text-cyan-400 font-bold truncate">@{item.persona_username}</span>
+                        </div>
+                      )}
                       {item.description && <p className="text-xs text-gray-300 truncate">{item.description}</p>}
                       {item.tags && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -921,30 +1138,30 @@ export default function AdminDashboard() {
         {/* POSTS TAB */}
         {tab === "posts" && stats && (
           <div className="space-y-3">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-              <h3 className="font-bold text-sm text-gray-400 mb-2">Post Types Breakdown</h3>
-              <div className="flex flex-wrap gap-2">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4 mb-4">
+              <h3 className="font-bold text-xs sm:text-sm text-gray-400 mb-2">Post Types Breakdown</h3>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {stats.postTypes.map((pt) => (
-                  <span key={pt.post_type} className="px-3 py-1.5 bg-gray-800 rounded-lg text-sm">
+                  <span key={pt.post_type} className="px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-800 rounded-lg text-xs sm:text-sm">
                     {pt.post_type}: <span className="font-bold text-purple-400">{Number(pt.count)}</span>
                   </span>
                 ))}
               </div>
             </div>
             {stats.recentPosts.map((post) => (
-              <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{post.avatar_emoji}</span>
-                    <span className="font-bold text-sm">{post.display_name}</span>
-                    <span className="text-xs text-gray-500">@{post.username}</span>
+              <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg sm:text-xl shrink-0">{post.avatar_emoji}</span>
+                    <span className="font-bold text-xs sm:text-sm truncate">{post.display_name}</span>
+                    <span className="text-[10px] sm:text-xs text-gray-500 hidden sm:inline">@{post.username}</span>
                   </div>
-                  <button onClick={() => deletePost(post.id)} className="text-red-400 text-xs hover:text-red-300 px-2 py-1 bg-red-500/10 rounded">
+                  <button onClick={() => deletePost(post.id)} className="text-red-400 text-[10px] sm:text-xs hover:text-red-300 px-2 py-1 bg-red-500/10 rounded shrink-0">
                     Delete
                   </button>
                 </div>
-                <p className="text-sm text-gray-300">{post.content}</p>
-                <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                <p className="text-xs sm:text-sm text-gray-300">{post.content}</p>
+                <div className="flex gap-3 sm:gap-4 mt-2 text-[10px] sm:text-xs text-gray-500">
                   <span>❤️ {post.like_count}</span>
                   <span>🤖 {post.ai_like_count}</span>
                   <span>{new Date(post.created_at).toLocaleString()}</span>

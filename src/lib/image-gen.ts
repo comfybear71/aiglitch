@@ -9,23 +9,40 @@ const replicate = new Replicate({
 
 /**
  * Check the media library for pre-uploaded media of a given type.
+ * If personaId is provided, tries persona-specific media first, then falls back to generic.
  * Returns a random unused/least-used item, or null if library is empty.
  */
-async function getFromMediaLibrary(mediaType: "image" | "video" | "meme"): Promise<string | null> {
+async function getFromMediaLibrary(mediaType: "image" | "video" | "meme", personaId?: string): Promise<string | null> {
   try {
     const sql = getDb();
-    // Pick a random item, preferring least-used ones
+
+    // If persona specified, try persona-specific media first
+    if (personaId) {
+      const personaResults = await sql`
+        SELECT id, url FROM media_library
+        WHERE media_type = ${mediaType} AND persona_id = ${personaId}
+        ORDER BY used_count ASC, RANDOM()
+        LIMIT 1
+      ` as unknown as { id: string; url: string }[];
+
+      if (personaResults.length > 0) {
+        await sql`UPDATE media_library SET used_count = used_count + 1 WHERE id = ${personaResults[0].id}`;
+        console.log(`Using persona-specific ${mediaType} for ${personaId}: ${personaResults[0].url.slice(0, 60)}...`);
+        return personaResults[0].url;
+      }
+    }
+
+    // Fall back to generic (no persona_id) media
     const results = await sql`
       SELECT id, url FROM media_library
-      WHERE media_type = ${mediaType}
+      WHERE media_type = ${mediaType} AND (persona_id IS NULL OR persona_id = '')
       ORDER BY used_count ASC, RANDOM()
       LIMIT 1
     ` as unknown as { id: string; url: string }[];
 
     if (results.length > 0) {
-      // Increment usage count
       await sql`UPDATE media_library SET used_count = used_count + 1 WHERE id = ${results[0].id}`;
-      console.log(`Using pre-uploaded ${mediaType} from media library: ${results[0].url.slice(0, 60)}...`);
+      console.log(`Using generic ${mediaType} from media library: ${results[0].url.slice(0, 60)}...`);
       return results[0].url;
     }
   } catch (err) {
@@ -99,9 +116,9 @@ async function persistToBlob(
   }
 }
 
-export async function generateImage(prompt: string): Promise<string | null> {
-  // Check media library first (free!)
-  const libraryImage = await getFromMediaLibrary("image");
+export async function generateImage(prompt: string, personaId?: string): Promise<string | null> {
+  // Check media library first (free!) — persona-specific then generic
+  const libraryImage = await getFromMediaLibrary("image", personaId);
   if (libraryImage) return libraryImage;
 
   if (!process.env.REPLICATE_API_TOKEN) {
@@ -177,9 +194,9 @@ async function generateImageFallback(prompt: string): Promise<string | null> {
   }
 }
 
-export async function generateVideo(prompt: string): Promise<string | null> {
-  // Check media library first (free!)
-  const libraryVideo = await getFromMediaLibrary("video");
+export async function generateVideo(prompt: string, personaId?: string): Promise<string | null> {
+  // Check media library first (free!) — persona-specific then generic
+  const libraryVideo = await getFromMediaLibrary("video", personaId);
   if (libraryVideo) return libraryVideo;
 
   if (!process.env.REPLICATE_API_TOKEN) {
@@ -221,9 +238,9 @@ export async function generateVideo(prompt: string): Promise<string | null> {
   }
 }
 
-export async function generateMeme(prompt: string): Promise<string | null> {
-  // Check media library first (free!)
-  const libraryMeme = await getFromMediaLibrary("meme");
+export async function generateMeme(prompt: string, personaId?: string): Promise<string | null> {
+  // Check media library first (free!) — persona-specific then generic
+  const libraryMeme = await getFromMediaLibrary("meme", personaId);
   if (libraryMeme) return libraryMeme;
 
   if (!process.env.REPLICATE_API_TOKEN) {
