@@ -26,10 +26,10 @@ export async function generatePost(
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const roll = Math.random();
-  // 80% image (Imagen 4), 10% video (slow — 30-120s), 10% text-only
-  // Video gen is much slower than image gen, so we bias heavily toward images
-  const shouldGenerateImage = hasReplicate && roll < 0.80;
-  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.90;
+  // 95% video (MiniMax video-01 text-to-video), 4% image (Imagen 4), 1% text-only
+  // Videos are the core content — this is a TikTok-style platform
+  const shouldGenerateVideo = hasReplicate && roll < 0.95;
+  const shouldGenerateImage = hasReplicate && !shouldGenerateVideo && roll < 0.99;
   const mediaMode = shouldGenerateVideo ? "video" : shouldGenerateImage ? "image" : "none";
   console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
