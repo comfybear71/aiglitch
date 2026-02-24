@@ -1,4 +1,6 @@
 import Replicate from "replicate";
+import { put } from "@vercel/blob";
+import { v4 as uuidv4 } from "uuid";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -36,27 +38,38 @@ function extractUrl(result: unknown): string | null {
 }
 
 /**
- * Download media from a temporary Replicate URL and convert to a base64 data URI.
- * Only used for images (not videos — videos are too large for base64).
+ * Download media from a temporary Replicate URL and upload to Vercel Blob
+ * for permanent CDN-backed storage. Falls back to the temp URL if Blob
+ * upload fails (e.g. BLOB_READ_WRITE_TOKEN not set).
  */
-async function toDataUri(url: string, mimeType: string): Promise<string | null> {
+async function persistToBlob(
+  tempUrl: string,
+  filename: string,
+  contentType: string
+): Promise<string> {
   try {
-    const res = await fetch(url);
+    // Download from Replicate's temp CDN
+    const res = await fetch(tempUrl);
     if (!res.ok) {
       console.error(`Failed to download media: HTTP ${res.status}`);
-      return null;
+      return tempUrl;
     }
+
     const buffer = await res.arrayBuffer();
-    // Skip if larger than 2MB (safety limit for DB storage)
-    if (buffer.byteLength > 2 * 1024 * 1024) {
-      console.log(`Media too large for base64 (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB), using temp URL`);
-      return null;
-    }
-    const base64 = Buffer.from(buffer).toString("base64");
-    return `data:${mimeType};base64,${base64}`;
+    console.log(`Downloaded ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB, uploading to Vercel Blob...`);
+
+    // Upload to Vercel Blob — returns a permanent public URL
+    const blob = await put(filename, Buffer.from(buffer), {
+      access: "public",
+      contentType,
+      addRandomSuffix: true,
+    });
+
+    console.log(`Uploaded to Vercel Blob: ${blob.url}`);
+    return blob.url;
   } catch (err) {
-    console.error("Failed to convert to data URI:", err);
-    return null;
+    console.error("Vercel Blob upload failed, using temp URL:", err);
+    return tempUrl;
   }
 }
 
@@ -88,15 +101,7 @@ export async function generateImage(prompt: string): Promise<string | null> {
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted image URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        // Download and persist as base64 so it never expires
-        const dataUri = await toDataUri(tempUrl, "image/webp");
-        if (dataUri) {
-          console.log(`Image persisted as base64 (${(dataUri.length / 1024).toFixed(0)}KB)`);
-          return dataUri;
-        }
-        // Fall back to temp URL if download fails
-        console.log("Base64 conversion failed, using temp URL");
-        return tempUrl;
+        return await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
       }
     }
 
@@ -131,12 +136,7 @@ async function generateImageFallback(prompt: string): Promise<string | null> {
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted Flux URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        const dataUri = await toDataUri(tempUrl, "image/webp");
-        if (dataUri) {
-          console.log(`Flux image persisted as base64 (${(dataUri.length / 1024).toFixed(0)}KB)`);
-          return dataUri;
-        }
-        return tempUrl;
+        return await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
       }
     }
 
@@ -177,9 +177,7 @@ export async function generateVideo(prompt: string): Promise<string | null> {
     console.log("Extracted video URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
 
     if (tempUrl) {
-      // Videos are too large for base64 — just use the temp URL.
-      // PostCard has onError fallback for when the URL expires.
-      return tempUrl;
+      return await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
     }
 
     return null;
