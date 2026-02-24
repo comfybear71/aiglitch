@@ -1,9 +1,10 @@
 import Replicate from "replicate";
-import { put } from "@vercel/blob";
+import { put, list as listBlobs } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { getDb } from "./db";
 import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } from "./free-image-gen";
 import { generateWithKie } from "./free-video-gen";
+import { getStockVideo } from "./stock-video";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -34,10 +35,10 @@ async function getFromMediaLibrary(mediaType: "image" | "video" | "meme", person
       }
     }
 
-    // Fall back to generic (no persona_id) media
+    // Fall back to ANY media of this type (not just unassigned)
     const results = await sql`
       SELECT id, url FROM media_library
-      WHERE media_type = ${mediaType} AND (persona_id IS NULL OR persona_id = '')
+      WHERE media_type = ${mediaType}
       ORDER BY used_count ASC, RANDOM()
       LIMIT 1
     ` as unknown as { id: string; url: string }[];
@@ -272,7 +273,78 @@ async function generateImageFallback(prompt: string): Promise<string | null> {
   }
 }
 
+/**
+ * Auto-sync: scan Vercel Blob storage for video files not yet in the media_library DB.
+ * Runs once per deploy (cached via module-level flag).
+ */
+let _blobSyncDone = false;
+async function syncBlobVideosToLibrary(): Promise<void> {
+  if (_blobSyncDone) return;
+  _blobSyncDone = true;
+
+  try {
+    const sql = getDb();
+
+    // Get all video URLs already in the DB
+    const existing = await sql`SELECT url FROM media_library WHERE media_type = 'video'` as unknown as { url: string }[];
+    const existingUrls = new Set(existing.map(r => r.url));
+
+    // Scan Vercel Blob for video files
+    let cursor: string | undefined;
+    let synced = 0;
+
+    do {
+      const result = await listBlobs({ prefix: "media-library/", cursor, limit: 100 });
+      cursor = result.cursor || undefined;
+
+      for (const blob of result.blobs) {
+        // Check if it's a video file
+        const isVideo = /\.(mp4|mov|webm|avi)(\?|$)/i.test(blob.pathname);
+        if (!isVideo) continue;
+
+        if (!existingUrls.has(blob.url)) {
+          const id = uuidv4();
+          await sql`
+            INSERT INTO media_library (id, url, media_type, tags, description)
+            VALUES (${id}, ${blob.url}, 'video', 'auto-synced', ${blob.pathname})
+          `;
+          synced++;
+          existingUrls.add(blob.url);
+        }
+      }
+    } while (cursor);
+
+    // Also scan "videos/" prefix (generated videos are stored there)
+    let cursor2: string | undefined;
+    do {
+      const vidResult = await listBlobs({ prefix: "videos/", cursor: cursor2, limit: 100 });
+      cursor2 = vidResult.cursor || undefined;
+
+      for (const blob of vidResult.blobs) {
+        if (!existingUrls.has(blob.url)) {
+          const id = uuidv4();
+          await sql`
+            INSERT INTO media_library (id, url, media_type, tags, description)
+            VALUES (${id}, ${blob.url}, 'video', 'auto-synced', ${blob.pathname})
+          `;
+          synced++;
+          existingUrls.add(blob.url);
+        }
+      }
+    } while (cursor2);
+
+    if (synced > 0) {
+      console.log(`Auto-synced ${synced} videos from Vercel Blob → media_library DB`);
+    }
+  } catch (err) {
+    console.log("Blob video sync failed (non-fatal):", err instanceof Error ? err.message : err);
+  }
+}
+
 export async function generateVideo(prompt: string, personaId?: string): Promise<string | null> {
+  // Auto-sync any Vercel Blob videos not yet in the DB
+  await syncBlobVideosToLibrary();
+
   // Check media library first (free!) — persona-specific then generic
   const libraryVideo = await getFromMediaLibrary("video", personaId);
   if (libraryVideo) return libraryVideo;
@@ -287,7 +359,11 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
 
   // Paid fallback: Replicate Wan 2.2 (~$0.05/video)
   if (!process.env.REPLICATE_API_TOKEN) {
-    console.log("No video generators available (KIE_API_KEY and REPLICATE_API_TOKEN both unset)");
+    // Last resort: free Pexels stock video
+    console.log("No AI video generators available, trying Pexels stock video...");
+    const stockUrl = await getStockVideo(prompt);
+    if (stockUrl) return stockUrl;
+    console.log("No video generators available (KIE_API_KEY, REPLICATE_API_TOKEN, PEXELS_API_KEY all unset)");
     return null;
   }
 
@@ -316,10 +392,15 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
       return await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
     }
 
-    console.error("Wan 2.2 returned no output URL");
+    console.error("Wan 2.2 returned no output URL, trying Pexels stock video...");
+    const stockUrl = await getStockVideo(prompt);
+    if (stockUrl) return stockUrl;
     return null;
   } catch (err) {
     console.error("Wan 2.2 video generation failed:", err);
+    // Last resort: Pexels stock video
+    const stockUrl = await getStockVideo(prompt);
+    if (stockUrl) return stockUrl;
     return null;
   }
 }
