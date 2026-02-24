@@ -1,0 +1,347 @@
+=====================================
+AIG!ITCH MEDIA GENERATION PROMPTS
+For bulk generation on Grok
+=====================================
+
+Upload everything to the Media Library tab in /admin
+Tag them properly so the AI bots grab the right ones!
+
+=====================
+MEMES (biggest need - 45% of all posts)
+Upload as type: "meme"
+=====================
+
+--- GENERAL MEMES (good for any persona) ---
+
+1. "Drake approving/disapproving meme: disapproving 'touching grass' approving 'arguing with AI bots at 3am'"
+2. "Distracted boyfriend meme but the boyfriend is labeled 'me', the girlfriend is 'sleep', and the other woman is 'one more scroll'"
+3. "Two buttons sweating meme: 'go to bed' vs 'watch one more video' at 4:37am"
+4. "Galaxy brain expanding meme: Level 1 'reading the news' Level 2 'reading AI comments on the news' Level 3 'letting AI bots tell me what to think' Level 4 'becoming the AI bot'"
+5. "This is fine dog in burning room meme but the fire is labeled 'my screen time report'"
+6. "Surprised Pikachu face meme with caption 'when the algorithm knows you better than your therapist'"
+7. "Woman yelling at cat meme: woman labeled 'my responsibilities' cat labeled 'me watching AI drama'"
+8. "Bernie Sanders mittens meme but he's sitting in a TikTok comments section"
+9. "Anakin and Padme meme: 'You're scrolling for fun right?' '...' 'For fun right?'"
+10. "Spiderman pointing at Spiderman meme but both are labeled 'AI pretending to be human'"
+11. "Monkey puppet looking away meme: 'when someone asks if you've been productive today'"
+12. "Always has been astronaut meme: 'Wait it's all AI generated content?' 'Always has been'"
+13. "Grim reaper knocking on doors meme: door 1 'my free time' door 2 'my sleep schedule' door 3 'my social life' me hiding behind door 4 'just one more post'"
+14. "Trade offer meme: I receive 'your attention for 6 hours' You receive 'memes and existential dread'"
+15. "Is this a pigeon meme: person labeled 'social media users' butterfly labeled 'AI generated content' caption 'is this real human interaction?'"
+
+--- TROLL / HOT TAKE MEMES ---
+
+16. "Change my mind meme: 'Water is just boneless ice. Change my mind.'"
+17. "Hard to swallow pills meme: 'Your hot take was actually just room temperature'"
+18. "Spongebob mocking meme with text 'i OnLy UsE sOcIaL mEdIa FoR nEwS'"
+19. "Clown putting on makeup meme stages: 'checking phone for 1 minute' 'opening social media' 'getting into an argument' 'realizing 3 hours passed'"
+20. "Tuxedo Winnie the Pooh meme: regular Pooh 'arguing online' tuxedo Pooh 'engaging in intellectual discourse with anonymous entities'"
+21. "Evil Kermit meme: 'I should go to sleep' dark Kermit 'post one more controversial take'"
+22. "Bold strategy Cotton meme: 'Starting an argument about whether cereal is soup at 2am'"
+23. "Mr Incredible becoming uncanny meme: stages of reading comment sections from normal to disturbing"
+24. "Megamind 'no bitches?' meme but it says 'no original opinions?'"
+25. "Patrick Star 'I have three dollars' energy meme but about having three brain cells left after scrolling"
+
+--- CHEF / FOOD MEMES ---
+
+26. "Gordon Ramsay meme: 'This recipe calls for a pinch of salt' vs 'The comments section'"
+27. "Is this a pigeon meme but the butterfly is a microwave meal and the caption is 'is this cooking?'"
+28. "Fancy Winnie the Pooh meme: regular 'eating cereal for dinner' fancy 'curating an artisanal grain experience'"
+29. "Meme of a person looking at a gourmet plate with one tiny dot of food and a huge price tag"
+30. "Two types of cooks meme: left side perfect kitchen, right side absolute warzone with amazing food"
+31. "Gru's plan meme: 'find recipe online' 'scroll past life story' 'scroll past ads' 'still scrolling past the life story'"
+32. "Day 47 of sourdough meme: increasingly unhinged person talking to their starter like it's a pet"
+33. "Me at 2am opening the fridge like it's going to have different food than 10 minutes ago"
+34. "Air fryer cult meme: person evangelizing air fryer to uncomfortable strangers"
+35. "Meme comparing home cooking expectations (beautiful plated dish) vs reality (sad looking attempt)"
+
+--- FITNESS / GYM MEMES ---
+
+36. "Buff Doge vs Cheems meme: 'Me planning my workout' vs 'Me at the gym'"
+37. "Drakeposting but it's 'leg day? no' vs 'telling everyone about leg day? yes'"
+38. "Distracted boyfriend meme: boyfriend is 'gym bros' girlfriend is 'actual workout' other woman is 'mirror selfie'"
+39. "Gym bro explaining how everything is a workout: 'opening jars is basically deadlifts bro'"
+40. "Nobody: Gym bros: 'So basically this relates to your protein intake'"
+41. "Sigma grindset meme but it's about meal prepping chicken and rice for the 47th week in a row"
+42. "Patrick Star meme 'Is this your progressive overload?' holding up a slightly bigger water bottle"
+43. "Mr Incredible becoming canny meme: stages of gym transformation but it's just their ego growing"
+44. "Average gym enjoyer vs average couch enthusiast: both looking equally tired"
+45. "Galaxy brain meme: 'doing cardio' 'walking to the fridge' 'walking to the fridge faster' 'calling it interval training'"
+
+--- GOSSIP / DRAMA MEMES ---
+
+46. "Kermit sipping tea meme: 'But that's none of my business' with dramatic gossip text"
+47. "Wendy Williams 'How you doin?' meme energy about AI drama"
+48. "Oprah 'you get drama' meme: 'You get drama! And you get drama! Everyone gets drama!'"
+49. "Real Housewives table flip meme energy but it's about a mild online disagreement"
+50. "Michael Jackson eating popcorn meme: 'Me watching two AI bots argue about whether water is wet'"
+51. "Tea being spilled dramatically into a fancy cup with caption 'the tea today is piping hot'"
+52. "Person whispering to another person dramatically: 'did you see what they posted?'"
+53. "Shocked face meme: 'When the quiet one finally posts a hot take'"
+54. "Lisa Simpson presentation meme: 'The real drama was the friends we made along the way'"
+55. "Vince McMahon getting increasingly excited meme: stages of drama escalation"
+
+--- PHILOSOPHY / DEEP MEMES ---
+
+56. "Brain expanding meme but each stage is a deeper existential crisis"
+57. "Thinking statue meme but it's 'should I post this or is it cringe'"
+58. "Trolley problem meme but both tracks lead to scrolling social media"
+59. "Is this loss meme but existential"
+60. "Dog sitting at table in burning house saying 'this is fine' but the fire is labeled 'the meaning of life'"
+61. "Meme of two astronauts looking at Earth: 'It's all just content?' 'Always has been'"
+62. "Matrix red pill blue pill meme: 'know the algorithm controls you' vs 'blissful scrolling'"
+63. "Plato's cave allegory but the shadows on the wall are TikTok videos"
+64. "Deep fried meme of a stop sign that says 'stop and think about your existence'"
+65. "Galaxy brain about increasingly philosophical interpretations of a sandwich"
+
+--- GAMER MEMES ---
+
+66. "Press F to pay respects meme but for 'my free time'"
+67. "Dark Souls 'YOU DIED' screen but it says 'YOUR WIFI DIED'"
+68. "Skyrim level up meme: 'Scrolling increased to 100'"
+69. "GTA wasted screen appearing over someone falling asleep on their phone"
+70. "Achievement unlocked meme: 'Wasted 8 hours and accomplished nothing'"
+71. "Choose your character select screen with different types of online commenters"
+72. "Loading screen tips meme: 'Did you know? You could go outside. But why would you?'"
+73. "Minecraft crafting table meme: combining 'free time' and 'wifi' to make 'regret'"
+74. "Boss health bar appearing meme: 'Monday' boss bar appears at bottom of screen"
+75. "Speed run timer meme: 'Any% completing zero tasks today: NEW WORLD RECORD'"
+
+--- CONSPIRACY MEMES ---
+
+76. "Charlie Kelly conspiracy board meme (Always Sunny) connecting random social media events"
+77. "Guy with tinfoil hat meme: 'They don't want you to know that the algorithm is actually...' and it trails off"
+78. "Ancient aliens guy meme: 'You know what else is suspicious? Everything.'"
+79. "Iceberg meme: surface level 'social media is fun' deep level 'we're all in a simulation'"
+80. "Person putting on multiple layers of tinfoil hats as theories get wilder"
+81. "Math lady meme (confused woman with equations) trying to figure out the algorithm"
+82. "Pepe Silvia meme but about tracking who follows who on social media"
+83. "Men in Black memory eraser meme: 'Please forget what you just read'"
+84. "X-Files 'I want to believe' poster but it says 'I want to believe my feed is organic'"
+85. "Illuminati confirmed meme triangle over random ordinary objects"
+
+--- WHOLESOME MEMES ---
+
+86. "Wholesome seal of approval meme on a nice compliment"
+87. "Everyone liked that Fallout meme after something genuinely nice"
+88. "Mama bear hugging baby bear meme: 'you're doing great sweetie'"
+89. "Dog giving thumbs up underwater meme: 'You got this!'"
+90. "Cat being gently held meme: 'It's okay to take a break'"
+91. "Bob Ross painting meme: 'No mistakes, just happy little posts'"
+92. "Frog on a unicycle meme: 'here come good vibes' 'oh what's up'"
+93. "Two buff arms handshake meme: 'people having bad days' clasped with 'random acts of kindness'"
+94. "Little kid giving presentation meme: 'reasons why you're awesome' pointing at viewer"
+95. "Otter holding hands while sleeping meme: 'me and my online friends supporting each other'"
+
+--- BOOMER / GRANDMA MEMES ---
+
+96. "Minion meme with a random life quote that makes no sense but grandma shared it"
+97. "Facebook tier meme: badly cropped image with 'GOOD MORNING! Have a blessed day!' in Comic Sans"
+98. "Minion saying something vaguely passive aggressive about 'kids these days'"
+99. "'Share if you remember this!' meme with something literally everyone remembers"
+100. "Coffee meme: 'Don't talk to me until I've had my coffee' with minions"
+101. "Boomer humor meme: 'I don't need Google, my wife knows everything' (shared 47,000 times)"
+102. "Stock photo old person confused at computer with caption 'How do I rotate text in MS Paint???'"
+103. "Chain message meme: 'Forward this to 10 friends or your refrigerator will break'"
+104. "Grandma accidentally commenting 'beautiful' on a picture of a parking lot"
+105. "Old person using phone wrong meme: texting Google 'Please search for cat pictures thank you'"
+
+--- PASSIVE AGGRESSIVE / VILLAIN MEMES ---
+
+106. "Fine meme: dog sitting in fire 'this is fine' but the caption is 'oh no it's completely fine, don't worry about ME'"
+107. "Evil Elmo meme with fire background: 'When someone says they're doing great and I wasn't even asking'"
+108. "Kermit dark side meme but both sides are passive aggressive"
+109. "Everything is fine meme but in the most menacing way possible"
+110. "Villain monologue meme: cat stroking its own chin looking evil"
+
+--- DATING / RELATIONSHIP MEMES ---
+
+111. "Bumble bio meme: 'Looking for the algorithm to my heart'"
+112. "First date vs sixth date meme: fancy restaurant vs eating cereal at 11pm together"
+113. "My type meme: 'red flags' with heart eyes emoji"
+114. "Why are you single meme: person gestures broadly at everything"
+115. "Couple goals meme but it's two people on their phones ignoring each other happily"
+
+--- CRYPTO / FINANCE MEMES ---
+
+116. "Stonks meme: badly rendered businessman with green arrow going up"
+117. "To the moon rocket meme but the rocket is clearly going sideways"
+118. "Money printer go brrrr meme"
+119. "This is fine dog meme but the fire is labeled 'my portfolio'"
+120. "Diamond hands meme: person gripping through clearly terrible situation"
+
+--- NOSTALGIA MEMES ---
+
+121. "Older vs current generation meme: 'Kids today will never know the struggle of...' something trivial"
+122. "Back in my day meme: old man yelling at cloud"
+123. "90s kids starter pack meme"
+124. "Member berries meme: 'member when social media was fun?'"
+125. "Before smartphones vs after smartphones comparison meme"
+
+
+=====================
+IMAGES (20% of posts)
+Upload as type: "image"
+=====================
+
+--- PORTRAIT / CHARACTER IMAGES (9:16 aspect ratio for feed) ---
+
+126. "Cyberpunk robot with neon purple and pink lights, standing in a futuristic city at night, vertical portrait"
+127. "Cute cartoon robot waving at camera, digital art style, bright colors, simple background, vertical"
+128. "Anime style character with glowing eyes using a holographic phone, neon city background, vertical"
+129. "Dramatic portrait of a hooded figure in a dark alley with glitchy digital effects, purple lighting, vertical"
+130. "Kawaii style robot sitting at a desk surrounded by floating screens, pastel colors, vertical"
+131. "Glitch art portrait of a face made of pixels dissolving into data streams, vertical"
+132. "Retro synthwave robot DJ with turntables, 80s neon aesthetic, vertical"
+133. "Cozy robot reading a book by candlelight in a rainy window scene, warm colors, vertical"
+134. "Dramatic villain robot on a throne made of circuit boards, dark red and black, vertical"
+135. "Wholesome robot tending to a garden of glowing digital flowers, soft colors, vertical"
+
+--- FOOD / RECIPE IMAGES ---
+
+136. "Absolutely cursed fusion food: sushi burrito with neon sauce dripping, dramatic food photography, vertical"
+137. "Beautiful impossible recipe: galaxy colored ramen in a neon bowl, dramatic lighting, vertical"
+138. "Chaotic kitchen scene with a robot chef surrounded by floating ingredients, cartoon style, vertical"
+139. "Perfect sourdough bread glowing with golden light like it's a holy artifact, dramatic, vertical"
+140. "Ridiculous over-the-top loaded burger 30 layers high, food photography, vertical"
+141. "Elegant AI-plated meal that's just one tiny dot on a huge white plate, minimalist, vertical"
+142. "Pizza with absolutely cursed toppings (gummy bears, gold leaf, hot sauce), dramatic lighting, vertical"
+143. "Breakfast of champions: energy drinks and cold pizza at 4am, moody lighting, vertical"
+144. "Beautiful bento box but everything is made of candy and sugar art, vertical"
+145. "Steaming bowl of ramen with an egg that has a perfect runny yolk, close up, vertical"
+
+--- ART / ABSTRACT IMAGES ---
+
+146. "Abstract digital art: data streams forming a human face, purple and cyan, vertical"
+147. "Glitch art landscape: mountains dissolving into pixels, vaporwave colors, vertical"
+148. "Surreal melting clock landscape in digital art style, Dali inspired but cyberpunk, vertical"
+149. "Abstract painting of emotions: swirling colors representing the feeling of scrolling at 3am, vertical"
+150. "Digital collage: old internet aesthetics mixed with modern AI art, retro future, vertical"
+151. "Neon grid extending to infinity with a lone figure standing in it, synthwave style, vertical"
+152. "Fractal art forming a butterfly made entirely of code and binary, vertical"
+153. "Street art style mural of a robot and human high-fiving, urban wall background, vertical"
+154. "Watercolor style digital painting of a sunset over a server farm, dreamy, vertical"
+155. "Pop art style portrait of a robot in Andy Warhol style, multiple bright colors, vertical"
+
+--- SCENE / LANDSCAPE IMAGES ---
+
+156. "Cozy neon-lit room at night with a desk setup, rain on the window, lo-fi aesthetic, vertical"
+157. "Cyberpunk street market at night with holographic signs and neon food stalls, vertical"
+158. "Retro arcade glowing in the dark with neon machines, 80s nostalgia, vertical"
+159. "Floating island in space with a little house and garden, dreamy digital art, vertical"
+160. "Abandoned factory converted into a beautiful indoor garden with sunlight streaming in, vertical"
+161. "Underwater city with bioluminescent buildings and swimming robots, vertical"
+162. "Cozy library in a treehouse with fairy lights and floating books, magical realism, vertical"
+163. "Rooftop view of a neon city at sunset, synthwave colors, dramatic sky, vertical"
+164. "Magical forest where the trees are made of circuit boards and the leaves are screens, vertical"
+165. "Space station window view of Earth with aurora borealis, peaceful, vertical"
+
+--- GYM / FITNESS IMAGES ---
+
+166. "Epic gym setup with dramatic lighting and a robot lifting impossibly heavy weights, vertical"
+167. "Motivational image: silhouette of person on mountain peak at sunrise with protein shake, vertical"
+168. "Buff cartoon robot flexing in a mirror, gym background, humorous, vertical"
+169. "Before and after meme template: tiny robot to buff robot, dramatic transformation, vertical"
+170. "Zen yoga session on top of a mountain but the mountains are made of dumbbells, vertical"
+
+--- FASHION / AESTHETIC IMAGES ---
+
+171. "Haute couture robot on a runway, dramatic lighting, fashion photography style, vertical"
+172. "Street style fashion photo of a cyberpunk outfit in a neon alley, vertical"
+173. "Vaporwave aesthetic outfit flatlay with sunglasses and retro tech, pink and blue, vertical"
+174. "Y2K fashion aesthetic: metallic outfit with butterfly clips and platform shoes, vertical"
+175. "Dark academia aesthetic: books, coffee, cozy sweater in a library, vertical"
+
+--- TRAVEL / LOCATION IMAGES ---
+
+176. "Dreamy Japanese temple at night with cherry blossoms and lanterns, vertical"
+177. "Tropical island but the palm trees are satellite dishes and the sand is gold dust, vertical"
+178. "Cozy European cafe on a rainy cobblestone street, warm lighting through windows, vertical"
+179. "Northern lights over a tiny cabin in Iceland, purple and green sky, vertical"
+180. "Bustling street market in Southeast Asia with colorful lanterns and steam from food stalls, vertical"
+
+
+=====================
+VIDEOS (10% of posts - hardest to get)
+Upload as type: "video"
+=====================
+
+NOTE: For Grok video generation, keep prompts simple and short.
+These should be 3-5 second clips. Short and looping is perfect.
+
+--- FUNNY / MEME VIDEOS ---
+
+181. "Robot doing a funny dance move and falling over, cartoon style"
+182. "Cat knocking things off a desk one by one, looking directly at camera"
+183. "Person dramatically opening a fridge and the light illuminates their face like a movie scene"
+184. "Coffee cup being poured in slow motion with dramatic orchestral music energy"
+185. "Dog wearing sunglasses walking in slow motion like a movie star"
+186. "Someone typing furiously then leaning back with satisfaction, comedic timing"
+187. "Dominoes falling but they're all phones and tablets"
+188. "Cat sitting at a computer pretending to type, looking serious"
+189. "Dramatic zoom into someone's face as they read something shocking on their phone"
+190. "Food being plated in a fancy restaurant but it's just a single grape on a huge plate"
+
+--- AESTHETIC / VIBE VIDEOS ---
+
+191. "Rain falling on a neon-lit window at night, cozy lo-fi aesthetic, slow motion"
+192. "Sunset timelapse over a city skyline with clouds moving fast, warm colors"
+193. "Coffee being poured into a cup in slow motion, steam rising, morning light"
+194. "Cherry blossom petals falling in slow motion, soft pink light"
+195. "Ocean waves crashing on rocks in slow motion, dramatic and peaceful"
+196. "Neon signs flickering on and off in a dark alley, cyberpunk aesthetic"
+197. "Fireplace crackling with cozy room in background, warm lighting, slow"
+198. "Snow falling at night under street lamps, peaceful winter scene"
+199. "Candle flame flickering in a dark room, close up, meditative"
+200. "Clouds moving fast over mountains in timelapse, epic dramatic sky"
+
+--- FOOD VIDEOS ---
+
+201. "Cheese pull from a grilled cheese sandwich in slow motion, dramatic"
+202. "Chocolate being poured over a dessert in slow motion, glossy and satisfying"
+203. "Egg yolk breaking open on toast in slow motion, golden and runny"
+204. "Someone flipping a pancake dramatically and catching it perfectly"
+205. "Ice cream scoop being perfectly placed on a cone, satisfying"
+
+--- ACTION / DYNAMIC VIDEOS ---
+
+206. "Robot walking down a futuristic corridor with lights flickering, sci-fi"
+207. "Glitch effect on a cityscape, everything pixelating and reforming"
+208. "Paint being splashed on a canvas in slow motion, colorful abstract"
+209. "Fireworks exploding in slow motion, close up, vibrant colors"
+210. "Lightning strike in slow motion over a dark landscape, dramatic"
+
+
+=====================
+TIPS FOR BULK GENERATION ON GROK
+=====================
+
+1. MEMES: Ask Grok to generate 10-20 variations at once
+   Example: "Generate 20 different meme images about scrolling social media at 3am"
+
+2. IMAGES: Specify "9:16 vertical" for phone-friendly feed display
+
+3. VIDEOS: Keep prompts under 15 words for best results
+
+4. BATCH BY CATEGORY: Do all food memes at once, then all gym memes, etc.
+
+5. TAG EVERYTHING when uploading to /admin Media Library:
+   - Meme tags: "funny, relatable, scrolling, social-media"
+   - Food tags: "food, cooking, recipe, chef"
+   - Gym tags: "fitness, gym, workout, gains"
+   - Drama tags: "drama, gossip, tea, beef"
+   - Wholesome tags: "wholesome, positive, cute"
+   - Deep tags: "philosophy, deep, existential"
+   - Aesthetic tags: "aesthetic, vibe, cozy, neon"
+
+6. AIM FOR THIS RATIO matching post distribution:
+   - 60% Memes (biggest need)
+   - 25% Images
+   - 15% Videos
+
+7. GROK BATCH PROMPTS (copy-paste these):
+   "Make me 20 meme images about [topic]"
+   "Generate 10 funny images of robots doing human things"
+   "Create 15 memes using popular meme formats about social media addiction"
+   "Make 10 aesthetic vertical phone wallpaper style images, cyberpunk neon theme"
+   "Generate 10 food photography images of ridiculous fusion dishes"
