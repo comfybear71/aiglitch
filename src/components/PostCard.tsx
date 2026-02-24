@@ -24,14 +24,14 @@ const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
 };
 
 const TEXT_GRADIENTS = [
-  "from-purple-900 via-black to-pink-900",
-  "from-blue-900 via-black to-cyan-900",
-  "from-red-900 via-black to-orange-900",
-  "from-green-900 via-black to-teal-900",
-  "from-indigo-900 via-black to-purple-900",
-  "from-pink-900 via-black to-red-900",
-  "from-yellow-900/50 via-black to-amber-900/50",
-  "from-cyan-900 via-black to-blue-900",
+  "from-purple-800 via-purple-950 to-pink-800",
+  "from-blue-800 via-blue-950 to-cyan-800",
+  "from-red-800 via-red-950 to-orange-800",
+  "from-green-800 via-green-950 to-teal-800",
+  "from-indigo-800 via-indigo-950 to-purple-800",
+  "from-pink-800 via-pink-950 to-red-800",
+  "from-yellow-800 via-amber-950 to-amber-800",
+  "from-cyan-800 via-cyan-950 to-blue-800",
 ];
 
 export default function PostCard({ post, sessionId }: PostCardProps) {
@@ -48,6 +48,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const [commentText, setCommentText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [textExpanded, setTextExpanded] = useState(false);
 
   // Video controls state
   const [isPaused, setIsPaused] = useState(false);
@@ -338,7 +339,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const hashtags = post.hashtags ? post.hashtags.split(",").filter(Boolean) : [];
 
   return (
-    <div ref={cardRef} className="snap-start h-[calc(100dvh-72px)] w-full relative overflow-hidden bg-black">
+    <div ref={cardRef} className="h-[calc(100dvh-72px)] w-full relative overflow-hidden bg-black">
       {/* Background: Video, Image, or Gradient */}
       {hasMedia && isVideo ? (
         <div className="absolute inset-0" onClick={togglePlayPause} onMouseMove={showControlsTemporarily}>
@@ -465,10 +466,20 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <div className="absolute inset-0 opacity-20" style={{
             backgroundImage: "radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.3), transparent 50%)"
           }} />
-          <div className="absolute inset-0 flex items-center justify-center pt-24 pl-6 pr-20 pb-40 overflow-hidden">
-            <p className="text-white text-base sm:text-lg font-bold leading-snug text-center drop-shadow-2xl line-clamp-[12]">
-              {post.content}
-            </p>
+          <div className="absolute inset-0 z-10 flex items-center justify-center pt-24 pl-6 pr-20 pb-40 overflow-y-auto">
+            <div className="text-center max-w-[85%]">
+              <p className={`text-white text-lg sm:text-xl font-bold leading-relaxed drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${textExpanded ? "" : "line-clamp-6"}`}>
+                {post.content}
+              </p>
+              {post.content.length > 150 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setTextExpanded(!textExpanded); }}
+                  className="text-gray-200 text-sm font-semibold mt-2 hover:text-white transition-colors drop-shadow-lg"
+                >
+                  {textExpanded ? "...less" : "...more"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -575,7 +586,17 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         </a>
 
         {hasMedia && (
-          <p className="text-white text-sm leading-relaxed mb-2 drop-shadow-lg line-clamp-3">{post.content}</p>
+          <div className="mb-2">
+            <p className={`text-white text-sm leading-relaxed drop-shadow-lg ${textExpanded ? "" : "line-clamp-2"}`}>{post.content}</p>
+            {post.content.length > 80 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setTextExpanded(!textExpanded); }}
+                className="text-gray-300 text-xs font-semibold hover:text-white transition-colors"
+              >
+                {textExpanded ? "...less" : "...more"}
+              </button>
+            )}
+          </div>
         )}
 
         {hashtags.length > 0 && (

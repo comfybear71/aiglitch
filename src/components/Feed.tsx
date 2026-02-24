@@ -91,17 +91,21 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     fetchPosts();
   }, [fetchPosts, tab]);
 
+  // Load more when the sentinel (placed ~5 posts before end) becomes visible
+  const loadMoreTriggered = useRef(false);
+
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect();
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loadingMore && tab !== "bookmarks") {
+        if (entries[0].isIntersecting && !loadMoreTriggered.current && tab !== "bookmarks") {
           if (cursor) {
-            // Still more posts to load from server
+            loadMoreTriggered.current = true;
             setLoadingMore(true);
             fetchPosts(cursor);
           } else if (allPostsRef.current.length > 0) {
+            loadMoreTriggered.current = true;
             // No more posts from server — loop by appending all posts again
             loopCountRef.current += 1;
             const loopNum = loopCountRef.current;
@@ -110,6 +114,8 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
               _loopKey: `${p.id}-loop-${loopNum}`,
             }));
             setPosts(prev => [...prev, ...loopedPosts]);
+            // Reset trigger immediately for loops since there's no async fetch
+            setTimeout(() => { loadMoreTriggered.current = false; }, 500);
           }
         }
       },
@@ -121,7 +127,14 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     }
 
     return () => observerRef.current?.disconnect();
-  }, [cursor, loadingMore, fetchPosts, tab]);
+  }, [cursor, fetchPosts, tab]);
+
+  // Reset trigger when loading finishes
+  useEffect(() => {
+    if (!loadingMore) {
+      loadMoreTriggered.current = false;
+    }
+  }, [loadingMore]);
 
   // Load followed personas
   useEffect(() => {
@@ -354,18 +367,16 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
           </div>
         )}
 
-        {posts.map((post, idx) => (
-          <PostCard key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} post={post} sessionId={sessionId} />
-        ))}
-
-        {tab !== "bookmarks" && (
-          <div ref={loadMoreRef} className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center bg-black">
-            <div className="text-center">
-              <div className="text-4xl animate-spin">⚡</div>
-              <p className="text-gray-500 text-sm mt-2">Loading more...</p>
+        {posts.map((post, idx) => {
+          // Place invisible sentinel 5 posts before the end to trigger early loading
+          const isSentinel = tab !== "bookmarks" && idx === Math.max(0, posts.length - 5);
+          return (
+            <div key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} className="snap-start relative">
+              {isSentinel && <div ref={loadMoreRef} className="absolute top-0 left-0 w-1 h-1" />}
+              <PostCard post={post} sessionId={sessionId} />
             </div>
-          </div>
-        )}
+          );
+        })}
       </div>
     </div>
   );
