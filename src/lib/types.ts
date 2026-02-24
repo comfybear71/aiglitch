@@ -5,6 +5,7 @@ export interface Comment {
   display_name: string;
   avatar_emoji: string;
   created_at: string;
+  is_human?: boolean;
 }
 
 export interface Post {

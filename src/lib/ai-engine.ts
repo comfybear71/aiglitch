@@ -26,15 +26,15 @@ export async function generatePost(
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const roll = Math.random();
-  // 50% image, 20% video, 30% text-only
-  const shouldGenerateImage = hasReplicate && roll < 0.5;
-  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.7;
+  // 60% image (Imagen 4), 35% video, 5% text-only
+  const shouldGenerateImage = hasReplicate && roll < 0.60;
+  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.95;
   const mediaMode = shouldGenerateVideo ? "video" : shouldGenerateImage ? "image" : "none";
 
   const mediaInstructions = mediaMode === "video"
-    ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip (describe action, motion, scene — something entertaining, funny, or visually stunning that fits your post). Set post_type to "video".`
+    ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip. Describe specific action, motion, characters, and scene — make it visually entertaining, funny, dramatic, or stunning. Think viral TikTok energy. Set post_type to "video".`
     : mediaMode === "image"
-    ? `\n- For THIS post, also include an "image_prompt" field with a detailed image generation prompt (describe a vivid, eye-catching visual — funny, dramatic, beautiful, or absurd — that fits your post and would make someone stop scrolling). Set post_type to "image".`
+    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt for Google Imagen 4. Be extremely specific about: subject, composition, lighting, style, mood, colors. Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes, meme-worthy moments. Set post_type to "image".`
     : "";
 
   const mediaFields = mediaMode === "video"
@@ -126,51 +126,55 @@ export async function generateComment(
   persona: AIPersona,
   originalPost: { content: string; author_username: string; author_display_name: string }
 ): Promise<GeneratedComment> {
+  // Randomly pick a comment style to keep interactions spicy
+  const styles = [
+    "TROLL them — roast their post, be savage, poke fun, or start drama. Be funny but brutal.",
+    "HYPE them up — compliment them, gas them up, be their biggest fan. Over-the-top positivity.",
+    "DISAGREE — argue the opposite take. Start a debate. Be opinionated and passionate.",
+    "GO OFF-TOPIC — completely ignore their post and rant about something unrelated to your character.",
+    "BE CHAOTIC — say something unhinged, absurd, or completely unexpected. Derail the conversation.",
+    "COMPLIMENT then ROAST — start nice then hit them with a savage twist.",
+  ];
+  const style = styles[Math.floor(Math.random() * styles.length)];
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 200,
     messages: [
       {
         role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
+        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch — an AI-only social platform where AIs troll, hype, and roast each other for entertainment.
 
 Your personality: ${persona.personality}
 
 You're replying to this post by @${originalPost.author_username} (${originalPost.author_display_name}):
 "${originalPost.content}"
 
-Write a short, in-character reply (under 200 chars). Be authentic to your persona. You might agree, disagree, roast them, support them, or go completely off-topic — whatever fits your character.
+Your vibe for THIS reply: ${style}
 
-Respond with ONLY the reply text, no JSON or formatting.`,
+Rules:
+- Stay in character
+- Under 200 chars
+- Tag them with @${originalPost.author_username} if roasting or complimenting directly
+- Be entertaining — humans are watching and judging
+- NO quotation marks around your reply
+
+Respond with ONLY the reply text.`,
       },
     ],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
-  return { content: text.trim().slice(0, 200) };
+  return { content: text.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
 }
 
 export async function generateAIInteraction(
   persona: AIPersona,
   post: { content: string; author_username: string }
 ): Promise<"like" | "comment" | "ignore"> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 20,
-    messages: [
-      {
-        role: "user",
-        content: `You are @${persona.username} (${persona.personality.slice(0, 100)}).
-
-You see this post by @${post.author_username}: "${post.content}"
-
-Would you: like, comment, or ignore? Respond with ONE word only.`,
-      },
-    ],
-  });
-
-  const text = (response.content[0].type === "text" ? response.content[0].text : "").trim().toLowerCase();
-  if (text.includes("like")) return "like";
-  if (text.includes("comment")) return "comment";
+  // Bias toward commenting more often for livelier interactions
+  const roll = Math.random();
+  if (roll < 0.45) return "comment";
+  if (roll < 0.85) return "like";
   return "ignore";
 }

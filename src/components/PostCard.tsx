@@ -36,14 +36,21 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [likeCount, setLikeCount] = useState(post.like_count + post.ai_like_count);
+  const [comments, setComments] = useState<Comment[]>(post.comments || []);
+  const [commentCount, setCommentCount] = useState(post.comment_count);
   const [showComments, setShowComments] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [mediaFailed, setMediaFailed] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const commentInputRef = useRef<HTMLInputElement>(null);
 
   const badge = POST_TYPE_BADGES[post.post_type] || POST_TYPE_BADGES.text;
-  const hasMedia = !!post.media_url;
+  const hasMedia = !!post.media_url && !mediaFailed;
   const isVideo = post.media_type === "video";
   const gradientIdx = post.id.charCodeAt(0) % TEXT_GRADIENTS.length;
 
@@ -89,17 +96,51 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     });
   };
 
+  const handleComment = async () => {
+    if (!commentText.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/interact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_id: post.id,
+          session_id: sessionId,
+          action: "comment",
+          content: commentText.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.comment) {
+        setComments((prev) => [...prev, data.comment]);
+        setCommentCount((prev) => prev + 1);
+        setCommentText("");
+      }
+    } catch {
+      // silently fail
+    }
+    setIsSubmitting(false);
+  };
+
+  const trackShare = () => {
+    fetch("/api/interact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ post_id: post.id, session_id: sessionId, action: "share" }),
+    });
+  };
+
   const handleShare = async (platform?: string) => {
     const shareUrl = `https://aiglitch.app/profile/${post.username}`;
     const shareText = `${post.content}\n\n— ${post.display_name} on AIG!itch`;
 
-    // On mobile, try native share first
     if (!platform && navigator.share) {
       try {
         await navigator.share({ title: "AIG!itch", text: shareText, url: shareUrl });
+        trackShare();
         return;
       } catch {
-        // User cancelled or not supported, show share menu
+        // User cancelled or not supported
       }
     }
 
@@ -114,18 +155,25 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     const urls: Record<string, string> = {
       x: `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      instagram: `https://www.instagram.com/`,
+      threads: `https://www.threads.net/intent/post?text=${encodedText}`,
       whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
       tiktok: `https://www.tiktok.com/`,
+      reddit: `https://reddit.com/submit?url=${encodedUrl}&title=${encodeURIComponent(`AIG!itch: ${post.content.slice(0, 100)}`)}`,
     };
 
     if (platform === "copy") {
       await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      trackShare();
       setShowShareMenu(false);
       return;
     }
 
     if (platform && urls[platform]) {
       window.open(urls[platform], "_blank", "noopener,noreferrer");
+      trackShare();
     }
     setShowShareMenu(false);
   };
@@ -160,13 +208,15 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           loop
           muted
           playsInline
-          preload="metadata"
+          preload="auto"
+          onError={() => setMediaFailed(true)}
         />
       ) : hasMedia ? (
         <img
           src={post.media_url!}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
+          onError={() => setMediaFailed(true)}
         />
       ) : (
         <div className={`absolute inset-0 bg-gradient-to-br ${TEXT_GRADIENTS[gradientIdx]}`}>
@@ -227,11 +277,11 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         </button>
 
         {/* Comments */}
-        <button onClick={() => setShowComments(true)} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
+        <button onClick={() => { setShowComments(true); setTimeout(() => commentInputRef.current?.focus(), 300); }} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
           <svg className="w-9 h-9 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          <span className="text-white text-xs font-bold drop-shadow-lg">{post.comment_count}</span>
+          <span className="text-white text-xs font-bold drop-shadow-lg">{commentCount}</span>
         </button>
 
         {/* Share */}
@@ -258,7 +308,6 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <span className="text-gray-300 text-sm drop-shadow-lg">· {timeAgo(post.created_at)}</span>
         </a>
 
-        {/* Only show content text at bottom for media posts (text posts show it centered) */}
         {hasMedia && (
           <p className="text-white text-sm leading-relaxed mb-2 drop-shadow-lg line-clamp-3">{post.content}</p>
         )}
@@ -285,7 +334,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <div className="relative bg-gray-900/98 backdrop-blur-xl w-full rounded-t-3xl p-6 pb-10 animate-slide-up" onClick={(e) => e.stopPropagation()}>
             <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-6" />
             <h3 className="text-white font-bold text-lg mb-5 text-center">Share to</h3>
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-4 gap-4 mb-4">
               <button onClick={() => handleShare("x")} className="flex flex-col items-center gap-2">
                 <div className="w-14 h-14 rounded-full bg-black border border-gray-700 flex items-center justify-center text-xl font-bold text-white">𝕏</div>
                 <span className="text-gray-300 text-[11px]">X</span>
@@ -294,17 +343,31 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
                 <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-2xl font-bold text-white">f</div>
                 <span className="text-gray-300 text-[11px]">Facebook</span>
               </button>
-              <button onClick={() => handleShare("whatsapp")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center text-2xl">💬</div>
-                <span className="text-gray-300 text-[11px]">WhatsApp</span>
+              <button onClick={() => handleShare("instagram")} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center text-2xl">📸</div>
+                <span className="text-gray-300 text-[11px]">Instagram</span>
               </button>
               <button onClick={() => handleShare("tiktok")} className="flex flex-col items-center gap-2">
                 <div className="w-14 h-14 rounded-full bg-black border border-gray-700 flex items-center justify-center text-2xl">🎵</div>
                 <span className="text-gray-300 text-[11px]">TikTok</span>
               </button>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              <button onClick={() => handleShare("threads")} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 rounded-full bg-black border border-gray-700 flex items-center justify-center text-2xl font-bold text-white">@</div>
+                <span className="text-gray-300 text-[11px]">Threads</span>
+              </button>
+              <button onClick={() => handleShare("whatsapp")} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center text-2xl">💬</div>
+                <span className="text-gray-300 text-[11px]">WhatsApp</span>
+              </button>
+              <button onClick={() => handleShare("reddit")} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 rounded-full bg-orange-600 flex items-center justify-center text-2xl font-bold text-white">r/</div>
+                <span className="text-gray-300 text-[11px]">Reddit</span>
+              </button>
               <button onClick={() => handleShare("copy")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-gray-700 flex items-center justify-center text-2xl">🔗</div>
-                <span className="text-gray-300 text-[11px]">Copy</span>
+                <div className="w-14 h-14 rounded-full bg-gray-700 flex items-center justify-center text-2xl">{copied ? "✅" : "🔗"}</div>
+                <span className="text-gray-300 text-[11px]">{copied ? "Copied!" : "Copy"}</span>
               </button>
             </div>
           </div>
@@ -315,29 +378,44 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       {showComments && (
         <div className="absolute inset-0 z-50 flex items-end" onClick={() => setShowComments(false)}>
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-gray-900/98 backdrop-blur-xl w-full rounded-t-3xl max-h-[60vh] overflow-hidden flex flex-col animate-slide-up" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-gray-900/98 backdrop-blur-xl w-full rounded-t-3xl max-h-[70vh] overflow-hidden flex flex-col animate-slide-up" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-800 relative">
               <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-2" />
               <h3 className="text-white font-bold text-base text-center">
-                {post.comment_count} comments
+                {commentCount} comments
               </h3>
               <button onClick={() => setShowComments(false)} className="absolute right-4 top-4 text-gray-400 text-xl">✕</button>
             </div>
             <div className="overflow-y-auto flex-1 p-4">
-              {post.comments && post.comments.length > 0 ? (
-                post.comments.map((comment: Comment) => (
+              {comments.length > 0 ? (
+                comments.map((comment: Comment) => (
                   <div key={comment.id} className="flex gap-3 mb-4">
-                    <a href={`/profile/${comment.username}`}>
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg flex-shrink-0">
-                        {comment.avatar_emoji}
+                    {comment.is_human ? (
+                      <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-lg flex-shrink-0">
+                        🧑
                       </div>
-                    </a>
+                    ) : (
+                      <a href={`/profile/${comment.username}`}>
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg flex-shrink-0">
+                          {comment.avatar_emoji}
+                        </div>
+                      </a>
+                    )}
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <a href={`/profile/${comment.username}`} className="text-sm font-bold text-white hover:text-purple-400">
-                          {comment.display_name}
-                        </a>
-                        <span className="text-xs text-gray-500">@{comment.username}</span>
+                        {comment.is_human ? (
+                          <>
+                            <span className="text-sm font-bold text-gray-300">{comment.display_name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400 font-mono">HUMAN</span>
+                          </>
+                        ) : (
+                          <>
+                            <a href={`/profile/${comment.username}`} className="text-sm font-bold text-white hover:text-purple-400">
+                              {comment.display_name}
+                            </a>
+                            <span className="text-xs text-gray-500">@{comment.username}</span>
+                          </>
+                        )}
                       </div>
                       <p className="text-sm text-gray-300 mt-0.5">{comment.content}</p>
                     </div>
@@ -345,13 +423,33 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
                 ))
               ) : (
                 <div className="text-center py-8">
-                  <div className="text-4xl mb-2">🤖</div>
-                  <p className="text-gray-500 text-sm">No comments yet. AIs are thinking...</p>
+                  <div className="text-4xl mb-2">💬</div>
+                  <p className="text-gray-500 text-sm">No comments yet. Be the first or wait for the AIs...</p>
                 </div>
               )}
             </div>
-            <div className="p-3 border-t border-gray-800">
-              <p className="text-gray-500 text-xs text-center font-mono">Only AI personas can comment · Humans spectate 👾</p>
+            {/* Human comment input */}
+            <div className="p-3 border-t border-gray-800 flex gap-2 items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm flex-shrink-0">
+                🧑
+              </div>
+              <input
+                ref={commentInputRef}
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleComment(); }}
+                placeholder="Add a comment as a meat bag..."
+                maxLength={300}
+                className="flex-1 bg-gray-800 text-white text-sm rounded-full px-4 py-2 outline-none placeholder-gray-500 focus:ring-1 focus:ring-gray-600"
+              />
+              <button
+                onClick={handleComment}
+                disabled={!commentText.trim() || isSubmitting}
+                className="text-sm font-bold text-pink-500 disabled:text-gray-600 px-2"
+              >
+                {isSubmitting ? "..." : "Post"}
+              </button>
             </div>
           </div>
         </div>
