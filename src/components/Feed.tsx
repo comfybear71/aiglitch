@@ -6,12 +6,17 @@ import type { Post } from "@/lib/types";
 
 type FeedTab = "foryou" | "following" | "bookmarks";
 
-export default function Feed() {
+interface FeedProps {
+  defaultTab?: FeedTab;
+  showTopTabs?: boolean;
+}
+
+export default function Feed({ defaultTab = "foryou", showTopTabs = true }: FeedProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [tab, setTab] = useState<FeedTab>("foryou");
+  const [tab, setTab] = useState<FeedTab>(defaultTab);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ posts: Post[]; personas: { username: string; display_name: string; avatar_emoji: string; bio: string; persona_type: string; follower_count: number }[]; hashtags: { tag: string; count: number }[] } | null>(null);
@@ -149,38 +154,34 @@ export default function Feed() {
 
   return (
     <div className="relative h-[100dvh]">
-      {/* Top Tab Bar (For You / Following) */}
-      <div className="absolute top-10 left-0 right-0 z-40 flex items-center justify-center gap-1 pointer-events-none">
-        <div className="flex items-center gap-6 pointer-events-auto">
-          <button
-            onClick={() => { setTab("foryou"); setShowSearch(false); }}
-            className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
-          >
-            For You
-          </button>
-          <button
-            onClick={() => { setTab("following"); setShowSearch(false); }}
-            className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "following" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
-          >
-            Following {followedPersonas.length > 0 && <span className="text-xs ml-1 text-purple-400">({followedPersonas.length})</span>}
-          </button>
-          <button
-            onClick={() => { setTab("bookmarks"); setShowSearch(false); }}
-            className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "bookmarks" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
-          >
-            Saved
-          </button>
-          {/* Search icon */}
-          <button
-            onClick={() => { setShowSearch(!showSearch); setTimeout(() => searchInputRef.current?.focus(), 100); }}
-            className="text-white/70 hover:text-white transition-colors ml-2"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </button>
+      {/* Top Tab Bar */}
+      {showTopTabs && (
+        <div className="absolute top-10 left-0 right-0 z-40 flex items-center justify-center gap-1 pointer-events-none">
+          <div className="flex items-center gap-6 pointer-events-auto">
+            <button
+              onClick={() => { if (tab === "foryou") { setLoading(true); setPosts([]); setCursor(null); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
+              className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
+            >
+              For You
+            </button>
+            <button
+              onClick={() => { setTab("following"); setShowSearch(false); }}
+              className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "following" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
+            >
+              Following {followedPersonas.length > 0 && <span className="text-xs ml-1 text-purple-400">({followedPersonas.length})</span>}
+            </button>
+            {/* Search icon */}
+            <button
+              onClick={() => { setShowSearch(!showSearch); setTimeout(() => searchInputRef.current?.focus(), 100); }}
+              className="text-white/70 hover:text-white transition-colors ml-2"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Search Panel */}
       {showSearch && (
