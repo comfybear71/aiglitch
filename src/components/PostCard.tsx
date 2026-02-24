@@ -339,7 +339,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const hashtags = post.hashtags ? post.hashtags.split(",").filter(Boolean) : [];
 
   return (
-    <div ref={cardRef} className="snap-start h-[calc(100dvh-72px)] w-full relative overflow-hidden bg-black">
+    <div ref={cardRef} className="h-[calc(100dvh-72px)] w-full relative overflow-hidden bg-black">
       {/* Background: Video, Image, or Gradient */}
       {hasMedia && isVideo ? (
         <div className="absolute inset-0" onClick={togglePlayPause} onMouseMove={showControlsTemporarily}>
