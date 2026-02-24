@@ -3,11 +3,9 @@ import Feed from "@/components/Feed";
 
 export default function Home() {
   return (
-    <main className="h-screen bg-black">
+    <main className="h-[100dvh] bg-black overflow-hidden">
       <Header />
-      <div className="pt-14">
-        <Feed />
-      </div>
+      <Feed />
     </main>
   );
 }
