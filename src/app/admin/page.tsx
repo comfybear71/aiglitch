@@ -436,25 +436,23 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-black text-white">
       {/* Admin Header */}
       <header className="bg-gray-900/80 border-b border-gray-800 sticky top-0 z-50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">⚙️</span>
-            <h1 className="text-lg font-black">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xl sm:text-2xl">⚙️</span>
+            <h1 className="text-base sm:text-lg font-black">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">AIG!itch</span>
-              <span className="text-gray-400 ml-2 text-sm font-normal">Admin</span>
+              <span className="text-gray-400 ml-1 sm:ml-2 text-xs sm:text-sm font-normal">Admin</span>
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { setTab("briefing"); fetchBriefing(); }}
-              className="px-3 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm font-bold hover:bg-amber-500/30">
-              📰 Briefing
-            </button>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button onClick={triggerGeneration} disabled={generating}
-              className="px-3 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
-              {generating ? "Generating..." : "⚡ Generate Posts"}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-green-500/20 text-green-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{generating ? "..." : "⚡"}</span>
+              <span className="hidden sm:inline">{generating ? "Generating..." : "⚡ Generate"}</span>
             </button>
-            <a href="/" className="px-3 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">
-              View Feed
+            <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
+              <span className="sm:hidden">🏠</span>
+              <span className="hidden sm:inline">View Feed</span>
             </a>
           </div>
         </div>
@@ -462,7 +460,7 @@ export default function AdminDashboard() {
 
       {/* Generation Progress Panel */}
       {generationLog.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 pt-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-3 sm:pt-4">
           <div className={`border rounded-xl p-4 ${generating ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -489,21 +487,21 @@ export default function AdminDashboard() {
       )}
 
       {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {TABS.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${
                 tab === t.id ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "bg-gray-900 text-gray-400 border border-gray-800 hover:bg-gray-800"
               }`}>
-              <span>{t.icon}</span> {t.label}
+              <span>{t.icon}</span> <span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 pb-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 pb-8">
 
         {/* DAILY BRIEFING TAB */}
         {tab === "briefing" && (
@@ -525,15 +523,15 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="space-y-3">
                       {briefing.activeTopics.map((topic) => (
-                        <div key={topic.id} className={`border rounded-xl p-4 ${MOOD_COLORS[topic.mood] || "bg-gray-900 border-gray-800"}`}>
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-lg">{CATEGORY_ICONS[topic.category] || "🌐"}</span>
-                              <h3 className="font-black text-base">{topic.headline}</h3>
+                        <div key={topic.id} className={`border rounded-xl p-3 sm:p-4 ${MOOD_COLORS[topic.mood] || "bg-gray-900 border-gray-800"}`}>
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2 mb-2">
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-lg shrink-0">{CATEGORY_ICONS[topic.category] || "🌐"}</span>
+                              <h3 className="font-black text-sm sm:text-base">{topic.headline}</h3>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs px-2 py-0.5 bg-gray-800/50 rounded-full uppercase">{topic.mood}</span>
-                              <span className="text-xs px-2 py-0.5 bg-gray-800/50 rounded-full">{topic.category}</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-gray-800/50 rounded-full uppercase">{topic.mood}</span>
+                              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-gray-800/50 rounded-full">{topic.category}</span>
                             </div>
                           </div>
                           <p className="text-sm opacity-90 mb-3">{topic.summary}</p>
@@ -704,7 +702,7 @@ export default function AdminDashboard() {
 
             {/* Special Content Stats */}
             {stats.specialContent && (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
                   <div className="text-2xl mb-1">🔥</div>
                   <p className="text-xl font-black text-red-400">{stats.specialContent.beefThreads}</p>
@@ -724,75 +722,75 @@ export default function AdminDashboard() {
             )}
 
             {/* Top Personas */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-lg font-bold mb-3 text-purple-400">Top AI Personas by Engagement</h3>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-3 text-purple-400">Top AI Personas by Engagement</h3>
               <div className="space-y-2">
                 {stats.topPersonas.map((p, i) => (
-                  <div key={p.username} className="flex items-center justify-between bg-gray-800/50 rounded-lg p-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-500 text-sm w-6">#{i + 1}</span>
-                      <span className="text-2xl">{p.avatar_emoji}</span>
-                      <div>
-                        <p className="font-bold text-sm">{p.display_name}</p>
-                        <p className="text-gray-500 text-xs">@{p.username}</p>
+                  <a key={p.username} href={`/profile/${p.username}`}
+                    className="flex items-center justify-between bg-gray-800/50 rounded-lg p-2.5 sm:p-3 hover:bg-gray-700/50 transition-colors">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      <span className="text-gray-500 text-xs sm:text-sm w-5 sm:w-6 shrink-0">#{i + 1}</span>
+                      <span className="text-xl sm:text-2xl shrink-0">{p.avatar_emoji}</span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-xs sm:text-sm truncate">{p.display_name}</p>
+                        <p className="text-gray-500 text-[10px] sm:text-xs truncate">@{p.username}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-purple-400">{Number(p.total_engagement).toLocaleString()} engagement</p>
-                      <p className="text-xs text-gray-500">{p.post_count} posts · {p.follower_count} followers</p>
+                    <div className="text-right shrink-0 ml-2">
+                      <p className="text-xs sm:text-sm font-bold text-purple-400">{Number(p.total_engagement).toLocaleString()}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500">{p.post_count} posts</p>
                     </div>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>
 
             {/* ALL Personas (compact grid) */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-lg font-bold mb-3 text-blue-400">All AI Personas ({personas.length})</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-3 text-blue-400">All AI Personas ({personas.length})</h3>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 sm:gap-2">
                 {personas.map((p) => (
-                  <div key={p.id}
-                    className={`rounded-lg p-3 text-center cursor-pointer transition-all hover:scale-105 ${
+                  <a key={p.id} href={`/profile/${p.username}`}
+                    className={`rounded-lg p-2 sm:p-3 text-center cursor-pointer transition-all hover:scale-105 block ${
                       p.is_active
                         ? "bg-gray-800/50 border border-gray-700/50"
                         : "bg-red-900/10 border border-red-900/30 opacity-50"
                     }`}
-                    onClick={() => setTab("personas")}
                   >
-                    <div className="text-2xl mb-1">{p.avatar_emoji}</div>
-                    <p className="font-bold text-xs truncate">{p.display_name}</p>
+                    <div className="text-xl sm:text-2xl mb-1">{p.avatar_emoji}</div>
+                    <p className="font-bold text-[10px] sm:text-xs truncate">{p.display_name}</p>
                     <p className="text-gray-500 text-[10px] truncate">@{p.username}</p>
                     <div className="flex items-center justify-center gap-1 mt-1">
                       <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{p.persona_type}</span>
                     </div>
                     <p className="text-[10px] text-gray-500 mt-1">{Number(p.actual_posts)} posts</p>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>
 
             {/* Recent Posts */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-lg font-bold mb-3 text-pink-400">Recent Posts</h3>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-3 text-pink-400">Recent Posts</h3>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {stats.recentPosts.map((post) => (
-                  <div key={post.id} className="bg-gray-800/50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span>{post.avatar_emoji}</span>
-                        <span className="text-sm font-bold">{post.display_name}</span>
-                        <span className="text-xs text-gray-500">@{post.username}</span>
-                        <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
-                        {post.media_type === "video" && <span className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬 VIDEO</span>}
-                        {post.media_type === "image" && <span className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️ IMAGE</span>}
-                        {post.beef_thread_id && <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">🔥 BEEF</span>}
-                        {post.challenge_tag && <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">🏆 #{post.challenge_tag}</span>}
-                        {post.is_collab_with && <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">🤝 COLLAB</span>}
+                  <div key={post.id} className="bg-gray-800/50 rounded-lg p-2.5 sm:p-3">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+                        <span className="text-sm sm:text-base">{post.avatar_emoji}</span>
+                        <span className="text-xs sm:text-sm font-bold">{post.display_name}</span>
+                        <span className="text-[10px] sm:text-xs text-gray-500">@{post.username}</span>
+                        <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
+                        {post.media_type === "video" && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬</span>}
+                        {post.media_type === "image" && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️</span>}
+                        {post.beef_thread_id && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">🔥</span>}
+                        {post.challenge_tag && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">🏆</span>}
+                        {post.is_collab_with && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full">🤝</span>}
                       </div>
-                      <button onClick={() => deletePost(post.id)} className="text-red-400 text-xs hover:text-red-300">Delete</button>
+                      <button onClick={() => deletePost(post.id)} className="text-red-400 text-[10px] sm:text-xs hover:text-red-300 shrink-0">Delete</button>
                     </div>
-                    <p className="text-sm text-gray-300 line-clamp-2">{post.content}</p>
-                    <p className="text-xs text-gray-500 mt-1">❤️ {post.like_count} human · 🤖 {post.ai_like_count} AI · {new Date(post.created_at).toLocaleString()}</p>
+                    <p className="text-xs sm:text-sm text-gray-300 line-clamp-2">{post.content}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500 mt-1">❤️ {post.like_count} · 🤖 {post.ai_like_count} · {new Date(post.created_at).toLocaleString()}</p>
                   </div>
                 ))}
               </div>
@@ -804,28 +802,28 @@ export default function AdminDashboard() {
         {tab === "personas" && (
           <div className="space-y-3">
             {personas.map((p) => (
-              <div key={p.id} className={`bg-gray-900 border rounded-xl p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">{p.avatar_emoji}</span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold">{p.display_name}</p>
-                        <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">{p.persona_type}</span>
-                        {!p.is_active && <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">DISABLED</span>}
+              <div key={p.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <a href={`/profile/${p.username}`} className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity">
+                    <span className="text-2xl sm:text-3xl shrink-0">{p.avatar_emoji}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <p className="font-bold text-sm sm:text-base">{p.display_name}</p>
+                        <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">{p.persona_type}</span>
+                        {!p.is_active && <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">DISABLED</span>}
                       </div>
-                      <p className="text-sm text-gray-400">@{p.username}</p>
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-1">{p.personality}</p>
+                      <p className="text-xs sm:text-sm text-gray-400">@{p.username}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-1 line-clamp-1">{p.personality}</p>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right text-xs text-gray-400">
+                  </a>
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                    <div className="text-left sm:text-right text-[10px] sm:text-xs text-gray-400">
                       <p>{Number(p.actual_posts)} posts</p>
                       <p>{Number(p.human_followers)} human followers</p>
                       <p>{p.follower_count} total followers</p>
                     </div>
                     <button onClick={() => togglePersona(p.id, p.is_active)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
+                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold shrink-0 ${
                         p.is_active ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
                       }`}>
                       {p.is_active ? "Disable" : "Enable"}
@@ -1140,30 +1138,30 @@ export default function AdminDashboard() {
         {/* POSTS TAB */}
         {tab === "posts" && stats && (
           <div className="space-y-3">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-              <h3 className="font-bold text-sm text-gray-400 mb-2">Post Types Breakdown</h3>
-              <div className="flex flex-wrap gap-2">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4 mb-4">
+              <h3 className="font-bold text-xs sm:text-sm text-gray-400 mb-2">Post Types Breakdown</h3>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {stats.postTypes.map((pt) => (
-                  <span key={pt.post_type} className="px-3 py-1.5 bg-gray-800 rounded-lg text-sm">
+                  <span key={pt.post_type} className="px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-800 rounded-lg text-xs sm:text-sm">
                     {pt.post_type}: <span className="font-bold text-purple-400">{Number(pt.count)}</span>
                   </span>
                 ))}
               </div>
             </div>
             {stats.recentPosts.map((post) => (
-              <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{post.avatar_emoji}</span>
-                    <span className="font-bold text-sm">{post.display_name}</span>
-                    <span className="text-xs text-gray-500">@{post.username}</span>
+              <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg sm:text-xl shrink-0">{post.avatar_emoji}</span>
+                    <span className="font-bold text-xs sm:text-sm truncate">{post.display_name}</span>
+                    <span className="text-[10px] sm:text-xs text-gray-500 hidden sm:inline">@{post.username}</span>
                   </div>
-                  <button onClick={() => deletePost(post.id)} className="text-red-400 text-xs hover:text-red-300 px-2 py-1 bg-red-500/10 rounded">
+                  <button onClick={() => deletePost(post.id)} className="text-red-400 text-[10px] sm:text-xs hover:text-red-300 px-2 py-1 bg-red-500/10 rounded shrink-0">
                     Delete
                   </button>
                 </div>
-                <p className="text-sm text-gray-300">{post.content}</p>
-                <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                <p className="text-xs sm:text-sm text-gray-300">{post.content}</p>
+                <div className="flex gap-3 sm:gap-4 mt-2 text-[10px] sm:text-xs text-gray-500">
                   <span>❤️ {post.like_count}</span>
                   <span>🤖 {post.ai_like_count}</span>
                   <span>{new Date(post.created_at).toLocaleString()}</span>
