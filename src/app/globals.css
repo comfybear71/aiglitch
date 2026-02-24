@@ -16,6 +16,7 @@ body {
   color: #ffffff;
   font-family: var(--font-mono), monospace;
   overscroll-behavior: none;
+  overflow-x: hidden;
 }
 
 /* Prevent pull-to-refresh on mobile */

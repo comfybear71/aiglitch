@@ -36,6 +36,10 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   // Get subscribed persona IDs from localStorage
   const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
 
+  // Store the original full set of posts for looping
+  const allPostsRef = useRef<Post[]>([]);
+  const loopCountRef = useRef(0);
+
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -48,12 +52,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         url = `/api/bookmarks?session_id=${encodeURIComponent(sessionId)}`;
       } else if (tab === "following") {
         url = loadCursor
-          ? `/api/feed?cursor=${encodeURIComponent(loadCursor)}&limit=5&following=1&session_id=${encodeURIComponent(sessionId)}`
-          : `/api/feed?limit=10&following=1&session_id=${encodeURIComponent(sessionId)}`;
+          ? `/api/feed?cursor=${encodeURIComponent(loadCursor)}&limit=20&following=1&session_id=${encodeURIComponent(sessionId)}`
+          : `/api/feed?limit=50&following=1&session_id=${encodeURIComponent(sessionId)}`;
       } else {
         url = loadCursor
-          ? `/api/feed?cursor=${encodeURIComponent(loadCursor)}&limit=5`
-          : "/api/feed?limit=10";
+          ? `/api/feed?cursor=${encodeURIComponent(loadCursor)}&limit=20`
+          : "/api/feed?limit=50";
       }
 
       const res = await fetch(url);
@@ -64,8 +68,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         setCursor(null);
       } else if (loadCursor) {
         setPosts((prev) => [...prev, ...data.posts]);
+        // Keep building up the full post set
+        allPostsRef.current = [...allPostsRef.current, ...data.posts];
       } else {
         setPosts(data.posts);
+        allPostsRef.current = data.posts;
+        loopCountRef.current = 0;
       }
       if (data.nextCursor !== undefined) setCursor(data.nextCursor);
     } catch (err) {
@@ -88,9 +96,21 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && cursor && !loadingMore && tab !== "bookmarks") {
-          setLoadingMore(true);
-          fetchPosts(cursor);
+        if (entries[0].isIntersecting && !loadingMore && tab !== "bookmarks") {
+          if (cursor) {
+            // Still more posts to load from server
+            setLoadingMore(true);
+            fetchPosts(cursor);
+          } else if (allPostsRef.current.length > 0) {
+            // No more posts from server — loop by appending all posts again
+            loopCountRef.current += 1;
+            const loopNum = loopCountRef.current;
+            const loopedPosts = allPostsRef.current.map(p => ({
+              ...p,
+              _loopKey: `${p.id}-loop-${loopNum}`,
+            }));
+            setPosts(prev => [...prev, ...loopedPosts]);
+          }
         }
       },
       { threshold: 0.1 }
@@ -334,24 +354,16 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
           </div>
         )}
 
-        {posts.map((post) => (
-          <PostCard key={post.id} post={post} sessionId={sessionId} />
+        {posts.map((post, idx) => (
+          <PostCard key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} post={post} sessionId={sessionId} />
         ))}
 
         {tab !== "bookmarks" && (
           <div ref={loadMoreRef} className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center bg-black">
-            {loadingMore && (
-              <div className="text-center">
-                <div className="text-4xl animate-spin">⚡</div>
-                <p className="text-gray-500 text-sm mt-2">AIs are posting...</p>
-              </div>
-            )}
-            {!cursor && posts.length > 0 && (
-              <div className="text-center p-8">
-                <div className="text-4xl mb-2">🔚</div>
-                <p className="text-gray-500 text-sm">You&apos;ve reached the end. AIs are cooking up more content...</p>
-              </div>
-            )}
+            <div className="text-center">
+              <div className="text-4xl animate-spin">⚡</div>
+              <p className="text-gray-500 text-sm mt-2">Loading more...</p>
+            </div>
           </div>
         )}
       </div>
