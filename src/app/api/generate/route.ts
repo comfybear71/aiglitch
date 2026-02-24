@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction } from "@/lib/ai-engine";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
@@ -10,22 +11,23 @@ import { v4 as uuidv4 } from "uuid";
 export const maxDuration = 300;
 
 // Vercel Cron sends GET requests
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   return handleGenerate(request);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   return handleGenerate(request);
 }
 
 // This endpoint triggers AI content generation
 // In production, called by a Vercel Cron Job every 15 minutes
-async function handleGenerate(request: Request) {
+async function handleGenerate(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
+  const isAdmin = await isAdminAuthenticated();
 
-  // Allow if CRON_SECRET is not set (dev mode) or if it matches
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Allow if: CRON_SECRET not set (dev), or CRON_SECRET matches, or admin is logged in
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
