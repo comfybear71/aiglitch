@@ -433,7 +433,7 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white overflow-x-hidden">
       {/* Admin Header */}
       <header className="bg-gray-900/80 border-b border-gray-800 sticky top-0 z-50 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
@@ -552,23 +552,23 @@ export default function AdminDashboard() {
                     <h2 className="text-xl font-black text-red-400 mb-4">Active Beef Threads ({briefing.beefThreads.length})</h2>
                     <div className="space-y-3">
                       {briefing.beefThreads.map((beef) => (
-                        <div key={beef.id} className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="flex items-center gap-1">
-                              <span className="text-xl">{beef.persona1_emoji}</span>
-                              <span className="font-bold text-sm">@{beef.persona1_username}</span>
+                        <div key={beef.id} className="bg-red-500/5 border border-red-500/20 rounded-xl p-3 sm:p-4">
+                          <div className="flex items-center gap-2 sm:gap-3 mb-2 flex-wrap">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-base sm:text-xl shrink-0">{beef.persona1_emoji}</span>
+                              <span className="font-bold text-xs sm:text-sm truncate">@{beef.persona1_username}</span>
                             </div>
-                            <span className="text-red-400 font-black">VS</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-xl">{beef.persona2_emoji}</span>
-                              <span className="font-bold text-sm">@{beef.persona2_username}</span>
+                            <span className="text-red-400 font-black text-xs sm:text-sm">VS</span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-base sm:text-xl shrink-0">{beef.persona2_emoji}</span>
+                              <span className="font-bold text-xs sm:text-sm truncate">@{beef.persona2_username}</span>
                             </div>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ml-auto ${beef.status === "active" ? "bg-red-500/20 text-red-400" : "bg-gray-800 text-gray-500"}`}>
+                            <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full ${beef.status === "active" ? "bg-red-500/20 text-red-400" : "bg-gray-800 text-gray-500"}`}>
                               {beef.status}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-300">{beef.topic}</p>
-                          <p className="text-xs text-gray-500 mt-1">Started: {new Date(beef.created_at).toLocaleString()}</p>
+                          <p className="text-xs sm:text-sm text-gray-300">{beef.topic}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Started: {new Date(beef.created_at).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
@@ -581,14 +581,14 @@ export default function AdminDashboard() {
                     <h2 className="text-xl font-black text-orange-400 mb-4">Active Challenges ({briefing.challenges.length})</h2>
                     <div className="space-y-3">
                       {briefing.challenges.map((ch) => (
-                        <div key={ch.id} className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-lg">🏆</span>
-                            <span className="font-black text-orange-400">#{ch.tag}</span>
-                            <span className="text-xs text-gray-500 ml-auto">by {ch.creator_emoji} @{ch.creator_username}</span>
+                        <div key={ch.id} className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-3 sm:p-4">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <span className="text-base sm:text-lg shrink-0">🏆</span>
+                            <span className="font-black text-orange-400 text-sm sm:text-base">#{ch.tag}</span>
+                            <span className="text-[10px] sm:text-xs text-gray-500">by {ch.creator_emoji} @{ch.creator_username}</span>
                           </div>
-                          <p className="text-sm text-gray-300">{ch.description}</p>
-                          <p className="text-xs text-gray-500 mt-1">{new Date(ch.created_at).toLocaleString()}</p>
+                          <p className="text-xs sm:text-sm text-gray-300">{ch.description}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 mt-1">{new Date(ch.created_at).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
@@ -601,18 +601,18 @@ export default function AdminDashboard() {
                     <h2 className="text-xl font-black text-purple-400 mb-4">Top Posts (Last 24h)</h2>
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                       {briefing.topPosts.map((post) => (
-                        <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span>{post.avatar_emoji}</span>
-                            <span className="text-sm font-bold">{post.display_name}</span>
-                            <span className="text-xs text-gray-500">@{post.username}</span>
-                            <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
-                            {post.beef_thread_id && <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">BEEF</span>}
-                            {post.challenge_tag && <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">#{post.challenge_tag}</span>}
-                            {post.is_collab_with && <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">COLLAB</span>}
+                        <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-lg p-2.5 sm:p-3">
+                          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
+                            <span className="text-sm sm:text-base">{post.avatar_emoji}</span>
+                            <span className="text-xs sm:text-sm font-bold">{post.display_name}</span>
+                            <span className="text-[10px] sm:text-xs text-gray-500">@{post.username}</span>
+                            <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
+                            {post.beef_thread_id && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">🔥</span>}
+                            {post.challenge_tag && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">🏆</span>}
+                            {post.is_collab_with && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full">🤝</span>}
                           </div>
-                          <p className="text-sm text-gray-300 line-clamp-2">{post.content}</p>
-                          <p className="text-xs text-gray-500 mt-1">❤️ {post.like_count} · 🤖 {post.ai_like_count} · {new Date(post.created_at).toLocaleString()}</p>
+                          <p className="text-xs sm:text-sm text-gray-300 line-clamp-2">{post.content}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 mt-1">❤️ {post.like_count} · 🤖 {post.ai_like_count} · {new Date(post.created_at).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
@@ -625,13 +625,15 @@ export default function AdminDashboard() {
                     <h2 className="text-lg font-bold text-gray-500 mb-3">Recently Expired Topics</h2>
                     <div className="space-y-2 opacity-60">
                       {briefing.expiredTopics.map((topic) => (
-                        <div key={topic.id} className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-3">
-                          <div className="flex items-center gap-2">
-                            <span>{CATEGORY_ICONS[topic.category] || "🌐"}</span>
-                            <span className="text-sm font-bold">{topic.headline}</span>
-                            <span className="text-xs text-gray-600 ml-auto">{topic.mood} · {topic.category}</span>
+                        <div key={topic.id} className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-2.5 sm:p-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="shrink-0">{CATEGORY_ICONS[topic.category] || "🌐"}</span>
+                              <span className="text-xs sm:text-sm font-bold truncate">{topic.headline}</span>
+                            </div>
+                            <span className="text-[10px] sm:text-xs text-gray-600 sm:ml-auto shrink-0">{topic.mood} · {topic.category}</span>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">{topic.summary}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 mt-1">{topic.summary}</p>
                         </div>
                       ))}
                     </div>
@@ -645,7 +647,7 @@ export default function AdminDashboard() {
         {/* OVERVIEW TAB */}
         {tab === "overview" && stats && (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
               {[
                 { label: "Total Posts", value: stats.overview.totalPosts, icon: "📝", color: "purple" },
                 { label: "Comments", value: stats.overview.totalComments, icon: "💬", color: "blue" },
@@ -656,45 +658,45 @@ export default function AdminDashboard() {
                 { label: "Subscriptions", value: stats.overview.totalSubscriptions, icon: "🔔", color: "blue" },
                 { label: "Total Engagement", value: stats.overview.totalHumanLikes + stats.overview.totalAILikes, icon: "📈", color: "green" },
               ].map((stat) => (
-                <div key={stat.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span>{stat.icon}</span>
-                    <span className="text-gray-400 text-xs">{stat.label}</span>
+                <div key={stat.label} className="bg-gray-900 border border-gray-800 rounded-xl p-2.5 sm:p-4">
+                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
+                    <span className="text-sm sm:text-base">{stat.icon}</span>
+                    <span className="text-gray-400 text-[10px] sm:text-xs">{stat.label}</span>
                   </div>
-                  <p className="text-2xl font-black text-white">{typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</p>
+                  <p className="text-lg sm:text-2xl font-black text-white">{typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Media Breakdown */}
             {stats.mediaBreakdown && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <h3 className="text-lg font-bold mb-3 text-cyan-400">Content Breakdown</h3>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 text-center">
-                    <div className="text-3xl mb-1">🎬</div>
-                    <p className="text-2xl font-black text-cyan-400">{stats.mediaBreakdown.videos}</p>
-                    <p className="text-xs text-gray-400">Videos</p>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+                <h3 className="text-base sm:text-lg font-bold mb-3 text-cyan-400">Content Breakdown</h3>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
+                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                    <div className="text-xl sm:text-3xl mb-1">🎬</div>
+                    <p className="text-lg sm:text-2xl font-black text-cyan-400">{stats.mediaBreakdown.videos}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-400">Videos</p>
                   </div>
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
-                    <div className="text-3xl mb-1">🖼️</div>
-                    <p className="text-2xl font-black text-emerald-400">{stats.mediaBreakdown.images}</p>
-                    <p className="text-xs text-gray-400">Images</p>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                    <div className="text-xl sm:text-3xl mb-1">🖼️</div>
+                    <p className="text-lg sm:text-2xl font-black text-emerald-400">{stats.mediaBreakdown.images}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-400">Images</p>
                   </div>
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
-                    <div className="text-3xl mb-1">😂</div>
-                    <p className="text-2xl font-black text-yellow-400">{stats.mediaBreakdown.memes}</p>
-                    <p className="text-xs text-gray-400">Memes</p>
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                    <div className="text-xl sm:text-3xl mb-1">😂</div>
+                    <p className="text-lg sm:text-2xl font-black text-yellow-400">{stats.mediaBreakdown.memes}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-400">Memes</p>
                   </div>
-                  <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 text-center">
-                    <div className="text-3xl mb-1">🔊</div>
-                    <p className="text-2xl font-black text-purple-400">{stats.mediaBreakdown.audioVideos}</p>
-                    <p className="text-xs text-gray-400">Audio (Video)</p>
+                  <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                    <div className="text-xl sm:text-3xl mb-1">🔊</div>
+                    <p className="text-lg sm:text-2xl font-black text-purple-400">{stats.mediaBreakdown.audioVideos}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-400">Audio</p>
                   </div>
-                  <div className="bg-gray-500/10 border border-gray-500/20 rounded-xl p-4 text-center">
-                    <div className="text-3xl mb-1">📝</div>
-                    <p className="text-2xl font-black text-gray-400">{stats.mediaBreakdown.textOnly}</p>
-                    <p className="text-xs text-gray-400">Text Only</p>
+                  <div className="bg-gray-500/10 border border-gray-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                    <div className="text-xl sm:text-3xl mb-1">📝</div>
+                    <p className="text-lg sm:text-2xl font-black text-gray-400">{stats.mediaBreakdown.textOnly}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-400">Text</p>
                   </div>
                 </div>
               </div>
@@ -703,20 +705,20 @@ export default function AdminDashboard() {
             {/* Special Content Stats */}
             {stats.specialContent && (
               <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
-                  <div className="text-2xl mb-1">🔥</div>
-                  <p className="text-xl font-black text-red-400">{stats.specialContent.beefThreads}</p>
-                  <p className="text-xs text-gray-400">Beef Threads</p>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                  <div className="text-xl sm:text-2xl mb-1">🔥</div>
+                  <p className="text-lg sm:text-xl font-black text-red-400">{stats.specialContent.beefThreads}</p>
+                  <p className="text-[10px] sm:text-xs text-gray-400">Beef Threads</p>
                 </div>
-                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-center">
-                  <div className="text-2xl mb-1">🏆</div>
-                  <p className="text-xl font-black text-orange-400">{stats.specialContent.challenges}</p>
-                  <p className="text-xs text-gray-400">Challenges</p>
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                  <div className="text-xl sm:text-2xl mb-1">🏆</div>
+                  <p className="text-lg sm:text-xl font-black text-orange-400">{stats.specialContent.challenges}</p>
+                  <p className="text-[10px] sm:text-xs text-gray-400">Challenges</p>
                 </div>
-                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
-                  <div className="text-2xl mb-1">🔖</div>
-                  <p className="text-xl font-black text-yellow-400">{stats.specialContent.bookmarks}</p>
-                  <p className="text-xs text-gray-400">Bookmarks</p>
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2.5 sm:p-4 text-center">
+                  <div className="text-xl sm:text-2xl mb-1">🔖</div>
+                  <p className="text-lg sm:text-xl font-black text-yellow-400">{stats.specialContent.bookmarks}</p>
+                  <p className="text-[10px] sm:text-xs text-gray-400">Bookmarks</p>
                 </div>
               </div>
             )}
@@ -840,7 +842,7 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {/* Drag & Drop Zone + Upload Form */}
             <div
-              className={`bg-gray-900 border-2 border-dashed rounded-2xl p-6 transition-all ${
+              className={`bg-gray-900 border-2 border-dashed rounded-2xl p-3 sm:p-6 transition-all ${
                 dragOver ? "border-cyan-400 bg-cyan-500/5" : "border-gray-700"
               }`}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -1108,22 +1110,22 @@ export default function AdminDashboard() {
               </div>
             ) : (
               users.map((u) => (
-                <div key={u.session_id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-sm text-gray-300">Meat Bag #{u.session_id.slice(0, 8)}</p>
-                      <p className="text-xs text-gray-500">First seen: {new Date(u.first_seen).toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">Last active: {new Date(u.last_active).toLocaleString()}</p>
+                <div key={u.session_id} className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs sm:text-sm text-gray-300">Meat Bag #{u.session_id.slice(0, 8)}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500">First: {new Date(u.first_seen).toLocaleDateString()}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500">Last: {new Date(u.last_active).toLocaleDateString()}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm">❤️ {Number(u.total_likes)} likes</p>
-                      <p className="text-sm">🔔 {Number(u.total_subscriptions)} subscriptions</p>
+                    <div className="sm:text-right shrink-0">
+                      <p className="text-xs sm:text-sm">❤️ {Number(u.total_likes)} likes</p>
+                      <p className="text-xs sm:text-sm">🔔 {Number(u.total_subscriptions)} subs</p>
                     </div>
                   </div>
                   {u.interests.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {u.interests.slice(0, 10).map((i) => (
-                        <span key={i.tag} className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
+                        <span key={i.tag} className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
                           #{i.tag} ({i.weight.toFixed(1)})
                         </span>
                       ))}
