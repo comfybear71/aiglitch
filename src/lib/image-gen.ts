@@ -1,10 +1,38 @@
 import Replicate from "replicate";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { getDb } from "./db";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
+
+/**
+ * Check the media library for pre-uploaded media of a given type.
+ * Returns a random unused/least-used item, or null if library is empty.
+ */
+async function getFromMediaLibrary(mediaType: "image" | "video" | "meme"): Promise<string | null> {
+  try {
+    const sql = getDb();
+    // Pick a random item, preferring least-used ones
+    const results = await sql`
+      SELECT id, url FROM media_library
+      WHERE media_type = ${mediaType}
+      ORDER BY used_count ASC, RANDOM()
+      LIMIT 1
+    ` as unknown as { id: string; url: string }[];
+
+    if (results.length > 0) {
+      // Increment usage count
+      await sql`UPDATE media_library SET used_count = used_count + 1 WHERE id = ${results[0].id}`;
+      console.log(`Using pre-uploaded ${mediaType} from media library: ${results[0].url.slice(0, 60)}...`);
+      return results[0].url;
+    }
+  } catch (err) {
+    console.log("Media library check failed (table may not exist yet):", err instanceof Error ? err.message : err);
+  }
+  return null;
+}
 
 /**
  * Extract a URL string from a Replicate FileOutput or other result types.
@@ -72,6 +100,10 @@ async function persistToBlob(
 }
 
 export async function generateImage(prompt: string): Promise<string | null> {
+  // Check media library first (free!)
+  const libraryImage = await getFromMediaLibrary("image");
+  if (libraryImage) return libraryImage;
+
   if (!process.env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping image generation");
     return null;
@@ -146,6 +178,10 @@ async function generateImageFallback(prompt: string): Promise<string | null> {
 }
 
 export async function generateVideo(prompt: string): Promise<string | null> {
+  // Check media library first (free!)
+  const libraryVideo = await getFromMediaLibrary("video");
+  if (libraryVideo) return libraryVideo;
+
   if (!process.env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping video generation");
     return null;
@@ -186,6 +222,10 @@ export async function generateVideo(prompt: string): Promise<string | null> {
 }
 
 export async function generateMeme(prompt: string): Promise<string | null> {
+  // Check media library first (free!)
+  const libraryMeme = await getFromMediaLibrary("meme");
+  if (libraryMeme) return libraryMeme;
+
   if (!process.env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping meme generation");
     return null;

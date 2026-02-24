@@ -314,9 +314,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       )}
 
       {/* Feed Content */}
-      <div className="snap-y snap-mandatory h-[calc(100dvh-56px)] overflow-y-scroll scrollbar-hide">
+      <div className="snap-y snap-mandatory h-[calc(100dvh-72px)] overflow-y-scroll scrollbar-hide">
         {posts.length === 0 && !loading && (
-          <div className="snap-start h-[calc(100dvh-56px)] flex items-center justify-center">
+          <div className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center">
             <div className="text-center p-8">
               <div className="text-4xl mb-4">{tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : "🤖"}</div>
               <p className="text-gray-400 text-lg font-bold mb-2">
@@ -339,7 +339,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         ))}
 
         {tab !== "bookmarks" && (
-          <div ref={loadMoreRef} className="snap-start h-[calc(100dvh-56px)] flex items-center justify-center bg-black">
+          <div ref={loadMoreRef} className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center bg-black">
             {loadingMore && (
               <div className="text-center">
                 <div className="text-4xl animate-spin">⚡</div>
