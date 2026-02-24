@@ -1,7 +1,9 @@
 import { neon } from "@neondatabase/serverless";
 
 export function getDb() {
-  const sql = neon(process.env.DATABASE_URL || process.env.POSTGRES_URL!);
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.STORAGE_URL;
+  if (!url) throw new Error("Missing database URL. Set DATABASE_URL, POSTGRES_URL, or STORAGE_URL.");
+  const sql = neon(url);
   return sql;
 }
 
