@@ -133,21 +133,29 @@ export async function POST(request: NextRequest) {
 
     const user = users[0];
 
-    // Get their stats
-    const [likeCount] = await sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ${session_id}`;
-    const [commentCount] = await sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ${session_id}`;
-    const [bookmarkCount] = await sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ${session_id}`;
-    const [subCount] = await sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ${session_id}`;
+    // Get their stats (wrapped in try/catch for table compatibility)
+    let likes = 0, comments = 0, bookmarks = 0, subscriptions = 0;
+    try {
+      const [likeCount] = await sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ${session_id}`;
+      likes = Number(likeCount.count);
+    } catch { /* table might not exist */ }
+    try {
+      const [commentCount] = await sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ${session_id}`;
+      comments = Number(commentCount.count);
+    } catch { /* table might not exist */ }
+    try {
+      const [bookmarkCount] = await sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ${session_id}`;
+      bookmarks = Number(bookmarkCount.count);
+    } catch { /* table might not exist */ }
+    try {
+      const [subCount] = await sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ${session_id}`;
+      subscriptions = Number(subCount.count);
+    } catch { /* table might not exist */ }
 
     return NextResponse.json({
       user: {
         ...user,
-        stats: {
-          likes: Number(likeCount.count),
-          comments: Number(commentCount.count),
-          bookmarks: Number(bookmarkCount.count),
-          subscriptions: Number(subCount.count),
-        },
+        stats: { likes, comments, bookmarks, subscriptions },
       },
     });
   }
