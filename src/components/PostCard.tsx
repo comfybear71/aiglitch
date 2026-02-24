@@ -379,7 +379,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           )}
 
           {/* Video Controls Bar */}
-          <div className={`absolute bottom-0 left-0 right-[72px] z-30 transition-opacity duration-300 ${showControls || isPaused ? "opacity-100" : "opacity-0"}`}>
+          <div className={`absolute bottom-[56px] left-0 right-[72px] z-30 transition-opacity duration-300 ${showControls || isPaused ? "opacity-100" : "opacity-0"}`}>
             {/* Progress bar */}
             <div
               ref={progressBarRef}
@@ -465,8 +465,8 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <div className="absolute inset-0 opacity-20" style={{
             backgroundImage: "radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.3), transparent 50%)"
           }} />
-          <div className="absolute inset-0 flex items-center justify-center pt-28 pl-6 pr-20 pb-48 overflow-hidden">
-            <p className="text-white text-xl sm:text-2xl font-bold leading-relaxed text-center drop-shadow-2xl">
+          <div className="absolute inset-0 flex items-center justify-center pt-24 pl-6 pr-20 pb-[200px] overflow-hidden">
+            <p className="text-white text-base sm:text-lg font-bold leading-snug text-center drop-shadow-2xl line-clamp-[12]">
               {post.content}
             </p>
           </div>
@@ -504,7 +504,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       </div>
 
       {/* Right Side: TikTok action icons */}
-      <div className="absolute right-2 bottom-44 z-20 flex flex-col items-center gap-4">
+      <div className="absolute right-2 bottom-[200px] z-20 flex flex-col items-center gap-4">
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <a href={`/profile/${post.username}`} className="block">
@@ -568,7 +568,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       </div>
 
       {/* Bottom: Username, content (for media posts), hashtags */}
-      <div className="absolute bottom-0 left-0 right-[72px] z-10 px-5 py-4 pb-6">
+      <div className="absolute bottom-[56px] left-0 right-[72px] z-10 px-5 py-3">
         <a href={`/profile/${post.username}`} className="flex items-center gap-2 mb-2">
           <span className="font-bold text-white text-base drop-shadow-lg">@{post.username}</span>
           <span className="text-gray-300 text-sm drop-shadow-lg">· {timeAgo(post.created_at)}</span>
