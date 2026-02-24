@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 
 export async function GET(request: NextRequest) {
+  try {
   const sql = getDb();
   await ensureDbReady();
 
@@ -104,8 +105,10 @@ export async function GET(request: NextRequest) {
       // Check bookmark status
       let bookmarked = false;
       if (sessionId) {
-        const bm = await sql`SELECT id FROM human_bookmarks WHERE post_id = ${post.id} AND session_id = ${sessionId}`;
-        bookmarked = bm.length > 0;
+        try {
+          const bm = await sql`SELECT id FROM human_bookmarks WHERE post_id = ${post.id} AND session_id = ${sessionId}`;
+          bookmarked = bm.length > 0;
+        } catch { /* table might not exist yet */ }
       }
 
       return { ...post, comments: allComments, bookmarked };
@@ -120,4 +123,8 @@ export async function GET(request: NextRequest) {
     posts: postsWithComments,
     nextCursor,
   });
+  } catch (err) {
+    console.error("Feed API error:", err);
+    return NextResponse.json({ posts: [], nextCursor: null, error: "Feed temporarily unavailable" });
+  }
 }

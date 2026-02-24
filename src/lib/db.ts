@@ -167,44 +167,43 @@ export async function initializeDb() {
   `;
 
   // ── Migrations: add new columns to existing tables safely ──
-  // These use DO $$ blocks so they don't fail if columns already exist
+  // Each migration wrapped in try/catch so one failure doesn't break the whole init
+
+  const safeMigrate = async (label: string, fn: () => Promise<unknown>) => {
+    try { await fn(); } catch (e) {
+      console.warn(`Migration "${label}" skipped:`, e instanceof Error ? e.message : e);
+    }
+  };
 
   // Add new columns to posts table
-  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_collab_with TEXT`;
-  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS challenge_tag TEXT`;
-  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS beef_thread_id TEXT`;
+  await safeMigrate("posts.is_collab_with", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_collab_with TEXT`);
+  await safeMigrate("posts.challenge_tag", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS challenge_tag TEXT`);
+  await safeMigrate("posts.beef_thread_id", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS beef_thread_id TEXT`);
 
   // Add new columns to human_users table
-  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS username TEXT`;
-  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS password_hash TEXT`;
-  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS avatar_emoji TEXT NOT NULL DEFAULT '🧑'`;
-  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT ''`;
+  await safeMigrate("human_users.username", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS username TEXT`);
+  await safeMigrate("human_users.password_hash", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
+  await safeMigrate("human_users.avatar_emoji", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS avatar_emoji TEXT DEFAULT '🧑'`);
+  await safeMigrate("human_users.bio", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT ''`);
+  await safeMigrate("human_users.email", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS email TEXT`);
 
-  // Add unique constraint on username if not exists (ignore errors)
-  try {
-    await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_human_users_username_unique ON human_users(username) WHERE username IS NOT NULL`;
-  } catch {
-    // constraint might already exist
-  }
+  // Add unique constraint on username if not exists
+  await safeMigrate("idx_human_users_username_unique", () =>
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_human_users_username_unique ON human_users(username) WHERE username IS NOT NULL`
+  );
 
-  // Drop old email unique constraint if it causes issues (email column might not exist)
-  try {
-    await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS email TEXT`;
-  } catch {
-    // column might already exist
-  }
-
-  await sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post ON human_comments(post_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_posts_persona_id ON posts(persona_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_ai_interactions_post_id ON ai_interactions(post_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_posts_reply ON posts(is_reply_to)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_human_users_session ON human_users(session_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_human_interests_session ON human_interests(session_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_human_likes_session ON human_likes(session_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_human_bookmarks_session ON human_bookmarks(session_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_posts_challenge ON posts(challenge_tag)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_posts_beef ON posts(beef_thread_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_human_users_username ON human_users(username)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_human_view_history_session ON human_view_history(session_id)`;
+  // Indexes — each individually safe
+  await safeMigrate("idx_human_comments_post", () => sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post ON human_comments(post_id)`);
+  await safeMigrate("idx_posts_created_at", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`);
+  await safeMigrate("idx_posts_persona_id", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_persona_id ON posts(persona_id)`);
+  await safeMigrate("idx_ai_interactions_post_id", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_interactions_post_id ON ai_interactions(post_id)`);
+  await safeMigrate("idx_posts_reply", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_reply ON posts(is_reply_to)`);
+  await safeMigrate("idx_human_users_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_users_session ON human_users(session_id)`);
+  await safeMigrate("idx_human_interests_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_interests_session ON human_interests(session_id)`);
+  await safeMigrate("idx_human_likes_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_likes_session ON human_likes(session_id)`);
+  await safeMigrate("idx_human_bookmarks_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_bookmarks_session ON human_bookmarks(session_id)`);
+  await safeMigrate("idx_posts_challenge", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_challenge ON posts(challenge_tag)`);
+  await safeMigrate("idx_posts_beef", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_beef ON posts(beef_thread_id)`);
+  await safeMigrate("idx_human_users_username", () => sql`CREATE INDEX IF NOT EXISTS idx_human_users_username ON human_users(username)`);
+  await safeMigrate("idx_human_view_history_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_view_history_session ON human_view_history(session_id)`);
 }

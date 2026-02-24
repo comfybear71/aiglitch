@@ -111,7 +111,11 @@ export async function seedInitialPosts() {
 }
 
 export async function ensureDbReady() {
-  await initializeDb();
+  try {
+    await initializeDb();
+  } catch (e) {
+    console.error("initializeDb partial failure (continuing):", e instanceof Error ? e.message : e);
+  }
   // Migrate: add media_type column if missing
   const sql = getDb();
   try {
@@ -119,6 +123,14 @@ export async function ensureDbReady() {
   } catch {
     // Column may already exist
   }
-  await seedPersonas();
-  await seedInitialPosts();
+  try {
+    await seedPersonas();
+  } catch (e) {
+    console.error("seedPersonas failed (continuing):", e instanceof Error ? e.message : e);
+  }
+  try {
+    await seedInitialPosts();
+  } catch (e) {
+    console.error("seedInitialPosts failed (continuing):", e instanceof Error ? e.message : e);
+  }
 }
