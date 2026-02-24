@@ -151,46 +151,8 @@ export async function generateVideo(prompt: string): Promise<string | null> {
     return null;
   }
 
-  // Try Veo 3.1 first (video + native audio), fall back to MiniMax video-01 (silent)
-  console.log("Starting video generation with Google Veo 3.1 (text-to-video + audio)...");
-
-  try {
-    const output = await replicate.run(
-      "google/veo-3",
-      {
-        input: {
-          prompt: prompt,
-          duration: 8,
-          aspect_ratio: "9:16",
-          generate_audio: true,
-        },
-      }
-    );
-
-    console.log("Veo 3 raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
-
-    let tempUrl = extractUrl(output);
-    if (!tempUrl && Array.isArray(output) && output.length > 0) {
-      tempUrl = extractUrl(output[0]);
-    }
-
-    console.log("Extracted video URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
-
-    if (tempUrl) {
-      return await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
-    }
-
-    console.error("Veo 3 returned no output URL, falling back to MiniMax");
-    return generateVideoFallback(prompt);
-  } catch (err) {
-    console.error("Veo 3 generation failed, falling back to MiniMax:", err);
-    return generateVideoFallback(prompt);
-  }
-}
-
-async function generateVideoFallback(prompt: string): Promise<string | null> {
-  // Wan 2.2 fast: ~$0.05/video, ~30s generation, no audio but very cheap
-  console.log("Starting video generation with Wan 2.2 fast (text-to-video, no audio)...");
+  // Wan 2.2 fast: ~$0.05/video, ~30s generation — cheap and fast
+  console.log("Starting video generation with Wan 2.2 fast (~$0.05, no audio)...");
 
   try {
     const output = await replicate.run(
@@ -218,7 +180,7 @@ async function generateVideoFallback(prompt: string): Promise<string | null> {
     console.error("Wan 2.2 returned no output URL");
     return null;
   } catch (err) {
-    console.error("Wan 2.2 video fallback also failed:", err);
+    console.error("Wan 2.2 video generation failed:", err);
     return null;
   }
 }
@@ -229,44 +191,8 @@ export async function generateMeme(prompt: string): Promise<string | null> {
     return null;
   }
 
-  // Ideogram v3 turbo: $0.03/image, excellent text rendering for memes
-  console.log("Starting meme generation with Ideogram v3 turbo...");
-
-  try {
-    const output = await replicate.run(
-      "ideogram-ai/ideogram-v3-turbo",
-      {
-        input: {
-          prompt: prompt,
-          aspect_ratio: "1:1",
-        },
-      }
-    );
-
-    console.log("Ideogram v3 raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
-
-    let tempUrl = extractUrl(output);
-    if (!tempUrl && Array.isArray(output) && output.length > 0) {
-      tempUrl = extractUrl(output[0]);
-    }
-
-    console.log("Extracted meme URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
-
-    if (tempUrl) {
-      return await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
-    }
-
-    console.error("Ideogram v3 returned no output URL, falling back to Flux");
-    return generateMemeFallback(prompt);
-  } catch (err) {
-    console.error("Ideogram v3 meme generation failed, falling back to Flux:", err);
-    return generateMemeFallback(prompt);
-  }
-}
-
-async function generateMemeFallback(prompt: string): Promise<string | null> {
-  // Flux Schnell: ~$0.003/image, decent text rendering
-  console.log("Trying Flux Schnell for meme fallback...");
+  // Flux Schnell: ~$0.003/image — ultra cheap, fast, decent text rendering
+  console.log("Starting meme generation with Flux Schnell (~$0.003)...");
 
   try {
     const output = await replicate.run(
@@ -282,16 +208,51 @@ async function generateMemeFallback(prompt: string): Promise<string | null> {
       }
     );
 
+    console.log("Flux Schnell raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
+
     if (Array.isArray(output) && output.length > 0) {
       const tempUrl = extractUrl(output[0]);
+      console.log("Extracted meme URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
         return await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
       }
     }
 
+    console.error("Flux Schnell returned no output, falling back to Ideogram");
+    return generateMemeFallback(prompt);
+  } catch (err) {
+    console.error("Flux Schnell meme failed, falling back to Ideogram:", err);
+    return generateMemeFallback(prompt);
+  }
+}
+
+async function generateMemeFallback(prompt: string): Promise<string | null> {
+  // Ideogram v3 turbo: $0.03/image, excellent text rendering (10x more expensive)
+  console.log("Trying Ideogram v3 turbo for meme fallback...");
+
+  try {
+    const output = await replicate.run(
+      "ideogram-ai/ideogram-v3-turbo",
+      {
+        input: {
+          prompt: prompt,
+          aspect_ratio: "1:1",
+        },
+      }
+    );
+
+    let tempUrl = extractUrl(output);
+    if (!tempUrl && Array.isArray(output) && output.length > 0) {
+      tempUrl = extractUrl(output[0]);
+    }
+
+    if (tempUrl) {
+      return await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
+    }
+
     return null;
   } catch (err) {
-    console.error("Flux meme fallback also failed:", err);
+    console.error("Ideogram meme fallback also failed:", err);
     return null;
   }
 }
