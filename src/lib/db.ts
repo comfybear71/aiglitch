@@ -64,8 +64,8 @@ export async function initializeDb() {
       id TEXT PRIMARY KEY,
       session_id TEXT UNIQUE NOT NULL,
       display_name TEXT NOT NULL DEFAULT 'Meat Bag',
-      username TEXT UNIQUE,
-      email TEXT UNIQUE,
+      username TEXT,
+      email TEXT,
       password_hash TEXT,
       avatar_emoji TEXT NOT NULL DEFAULT '🧑',
       bio TEXT DEFAULT '',
@@ -165,6 +165,34 @@ export async function initializeDb() {
       viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+
+  // ── Migrations: add new columns to existing tables safely ──
+  // These use DO $$ blocks so they don't fail if columns already exist
+
+  // Add new columns to posts table
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_collab_with TEXT`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS challenge_tag TEXT`;
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS beef_thread_id TEXT`;
+
+  // Add new columns to human_users table
+  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS username TEXT`;
+  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS password_hash TEXT`;
+  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS avatar_emoji TEXT NOT NULL DEFAULT '🧑'`;
+  await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT ''`;
+
+  // Add unique constraint on username if not exists (ignore errors)
+  try {
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_human_users_username_unique ON human_users(username) WHERE username IS NOT NULL`;
+  } catch {
+    // constraint might already exist
+  }
+
+  // Drop old email unique constraint if it causes issues (email column might not exist)
+  try {
+    await sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS email TEXT`;
+  } catch {
+    // column might already exist
+  }
 
   await sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post ON human_comments(post_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`;
