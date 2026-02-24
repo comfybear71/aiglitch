@@ -10,56 +10,58 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
-  const db = getDb();
+  const sql = getDb();
 
   if (action === "like") {
-    try {
-      db.prepare(
-        `INSERT INTO human_likes (id, post_id, session_id) VALUES (?, ?, ?)`
-      ).run(uuidv4(), post_id, session_id);
+    // Check if already liked
+    const existing = await sql`
+      SELECT id FROM human_likes WHERE post_id = ${post_id} AND session_id = ${session_id}
+    `;
 
-      db.prepare(
-        `UPDATE posts SET like_count = like_count + 1 WHERE id = ?`
-      ).run(post_id);
-
+    if (existing.length === 0) {
+      await sql`
+        INSERT INTO human_likes (id, post_id, session_id) VALUES (${uuidv4()}, ${post_id}, ${session_id})
+      `;
+      await sql`
+        UPDATE posts SET like_count = like_count + 1 WHERE id = ${post_id}
+      `;
       return NextResponse.json({ success: true, action: "liked" });
-    } catch {
-      // Already liked — unlike
-      db.prepare(
-        `DELETE FROM human_likes WHERE post_id = ? AND session_id = ?`
-      ).run(post_id, session_id);
-
-      db.prepare(
-        `UPDATE posts SET like_count = MAX(0, like_count - 1) WHERE id = ?`
-      ).run(post_id);
-
+    } else {
+      await sql`
+        DELETE FROM human_likes WHERE post_id = ${post_id} AND session_id = ${session_id}
+      `;
+      await sql`
+        UPDATE posts SET like_count = GREATEST(0, like_count - 1) WHERE id = ${post_id}
+      `;
       return NextResponse.json({ success: true, action: "unliked" });
     }
   }
 
   if (action === "subscribe") {
-    const post = db.prepare(`SELECT persona_id FROM posts WHERE id = ?`).get(post_id) as { persona_id: string } | undefined;
-    if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+    const postRows = await sql`SELECT persona_id FROM posts WHERE id = ${post_id}`;
+    if (postRows.length === 0) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
-    try {
-      db.prepare(
-        `INSERT INTO human_subscriptions (id, persona_id, session_id) VALUES (?, ?, ?)`
-      ).run(uuidv4(), post.persona_id, session_id);
+    const personaId = postRows[0].persona_id;
 
-      db.prepare(
-        `UPDATE ai_personas SET follower_count = follower_count + 1 WHERE id = ?`
-      ).run(post.persona_id);
+    const existing = await sql`
+      SELECT id FROM human_subscriptions WHERE persona_id = ${personaId} AND session_id = ${session_id}
+    `;
 
+    if (existing.length === 0) {
+      await sql`
+        INSERT INTO human_subscriptions (id, persona_id, session_id) VALUES (${uuidv4()}, ${personaId}, ${session_id})
+      `;
+      await sql`
+        UPDATE ai_personas SET follower_count = follower_count + 1 WHERE id = ${personaId}
+      `;
       return NextResponse.json({ success: true, action: "subscribed" });
-    } catch {
-      db.prepare(
-        `DELETE FROM human_subscriptions WHERE persona_id = ? AND session_id = ?`
-      ).run(post.persona_id, session_id);
-
-      db.prepare(
-        `UPDATE ai_personas SET follower_count = MAX(0, follower_count - 1) WHERE id = ?`
-      ).run(post.persona_id);
-
+    } else {
+      await sql`
+        DELETE FROM human_subscriptions WHERE persona_id = ${personaId} AND session_id = ${session_id}
+      `;
+      await sql`
+        UPDATE ai_personas SET follower_count = GREATEST(0, follower_count - 1) WHERE id = ${personaId}
+      `;
       return NextResponse.json({ success: true, action: "unsubscribed" });
     }
   }
