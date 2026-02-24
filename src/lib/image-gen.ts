@@ -2,7 +2,7 @@ import Replicate from "replicate";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { getDb } from "./db";
-import { generateWithPerchance, generateWithRaphael } from "./free-image-gen";
+import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } from "./free-image-gen";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -119,7 +119,7 @@ async function persistToBlob(
 
 /**
  * Try free/cheap image generation services before falling back to Replicate.
- * Chain: Perchance (free) → Raphael ($0.0036) → null (caller falls through to Replicate)
+ * Chain: FreeForAI (free) → Perchance (free) → Raphael ($0.0036) → null (falls through to Replicate)
  */
 async function generateFreeImage(
   prompt: string,
@@ -133,7 +133,18 @@ async function generateFreeImage(
   };
   const dims = dimensionMap[aspectRatio] || { w: 768, h: 1024 };
 
-  // Try Perchance first (completely free)
+  // Try FreeForAI first (free, no auth, FLUX.1-Dev — returns a URL directly)
+  try {
+    const freeForAIUrl = await generateWithFreeForAI(prompt, aspectRatio);
+    if (freeForAIUrl) {
+      // Persist to Vercel Blob for reliable CDN serving
+      return await persistToBlob(freeForAIUrl, `images/${uuidv4()}.webp`, "image/webp");
+    }
+  } catch (err) {
+    console.log("FreeForAI attempt failed:", err instanceof Error ? err.message : err);
+  }
+
+  // Try Perchance (free, needs userKey — returns buffer)
   try {
     const perchance = await generateWithPerchance(prompt, aspectRatio);
     if (perchance) {
@@ -148,14 +159,13 @@ async function generateFreeImage(
         return blob.url;
       } catch {
         console.log("Blob upload failed for Perchance image");
-        return null;
       }
     }
   } catch (err) {
     console.log("Perchance attempt failed:", err instanceof Error ? err.message : err);
   }
 
-  // Try Raphael ($0.0036/call — very cheap)
+  // Try Raphael ($0.0036/call — very cheap, needs API key)
   try {
     const raphael = await generateWithRaphael(prompt, dims.w, dims.h);
     if (raphael) {
@@ -170,7 +180,6 @@ async function generateFreeImage(
         return blob.url;
       } catch {
         console.log("Blob upload failed for Raphael image");
-        return null;
       }
     }
   } catch (err) {

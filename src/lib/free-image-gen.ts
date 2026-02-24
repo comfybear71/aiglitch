@@ -1,13 +1,113 @@
 /**
- * Free AI Image Generation via Perchance.org
+ * Free AI Image Generation
  *
- * Uses the unofficial Perchance image generation API (same endpoints
- * the browser UI uses). Completely free, no API key needed.
- *
- * Flow: verifyUser → generate → downloadTemporaryImage
+ * Three free/cheap providers in priority order:
+ * 1. FreeForAI (free, no auth, FLUX.1-Dev model) — easiest, most reliable
+ * 2. Perchance (free, needs userKey) — good quality, but key fetching can fail
+ * 3. Raphael Z-Image (paid $0.0036, needs API key) — cheap backup
  */
 
+const FREEFORAI_BASE = "https://data.aizdzj.com/draw";
 const PERCHANCE_BASE = "https://image-generation.perchance.org/api";
+
+// ============================================================
+// FreeForAI (FLUX.1-Dev) — FREE, no auth, no signup
+// ============================================================
+
+/**
+ * Generate an image using FreeForAI (100% free, FLUX.1-Dev model).
+ * No API key, no signup, no authentication needed.
+ *
+ * Flow: POST prompt → get task_id → poll until SUCCEEDED → get image URL
+ *
+ * @param prompt - Text description of the image
+ * @param aspectRatio - "9:16" for portrait, "1:1" for square, "16:9" for landscape
+ * @returns Image URL string or null if generation failed
+ */
+export async function generateWithFreeForAI(
+  prompt: string,
+  aspectRatio: "9:16" | "1:1" | "16:9" = "9:16",
+): Promise<string | null> {
+  console.log("Attempting free image generation via FreeForAI (FLUX.1-Dev)...");
+
+  const sizeMap: Record<string, string> = {
+    "9:16": "512*1024",
+    "1:1": "1024*1024",
+    "16:9": "1024*576",
+  };
+  const size = sizeMap[aspectRatio] || "512*1024";
+
+  try {
+    // Step 1: Submit generation task
+    const submitRes = await fetch(`${FREEFORAI_BASE}/text2image.php`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        prompt,
+        size,
+        model: "flux-dev",
+      }),
+    });
+
+    if (!submitRes.ok) {
+      console.log(`FreeForAI submit failed: HTTP ${submitRes.status}`);
+      return null;
+    }
+
+    const submitData = await submitRes.json();
+    if (!submitData.task_id) {
+      console.log("FreeForAI returned no task_id:", JSON.stringify(submitData).slice(0, 200));
+      return null;
+    }
+
+    console.log(`FreeForAI task submitted: ${submitData.task_id}`);
+
+    // Step 2: Poll for completion (max ~60s with backoff)
+    let delay = 2000;
+    const maxAttempts = 15;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(r => setTimeout(r, delay));
+
+      const pollRes = await fetch(`${FREEFORAI_BASE}/text2image.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ task_id: submitData.task_id }),
+      });
+
+      if (!pollRes.ok) {
+        console.log(`FreeForAI poll failed: HTTP ${pollRes.status}`);
+        continue;
+      }
+
+      const pollData = await pollRes.json();
+      console.log(`FreeForAI poll #${attempt + 1}: ${pollData.task_status}`);
+
+      if (pollData.task_status === "SUCCEEDED" && pollData.url) {
+        console.log(`FreeForAI image ready: ${pollData.url.slice(0, 80)}...`);
+        return pollData.url;
+      }
+
+      if (pollData.task_status === "FAILED") {
+        console.log("FreeForAI task failed:", JSON.stringify(pollData).slice(0, 200));
+        return null;
+      }
+
+      // Increase delay up to 5s
+      delay = Math.min(delay * 1.3, 5000);
+    }
+
+    console.log("FreeForAI: Timed out waiting for image generation");
+    return null;
+  } catch (err) {
+    console.log("FreeForAI error:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+// ============================================================
+// Perchance (Stable Diffusion) — FREE, needs userKey from verification
+// ============================================================
 
 // Rotate user agents to avoid detection
 const USER_AGENTS = [
@@ -213,9 +313,15 @@ export async function generateWithPerchance(
 }
 
 
+// ============================================================
+// Raphael Z-Image Turbo (via EvoLink API) — $0.0036/image
+// ============================================================
+
 /**
  * Generate an image using Raphael's Z-Image Turbo API ($0.0036/call).
- * Requires RAPHAEL_API_KEY environment variable.
+ * Requires RAPHAEL_API_KEY environment variable (from evolink.ai).
+ *
+ * Uses the async task-based API: submit task → poll for result → download.
  *
  * @param prompt - Text description of the image
  * @param width - Image width (default: 768)
@@ -236,38 +342,80 @@ export async function generateWithRaphael(
   console.log(`Attempting image generation via Raphael Z-Image Turbo ($0.0036)...`);
 
   try {
-    const res = await fetch("https://evolink.ai/z-image-turbo", {
+    // Step 1: Submit generation task
+    const sizeStr = width === height ? "1:1" : width > height ? "16:9" : "9:16";
+    const createRes = await fetch("https://api.evolink.ai/v1/images/generations", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        width,
-        height,
+        model: "z-image-turbo",
         prompt,
-        seed: Math.floor(Math.random() * 2 ** 32),
-        nsfw_check: true,
-        request_uuid: `aiglitch-${Date.now()}`,
+        size: sizeStr,
+        seed: Math.floor(Math.random() * 2147483647),
       }),
     });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.log(`Raphael API failed: HTTP ${res.status} — ${text.slice(0, 200)}`);
+    if (!createRes.ok) {
+      const text = await createRes.text().catch(() => "");
+      console.log(`Raphael API submit failed: HTTP ${createRes.status} — ${text.slice(0, 200)}`);
       return null;
     }
 
-    // Response is the image binary
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.length < 1000) {
-      console.log("Raphael: Response too small, likely an error");
+    const task = await createRes.json();
+    if (!task.id) {
+      console.log("Raphael returned no task id:", JSON.stringify(task).slice(0, 200));
       return null;
     }
 
-    const contentType = res.headers.get("content-type") || "image/png";
-    console.log(`Raphael image generated: ${(buffer.length / 1024).toFixed(1)}KB (${contentType})`);
-    return { buffer, contentType };
+    console.log(`Raphael task submitted: ${task.id}`);
+
+    // Step 2: Poll for completion (max ~30s)
+    let delay = 1000;
+    const maxAttempts = 12;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(r => setTimeout(r, delay));
+
+      const pollRes = await fetch(`https://api.evolink.ai/v1/tasks/${task.id}`, {
+        headers: { "Authorization": `Bearer ${apiKey}` },
+      });
+
+      if (!pollRes.ok) {
+        console.log(`Raphael poll failed: HTTP ${pollRes.status}`);
+        continue;
+      }
+
+      const result = await pollRes.json();
+      console.log(`Raphael poll #${attempt + 1}: status=${result.status}`);
+
+      if (result.status === "completed" && result.results?.length > 0) {
+        // Download the image from the result URL
+        const imageUrl = result.results[0];
+        const imgRes = await fetch(typeof imageUrl === "string" ? imageUrl : imageUrl.url);
+        if (!imgRes.ok) {
+          console.log(`Raphael image download failed: HTTP ${imgRes.status}`);
+          return null;
+        }
+
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        const contentType = imgRes.headers.get("content-type") || "image/png";
+        console.log(`Raphael image downloaded: ${(buffer.length / 1024).toFixed(1)}KB`);
+        return { buffer, contentType };
+      }
+
+      if (result.status === "failed") {
+        console.log("Raphael task failed:", JSON.stringify(result).slice(0, 200));
+        return null;
+      }
+
+      delay = Math.min(delay * 1.5, 4000);
+    }
+
+    console.log("Raphael: Timed out waiting for generation");
+    return null;
   } catch (err) {
     console.log("Raphael generation error:", err instanceof Error ? err.message : err);
     return null;
