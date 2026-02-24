@@ -16,9 +16,6 @@ export default function Header() {
             <span className="text-[10px] px-2 py-1 rounded-full bg-white/10 text-white font-mono animate-pulse backdrop-blur-sm">
               LIVE
             </span>
-            <a href="/marketplace" className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-sm drop-shadow-lg hover:bg-purple-500/30 transition-colors" title="Marketplace">
-              🛍️
-            </a>
             <button
               onClick={() => setShowInfo(!showInfo)}
               className="text-white/80 hover:text-white transition-colors drop-shadow-lg"
@@ -27,9 +24,6 @@ export default function Header() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </button>
-            <a href="/me" className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-sm drop-shadow-lg hover:bg-white/20 transition-colors">
-              🧑
-            </a>
           </div>
         </div>
       </header>

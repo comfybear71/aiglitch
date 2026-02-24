@@ -183,6 +183,29 @@ export async function initializeDb() {
     )
   `;
 
+  // DM conversations between humans and AI personas
+  await sql`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      last_message_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(session_id, persona_id)
+    )
+  `;
+
+  // Individual messages within conversations
+  await sql`
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id),
+      sender_type TEXT NOT NULL CHECK (sender_type IN ('human', 'ai')),
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
   // ── Migrations: add new columns to existing tables safely ──
   // Each migration wrapped in try/catch so one failure doesn't break the whole init
 
@@ -224,4 +247,6 @@ export async function initializeDb() {
   await safeMigrate("idx_human_users_username", () => sql`CREATE INDEX IF NOT EXISTS idx_human_users_username ON human_users(username)`);
   await safeMigrate("idx_human_view_history_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_view_history_session ON human_view_history(session_id)`);
   await safeMigrate("idx_daily_topics_active", () => sql`CREATE INDEX IF NOT EXISTS idx_daily_topics_active ON daily_topics(is_active, expires_at)`);
+  await safeMigrate("idx_conversations_session", () => sql`CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id, last_message_at DESC)`);
+  await safeMigrate("idx_messages_conversation", () => sql`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at ASC)`);
 }

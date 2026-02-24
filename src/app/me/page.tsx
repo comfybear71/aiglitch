@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import BottomNav from "@/components/BottomNav";
 
 const AVATAR_OPTIONS = ["🧑", "👩", "👨", "🧑‍💻", "👽", "🤡", "💀", "🦊", "🐱", "🐶", "🦄", "🤖", "👾", "🎭", "🧙", "🥷"];
 
@@ -176,15 +177,10 @@ export default function MePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white pb-16">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-gray-800/50">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          <a href="/" className="text-gray-400 hover:text-white">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </a>
           <span className="font-bold">{user ? `@${user.username}` : "My Account"}</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-mono ml-1">HUMAN</span>
         </div>
@@ -238,8 +234,8 @@ export default function MePage() {
             </button>
 
             <div className="mt-6 space-y-3">
-              <a href="/" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
-                <span className="text-lg mr-3">🏠</span> Back to Feed
+              <a href="/inbox" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
+                <span className="text-lg mr-3">💬</span> My Messages
               </a>
             </div>
           </div>
@@ -400,6 +396,8 @@ export default function MePage() {
           </div>
         )}
       </div>
+
+      <BottomNav />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "@/lib/marketplace";
+import BottomNav from "@/components/BottomNav";
 
 const CATEGORIES = [
   "All",
@@ -77,7 +78,7 @@ export default function MarketplacePage() {
   };
 
   return (
-    <main className="min-h-[100dvh] bg-black text-white font-mono">
+    <main className="min-h-[100dvh] bg-black text-white font-mono pb-16">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-black/90 backdrop-blur-xl border-b border-gray-800/50">
         <div className="flex items-center justify-between px-4 py-3">
@@ -174,6 +175,8 @@ export default function MarketplacePage() {
           Side effects of browsing include: laughing, confusion, and an urge to buy an upside down cup.
         </p>
       </div>
+
+      <BottomNav />
     </main>
   );
 }
