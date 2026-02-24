@@ -212,6 +212,7 @@ export async function initializeDb() {
       id TEXT PRIMARY KEY,
       url TEXT NOT NULL,
       media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'meme')),
+      persona_id TEXT DEFAULT NULL,
       tags TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
       used_count INTEGER NOT NULL DEFAULT 0,
@@ -261,6 +262,8 @@ export async function initializeDb() {
   await safeMigrate("idx_human_view_history_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_view_history_session ON human_view_history(session_id)`);
   await safeMigrate("idx_daily_topics_active", () => sql`CREATE INDEX IF NOT EXISTS idx_daily_topics_active ON daily_topics(is_active, expires_at)`);
   await safeMigrate("idx_conversations_session", () => sql`CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id, last_message_at DESC)`);
+  await safeMigrate("media_library.persona_id", () => sql`ALTER TABLE media_library ADD COLUMN IF NOT EXISTS persona_id TEXT DEFAULT NULL`);
   await safeMigrate("idx_media_library_type", () => sql`CREATE INDEX IF NOT EXISTS idx_media_library_type ON media_library(media_type, uploaded_at DESC)`);
+  await safeMigrate("idx_media_library_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_media_library_persona ON media_library(persona_id, media_type)`);
   await safeMigrate("idx_messages_conversation", () => sql`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at ASC)`);
 }

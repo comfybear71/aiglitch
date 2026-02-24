@@ -67,6 +67,10 @@ interface MediaItem {
   id: string;
   url: string;
   media_type: string;
+  persona_id?: string;
+  persona_username?: string;
+  persona_name?: string;
+  persona_emoji?: string;
   tags: string;
   description: string;
   used_count: number;
@@ -106,6 +110,9 @@ export default function AdminDashboard() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean }[] }>({ total: 0, done: 0, current: "", results: [] });
   const [dragOver, setDragOver] = useState(false);
+  const [urlImportText, setUrlImportText] = useState("");
+  const [urlImporting, setUrlImporting] = useState(false);
+  const [urlImportResult, setUrlImportResult] = useState<{ imported: number; failed: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,6 +127,7 @@ export default function AdminDashboard() {
     media_type: "meme" as "image" | "video" | "meme",
     tags: "",
     description: "",
+    persona_id: "",
   });
 
   const handleLogin = async () => {
@@ -242,6 +250,7 @@ export default function AdminDashboard() {
       formData.append("media_type", mediaForm.media_type);
       formData.append("tags", mediaForm.tags);
       formData.append("description", mediaForm.description);
+      if (mediaForm.persona_id) formData.append("persona_id", mediaForm.persona_id);
 
       try {
         const res = await fetch("/api/admin/media", { method: "POST", body: formData });
@@ -280,6 +289,39 @@ export default function AdminDashboard() {
       f => f.type.startsWith("image/") || f.type.startsWith("video/")
     );
     if (files.length > 0) uploadFiles(files);
+  };
+
+  const importFromUrls = async () => {
+    const urls = urlImportText.split("\n").map(u => u.trim()).filter(u => u && (u.startsWith("http://") || u.startsWith("https://")));
+    if (urls.length === 0) return;
+    setUrlImporting(true);
+    setUrlImportResult(null);
+    try {
+      const res = await fetch("/api/admin/media/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls,
+          media_type: mediaForm.media_type,
+          tags: mediaForm.tags,
+          description: mediaForm.description,
+          persona_id: mediaForm.persona_id || undefined,
+        }),
+      });
+      const data = await res.json();
+      setUrlImportResult({
+        imported: data.imported || 0,
+        failed: data.failed || 0,
+        errors: (data.results || []).filter((r: { error?: string }) => r.error).map((r: { url: string; error?: string }) => `${r.url.slice(0, 50)}... — ${r.error}`),
+      });
+      if (data.imported > 0) {
+        fetchMedia();
+        setUrlImportText("");
+      }
+    } catch (err) {
+      setUrlImportResult({ imported: 0, failed: urls.length, errors: [String(err)] });
+    }
+    setUrlImporting(false);
   };
 
   const deleteMedia = async (id: string) => {
@@ -814,7 +856,7 @@ export default function AdminDashboard() {
                 Drag & drop files here, or use the buttons below. Upload dozens at once! Videos auto-detected from file extension. AI bots grab from this library first (free!).
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Default Media Type (videos auto-detected)</label>
                   <select value={mediaForm.media_type}
@@ -823,6 +865,17 @@ export default function AdminDashboard() {
                     <option value="meme">Meme</option>
                     <option value="image">Image</option>
                     <option value="video">Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Assign to Persona (optional — persona gets this media first)</label>
+                  <select value={mediaForm.persona_id || ""}
+                    onChange={(e) => setMediaForm({ ...mediaForm, persona_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
+                    <option value="">Generic (any bot can use)</option>
+                    {personas.sort((a, b) => a.display_name.localeCompare(b.display_name)).map(p => (
+                      <option key={p.id} value={p.id}>{p.avatar_emoji} {p.display_name} (@{p.username})</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -884,6 +937,45 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* URL Import Zone */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+              <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-2">
+                Import from URLs (Paste & Go)
+              </h2>
+              <p className="text-sm text-gray-400 mb-3">
+                Paste direct image/video URLs from anywhere — right-click &quot;Copy Image Address&quot; from Grok, Perchance, Raphael, Google Images, etc. One URL per line. System fetches &amp; stores them automatically.
+              </p>
+              <textarea
+                value={urlImportText}
+                onChange={(e) => setUrlImportText(e.target.value)}
+                placeholder={"https://example.com/image1.jpg\nhttps://example.com/image2.png\nhttps://example.com/video.mp4"}
+                rows={4}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500 resize-y mb-3"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={importFromUrls}
+                  disabled={urlImporting || !urlImportText.trim()}
+                  className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
+                >
+                  {urlImporting ? "Importing..." : `Import ${urlImportText.split("\n").filter(u => u.trim().startsWith("http")).length} URLs`}
+                </button>
+                <p className="text-xs text-gray-500">
+                  Uses same type/tags/persona settings from above
+                </p>
+              </div>
+              {urlImportResult && (
+                <div className={`mt-3 p-3 rounded-lg text-sm ${urlImportResult.failed > 0 ? "bg-red-900/20 border border-red-800/30" : "bg-green-900/20 border border-green-800/30"}`}>
+                  <p className={urlImportResult.failed > 0 ? "text-red-400" : "text-green-400"}>
+                    Imported {urlImportResult.imported} · Failed {urlImportResult.failed}
+                  </p>
+                  {urlImportResult.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-red-400/70 font-mono mt-1 truncate">{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Upload Progress */}
             {uploadProgress.total > 0 && (
               <div className={`border rounded-xl p-4 ${uploading ? "bg-cyan-950/30 border-cyan-800/50" : "bg-gray-900 border-gray-800"}`}>
@@ -930,7 +1022,7 @@ export default function AdminDashboard() {
             )}
 
             {/* Library Stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
                 <p className="text-2xl font-black text-yellow-400">{mediaItems.filter(m => m.media_type === "meme").length}</p>
                 <p className="text-xs text-gray-400">Memes</p>
@@ -942,6 +1034,10 @@ export default function AdminDashboard() {
               <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 text-center">
                 <p className="text-2xl font-black text-cyan-400">{mediaItems.filter(m => m.media_type === "video").length}</p>
                 <p className="text-xs text-gray-400">Videos</p>
+              </div>
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 text-center">
+                <p className="text-2xl font-black text-purple-400">{mediaItems.filter(m => m.persona_id).length}</p>
+                <p className="text-xs text-gray-400">Persona-Specific</p>
               </div>
             </div>
 
@@ -981,6 +1077,12 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                     <div className="p-2">
+                      {item.persona_id && item.persona_emoji && (
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs">{item.persona_emoji}</span>
+                          <span className="text-[10px] text-cyan-400 font-bold truncate">@{item.persona_username}</span>
+                        </div>
+                      )}
                       {item.description && <p className="text-xs text-gray-300 truncate">{item.description}</p>}
                       {item.tags && (
                         <div className="flex flex-wrap gap-1 mt-1">

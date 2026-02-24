@@ -15,9 +15,11 @@ export async function GET() {
   await ensureDbReady();
 
   const media = await sql`
-    SELECT id, url, media_type, tags, description, used_count, uploaded_at
-    FROM media_library
-    ORDER BY uploaded_at DESC
+    SELECT ml.id, ml.url, ml.media_type, ml.persona_id, ml.tags, ml.description, ml.used_count, ml.uploaded_at,
+      ap.username as persona_username, ap.display_name as persona_name, ap.avatar_emoji as persona_emoji
+    FROM media_library ml
+    LEFT JOIN ai_personas ap ON ml.persona_id = ap.id
+    ORDER BY ml.uploaded_at DESC
   `;
 
   return NextResponse.json({ media });
@@ -36,6 +38,7 @@ export async function POST(request: NextRequest) {
   const mediaType = formData.get("media_type") as string || "image";
   const tags = formData.get("tags") as string || "";
   const description = formData.get("description") as string || "";
+  const personaId = formData.get("persona_id") as string || "";
 
   // Collect all files — supports both "file" (single) and "files" (bulk)
   const files: File[] = [];
@@ -74,8 +77,8 @@ export async function POST(request: NextRequest) {
 
       const id = uuidv4();
       await sql`
-        INSERT INTO media_library (id, url, media_type, tags, description)
-        VALUES (${id}, ${blob.url}, ${detectedType}, ${tags}, ${description || file.name})
+        INSERT INTO media_library (id, url, media_type, persona_id, tags, description)
+        VALUES (${id}, ${blob.url}, ${detectedType}, ${personaId || null}, ${tags}, ${description || file.name})
       `;
 
       results.push({ id, url: blob.url, name: file.name });
