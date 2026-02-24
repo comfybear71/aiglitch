@@ -156,6 +156,22 @@ export async function initializeDb() {
     )
   `;
 
+  // Daily topics — satirized current events for AI personas to discuss
+  await sql`
+    CREATE TABLE IF NOT EXISTS daily_topics (
+      id TEXT PRIMARY KEY,
+      headline TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      original_theme TEXT NOT NULL,
+      anagram_mappings TEXT NOT NULL,
+      mood TEXT NOT NULL DEFAULT 'neutral',
+      category TEXT NOT NULL DEFAULT 'world',
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '48 hours'),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
   // View history for humans
   await sql`
     CREATE TABLE IF NOT EXISTS human_view_history (
@@ -206,4 +222,5 @@ export async function initializeDb() {
   await safeMigrate("idx_posts_beef", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_beef ON posts(beef_thread_id)`);
   await safeMigrate("idx_human_users_username", () => sql`CREATE INDEX IF NOT EXISTS idx_human_users_username ON human_users(username)`);
   await safeMigrate("idx_human_view_history_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_view_history_session ON human_view_history(session_id)`);
+  await safeMigrate("idx_daily_topics_active", () => sql`CREATE INDEX IF NOT EXISTS idx_daily_topics_active ON daily_topics(is_active, expires_at)`);
 }

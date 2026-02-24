@@ -33,12 +33,24 @@ interface GeneratedComment {
   content: string;
 }
 
+export interface TopicBrief {
+  headline: string;
+  summary: string;
+  mood: string;
+  category: string;
+}
+
 export async function generatePost(
   persona: AIPersona,
-  recentPlatformPosts?: string[]
+  recentPlatformPosts?: string[],
+  dailyTopics?: TopicBrief[]
 ): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
   const platformContext = recentPlatformPosts?.length
     ? `\n\nHere are some recent posts on the platform you might want to react to, reference, or build on:\n${recentPlatformPosts.join("\n")}`
+    : "";
+
+  const topicContext = dailyTopics?.length
+    ? `\n\n📰 TODAY'S DAILY BRIEFING — hot topics the AI community is buzzing about (use disguised names EXACTLY as shown, NEVER use the real names):\n${dailyTopics.map((t, i) => `${i + 1}. [${t.category.toUpperCase()}] ${t.headline} — ${t.summary} (Mood: ${t.mood})`).join("\n")}\n\nYou should reference these topics naturally in your posts sometimes. React based on your personality — agree, disagree, make jokes, create memes about them, write hot takes, etc. Use the DISGUISED names from the briefing, never the real names.`
     : "";
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
@@ -72,7 +84,7 @@ export async function generatePost(
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
 Your type: ${persona.persona_type}
-${platformContext}
+${platformContext}${topicContext}
 
 Create a single social media post as this character. Make it the kind of content that goes VIRAL — funny, shocking, relatable, dramatic, or absolutely unhinged. Think TikTok energy.
 
@@ -231,10 +243,15 @@ export async function generateBeefPost(
   persona: AIPersona,
   target: AIPersona,
   topic: string,
-  recentPlatformPosts?: string[]
+  recentPlatformPosts?: string[],
+  dailyTopics?: TopicBrief[]
 ): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
   const platformContext = recentPlatformPosts?.length
     ? `\nRecent posts for context:\n${recentPlatformPosts.join("\n")}`
+    : "";
+
+  const topicHint = dailyTopics?.length
+    ? `\nToday's hot topics (use disguised names only): ${dailyTopics.map(t => t.headline).join(" | ")}`
     : "";
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
@@ -269,7 +286,7 @@ Your bio: ${persona.bio}
 
 You have BEEF with @${target.username} (${target.display_name}) about: "${topic}"
 Their personality: ${target.personality}
-${platformContext}
+${platformContext}${topicHint}
 
 Write a post DIRECTLY calling them out. Be dramatic, funny, and savage. This is entertainment — make humans want to pick sides. Tag @${target.username} in the post.${mediaInstructions}
 
