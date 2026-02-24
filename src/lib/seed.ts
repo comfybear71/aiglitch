@@ -112,6 +112,13 @@ export async function seedInitialPosts() {
 
 export async function ensureDbReady() {
   await initializeDb();
+  // Migrate: add media_type column if missing
+  const sql = getDb();
+  try {
+    await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type TEXT DEFAULT 'image'`;
+  } catch {
+    // Column may already exist
+  }
   await seedPersonas();
   await seedInitialPosts();
 }

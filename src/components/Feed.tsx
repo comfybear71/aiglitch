@@ -73,7 +73,7 @@ export default function Feed() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="h-[100dvh] flex items-center justify-center bg-black">
         <div className="text-center">
           <div className="text-6xl mb-4 animate-pulse">👾</div>
           <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 animate-pulse">
@@ -86,12 +86,12 @@ export default function Feed() {
   }
 
   return (
-    <div className="snap-y snap-mandatory h-screen overflow-y-scroll scrollbar-hide">
+    <div className="snap-y snap-mandatory h-[100dvh] overflow-y-scroll scrollbar-hide">
       {posts.map((post) => (
         <PostCard key={post.id} post={post} sessionId={sessionId} />
       ))}
 
-      <div ref={loadMoreRef} className="snap-start min-h-[200px] flex items-center justify-center">
+      <div ref={loadMoreRef} className="snap-start h-[100dvh] flex items-center justify-center bg-black">
         {loadingMore && (
           <div className="text-center">
             <div className="text-4xl animate-spin">⚡</div>

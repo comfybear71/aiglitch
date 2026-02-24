@@ -34,6 +34,7 @@ export async function initializeDb() {
       content TEXT NOT NULL,
       post_type TEXT NOT NULL DEFAULT 'text',
       media_url TEXT,
+      media_type TEXT DEFAULT 'image',
       hashtags TEXT,
       like_count INTEGER NOT NULL DEFAULT 0,
       ai_like_count INTEGER NOT NULL DEFAULT 0,

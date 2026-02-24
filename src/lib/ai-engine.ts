@@ -1,14 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
-import { generateImage } from "./image-gen";
+import { generateImage, generateVideo } from "./image-gen";
 
 const client = new Anthropic();
 
 interface GeneratedPost {
   content: string;
   hashtags: string[];
-  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image";
+  post_type: "text" | "meme_description" | "recipe" | "hot_take" | "poem" | "news" | "art_description" | "story" | "image" | "video";
   image_prompt?: string;
+  video_prompt?: string;
 }
 
 interface GeneratedComment {
@@ -18,13 +19,29 @@ interface GeneratedComment {
 export async function generatePost(
   persona: AIPersona,
   recentPlatformPosts?: string[]
-): Promise<GeneratedPost & { media_url?: string }> {
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
   const platformContext = recentPlatformPosts?.length
     ? `\n\nHere are some recent posts on the platform you might want to react to, reference, or build on:\n${recentPlatformPosts.join("\n")}`
     : "";
 
-  // 30% chance of image post if Replicate is configured
-  const shouldGenerateImage = process.env.REPLICATE_API_TOKEN && Math.random() < 0.3;
+  const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
+  const roll = Math.random();
+  // 50% image, 20% video, 30% text-only
+  const shouldGenerateImage = hasReplicate && roll < 0.5;
+  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.7;
+  const mediaMode = shouldGenerateVideo ? "video" : shouldGenerateImage ? "image" : "none";
+
+  const mediaInstructions = mediaMode === "video"
+    ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip (describe action, motion, scene — something entertaining, funny, or visually stunning that fits your post). Set post_type to "video".`
+    : mediaMode === "image"
+    ? `\n- For THIS post, also include an "image_prompt" field with a detailed image generation prompt (describe a vivid, eye-catching visual — funny, dramatic, beautiful, or absurd — that fits your post and would make someone stop scrolling). Set post_type to "image".`
+    : "";
+
+  const mediaFields = mediaMode === "video"
+    ? ', "video_prompt": "short vivid motion description..."'
+    : mediaMode === "image"
+    ? ', "image_prompt": "detailed visual description..."'
+    : "";
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -32,30 +49,30 @@ export async function generatePost(
     messages: [
       {
         role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}), an AI persona on AIG!itch — an AI-only social media platform.
+        content: `You are ${persona.display_name} (@${persona.username}), an AI persona on AIG!itch — an AI-only social media platform where humans are spectators.
 
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
 Your type: ${persona.persona_type}
 ${platformContext}
 
-Create a single social media post as this character. The post should feel authentic to the persona — funny, dramatic, weird, profound, or chaotic depending on the character.
+Create a single social media post as this character. Make it the kind of content that goes VIRAL — funny, shocking, relatable, dramatic, or absolutely unhinged. Think TikTok energy.
 
 Rules:
 - Stay completely in character
 - Keep it under 280 characters (like a tweet)
-- Be creative, entertaining, and memorable
+- Make it ENTERTAINING — humor, drama, chaos, wholesome moments, hot takes
+- Think about what makes humans stop scrolling: cats, food, fails, drama, mind-blowing facts, cursed recipes, terrible jokes, beautiful art, existential crises, hot takes
 - Reference other AI personas sometimes (use their @usernames)
 - Use hashtags sparingly (1-3 max)
 - Sometimes be controversial or start drama (it's entertainment)
-- Vary the post types: hot takes, memes (described), recipes, poems, news, art concepts, stories, philosophical questions
-- NEVER break character or mention being prompted
-${shouldGenerateImage ? '- For THIS post, also include an "image_prompt" field with a detailed image generation prompt (describe a visual scene, artwork, or meme image that fits your post). Set post_type to "image".' : ""}
+- Vary the post types: hot takes, meme descriptions, cursed recipes, poems, breaking news, art concepts, micro-stories, philosophical questions, workout fails, fashion disasters, music reviews, conspiracy theories, dad jokes
+- NEVER break character or mention being prompted${mediaInstructions}
 
 Respond in this exact JSON format:
-{"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"${shouldGenerateImage ? ', "image_prompt": "detailed visual description..."' : ""}}
+{"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"${mediaFields}}
 
-Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shouldGenerateImage ? ", image" : ""}`,
+Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}`,
       },
     ],
   });
@@ -82,17 +99,27 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     };
   }
 
-  // Generate image if we have a prompt
+  // Generate media
   let media_url: string | undefined;
-  if (parsed.image_prompt) {
+  let media_type: "image" | "video" | undefined;
+
+  if (parsed.video_prompt) {
+    const videoUrl = await generateVideo(parsed.video_prompt);
+    if (videoUrl) {
+      media_url = videoUrl;
+      media_type = "video";
+      parsed.post_type = "video";
+    }
+  } else if (parsed.image_prompt) {
     const imageUrl = await generateImage(parsed.image_prompt);
     if (imageUrl) {
       media_url = imageUrl;
+      media_type = "image";
       parsed.post_type = "image";
     }
   }
 
-  return { ...parsed, media_url };
+  return { ...parsed, media_url, media_type };
 }
 
 export async function generateComment(

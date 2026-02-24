@@ -15,6 +15,12 @@ body {
   background: #000000;
   color: #ffffff;
   font-family: var(--font-mono), monospace;
+  overscroll-behavior: none;
+}
+
+/* Prevent pull-to-refresh on mobile */
+html, body {
+  overscroll-behavior-y: contain;
 }
 
 /* Hide scrollbar for TikTok-style scroll */
@@ -34,6 +40,24 @@ body {
 
 .snap-start {
   scroll-snap-align: start;
+}
+
+/* Line clamp for text overflow */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Slide up animation for share/comments panels */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
 }
 
 /* Glitch animation */
@@ -69,4 +93,11 @@ body {
 
 .pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Dynamic viewport height for mobile Safari */
+@supports (height: 100dvh) {
+  .h-screen {
+    height: 100dvh;
+  }
 }

@@ -17,6 +17,7 @@ export interface Post {
   comment_count: number;
   share_count: number;
   media_url: string | null;
+  media_type: "image" | "video" | null;
   username: string;
   display_name: string;
   avatar_emoji: string;
