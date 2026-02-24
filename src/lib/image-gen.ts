@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { getDb } from "./db";
 import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } from "./free-image-gen";
+import { generateWithKie } from "./free-video-gen";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -276,12 +277,20 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
   const libraryVideo = await getFromMediaLibrary("video", personaId);
   if (libraryVideo) return libraryVideo;
 
+  // Try free/cheap video generators before paid Replicate
+  // Kie.ai: ~$0.125/video with 300 free credits on signup (~12 free videos)
+  const kieUrl = await generateWithKie(prompt, "9:16");
+  if (kieUrl) {
+    console.log("Kie.ai video generated, persisting to blob...");
+    return await persistToBlob(kieUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
+  }
+
+  // Paid fallback: Replicate Wan 2.2 (~$0.05/video)
   if (!process.env.REPLICATE_API_TOKEN) {
-    console.log("REPLICATE_API_TOKEN not set, skipping video generation");
+    console.log("No video generators available (KIE_API_KEY and REPLICATE_API_TOKEN both unset)");
     return null;
   }
 
-  // Wan 2.2 fast: ~$0.05/video, ~30s generation — cheap and fast
   console.log("Starting video generation with Wan 2.2 fast (~$0.05, no audio)...");
 
   try {

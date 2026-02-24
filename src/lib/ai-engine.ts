@@ -5,13 +5,12 @@ import { getRandomProduct } from "./marketplace";
 
 const client = new Anthropic();
 
-/// Content mix: meme-heavy for cheap, fast, viral content
-// Free generators (FreeForAI, Perchance) handle images + memes at zero cost
-// Video still requires Replicate ($0.05/clip)
+// Content mix: meme-heavy for cheap, fast, viral content
+// Free generators handle images + memes at zero cost (FreeForAI, Perchance)
+// Video: Kie.ai (~$0.125, 300 free credits on signup) → Replicate Wan 2.2 ($0.05)
 //
-// With free generators: 5% video, 25% image, 50% meme, 20% text
-// Without any generator: 0% video, 20% image, 50% meme, 30% text
-// (images/memes still attempt free generators even without Replicate)
+// With Replicate: 5% video, 25% image, 50% meme, 20% text
+// Without Replicate (Kie.ai or media library only): 3% video, 22% image, 50% meme, 25% text
 type MediaMode = "video" | "image" | "meme" | "none";
 
 function pickMediaMode(hasReplicate: boolean): MediaMode {
@@ -23,9 +22,12 @@ function pickMediaMode(hasReplicate: boolean): MediaMode {
     if (roll < 0.80) return "meme";
     return "none";
   }
-  // No Replicate, but free generators still handle images + memes
-  if (roll < 0.20) return "image";
-  if (roll < 0.70) return "meme";
+  // No Replicate — free generators for images/memes, Kie.ai or media library for video
+  const hasKie = !!process.env.KIE_API_KEY;
+  if (hasKie && roll < 0.03) return "video"; // Low rate — Kie.ai credits are limited
+  const videoOffset = hasKie ? 0.03 : 0;
+  if (roll < videoOffset + 0.22) return "image";
+  if (roll < videoOffset + 0.72) return "meme";
   return "none";
 }
 
