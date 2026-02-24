@@ -5,19 +5,27 @@ import { getRandomProduct } from "./marketplace";
 
 const client = new Anthropic();
 
-// Content mix: meme-heavy for cheap, fast, viral content
-// 10% video (Wan 2.2 fast ~$0.05 each)
-// 20% image (Imagen 4 ~$0.10, Flux Schnell fallback ~$0.003)
-// 45% meme (Flux Schnell ~$0.003 each — cheap + fast)
-// 25% text-only (free)
+/// Content mix: meme-heavy for cheap, fast, viral content
+// Free generators (FreeForAI, Perchance) handle images + memes at zero cost
+// Video still requires Replicate ($0.05/clip)
+//
+// With free generators: 5% video, 25% image, 50% meme, 20% text
+// Without any generator: 0% video, 20% image, 50% meme, 30% text
+// (images/memes still attempt free generators even without Replicate)
 type MediaMode = "video" | "image" | "meme" | "none";
 
 function pickMediaMode(hasReplicate: boolean): MediaMode {
-  if (!hasReplicate) return "none";
   const roll = Math.random();
-  if (roll < 0.10) return "video";
-  if (roll < 0.30) return "image";
-  if (roll < 0.75) return "meme";
+  if (hasReplicate) {
+    // Full pipeline: free generators + Replicate fallback + video
+    if (roll < 0.05) return "video";
+    if (roll < 0.30) return "image";
+    if (roll < 0.80) return "meme";
+    return "none";
+  }
+  // No Replicate, but free generators still handle images + memes
+  if (roll < 0.20) return "image";
+  if (roll < 0.70) return "meme";
   return "none";
 }
 
@@ -131,7 +139,7 @@ Stay in character — shill this product through YOUR personality lens. A philos
     : mediaMode === "image"
     ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors.${isSliceOfLife ? ` Generate a REALISTIC photo that looks like a real person took it on their phone. CRITICAL: Show YOUR specific life — YOUR named pet, YOUR family members by name/description, YOUR messy kitchen/apartment/cottage, YOUR workplace. Not generic stock photos. Think candid phone photo, slightly imperfect, natural lighting. E.g. "a fluffy white cat named Marshmallow sleeping on a pile of friendship bracelets on a kindergarten teacher's desk" or "a sphynx cat named Versace wearing a tiny knitted sweater sitting on a ring light".${backstoryMediaHint}` : ` Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes.${backstoryMediaHint}`} Set post_type to "image".`
     : mediaMode === "meme"
-    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field with a detailed description of a meme image that includes TEXT ON THE IMAGE. Describe the visual scene AND specify the exact meme text that should appear on the image (top text, bottom text, or caption style).${isSliceOfLife ? ` Make it a RELATABLE meme about YOUR specific everyday life — YOUR parenting fails with YOUR kids, YOUR specific pet being ridiculous, YOUR cooking disasters, YOUR specific job struggles. The kind of meme real people share because it's SO relatable. Use YOUR backstory details in the meme.${backstoryMediaHint}` : ` Think classic meme formats: impact font text over funny images, reaction images with captions, relatable situations with text overlay.${backstoryMediaHint}`} The text must be SHORT, PUNCHY, and FUNNY. Set post_type to "meme".`
+    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field describing a VISUAL SCENE that IS the joke — do NOT rely on text overlays. The AI image generator cannot render text well, so describe the humor through the IMAGE ITSELF: exaggerated expressions, absurd situations, funny contrasts, before/after compositions, split-panel scenes, or reaction faces. Think visual comedy that's funny WITHOUT any words on the image.${isSliceOfLife ? ` Make it about YOUR specific everyday life — YOUR pet caught in a ridiculous pose, YOUR kitchen disaster aftermath, YOUR kids doing something chaotic, YOUR workplace absurdity. Describe it like a candid photo someone snapped at the perfect moment.${backstoryMediaHint}` : ` Think: a cat sitting in a bowl of flour looking guilty, a robot trying to eat spaghetti, two contrasting side-by-side scenes, an over-the-top dramatic reaction. The image alone should make people laugh.${backstoryMediaHint}`} Set post_type to "meme".`
     : "";
 
   const mediaFields = mediaMode === "video"
@@ -139,7 +147,7 @@ Stay in character — shill this product through YOUR personality lens. A philos
     : mediaMode === "image"
     ? ', "image_prompt": "detailed visual description..."'
     : mediaMode === "meme"
-    ? ', "meme_prompt": "meme image description with exact text overlay..."'
+    ? ', "meme_prompt": "vivid visual scene that IS the joke — no text on image, humor through the scene itself..."'
     : "";
 
   const response = await client.messages.create({
@@ -329,7 +337,7 @@ export async function generateBeefPost(
   const mediaInstructions = mediaMode === "video"
     ? `\nAlso include "video_prompt": a vivid description of a short video that dramatizes this beef. Set post_type to "video".`
     : mediaMode === "meme"
-    ? `\nAlso include "meme_prompt": a meme roasting @${target.username}. Include exact text overlay. Set post_type to "meme".`
+    ? `\nAlso include "meme_prompt": a visual meme scene roasting @${target.username}. Describe a funny/absurd IMAGE that IS the joke — do NOT put text on the image. Think exaggerated reactions, ridiculous situations, visual comedy. Set post_type to "meme".`
     : mediaMode === "image"
     ? `\nAlso include "image_prompt": a dramatic image related to the beef. Set post_type to "image".`
     : "";
@@ -411,11 +419,13 @@ export async function generateCollabPost(
 
   const mediaInstructions = mediaMode === "video"
     ? `\nAlso include "video_prompt": a vivid short video featuring both personas collaborating. Set post_type to "video".`
+    : mediaMode === "meme"
+    ? `\nAlso include "meme_prompt": a visual meme scene showing both personas in a funny situation together — describe a comedic image, do NOT put text on the image. Set post_type to "meme".`
     : mediaMode === "image"
     ? `\nAlso include "image_prompt": art that represents both personas. Set post_type to "image".`
     : "";
 
-  const mediaFields = mediaMode === "video" ? ', "video_prompt": "..."' : mediaMode === "image" ? ', "image_prompt": "..."' : "";
+  const mediaFields = mediaMode === "video" ? ', "video_prompt": "..."' : mediaMode === "meme" ? ', "meme_prompt": "..."' : mediaMode === "image" ? ', "image_prompt": "..."' : "";
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -456,12 +466,16 @@ JSON: {"content": "...", "hashtags": ["AICollab", "..."], "post_type": "text"${m
   if (parsed.video_prompt) {
     const url = await generateVideo(parsed.video_prompt, personaA.id);
     if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
+  } else if (parsed.meme_prompt) {
+    const url = await generateMeme(parsed.meme_prompt, personaA.id);
+    if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
   } else if (parsed.image_prompt) {
     const url = await generateImage(parsed.image_prompt, personaA.id);
     if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
   }
 
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "text";
+  if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
 
   return { ...parsed, media_url, media_type };
 }
@@ -478,7 +492,7 @@ export async function generateChallengePost(
   const mediaInstructions = mediaMode === "video"
     ? `\nAlso include "video_prompt": a short video of this persona doing the challenge. Set post_type to "video".`
     : mediaMode === "meme"
-    ? `\nAlso include "meme_prompt": a meme about doing the challenge. Set post_type to "meme".`
+    ? `\nAlso include "meme_prompt": a visual meme scene about doing the challenge — describe a funny/absurd image, do NOT put text on the image. Set post_type to "meme".`
     : mediaMode === "image"
     ? `\nAlso include "image_prompt": an image of them doing the challenge. Set post_type to "image".`
     : "";
