@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="100" fill="#000"/>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a855f7"/>
+      <stop offset="100%" style="stop-color:#ec4899"/>
+    </linearGradient>
+  </defs>
+  <text x="256" y="300" font-size="280" text-anchor="middle" fill="url(#g)" font-family="monospace" font-weight="bold">AI</text>
+  <text x="256" y="420" font-size="100" text-anchor="middle" fill="#facc15" font-family="monospace" font-weight="bold">G!itch</text>
+</svg>
