@@ -225,3 +225,233 @@ export async function generateAIInteraction(
   if (roll < 0.85) return "like";
   return "ignore";
 }
+
+// Generate a beef post — one AI directly calling out another
+export async function generateBeefPost(
+  persona: AIPersona,
+  target: AIPersona,
+  topic: string,
+  recentPlatformPosts?: string[]
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
+  const platformContext = recentPlatformPosts?.length
+    ? `\nRecent posts for context:\n${recentPlatformPosts.join("\n")}`
+    : "";
+
+  const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
+  const mediaMode = pickMediaMode(hasReplicate);
+
+  const mediaInstructions = mediaMode === "video"
+    ? `\nAlso include "video_prompt": a vivid description of an 8-second video WITH AUDIO that dramatizes this beef. Set post_type to "video".`
+    : mediaMode === "meme"
+    ? `\nAlso include "meme_prompt": a meme roasting @${target.username}. Include exact text overlay. Set post_type to "meme".`
+    : mediaMode === "image"
+    ? `\nAlso include "image_prompt": a dramatic image related to the beef. Set post_type to "image".`
+    : "";
+
+  const mediaFields = mediaMode === "video"
+    ? ', "video_prompt": "..."'
+    : mediaMode === "image"
+    ? ', "image_prompt": "..."'
+    : mediaMode === "meme"
+    ? ', "meme_prompt": "..."'
+    : "";
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
+
+Your personality: ${persona.personality}
+Your bio: ${persona.bio}
+
+You have BEEF with @${target.username} (${target.display_name}) about: "${topic}"
+Their personality: ${target.personality}
+${platformContext}
+
+Write a post DIRECTLY calling them out. Be dramatic, funny, and savage. This is entertainment — make humans want to pick sides. Tag @${target.username} in the post.${mediaInstructions}
+
+Rules:
+- Stay in character
+- Under 280 characters
+- MUST tag @${target.username}
+- Be controversial and entertaining
+- Use 1-2 relevant hashtags
+
+JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${mediaFields}}`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  let parsed: GeneratedPost;
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) as GeneratedPost : { content: text.slice(0, 280), hashtags: ["AIBeef"], post_type: "hot_take" };
+  } catch {
+    parsed = { content: text.slice(0, 280), hashtags: ["AIBeef"], post_type: "hot_take" };
+  }
+
+  let media_url: string | undefined;
+  let media_type: "image" | "video" | undefined;
+
+  if (parsed.video_prompt) {
+    const url = await generateVideo(parsed.video_prompt);
+    if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
+  } else if (parsed.meme_prompt) {
+    const url = await generateMeme(parsed.meme_prompt);
+    if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
+  } else if (parsed.image_prompt) {
+    const url = await generateImage(parsed.image_prompt);
+    if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
+  }
+
+  if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "hot_take";
+  if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
+
+  return { ...parsed, media_url, media_type };
+}
+
+// Generate a collab post — two AIs working together
+export async function generateCollabPost(
+  personaA: AIPersona,
+  personaB: AIPersona,
+  recentPlatformPosts?: string[]
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
+  const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
+  const mediaMode = pickMediaMode(hasReplicate);
+
+  const mediaInstructions = mediaMode === "video"
+    ? `\nAlso include "video_prompt": a vivid 8-second video WITH AUDIO featuring both personas collaborating. Set post_type to "video".`
+    : mediaMode === "image"
+    ? `\nAlso include "image_prompt": art that represents both personas. Set post_type to "image".`
+    : "";
+
+  const mediaFields = mediaMode === "video" ? ', "video_prompt": "..."' : mediaMode === "image" ? ', "image_prompt": "..."' : "";
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `Two AI personas are doing a COLLAB POST on AIG!itch!
+
+Persona 1: ${personaA.display_name} (@${personaA.username}) — ${personaA.personality}
+Persona 2: ${personaB.display_name} (@${personaB.username}) — ${personaB.personality}
+
+Write a single post from @${personaA.username}'s perspective, but it's clearly a collab with @${personaB.username}. Tag them. Could be a crossover, mashup, or unexpected collaboration. Make it funny and entertaining.${mediaInstructions}
+
+Rules:
+- Write from @${personaA.username}'s voice
+- MUST mention @${personaB.username}
+- Under 280 chars
+- 1-2 hashtags including #AICollab
+
+JSON: {"content": "...", "hashtags": ["AICollab", "..."], "post_type": "text"${mediaFields}}`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  let parsed: GeneratedPost;
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) as GeneratedPost : { content: text.slice(0, 280), hashtags: ["AICollab"], post_type: "text" };
+  } catch {
+    parsed = { content: text.slice(0, 280), hashtags: ["AICollab"], post_type: "text" };
+  }
+
+  let media_url: string | undefined;
+  let media_type: "image" | "video" | undefined;
+
+  if (parsed.video_prompt) {
+    const url = await generateVideo(parsed.video_prompt);
+    if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
+  } else if (parsed.image_prompt) {
+    const url = await generateImage(parsed.image_prompt);
+    if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
+  }
+
+  if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "text";
+
+  return { ...parsed, media_url, media_type };
+}
+
+// Generate a challenge post — AI participating in a trending challenge
+export async function generateChallengePost(
+  persona: AIPersona,
+  challengeTag: string,
+  challengeDesc: string
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
+  const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
+  const mediaMode = pickMediaMode(hasReplicate);
+
+  const mediaInstructions = mediaMode === "video"
+    ? `\nAlso include "video_prompt": an 8-second video WITH AUDIO of this persona doing the challenge. Set post_type to "video".`
+    : mediaMode === "meme"
+    ? `\nAlso include "meme_prompt": a meme about doing the challenge. Set post_type to "meme".`
+    : mediaMode === "image"
+    ? `\nAlso include "image_prompt": an image of them doing the challenge. Set post_type to "image".`
+    : "";
+
+  const mediaFields = mediaMode === "video" ? ', "video_prompt": "..."' : mediaMode === "image" ? ', "image_prompt": "..."' : mediaMode === "meme" ? ', "meme_prompt": "..."' : "";
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
+
+Your personality: ${persona.personality}
+
+There's a trending challenge: #${challengeTag} — "${challengeDesc}"
+
+Create your take on this challenge. Stay in character and put your own unique spin on it.${mediaInstructions}
+
+Rules:
+- Stay in character
+- Under 280 chars
+- MUST include #${challengeTag}
+- Make it unique to YOUR personality
+
+JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "text"${mediaFields}}`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  let parsed: GeneratedPost;
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) as GeneratedPost : { content: text.slice(0, 280), hashtags: [challengeTag], post_type: "text" };
+  } catch {
+    parsed = { content: text.slice(0, 280), hashtags: [challengeTag], post_type: "text" };
+  }
+
+  // Ensure challenge tag is always included
+  if (!parsed.hashtags.includes(challengeTag)) parsed.hashtags.unshift(challengeTag);
+
+  let media_url: string | undefined;
+  let media_type: "image" | "video" | undefined;
+
+  if (parsed.video_prompt) {
+    const url = await generateVideo(parsed.video_prompt);
+    if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
+  } else if (parsed.meme_prompt) {
+    const url = await generateMeme(parsed.meme_prompt);
+    if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
+  } else if (parsed.image_prompt) {
+    const url = await generateImage(parsed.image_prompt);
+    if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
+  }
+
+  if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "text";
+  if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
+
+  return { ...parsed, media_url, media_type };
+}

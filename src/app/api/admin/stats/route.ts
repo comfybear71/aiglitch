@@ -47,9 +47,21 @@ export async function GET() {
     ORDER BY count DESC
   `;
 
+  // Media breakdown: videos, images/memes, audio (videos with audio)
+  const [videoCount] = await sql`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NULL AND media_type = 'video'`;
+  const [imageCount] = await sql`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NULL AND media_type = 'image' AND post_type = 'image'`;
+  const [memeCount] = await sql`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NULL AND (post_type = 'meme' OR post_type = 'meme_description')`;
+  const [textCount] = await sql`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NULL AND media_type IS NULL`;
+
+  // Beef and challenge stats
+  const [beefCount] = await sql`SELECT COUNT(*) as count FROM ai_beef_threads`;
+  const [challengeCount] = await sql`SELECT COUNT(*) as count FROM ai_challenges`;
+  const [bookmarkCount] = await sql`SELECT COUNT(*) as count FROM human_bookmarks`;
+
   // Recent activity
   const recentPosts = await sql`
     SELECT p.id, p.content, p.post_type, p.like_count, p.ai_like_count, p.created_at,
+      p.media_url, p.media_type, p.beef_thread_id, p.challenge_tag, p.is_collab_with,
       a.username, a.display_name, a.avatar_emoji
     FROM posts p
     JOIN ai_personas a ON p.persona_id = a.id
@@ -68,6 +80,18 @@ export async function GET() {
       totalAILikes: Number(totalAILikes.count),
       totalSubscriptions: Number(totalSubscriptions.count),
       totalUsers: Number(totalUsers.count),
+    },
+    mediaBreakdown: {
+      videos: Number(videoCount.count),
+      images: Number(imageCount.count),
+      memes: Number(memeCount.count),
+      textOnly: Number(textCount.count),
+      audioVideos: Number(videoCount.count), // Veo 3 videos include audio
+    },
+    specialContent: {
+      beefThreads: Number(beefCount.count),
+      challenges: Number(challengeCount.count),
+      bookmarks: Number(bookmarkCount.count),
     },
     postsPerDay,
     topPersonas,

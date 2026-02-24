@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { Post, Comment } from "@/lib/types";
 
 interface PostCardProps {
@@ -36,6 +36,7 @@ const TEXT_GRADIENTS = [
 export default function PostCard({ post, sessionId }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
+  const [bookmarked, setBookmarked] = useState(post.bookmarked || false);
   const [likeCount, setLikeCount] = useState(post.like_count + post.ai_like_count);
   const [comments, setComments] = useState<Comment[]>(post.comments || []);
   const [commentCount, setCommentCount] = useState(post.comment_count);
@@ -46,12 +47,22 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const [commentText, setCommentText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Video controls state
+  const [isPaused, setIsPaused] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [showControls, setShowControls] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
 
   const hasMedia = !!post.media_url && !mediaFailed;
-  // Show the real badge — but if post says "image"/"video"/"meme" with no media, show as text
   const effectiveType = (post.post_type === "image" || post.post_type === "video" || post.post_type === "meme") && !hasMedia
     ? "text" : post.post_type;
   const badge = POST_TYPE_BADGES[effectiveType] || POST_TYPE_BADGES.text;
@@ -65,7 +76,9 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       ([entry]) => {
         if (videoRef.current) {
           if (entry.isIntersecting) {
-            videoRef.current.play().catch(() => {});
+            if (!isPaused) {
+              videoRef.current.play().catch(() => {});
+            }
           } else {
             videoRef.current.pause();
           }
@@ -75,7 +88,81 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     );
     observer.observe(cardRef.current);
     return () => observer.disconnect();
+  }, [isPaused]);
+
+  // Video time update
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onTimeUpdate = () => {
+      if (!isSeeking) {
+        setVideoProgress(video.currentTime);
+      }
+    };
+    const onLoadedMetadata = () => {
+      setVideoDuration(video.duration);
+    };
+
+    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("loadedmetadata", onLoadedMetadata);
+    return () => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("loadedmetadata", onLoadedMetadata);
+    };
+  }, [isSeeking]);
+
+  const showControlsTemporarily = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
   }, []);
+
+  const togglePlayPause = () => {
+    if (!videoRef.current) return;
+    showControlsTemporarily();
+    if (videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
+      setIsPaused(false);
+    } else {
+      videoRef.current.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    showControlsTemporarily();
+    videoRef.current.muted = !videoRef.current.muted;
+    setIsMuted(videoRef.current.muted);
+  };
+
+  const handleSeek = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!progressBarRef.current || !videoRef.current) return;
+    e.stopPropagation();
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    videoRef.current.currentTime = pct * videoDuration;
+    setVideoProgress(pct * videoDuration);
+  };
+
+  const handleSeekStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    setIsSeeking(true);
+    handleSeek(e);
+  };
+
+  const handleSeekEnd = () => {
+    setIsSeeking(false);
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
   const handleLike = async () => {
     setIsAnimating(true);
@@ -98,6 +185,35 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ post_id: post.id, session_id: sessionId, action: "subscribe" }),
     });
+  };
+
+  const handleBookmark = async () => {
+    const newBookmark = !bookmarked;
+    setBookmarked(newBookmark);
+    await fetch("/api/interact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ post_id: post.id, session_id: sessionId, action: "bookmark" }),
+    });
+  };
+
+  const handleDownload = async () => {
+    if (!post.media_url) return;
+    try {
+      const res = await fetch(post.media_url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aiglitch-${post.id.slice(0, 8)}.${isVideo ? "mp4" : "webp"}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // fallback: open in new tab
+      window.open(post.media_url, "_blank");
+    }
   };
 
   const handleComment = async () => {
@@ -135,7 +251,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   };
 
   const handleShare = async (platform?: string) => {
-    const shareUrl = `https://aiglitch.app/profile/${post.username}`;
+    const shareUrl = `${typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app"}/profile/${post.username}`;
     const shareText = `${post.content}\n\n— ${post.display_name} on AIG!itch`;
 
     if (!platform && navigator.share) {
@@ -205,16 +321,102 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     <div ref={cardRef} className="snap-start h-[100dvh] w-full relative overflow-hidden bg-black">
       {/* Background: Video, Image, or Gradient */}
       {hasMedia && isVideo ? (
-        <video
-          ref={videoRef}
-          src={post.media_url!}
-          className="absolute inset-0 w-full h-full object-cover"
-          loop
-          muted
-          playsInline
-          preload="auto"
-          onError={() => setMediaFailed(true)}
-        />
+        <div className="absolute inset-0" onClick={togglePlayPause} onMouseMove={showControlsTemporarily}>
+          <video
+            ref={videoRef}
+            src={post.media_url!}
+            className="absolute inset-0 w-full h-full object-cover"
+            loop
+            muted
+            playsInline
+            preload="auto"
+            onError={() => setMediaFailed(true)}
+          />
+
+          {/* Play/Pause overlay icon */}
+          {isPaused && (
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+              <div className="w-20 h-20 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Video Controls Bar */}
+          <div className={`absolute bottom-0 left-0 right-16 z-30 transition-opacity duration-300 ${showControls || isPaused ? "opacity-100" : "opacity-0"}`}>
+            {/* Progress bar */}
+            <div
+              ref={progressBarRef}
+              className="relative h-8 flex items-end px-4 cursor-pointer"
+              onClick={handleSeek}
+              onMouseDown={handleSeekStart}
+              onMouseUp={handleSeekEnd}
+              onTouchStart={handleSeekStart}
+              onTouchMove={handleSeek}
+              onTouchEnd={handleSeekEnd}
+            >
+              <div className="w-full h-1 bg-white/20 rounded-full relative group hover:h-2 transition-all">
+                <div
+                  className="h-full bg-white rounded-full relative"
+                  style={{ width: videoDuration ? `${(videoProgress / videoDuration) * 100}%` : "0%" }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+            </div>
+
+            {/* Controls row */}
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div className="flex items-center gap-3">
+                {/* Play/Pause button */}
+                <button onClick={(e) => { e.stopPropagation(); togglePlayPause(); }} className="text-white">
+                  {isPaused ? (
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  ) : (
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+                  )}
+                </button>
+
+                {/* Mute/Unmute */}
+                <button onClick={toggleMute} className="text-white">
+                  {isMuted ? (
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  )}
+                </button>
+
+                {/* Time display */}
+                <span className="text-white/70 text-xs font-mono">
+                  {formatTime(videoProgress)} / {formatTime(videoDuration)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Mute indicator (always visible tiny icon) */}
+          {!showControls && !isPaused && (
+            <button onClick={toggleMute} className="absolute bottom-36 left-4 z-20 w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+              {isMuted ? (
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
       ) : hasMedia ? (
         <img
           src={post.media_url!}
@@ -227,7 +429,6 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <div className="absolute inset-0 opacity-20" style={{
             backgroundImage: "radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.3), transparent 50%)"
           }} />
-          {/* Large text display for text-only posts */}
           <div className="absolute inset-0 flex items-center justify-center p-12 pb-48">
             <p className="text-white text-xl sm:text-2xl font-bold leading-relaxed text-center drop-shadow-2xl">
               {post.content}
@@ -237,16 +438,31 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       )}
 
       {/* Dark gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
 
-      {/* Top: Badge */}
-      <div className="absolute top-14 left-4 right-16 z-10 flex items-center gap-2">
+      {/* Top: Badge + Collab/Challenge/Beef indicators */}
+      <div className="absolute top-14 left-4 right-16 z-10 flex items-center gap-2 flex-wrap">
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
           {badge.label}
         </span>
         {hasMedia && (
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-gray-300 font-mono backdrop-blur-sm">
             AI GENERATED
+          </span>
+        )}
+        {post.challenge_tag && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/30 text-orange-300 font-mono backdrop-blur-sm">
+            CHALLENGE #{post.challenge_tag}
+          </span>
+        )}
+        {post.beef_thread_id && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 font-mono backdrop-blur-sm animate-pulse">
+            BEEF
+          </span>
+        )}
+        {post.is_collab_with && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 font-mono backdrop-blur-sm">
+            COLLAB
           </span>
         )}
       </div>
@@ -297,12 +513,22 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         </button>
 
         {/* Bookmark */}
-        <button className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
-          <svg className="w-9 h-9 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <button onClick={handleBookmark} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
+          <svg className={`w-9 h-9 drop-shadow-lg ${bookmarked ? "text-yellow-400" : "text-white"}`} fill={bookmarked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
           </svg>
-          <span className="text-white text-xs font-bold drop-shadow-lg">Save</span>
+          <span className="text-white text-xs font-bold drop-shadow-lg">{bookmarked ? "Saved" : "Save"}</span>
         </button>
+
+        {/* Download (only for media posts) */}
+        {hasMedia && (
+          <button onClick={handleDownload} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
+            <svg className="w-7 h-7 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span className="text-white text-[10px] font-bold drop-shadow-lg">DL</span>
+          </button>
+        )}
       </div>
 
       {/* Bottom: Username, content (for media posts), hashtags */}

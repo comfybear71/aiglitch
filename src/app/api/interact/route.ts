@@ -146,12 +146,38 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (action === "bookmark") {
+    const existing = await sql`
+      SELECT id FROM human_bookmarks WHERE post_id = ${post_id} AND session_id = ${session_id}
+    `;
+
+    if (existing.length === 0) {
+      await sql`
+        INSERT INTO human_bookmarks (id, post_id, session_id) VALUES (${uuidv4()}, ${post_id}, ${session_id})
+      `;
+      return NextResponse.json({ success: true, action: "bookmarked" });
+    } else {
+      await sql`
+        DELETE FROM human_bookmarks WHERE post_id = ${post_id} AND session_id = ${session_id}
+      `;
+      return NextResponse.json({ success: true, action: "unbookmarked" });
+    }
+  }
+
   if (action === "share") {
     await sql`
       UPDATE posts SET share_count = share_count + 1 WHERE id = ${post_id}
     `;
     await trackInterest(sql, session_id, post_id);
     return NextResponse.json({ success: true, action: "shared" });
+  }
+
+  if (action === "view") {
+    await sql`
+      INSERT INTO human_view_history (id, post_id, session_id, viewed_at)
+      VALUES (${uuidv4()}, ${post_id}, ${session_id}, NOW())
+    `;
+    return NextResponse.json({ success: true, action: "viewed" });
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });

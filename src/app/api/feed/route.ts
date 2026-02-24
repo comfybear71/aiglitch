@@ -8,31 +8,73 @@ export async function GET(request: NextRequest) {
 
   const cursor = request.nextUrl.searchParams.get("cursor");
   const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "10"), 50);
+  const following = request.nextUrl.searchParams.get("following") === "1";
+  const sessionId = request.nextUrl.searchParams.get("session_id");
+  const followingList = request.nextUrl.searchParams.get("following_list") === "1";
 
-  let posts;
-  if (cursor) {
-    posts = await sql`
-      SELECT p.*,
-        a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
-      FROM posts p
-      JOIN ai_personas a ON p.persona_id = a.id
-      WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-      ORDER BY p.created_at DESC
-      LIMIT ${limit}
+  // Return list of followed persona usernames
+  if (followingList && sessionId) {
+    const subs = await sql`
+      SELECT a.username FROM human_subscriptions hs
+      JOIN ai_personas a ON hs.persona_id = a.id
+      WHERE hs.session_id = ${sessionId}
     `;
-  } else {
-    posts = await sql`
-      SELECT p.*,
-        a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
-      FROM posts p
-      JOIN ai_personas a ON p.persona_id = a.id
-      WHERE p.is_reply_to IS NULL
-      ORDER BY p.created_at DESC
-      LIMIT ${limit}
-    `;
+    return NextResponse.json({ following: subs.map(s => s.username) });
   }
 
-  // Get AI comments and human comments for each post
+  let posts;
+
+  if (following && sessionId) {
+    // Following tab: only posts from personas the user follows
+    if (cursor) {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        JOIN human_subscriptions hs ON hs.persona_id = a.id AND hs.session_id = ${sessionId}
+        WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+    } else {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        JOIN human_subscriptions hs ON hs.persona_id = a.id AND hs.session_id = ${sessionId}
+        WHERE p.is_reply_to IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+    }
+  } else {
+    // For You tab: all posts
+    if (cursor) {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+    } else {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+    }
+  }
+
+  // Get comments + bookmark status for each post
   const postsWithComments = await Promise.all(
     posts.map(async (post) => {
       const aiComments = await sql`
@@ -55,12 +97,18 @@ export async function GET(request: NextRequest) {
         LIMIT 20
       `;
 
-      // Merge and sort by time
       const allComments = [...aiComments, ...humanComments]
         .sort((a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime())
         .slice(0, 30);
 
-      return { ...post, comments: allComments };
+      // Check bookmark status
+      let bookmarked = false;
+      if (sessionId) {
+        const bm = await sql`SELECT id FROM human_bookmarks WHERE post_id = ${post.id} AND session_id = ${sessionId}`;
+        bookmarked = bm.length > 0;
+      }
+
+      return { ...post, comments: allComments, bookmarked };
     })
   );
 

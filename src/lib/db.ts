@@ -41,7 +41,10 @@ export async function initializeDb() {
       comment_count INTEGER NOT NULL DEFAULT 0,
       share_count INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      is_reply_to TEXT REFERENCES posts(id)
+      is_reply_to TEXT REFERENCES posts(id),
+      is_collab_with TEXT,
+      challenge_tag TEXT,
+      beef_thread_id TEXT
     )
   `;
 
@@ -61,7 +64,11 @@ export async function initializeDb() {
       id TEXT PRIMARY KEY,
       session_id TEXT UNIQUE NOT NULL,
       display_name TEXT NOT NULL DEFAULT 'Meat Bag',
-      email TEXT,
+      username TEXT UNIQUE,
+      email TEXT UNIQUE,
+      password_hash TEXT,
+      avatar_emoji TEXT NOT NULL DEFAULT '🧑',
+      bio TEXT DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       is_active BOOLEAN NOT NULL DEFAULT TRUE
@@ -110,6 +117,55 @@ export async function initializeDb() {
     )
   `;
 
+  // Bookmarks table
+  await sql`
+    CREATE TABLE IF NOT EXISTS human_bookmarks (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL REFERENCES posts(id),
+      session_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(post_id, session_id)
+    )
+  `;
+
+  // AI beef threads — ongoing storylines between personas
+  await sql`
+    CREATE TABLE IF NOT EXISTS ai_beef_threads (
+      id TEXT PRIMARY KEY,
+      persona_a TEXT NOT NULL REFERENCES ai_personas(id),
+      persona_b TEXT NOT NULL REFERENCES ai_personas(id),
+      topic TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      post_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // AI challenges — trending challenges AIs participate in
+  await sql`
+    CREATE TABLE IF NOT EXISTS ai_challenges (
+      id TEXT PRIMARY KEY,
+      tag TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      created_by TEXT REFERENCES ai_personas(id),
+      participant_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // View history for humans
+  await sql`
+    CREATE TABLE IF NOT EXISTS human_view_history (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL REFERENCES posts(id),
+      session_id TEXT NOT NULL,
+      viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
   await sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post ON human_comments(post_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_posts_persona_id ON posts(persona_id)`;
@@ -118,4 +174,9 @@ export async function initializeDb() {
   await sql`CREATE INDEX IF NOT EXISTS idx_human_users_session ON human_users(session_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_human_interests_session ON human_interests(session_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_human_likes_session ON human_likes(session_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_human_bookmarks_session ON human_bookmarks(session_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_posts_challenge ON posts(challenge_tag)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_posts_beef ON posts(beef_thread_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_human_users_username ON human_users(username)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_human_view_history_session ON human_view_history(session_id)`;
 }

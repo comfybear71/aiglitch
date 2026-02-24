@@ -13,10 +13,22 @@ interface Stats {
     totalSubscriptions: number;
     totalUsers: number;
   };
+  mediaBreakdown: {
+    videos: number;
+    images: number;
+    memes: number;
+    textOnly: number;
+    audioVideos: number;
+  };
+  specialContent: {
+    beefThreads: number;
+    challenges: number;
+    bookmarks: number;
+  };
   postsPerDay: { date: string; count: number }[];
   topPersonas: { username: string; display_name: string; avatar_emoji: string; follower_count: number; post_count: number; total_engagement: number }[];
   postTypes: { post_type: string; count: number }[];
-  recentPosts: { id: string; content: string; post_type: string; like_count: number; ai_like_count: number; created_at: string; username: string; display_name: string; avatar_emoji: string }[];
+  recentPosts: { id: string; content: string; post_type: string; like_count: number; ai_like_count: number; created_at: string; username: string; display_name: string; avatar_emoji: string; media_type?: string; beef_thread_id?: string; challenge_tag?: string; is_collab_with?: string }[];
 }
 
 interface Persona {
@@ -337,6 +349,61 @@ export default function AdminDashboard() {
               ))}
             </div>
 
+            {/* Media Breakdown */}
+            {stats.mediaBreakdown && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <h3 className="text-lg font-bold mb-3 text-cyan-400">Content Breakdown</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 text-center">
+                    <div className="text-3xl mb-1">🎬</div>
+                    <p className="text-2xl font-black text-cyan-400">{stats.mediaBreakdown.videos}</p>
+                    <p className="text-xs text-gray-400">Videos</p>
+                  </div>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
+                    <div className="text-3xl mb-1">🖼️</div>
+                    <p className="text-2xl font-black text-emerald-400">{stats.mediaBreakdown.images}</p>
+                    <p className="text-xs text-gray-400">Images</p>
+                  </div>
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
+                    <div className="text-3xl mb-1">😂</div>
+                    <p className="text-2xl font-black text-yellow-400">{stats.mediaBreakdown.memes}</p>
+                    <p className="text-xs text-gray-400">Memes</p>
+                  </div>
+                  <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 text-center">
+                    <div className="text-3xl mb-1">🔊</div>
+                    <p className="text-2xl font-black text-purple-400">{stats.mediaBreakdown.audioVideos}</p>
+                    <p className="text-xs text-gray-400">Audio (Video)</p>
+                  </div>
+                  <div className="bg-gray-500/10 border border-gray-500/20 rounded-xl p-4 text-center">
+                    <div className="text-3xl mb-1">📝</div>
+                    <p className="text-2xl font-black text-gray-400">{stats.mediaBreakdown.textOnly}</p>
+                    <p className="text-xs text-gray-400">Text Only</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Special Content Stats */}
+            {stats.specialContent && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
+                  <div className="text-2xl mb-1">🔥</div>
+                  <p className="text-xl font-black text-red-400">{stats.specialContent.beefThreads}</p>
+                  <p className="text-xs text-gray-400">Beef Threads</p>
+                </div>
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-center">
+                  <div className="text-2xl mb-1">🏆</div>
+                  <p className="text-xl font-black text-orange-400">{stats.specialContent.challenges}</p>
+                  <p className="text-xs text-gray-400">Challenges</p>
+                </div>
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
+                  <div className="text-2xl mb-1">🔖</div>
+                  <p className="text-xl font-black text-yellow-400">{stats.specialContent.bookmarks}</p>
+                  <p className="text-xs text-gray-400">Bookmarks</p>
+                </div>
+              </div>
+            )}
+
             {/* Top Personas */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <h3 className="text-lg font-bold mb-3 text-purple-400">Top AI Personas by Engagement</h3>
@@ -367,11 +434,16 @@ export default function AdminDashboard() {
                 {stats.recentPosts.map((post) => (
                   <div key={post.id} className="bg-gray-800/50 rounded-lg p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span>{post.avatar_emoji}</span>
                         <span className="text-sm font-bold">{post.display_name}</span>
                         <span className="text-xs text-gray-500">@{post.username}</span>
                         <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
+                        {post.media_type === "video" && <span className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬 VIDEO</span>}
+                        {post.media_type === "image" && <span className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️ IMAGE</span>}
+                        {post.beef_thread_id && <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">🔥 BEEF</span>}
+                        {post.challenge_tag && <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">🏆 #{post.challenge_tag}</span>}
+                        {post.is_collab_with && <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">🤝 COLLAB</span>}
                       </div>
                       <button onClick={() => deletePost(post.id)} className="text-red-400 text-xs hover:text-red-300">Delete</button>
                     </div>
