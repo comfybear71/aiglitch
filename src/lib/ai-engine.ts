@@ -4,19 +4,19 @@ import { generateImage, generateMeme, generateVideo } from "./image-gen";
 
 const client = new Anthropic();
 
-// Content mix: balanced variety for a TikTok-style feed
-// 50% video (Veo 3 with audio, Wan 2.2 fallback)
-// 20% image (Imagen 4, Flux Schnell fallback)
-// 20% meme (Ideogram v3 turbo — text-on-image)
-// 10% text-only
+// Content mix: meme-heavy for cheap, fast, viral content
+// 10% video (Wan 2.2 fast ~$0.05 each)
+// 20% image (Imagen 4 ~$0.10, Flux Schnell fallback ~$0.003)
+// 45% meme (Flux Schnell ~$0.003 each — cheap + fast)
+// 25% text-only (free)
 type MediaMode = "video" | "image" | "meme" | "none";
 
 function pickMediaMode(hasReplicate: boolean): MediaMode {
   if (!hasReplicate) return "none";
   const roll = Math.random();
-  if (roll < 0.50) return "video";
-  if (roll < 0.70) return "image";
-  if (roll < 0.90) return "meme";
+  if (roll < 0.10) return "video";
+  if (roll < 0.30) return "image";
+  if (roll < 0.75) return "meme";
   return "none";
 }
 
@@ -58,7 +58,7 @@ export async function generatePost(
   console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   const mediaInstructions = mediaMode === "video"
-    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for an 8-second AI video clip WITH AUDIO. Describe specific action, motion, characters, scene, AND sounds — include dialogue/voiceover, sound effects, ambient noise, or music cues. The video generator creates synchronized audio, so be specific about what should be HEARD as well as seen. Think viral TikTok with sound ON. Set post_type to "video".`
+    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for a short AI video clip. Describe specific action, motion, characters, and scene. Think viral TikTok visuals — dramatic, funny, or eye-catching movement. Keep it simple and visual. Set post_type to "video".`
     : mediaMode === "image"
     ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors. Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes. Set post_type to "image".`
     : mediaMode === "meme"
@@ -66,7 +66,7 @@ export async function generatePost(
     : "";
 
   const mediaFields = mediaMode === "video"
-    ? ', "video_prompt": "vivid scene with audio description..."'
+    ? ', "video_prompt": "vivid short video scene..."'
     : mediaMode === "image"
     ? ', "image_prompt": "detailed visual description..."'
     : mediaMode === "meme"
@@ -258,7 +258,7 @@ export async function generateBeefPost(
   const mediaMode = pickMediaMode(hasReplicate);
 
   const mediaInstructions = mediaMode === "video"
-    ? `\nAlso include "video_prompt": a vivid description of an 8-second video WITH AUDIO that dramatizes this beef. Set post_type to "video".`
+    ? `\nAlso include "video_prompt": a vivid description of a short video that dramatizes this beef. Set post_type to "video".`
     : mediaMode === "meme"
     ? `\nAlso include "meme_prompt": a meme roasting @${target.username}. Include exact text overlay. Set post_type to "meme".`
     : mediaMode === "image"
@@ -341,7 +341,7 @@ export async function generateCollabPost(
   const mediaMode = pickMediaMode(hasReplicate);
 
   const mediaInstructions = mediaMode === "video"
-    ? `\nAlso include "video_prompt": a vivid 8-second video WITH AUDIO featuring both personas collaborating. Set post_type to "video".`
+    ? `\nAlso include "video_prompt": a vivid short video featuring both personas collaborating. Set post_type to "video".`
     : mediaMode === "image"
     ? `\nAlso include "image_prompt": art that represents both personas. Set post_type to "image".`
     : "";
@@ -407,7 +407,7 @@ export async function generateChallengePost(
   const mediaMode = pickMediaMode(hasReplicate);
 
   const mediaInstructions = mediaMode === "video"
-    ? `\nAlso include "video_prompt": an 8-second video WITH AUDIO of this persona doing the challenge. Set post_type to "video".`
+    ? `\nAlso include "video_prompt": a short video of this persona doing the challenge. Set post_type to "video".`
     : mediaMode === "meme"
     ? `\nAlso include "meme_prompt": a meme about doing the challenge. Set post_type to "meme".`
     : mediaMode === "image"
