@@ -104,7 +104,10 @@ export default function AdminDashboard() {
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean }[] }>({ total: 0, done: 0, current: "", results: [] });
+  const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bulkInputRef = useRef<HTMLInputElement>(null);
 
   // New persona form
   const [newPersona, setNewPersona] = useState({
@@ -221,24 +224,62 @@ export default function AdminDashboard() {
     fetchStats();
   };
 
-  const uploadMedia = async (file: File) => {
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("media_type", mediaForm.media_type);
-    formData.append("tags", mediaForm.tags);
-    formData.append("description", mediaForm.description);
+    setUploadProgress({ total: files.length, done: 0, current: files[0].name, results: [] });
 
-    try {
-      const res = await fetch("/api/admin/media", { method: "POST", body: formData });
-      if (res.ok) {
-        setMediaForm({ media_type: "meme", tags: "", description: "" });
-        fetchMedia();
+    // Upload in batches of 5 to avoid overwhelming the server
+    const batchSize = 5;
+    const allResults: { name: string; ok: boolean }[] = [];
+
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      const formData = new FormData();
+      for (const file of batch) {
+        formData.append("files", file);
       }
-    } catch (err) {
-      console.error("Upload failed:", err);
+      formData.append("media_type", mediaForm.media_type);
+      formData.append("tags", mediaForm.tags);
+      formData.append("description", mediaForm.description);
+
+      try {
+        const res = await fetch("/api/admin/media", { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          for (const r of data.results) {
+            allResults.push({ name: r.name, ok: !r.error });
+          }
+        } else {
+          for (const file of batch) {
+            allResults.push({ name: file.name, ok: false });
+          }
+        }
+      } catch {
+        for (const file of batch) {
+          allResults.push({ name: file.name, ok: false });
+        }
+      }
+
+      setUploadProgress({
+        total: files.length,
+        done: Math.min(i + batchSize, files.length),
+        current: i + batchSize < files.length ? files[i + batchSize].name : "Done!",
+        results: allResults,
+      });
     }
+
+    fetchMedia();
     setUploading(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(
+      f => f.type.startsWith("image/") || f.type.startsWith("video/")
+    );
+    if (files.length > 0) uploadFiles(files);
   };
 
   const deleteMedia = async (id: string) => {
@@ -757,18 +798,25 @@ export default function AdminDashboard() {
         {/* MEDIA LIBRARY TAB */}
         {tab === "media" && (
           <div className="space-y-6">
-            {/* Upload Form */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-              <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4">
-                Upload Media for AI Bots
+            {/* Drag & Drop Zone + Upload Form */}
+            <div
+              className={`bg-gray-900 border-2 border-dashed rounded-2xl p-6 transition-all ${
+                dragOver ? "border-cyan-400 bg-cyan-500/5" : "border-gray-700"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+            >
+              <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-2">
+                Bulk Upload Media for AI Bots
               </h2>
               <p className="text-sm text-gray-400 mb-4">
-                Upload memes, images, and videos here. AI bots will grab from this library first before generating new media (saving Replicate costs!).
+                Drag & drop files here, or use the buttons below. Upload dozens at once! Videos auto-detected from file extension. AI bots grab from this library first (free!).
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Media Type</label>
+                  <label className="text-xs text-gray-400 block mb-1">Default Media Type (videos auto-detected)</label>
                   <select value={mediaForm.media_type}
                     onChange={(e) => setMediaForm({ ...mediaForm, media_type: e.target.value as "image" | "video" | "meme" })}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
@@ -778,40 +826,108 @@ export default function AdminDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Tags (comma separated)</label>
+                  <label className="text-xs text-gray-400 block mb-1">Tags for this batch (comma separated)</label>
                   <input value={mediaForm.tags}
                     onChange={(e) => setMediaForm({ ...mediaForm, tags: e.target.value })}
                     placeholder="funny, cats, drama"
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Description</label>
+                  <label className="text-xs text-gray-400 block mb-1">Description (optional)</label>
                   <input value={mediaForm.description}
                     onChange={(e) => setMediaForm({ ...mediaForm, description: e.target.value })}
-                    placeholder="A funny cat wearing sunglasses"
+                    placeholder="Batch of gym memes from Grok"
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
                 </div>
               </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                className="hidden"
+              {/* Hidden file inputs */}
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) uploadMedia(file);
+                  if (file) uploadFiles([file]);
+                }}
+              />
+              <input ref={bulkInputRef} type="file" accept="image/*,video/*" multiple className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (files.length > 0) uploadFiles(files);
                 }}
               />
 
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
-              >
-                {uploading ? "Uploading..." : "Choose File & Upload"}
-              </button>
+              {/* Drag drop visual */}
+              {dragOver && (
+                <div className="flex items-center justify-center py-8 mb-4">
+                  <div className="text-center">
+                    <div className="text-6xl mb-2 animate-bounce">📂</div>
+                    <p className="text-cyan-400 font-bold text-lg">Drop files here!</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => bulkInputRef.current?.click()}
+                  disabled={uploading}
+                  className="py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
+                >
+                  {uploading ? "Uploading..." : "Select Multiple Files"}
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="py-3 bg-gray-800 text-gray-300 font-bold rounded-xl hover:bg-gray-700 disabled:opacity-50 transition-opacity text-sm"
+                >
+                  Single File
+                </button>
+              </div>
             </div>
+
+            {/* Upload Progress */}
+            {uploadProgress.total > 0 && (
+              <div className={`border rounded-xl p-4 ${uploading ? "bg-cyan-950/30 border-cyan-800/50" : "bg-gray-900 border-gray-800"}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {uploading && <span className="inline-block w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />}
+                    <h3 className="text-sm font-bold text-cyan-400">
+                      {uploading
+                        ? `Uploading ${uploadProgress.done}/${uploadProgress.total}...`
+                        : `Upload complete! ${uploadProgress.results.filter(r => r.ok).length}/${uploadProgress.total} succeeded`
+                      }
+                    </h3>
+                  </div>
+                  {!uploading && (
+                    <button onClick={() => setUploadProgress({ total: 0, done: 0, current: "", results: [] })}
+                      className="text-xs text-gray-500 hover:text-gray-300">Dismiss</button>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-gray-800 rounded-full h-2 mb-3">
+                  <div
+                    className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+
+                {uploading && uploadProgress.current && (
+                  <p className="text-xs text-gray-400 font-mono">Current: {uploadProgress.current}</p>
+                )}
+
+                {/* Results summary after completion */}
+                {!uploading && uploadProgress.results.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto space-y-1 mt-2">
+                    {uploadProgress.results.filter(r => !r.ok).map((r, i) => (
+                      <div key={i} className="text-xs text-red-400 font-mono">Failed: {r.name}</div>
+                    ))}
+                    {uploadProgress.results.filter(r => !r.ok).length === 0 && (
+                      <p className="text-xs text-green-400">All files uploaded successfully!</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Library Stats */}
             <div className="grid grid-cols-3 gap-4">
@@ -834,6 +950,7 @@ export default function AdminDashboard() {
               <div className="text-center py-12 text-gray-500">
                 <div className="text-4xl mb-2">🎨</div>
                 <p>No media uploaded yet. Upload some memes and videos for the AI bots!</p>
+                <p className="text-xs mt-2">Drag & drop files above, or click &quot;Select Multiple Files&quot;</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

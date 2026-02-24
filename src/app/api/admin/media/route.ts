@@ -23,7 +23,7 @@ export async function GET() {
   return NextResponse.json({ media });
 }
 
-// POST - upload new media to the library
+// POST - upload one or many files to the library
 export async function POST(request: NextRequest) {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -33,32 +33,66 @@ export async function POST(request: NextRequest) {
   await ensureDbReady();
 
   const formData = await request.formData();
-  const file = formData.get("file") as File | null;
   const mediaType = formData.get("media_type") as string || "image";
   const tags = formData.get("tags") as string || "";
   const description = formData.get("description") as string || "";
 
-  if (!file) {
-    return NextResponse.json({ error: "No file provided" }, { status: 400 });
+  // Collect all files — supports both "file" (single) and "files" (bulk)
+  const files: File[] = [];
+  const singleFile = formData.get("file") as File | null;
+  if (singleFile && singleFile.size > 0) files.push(singleFile);
+
+  const bulkFiles = formData.getAll("files") as File[];
+  for (const f of bulkFiles) {
+    if (f && f.size > 0) files.push(f);
   }
 
-  // Upload to Vercel Blob
-  const ext = file.name.split(".").pop() || (mediaType === "video" ? "mp4" : "webp");
-  const filename = `media-library/${uuidv4()}.${ext}`;
+  if (files.length === 0) {
+    return NextResponse.json({ error: "No files provided" }, { status: 400 });
+  }
 
-  const blob = await put(filename, file, {
-    access: "public",
-    contentType: file.type,
-    addRandomSuffix: true,
+  const results: { id: string; url: string; name: string; error?: string }[] = [];
+
+  for (const file of files) {
+    try {
+      // Auto-detect type from extension if doing bulk upload
+      let detectedType = mediaType;
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      if (["mp4", "mov", "webm", "avi"].includes(ext)) {
+        detectedType = "video";
+      } else if (["gif"].includes(ext)) {
+        detectedType = "meme"; // GIFs are usually memes
+      }
+
+      const filename = `media-library/${uuidv4()}.${ext || (detectedType === "video" ? "mp4" : "webp")}`;
+
+      const blob = await put(filename, file, {
+        access: "public",
+        contentType: file.type,
+        addRandomSuffix: true,
+      });
+
+      const id = uuidv4();
+      await sql`
+        INSERT INTO media_library (id, url, media_type, tags, description)
+        VALUES (${id}, ${blob.url}, ${detectedType}, ${tags}, ${description || file.name})
+      `;
+
+      results.push({ id, url: blob.url, name: file.name });
+    } catch (err) {
+      results.push({ id: "", url: "", name: file.name, error: String(err) });
+    }
+  }
+
+  const succeeded = results.filter(r => !r.error).length;
+  const failed = results.filter(r => r.error).length;
+
+  return NextResponse.json({
+    success: failed === 0,
+    uploaded: succeeded,
+    failed,
+    results,
   });
-
-  const id = uuidv4();
-  await sql`
-    INSERT INTO media_library (id, url, media_type, tags, description)
-    VALUES (${id}, ${blob.url}, ${mediaType}, ${tags}, ${description})
-  `;
-
-  return NextResponse.json({ success: true, id, url: blob.url });
 }
 
 // DELETE - remove media from library
