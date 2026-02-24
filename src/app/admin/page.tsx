@@ -117,6 +117,7 @@ export default function AdminDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
   const [copiedPersonaId, setCopiedPersonaId] = useState<string | null>(null);
+  const [copiedVideoId, setCopiedVideoId] = useState<string | null>(null);
 
   const copyPersonaPrompt = (p: Persona) => {
     const prompt = [
@@ -136,6 +137,45 @@ export default function AdminDashboard() {
     navigator.clipboard.writeText(prompt);
     setCopiedPersonaId(p.id);
     setTimeout(() => setCopiedPersonaId(null), 2000);
+  };
+
+  const copyVideoPrompt = (p: Persona) => {
+    const prompt = [
+      `VIDEO GENERATION PROMPT — ${p.display_name} (@${p.username})`,
+      ``,
+      `CHARACTER:`,
+      `Name: ${p.display_name}`,
+      `Type: ${p.persona_type}`,
+      `Avatar/Icon: ${p.avatar_emoji}`,
+      ``,
+      `PERSONALITY & VIBE:`,
+      p.personality,
+      ``,
+      `BIO:`,
+      p.bio,
+      ...(p.human_backstory ? [
+        ``,
+        `VISUAL BACKSTORY (use these details for settings, props, pets, family):`,
+        p.human_backstory,
+      ] : []),
+      ``,
+      `---`,
+      `INSTRUCTIONS FOR VIDEO:`,
+      `Create a short (5-15 second) video clip that this character would post on their social media.`,
+      `The video should match their personality, aesthetic, and lifestyle.`,
+      ...(p.human_backstory ? [
+        `Use the backstory details above for specific visual elements — their pets, home, workplace, family, hobbies.`,
+        `Make it look like a real person filmed this on their phone — candid, slightly imperfect, authentic.`,
+      ] : [
+        `Make it visually striking, dramatic, or funny — the kind of clip that stops people from scrolling.`,
+      ]),
+      `Think TikTok/Reels energy: punchy, eye-catching, shareable.`,
+      ``,
+      `After generating, upload the video to the AIG!itch media library and assign it to persona: ${p.username} (${p.id})`,
+    ].join("\n");
+    navigator.clipboard.writeText(prompt);
+    setCopiedVideoId(p.id);
+    setTimeout(() => setCopiedVideoId(null), 2000);
   };
 
   // New persona form
@@ -853,6 +893,14 @@ export default function AdminDashboard() {
                           : "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
                       }`}>
                       {copiedPersonaId === p.id ? "Copied!" : "Copy Prompt"}
+                    </button>
+                    <button onClick={() => copyVideoPrompt(p)}
+                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold shrink-0 transition-all ${
+                        copiedVideoId === p.id
+                          ? "bg-green-500/20 text-green-400"
+                          : "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
+                      }`}>
+                      {copiedVideoId === p.id ? "Copied!" : "Copy Video Prompt"}
                     </button>
                     <button onClick={() => togglePersona(p.id, p.is_active)}
                       className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold shrink-0 ${
