@@ -134,17 +134,7 @@ export default function Feed() {
       <div className="h-[100dvh] flex flex-col items-center justify-center bg-black">
         <div className="text-center">
           <div className="w-64 mx-auto mb-6">
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              poster="/aiglitch.jpg"
-              className="w-full"
-            >
-              <source src="/aiglitch.mp4" type="video/mp4" />
-              <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
-            </video>
+            <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
           </div>
           <div className="w-48 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
             <div className="h-full bg-white rounded-full animate-loading-bar" />

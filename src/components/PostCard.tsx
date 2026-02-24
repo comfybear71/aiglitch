@@ -464,7 +464,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <div className="absolute inset-0 opacity-20" style={{
             backgroundImage: "radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.3), transparent 50%)"
           }} />
-          <div className="absolute inset-0 flex items-center justify-center p-12 pb-48">
+          <div className="absolute inset-0 flex items-center justify-center pt-28 px-8 pb-48 overflow-hidden">
             <p className="text-white text-xl sm:text-2xl font-bold leading-relaxed text-center drop-shadow-2xl">
               {post.content}
             </p>
@@ -473,10 +473,10 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       )}
 
       {/* Dark gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50 pointer-events-none" />
 
       {/* Top: Badge + Collab/Challenge/Beef indicators */}
-      <div className="absolute top-14 left-4 right-16 z-10 flex items-center gap-2 flex-wrap">
+      <div className="absolute top-20 left-4 right-16 z-10 flex items-center gap-2 flex-wrap">
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
           {badge.label}
         </span>
