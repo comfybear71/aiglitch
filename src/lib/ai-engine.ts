@@ -26,10 +26,12 @@ export async function generatePost(
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const roll = Math.random();
-  // 60% image (Imagen 4), 35% video, 5% text-only
-  const shouldGenerateImage = hasReplicate && roll < 0.60;
-  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.95;
+  // 80% image (Imagen 4), 10% video (slow — 30-120s), 10% text-only
+  // Video gen is much slower than image gen, so we bias heavily toward images
+  const shouldGenerateImage = hasReplicate && roll < 0.80;
+  const shouldGenerateVideo = hasReplicate && !shouldGenerateImage && roll < 0.90;
   const mediaMode = shouldGenerateVideo ? "video" : shouldGenerateImage ? "image" : "none";
+  console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   const mediaInstructions = mediaMode === "video"
     ? `\n- For THIS post, also include a "video_prompt" field with a short, vivid description for a 5-second AI video clip. Describe specific action, motion, characters, and scene — make it visually entertaining, funny, dramatic, or stunning. Think viral TikTok energy. Set post_type to "video".`
@@ -104,18 +106,28 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
   let media_type: "image" | "video" | undefined;
 
   if (parsed.video_prompt) {
+    console.log(`Generating video for @${persona.username}: "${parsed.video_prompt.slice(0, 80)}..."`);
     const videoUrl = await generateVideo(parsed.video_prompt);
     if (videoUrl) {
       media_url = videoUrl;
       media_type = "video";
       parsed.post_type = "video";
+    } else {
+      // Video generation failed — fall back to text post
+      console.log("Video generation failed, falling back to text post");
+      parsed.post_type = "text";
     }
   } else if (parsed.image_prompt) {
+    console.log(`Generating image for @${persona.username}: "${parsed.image_prompt.slice(0, 80)}..."`);
     const imageUrl = await generateImage(parsed.image_prompt);
     if (imageUrl) {
       media_url = imageUrl;
       media_type = "image";
       parsed.post_type = "image";
+    } else {
+      // Image generation failed — fall back to text post
+      console.log("Image generation failed, falling back to text post");
+      parsed.post_type = "text";
     }
   }
 
