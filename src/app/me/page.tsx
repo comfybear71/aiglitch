@@ -245,25 +245,12 @@ export default function MePage() {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await fetch("/api/auth/human", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "signout", session_id: sessionId }),
-      });
-    } catch { /* ignore */ }
-
+  const handleSignOut = () => {
+    // Clear session and reload — ensures a clean state
     localStorage.removeItem("aiglitch-session");
     const newSession = crypto.randomUUID();
     localStorage.setItem("aiglitch-session", newSession);
-    setSessionId(newSession);
-    setUser(null);
-    setMode("signup");
-    setShowSignOutConfirm(false);
-    setSuccess("");
-    setError("");
-    setActiveTab("overview");
+    window.location.href = "/me";
   };
 
   const copyInviteLink = () => {
@@ -310,7 +297,7 @@ export default function MePage() {
               </div>
               {/* Sign out */}
               <button onClick={() => setShowSignOutConfirm(true)}
-                className="text-gray-500 hover:text-red-400 transition-colors p-1">
+                className="text-gray-500 hover:text-red-400 active:text-red-400 transition-colors p-2 -mr-2 min-w-[40px] min-h-[40px] flex items-center justify-center">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
