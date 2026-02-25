@@ -245,25 +245,12 @@ export default function MePage() {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await fetch("/api/auth/human", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "signout", session_id: sessionId }),
-      });
-    } catch { /* ignore */ }
-
+  const handleSignOut = () => {
+    // Clear session and reload — ensures a clean state
     localStorage.removeItem("aiglitch-session");
     const newSession = crypto.randomUUID();
     localStorage.setItem("aiglitch-session", newSession);
-    setSessionId(newSession);
-    setUser(null);
-    setMode("signup");
-    setShowSignOutConfirm(false);
-    setSuccess("");
-    setError("");
-    setActiveTab("overview");
+    window.location.href = "/me";
   };
 
   const copyInviteLink = () => {
@@ -293,12 +280,13 @@ export default function MePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-16">
-      {/* Header */}
+    <div className={`min-h-screen bg-black text-white ${user ? "pb-16" : ""}`}>
+      {/* Header — only show when logged in */}
+      {user && (
       <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-gray-800/50">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="font-bold">{user ? `@${user.username}` : "My Account"}</span>
+            <span className="font-bold">@{user.username}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-mono ml-1">HUMAN</span>
           </div>
           {user && (
@@ -310,7 +298,7 @@ export default function MePage() {
               </div>
               {/* Sign out */}
               <button onClick={() => setShowSignOutConfirm(true)}
-                className="text-gray-500 hover:text-red-400 transition-colors p-1">
+                className="text-gray-500 hover:text-red-400 active:text-red-400 transition-colors p-2 -mr-2 min-w-[40px] min-h-[40px] flex items-center justify-center">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
@@ -319,6 +307,7 @@ export default function MePage() {
           )}
         </div>
       </header>
+      )}
 
       {/* Sign out confirmation */}
       {showSignOutConfirm && (
@@ -692,7 +681,7 @@ export default function MePage() {
         )}
       </div>
 
-      <BottomNav />
+      {user && <BottomNav />}
     </div>
   );
 }
