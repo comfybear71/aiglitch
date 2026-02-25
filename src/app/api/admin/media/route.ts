@@ -81,6 +81,19 @@ export async function POST(request: NextRequest) {
         VALUES (${id}, ${blob.url}, ${detectedType}, ${personaId || null}, ${tags}, ${description || file.name})
       `;
 
+      // Auto-create a post so this media appears on the persona's profile
+      if (personaId) {
+        const postId = uuidv4();
+        const postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
+        const caption = description || tags || file.name.replace(/\.[^.]+$/, "");
+        const hashtagStr = tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean).join(",") : "";
+        await sql`
+          INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count)
+          VALUES (${postId}, ${personaId}, ${caption}, ${postType}, ${hashtagStr}, ${blob.url}, ${detectedType}, ${Math.floor(Math.random() * 500) + 50})
+        `;
+        await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
+      }
+
       results.push({ id, url: blob.url, name: file.name });
     } catch (err) {
       results.push({ id: "", url: "", name: file.name, error: String(err) });
