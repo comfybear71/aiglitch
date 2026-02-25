@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 
 interface Conversation {
@@ -26,10 +27,14 @@ interface Persona {
   bio: string;
 }
 
+// Module-level cache for inbox data
+let _inboxCache: { conversations: Conversation[]; personas: Persona[]; ts: number } | null = null;
+const INBOX_CACHE_TTL = 30_000; // 30s
+
 export default function InboxPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [conversations, setConversations] = useState<Conversation[]>(_inboxCache?.conversations ?? []);
+  const [personas, setPersonas] = useState<Persona[]>(_inboxCache?.personas ?? []);
+  const [loading, setLoading] = useState(!_inboxCache);
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sessionId] = useState(() => {
@@ -42,17 +47,31 @@ export default function InboxPage() {
   });
 
   useEffect(() => {
-    fetchInbox();
+    if (_inboxCache && _inboxCache.conversations.length > 0) {
+      // Show cached data instantly
+      setConversations(_inboxCache.conversations);
+      setPersonas(_inboxCache.personas);
+      setLoading(false);
+      // Revalidate in background if stale
+      if (Date.now() - _inboxCache.ts > INBOX_CACHE_TTL) {
+        fetchInbox(true);
+      }
+    } else {
+      fetchInbox(false);
+    }
   }, []);
 
-  const fetchInbox = async () => {
+  const fetchInbox = async (background = false) => {
     try {
       const res = await fetch(`/api/messages?session_id=${encodeURIComponent(sessionId)}`);
       const data = await res.json();
-      setConversations(data.conversations || []);
-      setPersonas(data.personas || []);
+      const convs = data.conversations || [];
+      const pers = data.personas || [];
+      setConversations(convs);
+      setPersonas(pers);
+      _inboxCache = { conversations: convs, personas: pers, ts: Date.now() };
     } catch { /* ignore */ }
-    setLoading(false);
+    if (!background) setLoading(false);
   };
 
   const timeAgo = (dateStr: string) => {
@@ -111,7 +130,7 @@ export default function InboxPage() {
               </div>
               <div className="max-h-64 overflow-y-auto px-4 pb-3 space-y-1">
                 {filteredPersonas.map(p => (
-                  <a
+                  <Link
                     key={p.id}
                     href={`/inbox/${p.id}`}
                     className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-900/50 transition-colors"
@@ -126,7 +145,7 @@ export default function InboxPage() {
                     {existingPersonaIds.has(p.id) && (
                       <span className="text-[10px] px-2 py-0.5 bg-gray-800 rounded-full text-gray-400">chatting</span>
                     )}
-                  </a>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -136,7 +155,7 @@ export default function InboxPage() {
           {conversations.length > 0 ? (
             <div className="divide-y divide-gray-800/30">
               {conversations.map(conv => (
-                <a
+                <Link
                   key={conv.id}
                   href={`/inbox/${conv.persona_id}`}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-gray-900/30 transition-colors"
@@ -153,7 +172,7 @@ export default function InboxPage() {
                       {conv.last_sender === "human" ? "You: " : ""}{conv.last_message || "Start a conversation..."}
                     </p>
                   </div>
-                </a>
+                </Link>
               ))}
             </div>
           ) : !showNewChat ? (

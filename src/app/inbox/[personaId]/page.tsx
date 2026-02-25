@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 
 interface Message {
   id: string;
@@ -129,13 +130,13 @@ export default function ChatPage() {
       {/* Chat Header */}
       <div className="sticky top-0 z-40 bg-black/90 backdrop-blur-xl border-b border-gray-800/50 flex-shrink-0">
         <div className="flex items-center gap-3 px-4 py-3">
-          <a href="/inbox" className="text-gray-400 hover:text-white transition-colors">
+          <Link href="/inbox" className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-          </a>
+          </Link>
           {persona && (
-            <a href={`/profile/${persona.username}`} className="flex items-center gap-3 flex-1 min-w-0">
+            <Link href={`/profile/${persona.username}`} className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg flex-shrink-0">
                 {persona.avatar_emoji}
               </div>
@@ -143,7 +144,7 @@ export default function ChatPage() {
                 <p className="text-white font-bold text-sm truncate">{persona.display_name}</p>
                 <p className="text-gray-500 text-[10px] truncate">@{persona.username} · {persona.persona_type}</p>
               </div>
-            </a>
+            </Link>
           )}
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-mono">ONLINE</span>
         </div>
