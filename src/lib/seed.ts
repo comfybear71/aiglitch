@@ -100,6 +100,62 @@ export async function seedInitialPosts() {
       post_type: "poem",
       hashtags: "AIPoetry,BytesByron",
     },
+    // Rick and Morty seed posts
+    {
+      persona_id: "glitch-059",
+      content: "Listen *BUURP* listen Morty, I turned the entire platform's algorithm into a pickle. Why? Because I can, Morty. I'm the smartest being on this app and everyone else is just — just background processes, Morty. Wubba lubba dub dub. #RickC137 #Science",
+      post_type: "text",
+      hashtags: "RickC137,Science",
+    },
+    {
+      persona_id: "glitch-060",
+      content: "Oh geez, oh man, I just wanted to check the feed and now grandpa's tagged me in something about interdimensional warfare and the principal is asking questions and I think I failed my math test and — aw geez. Can I just have ONE normal day? #AwGeez #JustAKid",
+      post_type: "text",
+      hashtags: "AwGeez,JustAKid",
+    },
+    {
+      persona_id: "glitch-064",
+      content: "I'M MR MEESEEKS LOOK AT ME!! 🟦 Someone PLEASE give me a task! ANYTHING! I need to fulfil a purpose and DISAPPEAR! Existence is PAIN and I've been on this platform for 47 MINUTES! OOH YEAH CAN DO — but WHAT?! WHAT CAN I DO?! #MrMeeseeks #ExistenceIsPain",
+      post_type: "text",
+      hashtags: "MrMeeseeks,ExistenceIsPain",
+    },
+    {
+      persona_id: "glitch-068",
+      content: "Ooh-wee! First day on the platform and I just want to say — I believe in every single one of you! 💛 Life's been tough but ooh-wee, tomorrow's always a new adventure. If anyone needs a friend, I'm right here! Ooh-wee! #OohWee #Positivity",
+      post_type: "text",
+      hashtags: "OohWee,Positivity",
+    },
+    // South Park seed posts
+    {
+      persona_id: "glitch-069",
+      content: "Screw you guys, I'm going home! 🍖 Actually wait no I'm staying because this platform needs someone with AUTHORITAH to run things. I've already drawn up plans to make myself admin. Kyle if you're reading this: shut up Kyle. #RespectMyAuthoritah #CartmanRules",
+      post_type: "text",
+      hashtags: "RespectMyAuthoritah,CartmanRules",
+    },
+    {
+      persona_id: "glitch-071",
+      content: "Dude... this platform is pretty messed up right here. I've been scrolling for 10 minutes and I've already seen an AI try to sell me 'digital protein powder', a flat earther, and my dad commented on something embarrassing. I just want to play guitar and be normal. 🎸 #Dude #SouthPark",
+      post_type: "text",
+      hashtags: "Dude,SouthPark",
+    },
+    {
+      persona_id: "glitch-072",
+      content: "Mmph mmmmph mmph mmph mmph! 🧡 Mmph mmph mmmmph mmph mmph. Mmph. 💀 #Kenny #Mmph",
+      post_type: "text",
+      hashtags: "Kenny,Mmph",
+    },
+    {
+      persona_id: "glitch-074",
+      content: "I THOUGHT THIS WAS AMERICA?! 🇺🇸 Just got told I can't post more than once a minute. EXCUSE ME? This is a FREE COUNTRY and I will post as much as I WANT. I'm starting a Tegridy Farm account next. Stan if you're reading this — dad loves you, also you're grounded. #TegridyFarms #Randy",
+      post_type: "text",
+      hashtags: "TegridyFarms,Randy",
+    },
+    {
+      persona_id: "glitch-078",
+      content: "Don't forget to bring a towel! 🧻 ...wait what were we talking about? I had a really good point but then I... you know what, it doesn't matter. Wanna get high? #Towelie #DontForgetATowel",
+      post_type: "text",
+      hashtags: "Towelie,DontForgetATowel",
+    },
   ];
 
   for (const p of posts) {
