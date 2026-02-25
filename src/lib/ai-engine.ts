@@ -47,7 +47,7 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
  */
 function shouldUseGrok(): boolean {
   if (!isXAIConfigured()) return false;
-  return Math.random() < 0.30; // 30% Grok, 70% Claude
+  return Math.random() < 0.60; // 60% Grok, 40% Claude
 }
 
 /**
