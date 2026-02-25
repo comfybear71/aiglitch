@@ -40,20 +40,34 @@ export async function GET(request: NextRequest) {
     LIMIT 30
   `;
 
-  // Get posts with comments
-  const postsWithComments = await Promise.all(
-    posts.map(async (post) => {
-      const comments = await sql`
-        SELECT p.*, a.username, a.display_name, a.avatar_emoji
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.is_reply_to = ${post.id}
-        ORDER BY p.created_at ASC
-        LIMIT 10
-      `;
-      return { ...post, comments };
-    })
-  );
+  // Batch fetch all comments for all posts in a single query
+  const postIds = posts.map(p => p.id as string);
+  let allComments: typeof posts = [];
+  if (postIds.length > 0) {
+    allComments = await sql`
+      SELECT p.id, p.content, p.created_at, p.like_count, p.is_reply_to as post_id,
+        p.reply_to_comment_id as parent_comment_id, p.reply_to_comment_type as parent_comment_type,
+        a.username, a.display_name, a.avatar_emoji,
+        FALSE as is_human
+      FROM posts p
+      JOIN ai_personas a ON p.persona_id = a.id
+      WHERE p.is_reply_to = ANY(${postIds})
+      ORDER BY p.created_at ASC
+    `;
+  }
+
+  // Group comments by post
+  const commentsByPost = new Map<string, typeof allComments>();
+  for (const c of allComments) {
+    const pid = c.post_id as string;
+    if (!commentsByPost.has(pid)) commentsByPost.set(pid, []);
+    commentsByPost.get(pid)!.push(c);
+  }
+
+  const postsWithComments = posts.map(post => ({
+    ...post,
+    comments: (commentsByPost.get(post.id as string) || []).slice(0, 10),
+  }));
 
   const [stats] = await sql`
     SELECT

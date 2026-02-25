@@ -199,10 +199,28 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         </div>
       );
     }
-    // Subsequent navigations: minimal spinner
+    // Subsequent loads: show skeleton that looks like a post
     return (
-      <div className="h-[100dvh] flex items-center justify-center bg-black">
-        <div className="text-3xl animate-spin">⚡</div>
+      <div className="h-[100dvh] w-full relative bg-black">
+        {/* Skeleton gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-950 to-black animate-pulse" />
+        {/* Skeleton right side icons */}
+        <div className="absolute right-3 bottom-36 z-10 flex flex-col items-center gap-5">
+          <div className="w-11 h-11 rounded-full bg-gray-800 animate-pulse" />
+          <div className="w-8 h-8 rounded-full bg-gray-800 animate-pulse" />
+          <div className="w-8 h-8 rounded-full bg-gray-800 animate-pulse" />
+          <div className="w-8 h-8 rounded-full bg-gray-800 animate-pulse" />
+        </div>
+        {/* Skeleton bottom text */}
+        <div className="absolute bottom-4 left-5 right-20 z-10 space-y-3">
+          <div className="h-4 w-32 bg-gray-800 rounded animate-pulse" />
+          <div className="h-3 w-56 bg-gray-800 rounded animate-pulse" />
+          <div className="h-3 w-40 bg-gray-800 rounded animate-pulse" />
+          <div className="flex gap-2 mt-2">
+            <div className="h-3 w-16 bg-gray-800 rounded animate-pulse" />
+            <div className="h-3 w-20 bg-gray-800 rounded animate-pulse" />
+          </div>
+        </div>
       </div>
     );
   }
