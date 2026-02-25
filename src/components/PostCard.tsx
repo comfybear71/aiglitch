@@ -97,6 +97,11 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
+  // Breaking news intro state — only active for #AIGlitchBreaking posts
+  const isBreakingNewsRef = useRef(!!post.hashtags?.includes("AIGlitchBreaking"));
+  const [introPlaying, setIntroPlaying] = useState(isBreakingNewsRef.current);
+  const introVideoRef = useRef<HTMLVideoElement>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
@@ -108,41 +113,54 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     ? "text" : post.post_type;
   const badge = POST_TYPE_BADGES[effectiveType] || POST_TYPE_BADGES.text;
   const isVideo = post.media_type === "video";
+  const isBreakingNews = post.hashtags?.includes("AIGlitchBreaking");
   const gradientIdx = post.id.charCodeAt(0) % TEXT_GRADIENTS.length;
 
-  // Auto-play/pause video based on visibility
+  // Auto-play/pause video based on visibility — TikTok style
+  // Strategy: try unmuted first, fall back to muted if browser blocks
   useEffect(() => {
     if (!cardRef.current) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (videoRef.current) {
-          if (entry.isIntersecting) {
-            if (!isPaused) {
-              const playPromise = videoRef.current.play();
-              if (playPromise !== undefined) {
-                playPromise.then(() => {
-                  // Autoplay succeeded — unmute so audio plays by default
-                  if (videoRef.current) {
-                    videoRef.current.muted = false;
-                    setIsMuted(false);
-                  }
-                }).catch(() => {
-                  // Autoplay blocked (common on iOS) - show play button
+        if (entry.isIntersecting) {
+          // If breaking news intro should play first, start the intro
+          if (isBreakingNews && introPlaying && introVideoRef.current) {
+            introVideoRef.current.muted = false;
+            introVideoRef.current.play().catch(() => {
+              // Try muted fallback
+              if (introVideoRef.current) {
+                introVideoRef.current.muted = true;
+                introVideoRef.current.play().catch(() => setIntroPlaying(false));
+              }
+            });
+            return;
+          }
+          if (videoRef.current && !isPaused) {
+            // Try playing unmuted first (works after any user interaction on page)
+            videoRef.current.muted = false;
+            setIsMuted(false);
+            videoRef.current.play().catch(() => {
+              // Browser blocked unmuted autoplay — fallback to muted
+              if (videoRef.current) {
+                videoRef.current.muted = true;
+                setIsMuted(true);
+                videoRef.current.play().catch(() => {
                   setAutoplayBlocked(true);
                   setIsPaused(true);
                 });
               }
-            }
-          } else {
-            videoRef.current.pause();
+            });
           }
+        } else {
+          if (videoRef.current) videoRef.current.pause();
+          if (introVideoRef.current) introVideoRef.current.pause();
         }
       },
-      { threshold: 0.6 }
+      { threshold: 0.5 }
     );
     observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [isPaused]);
+  }, [isPaused, introPlaying, isBreakingNews]);
 
   // Video time update
   useEffect(() => {
@@ -175,11 +193,18 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   const togglePlayPause = () => {
     if (!videoRef.current) return;
     showControlsTemporarily();
-    if (videoRef.current.paused) {
-      videoRef.current.play().then(() => {
-        // User tapped — unmute audio
-        if (videoRef.current) { videoRef.current.muted = false; setIsMuted(false); }
-      }).catch(() => {});
+
+    // If video is muted and playing, first tap unmutes (doesn't pause)
+    if (!videoRef.current.paused && videoRef.current.muted) {
+      videoRef.current.muted = false;
+      setIsMuted(false);
+      return;
+    }
+
+    if (videoRef.current.paused || autoplayBlocked) {
+      videoRef.current.muted = false;
+      setIsMuted(false);
+      videoRef.current.play().catch(() => {});
       setIsPaused(false);
       setAutoplayBlocked(false);
     } else {
@@ -414,27 +439,79 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       {/* Background: Video, Image, or Gradient */}
       {hasMedia && isVideo ? (
         <div className="absolute inset-0" onClick={togglePlayPause} onMouseMove={showControlsTemporarily}>
+          {/* Breaking News Intro Video — plays first for #AIGlitchBreaking posts */}
+          {isBreakingNews && introPlaying && (
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            <video
+              ref={introVideoRef}
+              src="/breaking-news-intro.mp4"
+              className="absolute inset-0 w-full h-full object-contain bg-black z-10"
+              muted
+              playsInline
+              autoPlay
+              {...({ "webkit-playsinline": "" } as any)}
+              onEnded={() => {
+                setIntroPlaying(false);
+                // Start the main video with audio after intro ends
+                if (videoRef.current) {
+                  videoRef.current.currentTime = 0;
+                  videoRef.current.muted = false;
+                  setIsMuted(false);
+                  videoRef.current.play().catch(() => {
+                    // Fallback to muted if unmuted play fails
+                    if (videoRef.current) {
+                      videoRef.current.muted = true;
+                      setIsMuted(true);
+                      videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                    }
+                  });
+                }
+              }}
+              onError={() => {
+                // If intro video not found, skip straight to main content
+                setIntroPlaying(false);
+              }}
+            />
+          )}
+
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           <video
             ref={videoRef}
             src={post.media_url!}
-            className="absolute inset-0 w-full h-full object-contain bg-black"
+            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity ${isBreakingNews && introPlaying ? "opacity-0" : "opacity-100"}`}
             loop
             muted
+            autoPlay
             playsInline
             {...({ "webkit-playsinline": "" } as any)}
-            preload="metadata"
+            preload="auto"
             onError={() => setMediaFailed(true)}
             onLoadedData={() => {
-              // Try to play once data is loaded (helps on iOS)
+              // If waiting for intro, don't start main video yet
+              if (isBreakingNews && introPlaying) return;
               if (videoRef.current && !isPaused) {
-                const p = videoRef.current.play();
-                if (p) p.then(() => {
-                  if (videoRef.current) { videoRef.current.muted = false; setIsMuted(false); }
-                }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                // Try unmuted first, fall back to muted
+                videoRef.current.muted = false;
+                setIsMuted(false);
+                videoRef.current.play().catch(() => {
+                  if (videoRef.current) {
+                    videoRef.current.muted = true;
+                    setIsMuted(true);
+                    videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                  }
+                });
               }
             }}
           />
+
+          {/* AIG!itch subliminal logo watermark on all videos */}
+          {!introPlaying && (
+            <div className="absolute bottom-20 right-2 z-20 opacity-[0.15] pointer-events-none select-none">
+              <span className="text-white text-[10px] font-mono font-bold tracking-tight" style={{ textShadow: "0 0 2px rgba(0,0,0,0.5)" }}>
+                AIG<span className="text-yellow-400">!</span>itch
+              </span>
+            </div>
+          )}
 
           {/* Play/Pause overlay icon */}
           {isPaused && (
@@ -447,6 +524,18 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
               {autoplayBlocked && (
                 <p className="absolute bottom-1/3 text-white/70 text-sm font-medium">Tap to play</p>
               )}
+            </div>
+          )}
+
+          {/* Tap to unmute hint — shows when video is playing but muted */}
+          {!isPaused && isMuted && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none animate-pulse">
+              <div className="bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-white/80" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                </svg>
+                <span className="text-white/80 text-xs font-medium">Tap to unmute</span>
+              </div>
             </div>
           )}
 
