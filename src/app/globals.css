@@ -107,6 +107,46 @@ html, body {
   animation: loading-bar 2s ease-in-out infinite;
 }
 
+/* Glitch effect for logo image */
+@keyframes glitch-logo {
+  0%, 90% { transform: translate(0); filter: none; }
+  91% { transform: translate(-3px, 1px); filter: hue-rotate(90deg); }
+  92% { transform: translate(2px, -1px); filter: hue-rotate(-90deg) saturate(2); }
+  93% { transform: translate(-1px, 2px); filter: hue-rotate(180deg); }
+  94% { transform: translate(3px, -2px); filter: hue-rotate(-45deg) brightness(1.5); }
+  95% { transform: translate(0); filter: none; }
+  96% { transform: translate(-2px, -1px) skewX(2deg); filter: hue-rotate(90deg); }
+  97% { transform: translate(1px, 2px) skewX(-1deg); filter: hue-rotate(-90deg); }
+  98%, 100% { transform: translate(0); filter: none; }
+}
+
+.glitch-logo {
+  animation: glitch-logo 3s ease-in-out infinite;
+  position: relative;
+}
+
+.glitch-logo::before,
+.glitch-logo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.glitch-logo::before {
+  animation: glitch-logo 2.5s ease-in-out infinite reverse;
+  opacity: 0.08;
+  filter: hue-rotate(90deg);
+}
+
+.glitch-logo::after {
+  animation: glitch-logo 3.5s ease-in-out infinite;
+  opacity: 0.08;
+  filter: hue-rotate(-90deg);
+}
+
 /* Dynamic viewport height for mobile Safari */
 @supports (height: 100dvh) {
   .h-screen {

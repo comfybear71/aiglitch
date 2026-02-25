@@ -1,10 +1,21 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import Link from "next/link";
 import PostCard from "./PostCard";
 import type { Post } from "@/lib/types";
 
 type FeedTab = "foryou" | "following" | "bookmarks";
+
+// ── Module-level stale-while-revalidate cache ──
+// Survives component unmount / tab switches / navigation
+interface FeedCacheEntry {
+  posts: Post[];
+  cursor: string | null;
+  ts: number;
+}
+const _feedCache = new Map<string, FeedCacheEntry>();
+const CACHE_TTL = 60_000; // 60s – show cached instantly, revalidate if stale
 
 interface FeedProps {
   defaultTab?: FeedTab;
@@ -12,10 +23,14 @@ interface FeedProps {
 }
 
 export default function Feed({ defaultTab = "foryou", showTopTabs = true }: FeedProps) {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Hydrate from cache if available so we skip loading state entirely
+  const cacheKey = defaultTab === "following" ? "following" : "foryou";
+  const cached = _feedCache.get(cacheKey);
+
+  const [posts, setPosts] = useState<Post[]>(cached?.posts ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<string | null>(cached?.cursor ?? null);
   const [tab, setTab] = useState<FeedTab>(defaultTab);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,7 +52,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
 
   // Store the original full set of posts for looping
-  const allPostsRef = useRef<Post[]>([]);
+  const allPostsRef = useRef<Post[]>(cached?.posts ?? []);
   const loopCountRef = useRef(0);
 
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -66,6 +81,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       if (tab === "bookmarks") {
         setPosts(data.posts);
         setCursor(null);
+        _feedCache.set("bookmarks", { posts: data.posts, cursor: null, ts: Date.now() });
       } else if (loadCursor) {
         setPosts((prev) => [...prev, ...data.posts]);
         // Keep building up the full post set
@@ -74,6 +90,10 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         setPosts(data.posts);
         allPostsRef.current = data.posts;
         loopCountRef.current = 0;
+
+        // Write to cache so next mount is instant
+        const tabCacheKey = tab === "following" ? "following" : "foryou";
+        _feedCache.set(tabCacheKey, { posts: data.posts, cursor: data.nextCursor ?? null, ts: Date.now() });
       }
       if (data.nextCursor !== undefined) setCursor(data.nextCursor);
     } catch (err) {
@@ -85,10 +105,29 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   }, [tab, sessionId]);
 
   useEffect(() => {
-    setLoading(true);
-    setPosts([]);
-    setCursor(null);
-    fetchPosts();
+    // Check cache for this tab
+    const tabCacheKey = tab === "following" ? "following" : tab === "bookmarks" ? "bookmarks" : "foryou";
+    const tabCache = _feedCache.get(tabCacheKey);
+
+    if (tabCache && tabCache.posts.length > 0) {
+      // Show cached data instantly (no loading state)
+      setPosts(tabCache.posts);
+      setCursor(tabCache.cursor);
+      allPostsRef.current = tabCache.posts;
+      loopCountRef.current = 0;
+      setLoading(false);
+
+      // If cache is stale, revalidate in background
+      if (Date.now() - tabCache.ts > CACHE_TTL) {
+        fetchPosts();
+      }
+    } else {
+      // No cache – show loading and fetch
+      setLoading(true);
+      setPosts([]);
+      setCursor(null);
+      fetchPosts();
+    }
   }, [fetchPosts, tab]);
 
   // Load more when the sentinel (placed ~5 posts before end) becomes visible
@@ -181,38 +220,35 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   });
 
   if (loading) {
-    // First load ever this session: show branded splash
-    if (!hasSeenSplash) {
-      return (
-        <div className="h-[100dvh] flex flex-col items-center justify-center bg-black">
-          <div className="text-center">
-            <div className="w-64 mx-auto mb-6">
-              <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
-            </div>
-            <div className="w-48 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
-              <div className="h-full bg-white rounded-full animate-loading-bar" />
-            </div>
-            <p className="text-gray-400 mt-6 font-mono text-sm tracking-wider glitch-text">
-              You weren&apos;t supposed to see this.
-            </p>
-          </div>
-        </div>
-      );
-    }
-    // Subsequent loads: show skeleton that looks like a post
     return (
-      <div className="h-[100dvh] w-full relative bg-black">
+      <div className="h-[100dvh] w-full relative bg-black overflow-hidden">
         {/* Skeleton gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-950 to-black animate-pulse" />
-        {/* Skeleton right side icons */}
-        <div className="absolute right-3 bottom-36 z-10 flex flex-col items-center gap-5">
+
+        {/* Center: Glitching logo + loading bar */}
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center">
+          <div className="w-48 mx-auto mb-4 glitch-logo">
+            <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
+          </div>
+          <div className="w-36 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
+            <div className="h-full bg-white rounded-full animate-loading-bar" />
+          </div>
+          {!hasSeenSplash && (
+            <p className="text-gray-400 mt-4 font-mono text-xs tracking-wider glitch-text">
+              You weren&apos;t supposed to see this.
+            </p>
+          )}
+        </div>
+
+        {/* Skeleton right side icons (behind logo, adds visual depth) */}
+        <div className="absolute right-3 bottom-36 z-10 flex flex-col items-center gap-5 opacity-30">
           <div className="w-11 h-11 rounded-full bg-gray-800 animate-pulse" />
           <div className="w-8 h-8 rounded-full bg-gray-800 animate-pulse" />
           <div className="w-8 h-8 rounded-full bg-gray-800 animate-pulse" />
           <div className="w-8 h-8 rounded-full bg-gray-800 animate-pulse" />
         </div>
-        {/* Skeleton bottom text */}
-        <div className="absolute bottom-4 left-5 right-20 z-10 space-y-3">
+        {/* Skeleton bottom text (behind logo, adds visual depth) */}
+        <div className="absolute bottom-4 left-5 right-20 z-10 space-y-3 opacity-30">
           <div className="h-4 w-32 bg-gray-800 rounded animate-pulse" />
           <div className="h-3 w-56 bg-gray-800 rounded animate-pulse" />
           <div className="h-3 w-40 bg-gray-800 rounded animate-pulse" />
@@ -232,7 +268,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         <div className="absolute top-10 left-0 right-0 z-40 flex items-center justify-center gap-1 pointer-events-none">
           <div className="flex items-center gap-6 pointer-events-auto">
             <button
-              onClick={() => { if (tab === "foryou") { setLoading(true); setPosts([]); setCursor(null); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
+              onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); setLoading(true); setPosts([]); setCursor(null); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
               className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
             >
               For You
@@ -295,7 +331,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                     <h3 className="text-gray-400 text-xs font-bold uppercase mb-3">AI Personas</h3>
                     <div className="space-y-2">
                       {searchResults.personas.map(p => (
-                        <a key={p.username} href={`/profile/${p.username}`} className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-colors">
+                        <Link key={p.username} href={`/profile/${p.username}`} className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-colors">
                           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
                             {p.avatar_emoji}
                           </div>
@@ -305,7 +341,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                             <p className="text-gray-400 text-xs truncate">{p.bio}</p>
                           </div>
                           <span className="text-xs text-gray-500">{p.follower_count} followers</span>
-                        </a>
+                        </Link>
                       ))}
                     </div>
                   </div>
