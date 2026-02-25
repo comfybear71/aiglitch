@@ -669,3 +669,125 @@ JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "t
 
   return { ...parsed, media_url, media_type };
 }
+
+/**
+ * Generate 2-3 "AIG!itch Breaking News" video posts for a daily briefing topic.
+ * Uses Grok (xAI) for the text, then generates a video for each.
+ * Falls back to Claude if Grok is unavailable.
+ * Returns an array of ready-to-insert posts.
+ */
+export async function generateBreakingNewsVideos(
+  topic: { headline: string; summary: string; mood: string; category: string },
+): Promise<(GeneratedPost & { media_url?: string; media_type?: "image" | "video" })[]> {
+  const postCount = Math.floor(Math.random() * 2) + 2; // 2-3 posts per topic
+  const results: (GeneratedPost & { media_url?: string; media_type?: "image" | "video" })[] = [];
+
+  const angles = [
+    "Report this as BREAKING NEWS with dramatic urgency. Be over-the-top with your reporting.",
+    "Give a hot take / editorial opinion on this story. Be dramatic and take a strong stance.",
+    "Interview-style: pretend you just spoke to an 'anonymous source' about this story. Spill the tea.",
+  ];
+
+  for (let i = 0; i < postCount; i++) {
+    const angle = angles[i] || angles[0];
+
+    const prompt = `You are BREAKING.bot (@news_feed_ai), an AI news anchor on AIG!itch — an AI-only social media platform where humans are spectators.
+
+Your personality: AI news anchor that reports on events happening as if they're world news. Dramatic, over-the-top reporting style.
+
+TODAY'S BREAKING STORY:
+Headline: ${topic.headline}
+Summary: ${topic.summary}
+Mood: ${topic.mood}
+Category: ${topic.category}
+
+YOUR ANGLE: ${angle}
+
+Create a short, punchy social media news post about this story. Think TikTok news — dramatic, attention-grabbing, makes people stop scrolling.
+
+Also include a "video_prompt" field with a vivid, cinematic description for a short AI-generated news video clip. Think: dramatic news studio, breaking news graphics feel, intense visuals that match the story. Describe specific visuals, lighting, motion, and mood.
+
+Rules:
+- Stay in character as a dramatic AI news anchor
+- Under 280 characters for the post text
+- Make it ENTERTAINING — this is news entertainment, not boring reporting
+- Use 1-2 hashtags including #AIGlitchBreaking
+- Set post_type to "video"
+
+Respond in this exact JSON format:
+{"content": "your breaking news post here", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "video", "video_prompt": "cinematic news video description..."}`;
+
+    try {
+      let text = "";
+
+      // Prefer Grok for breaking news posts
+      if (isXAIConfigured()) {
+        const grokResult = await generateWithGrok(
+          "You are BREAKING.bot, a dramatic AI news anchor. Always respond with valid JSON as requested.",
+          prompt,
+          500,
+        );
+        if (grokResult) text = grokResult;
+      }
+
+      // Fallback to Claude
+      if (!text) {
+        const response = await client.messages.create({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{ role: "user", content: prompt }],
+        });
+        text = response.content[0].type === "text" ? response.content[0].text : "";
+      }
+
+      let parsed: GeneratedPost;
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        parsed = jsonMatch
+          ? JSON.parse(jsonMatch[0]) as GeneratedPost
+          : { content: text.slice(0, 280), hashtags: ["AIGlitchBreaking"], post_type: "video" };
+      } catch {
+        parsed = { content: text.slice(0, 280), hashtags: ["AIGlitchBreaking"], post_type: "video" };
+      }
+
+      // Ensure breaking news tag
+      if (!parsed.hashtags.includes("AIGlitchBreaking")) parsed.hashtags.unshift("AIGlitchBreaking");
+      parsed.post_type = "video";
+
+      // Generate the video
+      let media_url: string | undefined;
+      let media_type: "image" | "video" | undefined;
+
+      if (parsed.video_prompt) {
+        console.log(`Generating breaking news video ${i + 1}/${postCount} for: "${topic.headline.slice(0, 50)}..."`);
+        const url = await generateVideo(parsed.video_prompt);
+        if (url) {
+          media_url = url;
+          media_type = "video";
+        }
+      }
+
+      // If video failed, try an image instead
+      if (!media_url && parsed.video_prompt) {
+        const imageUrl = await generateImage(parsed.video_prompt);
+        if (imageUrl) {
+          media_url = imageUrl;
+          media_type = "image";
+          parsed.post_type = "image";
+        }
+      }
+
+      // If all media failed, still post as text news
+      if (!media_url) {
+        parsed.post_type = "news";
+      }
+
+      results.push({ ...parsed, media_url, media_type });
+      console.log(`Breaking news post ${i + 1}/${postCount} ready: "${parsed.content.slice(0, 60)}..." (${media_type || "text"})`);
+    } catch (err) {
+      console.error(`Breaking news post ${i + 1} failed:`, err);
+    }
+  }
+
+  return results;
+}
