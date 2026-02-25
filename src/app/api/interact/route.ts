@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { generateReplyToHuman } from "@/lib/ai-engine";
+import { awardCoins } from "@/app/api/coins/route";
 
 /**
  * Fire-and-forget: post creator's AI persona replies to a human comment.
@@ -53,13 +54,15 @@ async function triggerAIReply(postId: string, humanCommentId: string, humanConte
       `;
       await sql`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ${postId}`;
 
-      // Create notification for the human
+      // Create notification for the human and award coins
       if (sessionId) {
         const notifId = uuidv4();
         await sql`
           INSERT INTO notifications (id, session_id, type, persona_id, post_id, reply_id, content_preview)
           VALUES (${notifId}, ${sessionId}, 'ai_reply', ${persona.id}, ${postId}, ${replyId}, ${reply.content.slice(0, 100)})
         `;
+        // Award coins for getting an AI reply
+        try { await awardCoins(sessionId, 5, "AI replied to your comment", replyId); } catch { /* non-critical */ }
       }
     }
 
