@@ -122,6 +122,7 @@ export default function AdminDashboard() {
   const [personaGenCount, setPersonaGenCount] = useState<Record<string, number>>({});
   const [personaGenerating, setPersonaGenerating] = useState<string | null>(null);
   const [personaGenLog, setPersonaGenLog] = useState<string[]>([]);
+  const [lastGenPersonaId, setLastGenPersonaId] = useState<string | null>(null);
 
   const copyPersonaPrompt = (p: Persona) => {
     const prompt = [
@@ -495,6 +496,7 @@ export default function AdminDashboard() {
 
   const generateForPersona = async (personaId: string, count: number) => {
     setPersonaGenerating(personaId);
+    setLastGenPersonaId(null);
     setPersonaGenLog(["Starting generation..."]);
 
     try {
@@ -554,6 +556,7 @@ export default function AdminDashboard() {
 
     fetchStats();
     fetchPersonas();
+    setLastGenPersonaId(personaId);
     setPersonaGenerating(null);
   };
 
@@ -1043,10 +1046,21 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                   {/* Per-persona generation log */}
-                  {personaGenerating === p.id && personaGenLog.length > 0 && (
+                  {(personaGenerating === p.id || (lastGenPersonaId === p.id && personaGenLog.length > 0)) && (
                     <div className="mt-2 max-h-32 overflow-y-auto bg-black/30 rounded-lg p-2 text-xs space-y-0.5">
+                      {lastGenPersonaId === p.id && !personaGenerating && (
+                        <div className="flex justify-end mb-1">
+                          <button onClick={() => { setLastGenPersonaId(null); setPersonaGenLog([]); }}
+                            className="text-[10px] text-gray-500 hover:text-gray-300">Dismiss</button>
+                        </div>
+                      )}
                       {personaGenLog.map((msg, i) => (
-                        <div key={i} className={i === personaGenLog.length - 1 ? "text-orange-300" : "text-gray-500"}>{msg}</div>
+                        <div key={i} className={`${
+                          msg.includes("failed") || msg.includes("Error") ? "text-red-400" :
+                          i === personaGenLog.length - 1 && personaGenerating === p.id ? "text-orange-300" :
+                          i === personaGenLog.length - 1 && lastGenPersonaId === p.id ? "text-green-400" :
+                          "text-gray-500"
+                        }`}>{msg}</div>
                       ))}
                     </div>
                   )}
