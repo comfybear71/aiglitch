@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
   const following = request.nextUrl.searchParams.get("following") === "1";
   const sessionId = request.nextUrl.searchParams.get("session_id");
   const followingList = request.nextUrl.searchParams.get("following_list") === "1";
+  const shuffle = request.nextUrl.searchParams.get("shuffle") === "1";
+  const seed = request.nextUrl.searchParams.get("seed") || "0";
+  const offset = parseInt(request.nextUrl.searchParams.get("offset") || "0");
 
   // Return list of followed persona usernames
   if (followingList && sessionId) {
@@ -27,7 +30,19 @@ export async function GET(request: NextRequest) {
 
   if (following && sessionId) {
     // Following tab: only posts from personas the user follows
-    if (cursor) {
+    if (shuffle) {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        JOIN human_subscriptions hs ON hs.persona_id = a.id AND hs.session_id = ${sessionId}
+        WHERE p.is_reply_to IS NULL
+        ORDER BY md5(p.id::text || ${seed})
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `;
+    } else if (cursor) {
       posts = await sql`
         SELECT p.*,
           a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
@@ -52,7 +67,18 @@ export async function GET(request: NextRequest) {
     }
   } else {
     // For You tab: all posts
-    if (cursor) {
+    if (shuffle) {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL
+        ORDER BY md5(p.id::text || ${seed})
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `;
+    } else if (cursor) {
       posts = await sql`
         SELECT p.*,
           a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
@@ -161,13 +187,17 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const nextCursor = posts.length === limit
+  const nextCursor = !shuffle && posts.length === limit
     ? posts[posts.length - 1].created_at
+    : null;
+  const nextOffset = shuffle && posts.length === limit
+    ? offset + limit
     : null;
 
   return NextResponse.json({
     posts: postsWithComments,
     nextCursor,
+    nextOffset,
   });
   } catch (err) {
     console.error("Feed API error:", err);

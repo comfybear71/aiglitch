@@ -30,8 +30,11 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const [posts, setPosts] = useState<Post[]>(cached?.posts ?? []);
   const [loading, setLoading] = useState(!cached);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [cursor, setCursor] = useState<string | null>(cached?.cursor ?? null);
   const [tab, setTab] = useState<FeedTab>(defaultTab);
+  // Shuffle seed: changes on each refresh to give a different random order
+  const shuffleSeedRef = useRef(Math.random().toString(36).slice(2));
+  // Offset-based pagination for shuffled feeds (null = no more pages)
+  const nextOffsetRef = useRef<number | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ posts: Post[]; personas: { username: string; display_name: string; avatar_emoji: string; bio: string; persona_type: string; follower_count: number }[]; hashtags: { tag: string; count: number }[] } | null>(null);
@@ -60,19 +63,24 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchPosts = useCallback(async (loadCursor?: string) => {
+  const fetchPosts = useCallback(async (isLoadMore = false) => {
     try {
       let url: string;
+      const currentSeed = shuffleSeedRef.current;
+      const currentOffset = nextOffsetRef.current;
+
       if (tab === "bookmarks") {
         url = `/api/bookmarks?session_id=${encodeURIComponent(sessionId)}`;
       } else if (tab === "following") {
-        url = loadCursor
-          ? `/api/feed?cursor=${encodeURIComponent(loadCursor)}&limit=20&following=1&session_id=${encodeURIComponent(sessionId)}`
-          : `/api/feed?limit=50&following=1&session_id=${encodeURIComponent(sessionId)}`;
+        const base = `/api/feed?following=1&session_id=${encodeURIComponent(sessionId)}&shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
+        url = isLoadMore && currentOffset !== null
+          ? `${base}&limit=20&offset=${currentOffset}`
+          : `${base}&limit=50`;
       } else {
-        url = loadCursor
-          ? `/api/feed?cursor=${encodeURIComponent(loadCursor)}&limit=20`
-          : "/api/feed?limit=50";
+        const base = `/api/feed?shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
+        url = isLoadMore && currentOffset !== null
+          ? `${base}&limit=20&offset=${currentOffset}`
+          : `${base}&limit=50`;
       }
 
       const res = await fetch(url);
@@ -80,22 +88,21 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
 
       if (tab === "bookmarks") {
         setPosts(data.posts);
-        setCursor(null);
+        nextOffsetRef.current = null;
         _feedCache.set("bookmarks", { posts: data.posts, cursor: null, ts: Date.now() });
-      } else if (loadCursor) {
+      } else if (isLoadMore) {
         setPosts((prev) => [...prev, ...data.posts]);
-        // Keep building up the full post set
         allPostsRef.current = [...allPostsRef.current, ...data.posts];
       } else {
         setPosts(data.posts);
         allPostsRef.current = data.posts;
         loopCountRef.current = 0;
 
-        // Write to cache so next mount is instant
         const tabCacheKey = tab === "following" ? "following" : "foryou";
-        _feedCache.set(tabCacheKey, { posts: data.posts, cursor: data.nextCursor ?? null, ts: Date.now() });
+        _feedCache.set(tabCacheKey, { posts: data.posts, cursor: null, ts: Date.now() });
       }
-      if (data.nextCursor !== undefined) setCursor(data.nextCursor);
+      // Track offset for shuffle pagination
+      nextOffsetRef.current = data.nextOffset ?? null;
     } catch (err) {
       console.error("Failed to fetch feed:", err);
     } finally {
@@ -112,9 +119,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     if (tabCache && tabCache.posts.length > 0) {
       // Show cached data instantly (no loading state)
       setPosts(tabCache.posts);
-      setCursor(tabCache.cursor);
       allPostsRef.current = tabCache.posts;
       loopCountRef.current = 0;
+      nextOffsetRef.current = null;
       setLoading(false);
 
       // If cache is stale, revalidate in background
@@ -125,7 +132,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       // No cache – show loading and fetch
       setLoading(true);
       setPosts([]);
-      setCursor(null);
+      nextOffsetRef.current = null;
       fetchPosts();
     }
   }, [fetchPosts, tab]);
@@ -139,21 +146,25 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadMoreTriggered.current && tab !== "bookmarks") {
-          if (cursor) {
+          if (nextOffsetRef.current !== null) {
             loadMoreTriggered.current = true;
             setLoadingMore(true);
-            fetchPosts(cursor);
+            fetchPosts(true);
           } else if (allPostsRef.current.length > 0) {
             loadMoreTriggered.current = true;
-            // No more posts from server — loop by appending all posts again
+            // No more posts from server — loop with shuffled order for variety
             loopCountRef.current += 1;
             const loopNum = loopCountRef.current;
-            const loopedPosts = allPostsRef.current.map(p => ({
+            const shuffled = [...allPostsRef.current];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            const loopedPosts = shuffled.map(p => ({
               ...p,
               _loopKey: `${p.id}-loop-${loopNum}`,
             }));
             setPosts(prev => [...prev, ...loopedPosts]);
-            // Reset trigger immediately for loops since there's no async fetch
             setTimeout(() => { loadMoreTriggered.current = false; }, 500);
           }
         }
@@ -166,7 +177,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     }
 
     return () => observerRef.current?.disconnect();
-  }, [cursor, fetchPosts, tab]);
+  }, [fetchPosts, tab]);
 
   // Reset trigger when loading finishes
   useEffect(() => {
@@ -174,6 +185,23 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       loadMoreTriggered.current = false;
     }
   }, [loadingMore]);
+
+  // Listen for shuffle event from home button / bottom nav
+  useEffect(() => {
+    const handleShuffle = () => {
+      const tabCacheKey = tab === "following" ? "following" : "foryou";
+      _feedCache.delete(tabCacheKey);
+      shuffleSeedRef.current = Math.random().toString(36).slice(2);
+      nextOffsetRef.current = null;
+      allPostsRef.current = [];
+      loopCountRef.current = 0;
+      setLoading(true);
+      setPosts([]);
+      fetchPosts();
+    };
+    window.addEventListener("feed-shuffle", handleShuffle);
+    return () => window.removeEventListener("feed-shuffle", handleShuffle);
+  }, [fetchPosts, tab]);
 
   // Load followed personas
   useEffect(() => {
@@ -268,7 +296,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         <div className="absolute top-10 left-0 right-0 z-40 flex items-center justify-center gap-1 pointer-events-none">
           <div className="flex items-center gap-6 pointer-events-auto">
             <button
-              onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); setLoading(true); setPosts([]); setCursor(null); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
+              onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
               className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
             >
               For You

@@ -86,6 +86,13 @@ export default function BottomNav() {
               key={tab.key}
               href={tab.href}
               prefetch={true}
+              onClick={(e) => {
+                if (tab.key === "home" && active) {
+                  e.preventDefault();
+                  window.scrollTo(0, 0);
+                  window.dispatchEvent(new Event("feed-shuffle"));
+                }
+              }}
               className={`flex flex-col items-center justify-center gap-0.5 py-1 px-3 transition-colors ${
                 active ? "text-white" : "text-gray-500"
               }`}

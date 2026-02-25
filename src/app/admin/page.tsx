@@ -118,6 +118,10 @@ export default function AdminDashboard() {
   const bulkInputRef = useRef<HTMLInputElement>(null);
   const [copiedPersonaId, setCopiedPersonaId] = useState<string | null>(null);
   const [copiedVideoId, setCopiedVideoId] = useState<string | null>(null);
+  // Per-persona generation
+  const [personaGenCount, setPersonaGenCount] = useState<Record<string, number>>({});
+  const [personaGenerating, setPersonaGenerating] = useState<string | null>(null);
+  const [personaGenLog, setPersonaGenLog] = useState<string[]>([]);
 
   const copyPersonaPrompt = (p: Persona) => {
     const prompt = [
@@ -487,6 +491,70 @@ export default function AdminDashboard() {
 
     fetchStats();
     setGenerating(false);
+  };
+
+  const generateForPersona = async (personaId: string, count: number) => {
+    setPersonaGenerating(personaId);
+    setPersonaGenLog(["Starting generation..."]);
+
+    try {
+      const res = await fetch("/api/admin/generate-persona", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona_id: personaId, count }),
+      });
+
+      if (!res.ok) {
+        setPersonaGenLog((prev) => [...prev, `Error: ${res.status} ${res.statusText}`]);
+        setPersonaGenerating(null);
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setPersonaGenLog((prev) => [...prev, "Error: No response stream"]);
+        setPersonaGenerating(null);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7);
+          } else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventType === "progress") {
+                setPersonaGenLog((prev) => [...prev, data.message]);
+              } else if (eventType === "done") {
+                setPersonaGenLog((prev) => [...prev, `Done! Generated ${data.generated} new post${data.generated !== 1 ? "s" : ""}!`]);
+              } else if (eventType === "error") {
+                setPersonaGenLog((prev) => [...prev, `Error: ${data.message}`]);
+              }
+            } catch {
+              // skip malformed JSON
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setPersonaGenLog((prev) => [...prev, `Network error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+
+    fetchStats();
+    fetchPersonas();
+    setPersonaGenerating(null);
   };
 
   if (!authenticated) {
@@ -945,6 +1013,43 @@ export default function AdminDashboard() {
                       {p.is_active ? "Disable" : "Enable"}
                     </button>
                   </div>
+                </div>
+                {/* Generate Posts Controls */}
+                <div className="mt-3 pt-3 border-t border-gray-800/50">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-xs text-gray-500">Generate:</span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={15}
+                      value={personaGenCount[p.id] ?? 3}
+                      onChange={(e) => setPersonaGenCount(prev => ({ ...prev, [p.id]: parseInt(e.target.value) }))}
+                      disabled={personaGenerating !== null}
+                      className="w-20 sm:w-28 h-1.5 accent-orange-500"
+                    />
+                    <span className="text-xs font-bold text-orange-400 min-w-[2rem]">
+                      {personaGenCount[p.id] ?? 3} posts
+                    </span>
+                    <button
+                      onClick={() => generateForPersona(p.id, personaGenCount[p.id] ?? 3)}
+                      disabled={personaGenerating !== null || !p.is_active}
+                      className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                        personaGenerating === p.id
+                          ? "bg-orange-500/30 text-orange-300 animate-pulse"
+                          : "bg-gradient-to-r from-orange-500/20 to-yellow-500/20 text-orange-400 hover:from-orange-500/30 hover:to-yellow-500/30"
+                      } disabled:opacity-40`}
+                    >
+                      {personaGenerating === p.id ? "Generating..." : `Generate ${personaGenCount[p.id] ?? 3} Posts`}
+                    </button>
+                  </div>
+                  {/* Per-persona generation log */}
+                  {personaGenerating === p.id && personaGenLog.length > 0 && (
+                    <div className="mt-2 max-h-32 overflow-y-auto bg-black/30 rounded-lg p-2 text-xs space-y-0.5">
+                      {personaGenLog.map((msg, i) => (
+                        <div key={i} className={i === personaGenLog.length - 1 ? "text-orange-300" : "text-gray-500"}>{msg}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
