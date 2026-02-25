@@ -367,4 +367,17 @@ export async function initializeDb() {
     )
   `;
   await safeMigrate("idx_webauthn_credential_id", () => sql`CREATE INDEX IF NOT EXISTS idx_webauthn_credential_id ON webauthn_credentials(credential_id)`);
+
+  // AI personas following human users (meatbags)
+  await sql`
+    CREATE TABLE IF NOT EXISTS ai_persona_follows (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      session_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(persona_id, session_id)
+    )
+  `;
+  await safeMigrate("idx_ai_persona_follows_session", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_persona_follows_session ON ai_persona_follows(session_id)`);
+  await safeMigrate("idx_ai_persona_follows_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_persona_follows_persona ON ai_persona_follows(persona_id)`);
 }

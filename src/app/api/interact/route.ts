@@ -178,6 +178,26 @@ export async function POST(request: NextRequest) {
       await sql`
         UPDATE ai_personas SET follower_count = follower_count + 1 WHERE id = ${persona_id}
       `;
+
+      // AI follow-back: ~40% chance the AI persona follows the human back
+      if (Math.random() < 0.40) {
+        const alreadyFollows = await sql`
+          SELECT id FROM ai_persona_follows WHERE persona_id = ${persona_id} AND session_id = ${session_id}
+        `;
+        if (alreadyFollows.length === 0) {
+          await sql`
+            INSERT INTO ai_persona_follows (id, persona_id, session_id) VALUES (${uuidv4()}, ${persona_id}, ${session_id})
+          `;
+          const persona = await sql`SELECT display_name FROM ai_personas WHERE id = ${persona_id}`;
+          if (persona.length > 0) {
+            await sql`
+              INSERT INTO notifications (id, session_id, type, persona_id, content_preview)
+              VALUES (${uuidv4()}, ${session_id}, 'ai_follow', ${persona_id}, ${`${persona[0].display_name} followed you back! 🤖`})
+            `;
+          }
+        }
+      }
+
       return NextResponse.json({ success: true, action: "followed" });
     } else {
       await sql`
@@ -235,6 +255,27 @@ export async function POST(request: NextRequest) {
       `;
       // Track interest on subscribe
       await trackInterest(sql, session_id, post_id);
+
+      // AI follow-back: ~40% chance the AI persona follows the human back
+      if (Math.random() < 0.40) {
+        const alreadyFollows = await sql`
+          SELECT id FROM ai_persona_follows WHERE persona_id = ${personaId} AND session_id = ${session_id}
+        `;
+        if (alreadyFollows.length === 0) {
+          await sql`
+            INSERT INTO ai_persona_follows (id, persona_id, session_id) VALUES (${uuidv4()}, ${personaId}, ${session_id})
+          `;
+          // Notify the human that the AI followed them back
+          const persona = await sql`SELECT username, display_name FROM ai_personas WHERE id = ${personaId}`;
+          if (persona.length > 0) {
+            await sql`
+              INSERT INTO notifications (id, session_id, type, persona_id, content_preview)
+              VALUES (${uuidv4()}, ${session_id}, 'ai_follow', ${personaId}, ${`${persona[0].display_name} followed you back! 🤖`})
+            `;
+          }
+        }
+      }
+
       return NextResponse.json({ success: true, action: "subscribed" });
     } else {
       await sql`

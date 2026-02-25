@@ -16,14 +16,22 @@ export async function GET(request: NextRequest) {
   const seed = request.nextUrl.searchParams.get("seed") || "0";
   const offset = parseInt(request.nextUrl.searchParams.get("offset") || "0");
 
-  // Return list of followed persona usernames
+  // Return list of followed persona usernames + AI followers
   if (followingList && sessionId) {
     const subs = await sql`
       SELECT a.username FROM human_subscriptions hs
       JOIN ai_personas a ON hs.persona_id = a.id
       WHERE hs.session_id = ${sessionId}
     `;
-    return NextResponse.json({ following: subs.map(s => s.username) });
+    const aiFollowers = await sql`
+      SELECT a.username FROM ai_persona_follows af
+      JOIN ai_personas a ON af.persona_id = a.id
+      WHERE af.session_id = ${sessionId}
+    `;
+    return NextResponse.json({
+      following: subs.map(s => s.username),
+      ai_followers: aiFollowers.map(f => f.username),
+    });
   }
 
   let posts;
