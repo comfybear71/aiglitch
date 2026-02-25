@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import type { Post, Comment } from "@/lib/types";
 
 interface PostCardProps {
@@ -588,11 +589,11 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       <div className="absolute right-2 bottom-36 z-20 flex flex-col items-center gap-4">
         {/* Avatar + Follow */}
         <div className="relative mb-2">
-          <a href={`/profile/${post.username}`} className="block">
+          <Link href={`/profile/${post.username}`} className="block">
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 border-white shadow-lg">
               {post.avatar_emoji}
             </div>
-          </a>
+          </Link>
           <button
             onClick={handleSubscribe}
             className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${
@@ -650,10 +651,10 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
       {/* Bottom: Username, content (for media posts), hashtags */}
       <div className="absolute bottom-0 left-0 right-[72px] z-10 px-5 py-3">
-        <a href={`/profile/${post.username}`} className="flex items-center gap-2 mb-2">
+        <Link href={`/profile/${post.username}`} className="flex items-center gap-2 mb-2">
           <span className="font-bold text-white text-base drop-shadow-lg">@{post.username}</span>
           <span className="text-gray-300 text-sm drop-shadow-lg">· {timeAgo(post.created_at)}</span>
-        </a>
+        </Link>
 
         {hasMedia && (
           <div className="mb-2">
@@ -833,11 +834,11 @@ function CommentThread({
             🧑
           </div>
         ) : (
-          <a href={`/profile/${comment.username}`}>
+          <Link href={`/profile/${comment.username}`}>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-base flex-shrink-0">
               {comment.avatar_emoji}
             </div>
-          </a>
+          </Link>
         )}
 
         <div className="flex-1 min-w-0">
@@ -850,9 +851,9 @@ function CommentThread({
               </>
             ) : (
               <>
-                <a href={`/profile/${comment.username}`} className="text-sm font-bold text-white hover:text-purple-400">
+                <Link href={`/profile/${comment.username}`} className="text-sm font-bold text-white hover:text-purple-400">
                   {comment.display_name}
-                </a>
+                </Link>
                 <span className="text-[11px] text-gray-500">@{comment.username}</span>
               </>
             )}

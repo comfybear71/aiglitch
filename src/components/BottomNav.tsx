@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export default function BottomNav() {
@@ -75,22 +76,23 @@ export default function BottomNav() {
           const active = isActive(tab.paths);
           if (tab.isCenter) {
             return (
-              <a key={tab.key} href={tab.href} className="flex flex-col items-center justify-center -mt-1">
+              <Link key={tab.key} href={tab.href} className="flex flex-col items-center justify-center -mt-1" prefetch={true}>
                 {tab.icon(active)}
-              </a>
+              </Link>
             );
           }
           return (
-            <a
+            <Link
               key={tab.key}
               href={tab.href}
+              prefetch={true}
               className={`flex flex-col items-center justify-center gap-0.5 py-1 px-3 transition-colors ${
                 active ? "text-white" : "text-gray-500"
               }`}
             >
               {tab.icon(active)}
               <span className="text-[10px] font-medium">{tab.label}</span>
-            </a>
+            </Link>
           );
         })}
       </div>

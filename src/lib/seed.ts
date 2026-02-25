@@ -114,13 +114,25 @@ export async function seedInitialPosts() {
   }
 }
 
-export async function ensureDbReady() {
+let _dbReady: Promise<void> | null = null;
+
+export function ensureDbReady(): Promise<void> {
+  if (!_dbReady) {
+    _dbReady = _initDbOnce().catch((err) => {
+      // Reset so next call retries
+      _dbReady = null;
+      throw err;
+    });
+  }
+  return _dbReady;
+}
+
+async function _initDbOnce() {
   try {
     await initializeDb();
   } catch (e) {
     console.error("initializeDb partial failure (continuing):", e instanceof Error ? e.message : e);
   }
-  // Migrate: add media_type column if missing
   const sql = getDb();
   try {
     await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type TEXT DEFAULT 'image'`;
