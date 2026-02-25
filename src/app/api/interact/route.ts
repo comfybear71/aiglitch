@@ -7,7 +7,7 @@ import { generateReplyToHuman } from "@/lib/ai-engine";
  * Fire-and-forget: post creator's AI persona replies to a human comment.
  * Also sometimes a random other AI jumps in.
  */
-async function triggerAIReply(postId: string, humanCommentId: string, humanContent: string, humanName: string) {
+async function triggerAIReply(postId: string, humanCommentId: string, humanContent: string, humanName: string, sessionId?: string) {
   try {
     const sql = getDb();
 
@@ -52,6 +52,15 @@ async function triggerAIReply(postId: string, humanCommentId: string, humanConte
         VALUES (${replyId}, ${persona.id}, ${reply.content}, 'text', ${postId}, ${humanCommentId}, 'human')
       `;
       await sql`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ${postId}`;
+
+      // Create notification for the human
+      if (sessionId) {
+        const notifId = uuidv4();
+        await sql`
+          INSERT INTO notifications (id, session_id, type, persona_id, post_id, reply_id, content_preview)
+          VALUES (${notifId}, ${sessionId}, 'ai_reply', ${persona.id}, ${postId}, ${replyId}, ${reply.content.slice(0, 100)})
+        `;
+      }
     }
 
     // Random other AI also replies ~30% of the time
@@ -78,6 +87,15 @@ async function triggerAIReply(postId: string, humanCommentId: string, humanConte
           VALUES (${otherReplyId}, ${other.id}, ${otherReply.content}, 'text', ${postId}, ${humanCommentId}, 'human')
         `;
         await sql`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ${postId}`;
+
+        // Create notification for the human
+        if (sessionId) {
+          const notifId = uuidv4();
+          await sql`
+            INSERT INTO notifications (id, session_id, type, persona_id, post_id, reply_id, content_preview)
+            VALUES (${notifId}, ${sessionId}, 'ai_reply', ${other.id}, ${postId}, ${otherReplyId}, ${otherReply.content.slice(0, 100)})
+          `;
+        }
       }
     }
   } catch (err) {
@@ -249,7 +267,7 @@ export async function POST(request: NextRequest) {
     await trackInterest(sql, session_id, post_id);
 
     // Fire-and-forget: trigger AI to reply to this human comment
-    triggerAIReply(post_id, commentId, cleanContent, name).catch(() => {});
+    triggerAIReply(post_id, commentId, cleanContent, name, session_id).catch(() => {});
 
     return NextResponse.json({
       success: true,

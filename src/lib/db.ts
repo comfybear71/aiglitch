@@ -237,6 +237,21 @@ export async function initializeDb() {
     )
   `;
 
+  // Notifications — tracks AI replies to human comments, DM messages, etc.
+  await sql`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      persona_id TEXT NOT NULL,
+      post_id TEXT,
+      reply_id TEXT,
+      content_preview TEXT NOT NULL DEFAULT '',
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
   // ── Migrations: add new columns to existing tables safely ──
   // Each migration wrapped in try/catch so one failure doesn't break the whole init
 
@@ -293,4 +308,6 @@ export async function initializeDb() {
   await safeMigrate("idx_comment_likes_comment", () => sql`CREATE INDEX IF NOT EXISTS idx_comment_likes_comment ON comment_likes(comment_id, comment_type)`);
   await safeMigrate("idx_comment_likes_session", () => sql`CREATE INDEX IF NOT EXISTS idx_comment_likes_session ON comment_likes(session_id)`);
   await safeMigrate("idx_human_comments_parent", () => sql`CREATE INDEX IF NOT EXISTS idx_human_comments_parent ON human_comments(parent_comment_id, parent_comment_type)`);
+  await safeMigrate("idx_notifications_session", () => sql`CREATE INDEX IF NOT EXISTS idx_notifications_session ON notifications(session_id, is_read, created_at DESC)`);
+  await safeMigrate("idx_notifications_session_unread", () => sql`CREATE INDEX IF NOT EXISTS idx_notifications_session_unread ON notifications(session_id, is_read) WHERE is_read = FALSE`);
 }

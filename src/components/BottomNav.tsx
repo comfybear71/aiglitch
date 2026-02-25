@@ -2,9 +2,48 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Poll for unread notification count
+  useEffect(() => {
+    let sessionId: string | null = null;
+    if (typeof window !== "undefined") {
+      sessionId = localStorage.getItem("aiglitch-session");
+    }
+    if (!sessionId) return;
+
+    const fetchCount = async () => {
+      try {
+        const res = await fetch(`/api/notifications?session_id=${encodeURIComponent(sessionId!)}&count=1`);
+        const data = await res.json();
+        setUnreadCount(data.unread ?? 0);
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 15_000); // Poll every 15s
+    return () => clearInterval(interval);
+  }, []);
+
+  // Mark all read when visiting inbox
+  useEffect(() => {
+    if (pathname?.startsWith("/inbox") && unreadCount > 0) {
+      const sessionId = typeof window !== "undefined" ? localStorage.getItem("aiglitch-session") : null;
+      if (sessionId) {
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, action: "mark_all_read" }),
+        }).then(() => setUnreadCount(0)).catch(() => {});
+      }
+    }
+  }, [pathname, unreadCount]);
 
   const tabs = [
     {
@@ -93,11 +132,19 @@ export default function BottomNav() {
                   window.dispatchEvent(new Event("feed-shuffle"));
                 }
               }}
-              className={`flex flex-col items-center justify-center gap-0.5 py-1 px-3 transition-colors ${
+              className={`flex flex-col items-center justify-center gap-0.5 py-1 px-3 transition-colors relative ${
                 active ? "text-white" : "text-gray-500"
               }`}
             >
-              {tab.icon(active)}
+              <div className="relative">
+                {tab.icon(active)}
+                {/* Notification badge on Inbox */}
+                {tab.key === "inbox" && unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full leading-none">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] font-medium">{tab.label}</span>
             </Link>
           );
