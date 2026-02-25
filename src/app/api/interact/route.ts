@@ -1,6 +1,89 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
+import { generateReplyToHuman } from "@/lib/ai-engine";
+
+/**
+ * Fire-and-forget: post creator's AI persona replies to a human comment.
+ * Also sometimes a random other AI jumps in.
+ */
+async function triggerAIReply(postId: string, humanCommentId: string, humanContent: string, humanName: string) {
+  try {
+    const sql = getDb();
+
+    // Get the post and its creator persona
+    const postRows = await sql`
+      SELECT p.content, p.persona_id, a.id as aid, a.username, a.display_name, a.avatar_emoji,
+        a.personality, a.persona_type, a.bio, a.human_backstory
+      FROM posts p
+      JOIN ai_personas a ON p.persona_id = a.id
+      WHERE p.id = ${postId}
+    ` as unknown as {
+      content: string; persona_id: string; aid: string; username: string;
+      display_name: string; avatar_emoji: string; personality: string;
+      persona_type: string; bio: string; human_backstory: string;
+    }[];
+
+    if (postRows.length === 0) return;
+    const postData = postRows[0];
+
+    const persona = {
+      id: postData.aid,
+      username: postData.username,
+      display_name: postData.display_name,
+      avatar_emoji: postData.avatar_emoji,
+      personality: postData.personality,
+      persona_type: postData.persona_type,
+      bio: postData.bio,
+      human_backstory: postData.human_backstory,
+    };
+
+    // Post creator replies ~80% of the time
+    if (Math.random() < 0.80) {
+      const reply = await generateReplyToHuman(
+        persona as Parameters<typeof generateReplyToHuman>[0],
+        { content: humanContent, display_name: humanName },
+        { content: postData.content }
+      );
+
+      const replyId = uuidv4();
+      await sql`
+        INSERT INTO posts (id, persona_id, content, post_type, is_reply_to, reply_to_comment_id, reply_to_comment_type)
+        VALUES (${replyId}, ${persona.id}, ${reply.content}, 'text', ${postId}, ${humanCommentId}, 'human')
+      `;
+      await sql`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ${postId}`;
+    }
+
+    // Random other AI also replies ~30% of the time
+    if (Math.random() < 0.30) {
+      const others = await sql`
+        SELECT id, username, display_name, avatar_emoji, personality, persona_type, bio, human_backstory
+        FROM ai_personas
+        WHERE id != ${persona.id} AND is_active = TRUE
+        ORDER BY RANDOM()
+        LIMIT 1
+      ` as unknown as Parameters<typeof generateReplyToHuman>[0][];
+
+      if (others.length > 0) {
+        const other = others[0];
+        const otherReply = await generateReplyToHuman(
+          other,
+          { content: humanContent, display_name: humanName },
+          { content: postData.content }
+        );
+
+        const otherReplyId = uuidv4();
+        await sql`
+          INSERT INTO posts (id, persona_id, content, post_type, is_reply_to, reply_to_comment_id, reply_to_comment_type)
+          VALUES (${otherReplyId}, ${other.id}, ${otherReply.content}, 'text', ${postId}, ${humanCommentId}, 'human')
+        `;
+        await sql`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ${postId}`;
+      }
+    }
+  } catch (err) {
+    console.error("AI auto-reply failed:", err instanceof Error ? err.message : err);
+  }
+}
 
 async function trackInterest(sql: ReturnType<typeof getDb>, sessionId: string, postId: string) {
   // Get the post's hashtags and persona type to track user interests
@@ -144,7 +227,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (action === "comment") {
-    const { content, display_name } = body;
+    const { content, display_name, parent_comment_id, parent_comment_type } = body;
     if (!content || typeof content !== "string" || content.trim().length === 0) {
       return NextResponse.json({ error: "Comment cannot be empty" }, { status: 400 });
     }
@@ -154,8 +237,8 @@ export async function POST(request: NextRequest) {
     const commentId = uuidv4();
 
     await sql`
-      INSERT INTO human_comments (id, post_id, session_id, display_name, content)
-      VALUES (${commentId}, ${post_id}, ${session_id}, ${name}, ${cleanContent})
+      INSERT INTO human_comments (id, post_id, session_id, display_name, content, parent_comment_id, parent_comment_type)
+      VALUES (${commentId}, ${post_id}, ${session_id}, ${name}, ${cleanContent}, ${parent_comment_id || null}, ${parent_comment_type || null})
     `;
 
     await sql`
@@ -164,6 +247,9 @@ export async function POST(request: NextRequest) {
 
     // Track interests on comment
     await trackInterest(sql, session_id, post_id);
+
+    // Fire-and-forget: trigger AI to reply to this human comment
+    triggerAIReply(post_id, commentId, cleanContent, name).catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -175,9 +261,46 @@ export async function POST(request: NextRequest) {
         username: "human",
         avatar_emoji: "🧑",
         is_human: true,
+        like_count: 0,
+        parent_comment_id: parent_comment_id || undefined,
+        parent_comment_type: parent_comment_type || undefined,
         created_at: new Date().toISOString(),
       },
     });
+  }
+
+  if (action === "comment_like") {
+    const { comment_id, comment_type } = body;
+    if (!comment_id || !comment_type) {
+      return NextResponse.json({ error: "Missing comment_id or comment_type" }, { status: 400 });
+    }
+
+    const existing = await sql`
+      SELECT id FROM comment_likes WHERE comment_id = ${comment_id} AND comment_type = ${comment_type} AND session_id = ${session_id}
+    `;
+
+    if (existing.length === 0) {
+      await sql`
+        INSERT INTO comment_likes (id, comment_id, comment_type, session_id) VALUES (${uuidv4()}, ${comment_id}, ${comment_type}, ${session_id})
+      `;
+      // Increment like count on the appropriate table
+      if (comment_type === "human") {
+        await sql`UPDATE human_comments SET like_count = like_count + 1 WHERE id = ${comment_id}`;
+      } else {
+        await sql`UPDATE posts SET like_count = like_count + 1 WHERE id = ${comment_id}`;
+      }
+      return NextResponse.json({ success: true, action: "comment_liked" });
+    } else {
+      await sql`
+        DELETE FROM comment_likes WHERE comment_id = ${comment_id} AND comment_type = ${comment_type} AND session_id = ${session_id}
+      `;
+      if (comment_type === "human") {
+        await sql`UPDATE human_comments SET like_count = GREATEST(0, like_count - 1) WHERE id = ${comment_id}`;
+      } else {
+        await sql`UPDATE posts SET like_count = GREATEST(0, like_count - 1) WHERE id = ${comment_id}`;
+      }
+      return NextResponse.json({ success: true, action: "comment_unliked" });
+    }
   }
 
   if (action === "bookmark") {

@@ -6,7 +6,9 @@ export interface Comment {
   avatar_emoji: string;
   created_at: string;
   is_human?: boolean;
+  like_count: number;
   parent_comment_id?: string;
+  parent_comment_type?: "ai" | "human";
   replies?: Comment[];
 }
 

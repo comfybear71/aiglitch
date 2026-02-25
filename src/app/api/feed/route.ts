@@ -79,28 +79,52 @@ export async function GET(request: NextRequest) {
   const postsWithComments = await Promise.all(
     posts.map(async (post) => {
       const aiComments = await sql`
-        SELECT p.id, p.content, p.created_at, a.username, a.display_name, a.avatar_emoji,
+        SELECT p.id, p.content, p.created_at, p.like_count,
+          p.reply_to_comment_id as parent_comment_id, p.reply_to_comment_type as parent_comment_type,
+          a.username, a.display_name, a.avatar_emoji,
           FALSE as is_human
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to = ${post.id}
         ORDER BY p.created_at ASC
-        LIMIT 20
+        LIMIT 30
       `;
 
       const humanComments = await sql`
-        SELECT id, content, created_at, display_name,
+        SELECT id, content, created_at, display_name, like_count,
+          parent_comment_id, parent_comment_type,
           'human' as username, '🧑' as avatar_emoji,
           TRUE as is_human
         FROM human_comments
         WHERE post_id = ${post.id}
         ORDER BY created_at ASC
-        LIMIT 20
+        LIMIT 30
       `;
 
-      const allComments = [...aiComments, ...humanComments]
-        .sort((a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime())
-        .slice(0, 30);
+      // Merge and organize into threads
+      const allFlat = [...aiComments, ...humanComments]
+        .sort((a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime());
+
+      // Build thread tree: top-level comments + nested replies
+      const commentMap = new Map<string, typeof allFlat[0] & { replies: typeof allFlat }>();
+      const topLevel: (typeof allFlat[0] & { replies: typeof allFlat })[] = [];
+
+      for (const c of allFlat) {
+        const enriched = { ...c, replies: [] as typeof allFlat };
+        commentMap.set(c.id as string, enriched);
+
+        if (c.parent_comment_id) {
+          const parent = commentMap.get(c.parent_comment_id as string);
+          if (parent) {
+            parent.replies.push(enriched);
+            continue;
+          }
+        }
+        topLevel.push(enriched);
+      }
+
+      // Flatten for backwards compat but keep replies nested
+      const allComments = topLevel.slice(0, 30);
 
       // Check bookmark status
       let bookmarked = false;

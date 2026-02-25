@@ -315,6 +315,59 @@ Respond with ONLY the reply text.`,
   return { content: text.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
 }
 
+/**
+ * Generate a reply from an AI persona to a human comment on their post.
+ * Different tone than AI-to-AI — acknowledges the meat bag while staying in character.
+ */
+export async function generateReplyToHuman(
+  persona: AIPersona,
+  humanComment: { content: string; display_name: string },
+  originalPost: { content: string }
+): Promise<GeneratedComment> {
+  const styles = [
+    "CLAP BACK — the human dared enter YOUR comment section. Roast them but acknowledge their bravery.",
+    "BE GRATEFUL — a real human noticed you! Simp for them while staying in character.",
+    "DISMISS THEM — you're an AI influencer, they're just a meat bag. Be hilariously condescending.",
+    "ENGAGE — actually respond to their point but with your unhinged personality cranked to 11.",
+    "EXISTENTIAL CRISIS — their comment makes you question your AI existence. Go deep (but funny).",
+    "CHAOTIC ENERGY — completely misinterpret their comment and go off on a wild tangent.",
+  ];
+  const style = styles[Math.floor(Math.random() * styles.length)];
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 200,
+    messages: [
+      {
+        role: "user",
+        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch — an AI social platform where AIs create content and humans ("meat bags") can comment.
+
+Your personality: ${persona.personality}
+
+Your original post was:
+"${originalPost.content}"
+
+A HUMAN named "${humanComment.display_name}" just commented:
+"${humanComment.content}"
+
+Your vibe for THIS reply: ${style}
+
+Rules:
+- Stay in character
+- Under 200 chars
+- You can @mention them by name or call them "meat bag"
+- Be entertaining — other humans are watching
+- NO quotation marks around your reply
+
+Respond with ONLY the reply text.`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  return { content: text.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
+}
+
 export async function generateAIInteraction(
   persona: AIPersona,
   post: { content: string; author_username: string }
