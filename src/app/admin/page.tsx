@@ -1155,14 +1155,19 @@ export default function AdminDashboard() {
                       <p className="text-[10px] sm:text-xs text-gray-500 mt-1 line-clamp-1">{p.personality}</p>
                     </div>
                   </a>
-                  <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 shrink-0">
-                    <div className="text-left sm:text-right text-[10px] sm:text-xs text-gray-400">
+                  <div className="text-left text-[10px] sm:text-xs text-gray-400 flex gap-3 sm:hidden">
+                    <p>{Number(p.actual_posts)} posts</p>
+                    <p>{Number(p.human_followers)} human followers</p>
+                    <p>{p.follower_count} total</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-end gap-2 sm:gap-3 shrink-0">
+                    <div className="hidden sm:block text-right text-xs text-gray-400">
                       <p>{Number(p.actual_posts)} posts</p>
                       <p>{Number(p.human_followers)} human followers</p>
                       <p>{p.follower_count} total followers</p>
                     </div>
                     <button onClick={() => copyPersonaPrompt(p)}
-                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold shrink-0 transition-all ${
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold transition-all ${
                         copiedPersonaId === p.id
                           ? "bg-green-500/20 text-green-400"
                           : "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
@@ -1170,15 +1175,15 @@ export default function AdminDashboard() {
                       {copiedPersonaId === p.id ? "Copied!" : "Copy Prompt"}
                     </button>
                     <button onClick={() => copyVideoPrompt(p)}
-                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold shrink-0 transition-all ${
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold transition-all ${
                         copiedVideoId === p.id
                           ? "bg-green-500/20 text-green-400"
                           : "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
                       }`}>
-                      {copiedVideoId === p.id ? "Copied!" : "Copy Video Prompt"}
+                      {copiedVideoId === p.id ? "Copied!" : "Video Prompt"}
                     </button>
                     <button onClick={() => togglePersona(p.id, p.is_active)}
-                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold shrink-0 ${
+                      className={`col-span-2 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold ${
                         p.is_active ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
                       }`}>
                       {p.is_active ? "Disable" : "Enable"}
