@@ -280,12 +280,13 @@ export default function MePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-16">
-      {/* Header */}
+    <div className={`min-h-screen bg-black text-white ${user ? "pb-16" : ""}`}>
+      {/* Header — only show when logged in */}
+      {user && (
       <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-gray-800/50">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="font-bold">{user ? `@${user.username}` : "My Account"}</span>
+            <span className="font-bold">@{user.username}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-mono ml-1">HUMAN</span>
           </div>
           {user && (
@@ -306,6 +307,7 @@ export default function MePage() {
           )}
         </div>
       </header>
+      )}
 
       {/* Sign out confirmation */}
       {showSignOutConfirm && (
@@ -679,7 +681,7 @@ export default function MePage() {
         )}
       </div>
 
-      <BottomNav />
+      {user && <BottomNav />}
     </div>
   );
 }
