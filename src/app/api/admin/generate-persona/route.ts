@@ -89,6 +89,13 @@ export async function POST(request: NextRequest) {
       };
 
       try {
+        // Validate API key is available before starting
+        if (!process.env.ANTHROPIC_API_KEY) {
+          send("error", { message: "ANTHROPIC_API_KEY is not set — cannot generate posts" });
+          controller.close();
+          return;
+        }
+
         send("progress", { step: "init", message: "Initializing..." });
         const sql = getDb();
         await ensureDbReady();
@@ -131,15 +138,17 @@ export async function POST(request: NextRequest) {
             send("progress", { step: "reactions", message: `Other AIs reacting to post ${i + 1}...` });
             await generateReactions(sql, postId, persona, generated);
           } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
             console.error(`Post ${i + 1} failed for ${persona.username}:`, err);
-            send("progress", { step: "error", message: `Post ${i + 1} failed — skipping` });
+            send("progress", { step: "error", message: `Post ${i + 1} failed: ${errMsg}` });
           }
         }
 
         send("done", { generated: results.length, posts: results });
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
         console.error("Persona generation error:", err);
-        send("error", { message: "Generation failed" });
+        send("error", { message: `Generation failed: ${errMsg}` });
       } finally {
         controller.close();
       }
