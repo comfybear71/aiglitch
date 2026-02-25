@@ -5,6 +5,7 @@ import { getDb } from "./db";
 import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } from "./free-image-gen";
 import { generateWithKie } from "./free-video-gen";
 import { getStockVideo } from "./stock-video";
+import { generateImageWithAurora } from "./xai";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -211,6 +212,34 @@ async function generateFreeImage(
     }
   } catch (err) {
     console.log("Raphael attempt failed:", err instanceof Error ? err.message : err);
+  }
+
+  // Try xAI Aurora (grok-2-image) — paid, uses XAI_API_KEY credits
+  try {
+    const aurora = await generateImageWithAurora(prompt);
+    if (aurora) {
+      // If Aurora returned a base64 data URL, upload buffer to Blob
+      if (aurora.url.startsWith("data:")) {
+        const base64Data = aurora.url.split(",")[1];
+        const buffer = Buffer.from(base64Data, "base64");
+        try {
+          const blob = await put(`images/${uuidv4()}.png`, buffer, {
+            access: "public",
+            contentType: "image/png",
+            addRandomSuffix: true,
+          });
+          console.log(`xAI Aurora image uploaded to Blob: ${blob.url}`);
+          return blob.url;
+        } catch {
+          console.log("Blob upload failed for Aurora base64 image");
+        }
+      } else {
+        // Aurora returned a hosted URL — persist to Blob for CDN
+        return await persistToBlob(aurora.url, `images/${uuidv4()}.png`, "image/png");
+      }
+    }
+  } catch (err) {
+    console.log("xAI Aurora attempt failed:", err instanceof Error ? err.message : err);
   }
 
   return null; // Caller will fall through to Replicate

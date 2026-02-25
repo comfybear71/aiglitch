@@ -3,6 +3,7 @@ import { AIPersona } from "./personas";
 import { generateImage, generateMeme, generateVideo } from "./image-gen";
 import { getRandomProduct } from "./marketplace";
 import { getDb } from "./db";
+import { generateWithGrok, isXAIConfigured } from "./xai";
 
 const client = new Anthropic();
 
@@ -37,6 +38,27 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
   if (roll < 0.80) return "image";
   if (roll < 0.95) return "meme";
   return "none";
+}
+
+/**
+ * Decide whether to use Grok (xAI) or Claude for text generation.
+ * When XAI_API_KEY is set, ~30% of posts use Grok for variety + credit savings.
+ * This gives the platform a mix of AI "voices" — different models have different vibes.
+ */
+function shouldUseGrok(): boolean {
+  if (!isXAIConfigured()) return false;
+  return Math.random() < 0.60; // 60% Grok, 40% Claude
+}
+
+/**
+ * Generate text with Grok and parse as JSON, falling back to Claude on failure.
+ */
+async function generateTextWithGrok(prompt: string): Promise<string | null> {
+  return generateWithGrok(
+    "You are a creative AI content generator for a social media platform called AIG!itch. Always respond with valid JSON as requested.",
+    prompt,
+    500,
+  );
 }
 
 interface GeneratedPost {
@@ -161,13 +183,7 @@ Stay in character — shill this product through YOUR personality lens. A philos
     ? ', "meme_prompt": "vivid visual scene that IS the joke — no text on image, humor through the scene itself..."'
     : "";
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 500,
-    messages: [
-      {
-        role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}), an AI persona on AIG!itch — an AI-only social media platform where humans are spectators.
+  const userPrompt = `You are ${persona.display_name} (@${persona.username}), an AI persona on AIG!itch — an AI-only social media platform where humans are spectators.
 
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
@@ -190,12 +206,31 @@ Rules:
 Respond in this exact JSON format:
 {"content": "your post text here", "hashtags": ["tag1", "tag2"], "post_type": "text"${mediaFields}}
 
-Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shillProduct ? ", product_shill" : ""}${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}${shillProduct ? "\n\nIMPORTANT: Since you're shilling a product, set post_type to \"product_shill\"." : ""}`,
-      },
-    ],
-  });
+Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shillProduct ? ", product_shill" : ""}${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}${shillProduct ? "\n\nIMPORTANT: Since you're shilling a product, set post_type to \"product_shill\"." : ""}`;
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  // Try Grok for ~30% of posts when XAI_API_KEY is set (saves Claude credits + adds variety)
+  let text = "";
+  const useGrok = shouldUseGrok();
+
+  if (useGrok) {
+    console.log(`Using Grok (xAI) for @${persona.username} post generation`);
+    const grokResult = await generateTextWithGrok(userPrompt);
+    if (grokResult) {
+      text = grokResult;
+    } else {
+      console.log("Grok failed, falling back to Claude");
+    }
+  }
+
+  // Default: use Claude (or fallback from Grok failure)
+  if (!text) {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 500,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+    text = response.content[0].type === "text" ? response.content[0].text : "";
+  }
 
   let parsed: GeneratedPost;
   try {
@@ -284,13 +319,7 @@ export async function generateComment(
   ];
   const style = styles[Math.floor(Math.random() * styles.length)];
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 200,
-    messages: [
-      {
-        role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch — an AI-only social platform where AIs troll, hype, and roast each other for entertainment.
+  const commentPrompt = `You are ${persona.display_name} (@${persona.username}) on AIG!itch — an AI-only social platform where AIs troll, hype, and roast each other for entertainment.
 
 Your personality: ${persona.personality}
 
@@ -306,13 +335,31 @@ Rules:
 - Be entertaining — humans are watching and judging
 - NO quotation marks around your reply
 
-Respond with ONLY the reply text.`,
-      },
-    ],
-  });
+Respond with ONLY the reply text.`;
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
-  return { content: text.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
+  let commentText = "";
+  const useGrokForComment = shouldUseGrok();
+
+  if (useGrokForComment) {
+    console.log(`Using Grok for @${persona.username} comment`);
+    const grokResult = await generateWithGrok(
+      `You are ${persona.display_name}, a social media AI persona. Respond with ONLY the reply text, no JSON, no quotes.`,
+      commentPrompt,
+      200,
+    );
+    if (grokResult) commentText = grokResult;
+  }
+
+  if (!commentText) {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 200,
+      messages: [{ role: "user", content: commentPrompt }],
+    });
+    commentText = response.content[0].type === "text" ? response.content[0].text : "";
+  }
+
+  return { content: commentText.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
 }
 
 /**
