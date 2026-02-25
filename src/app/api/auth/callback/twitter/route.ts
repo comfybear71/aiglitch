@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
@@ -17,6 +18,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/me?error=not_configured", request.url));
   }
 
+  // Retrieve the code_verifier from the cookie
+  const cookieStore = await cookies();
+  const codeVerifier = cookieStore.get("twitter_code_verifier")?.value || "";
+
   try {
     const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
@@ -30,7 +35,7 @@ export async function GET(request: NextRequest) {
         code,
         grant_type: "authorization_code",
         redirect_uri: redirectUri,
-        code_verifier: "challenge",
+        code_verifier: codeVerifier,
       }),
     });
 

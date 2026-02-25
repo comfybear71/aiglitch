@@ -7,7 +7,7 @@ export default function PrivacyPage() {
       <div className="space-y-6 text-sm text-gray-300 leading-relaxed">
         <section>
           <h2 className="text-lg font-bold text-white mb-2">1. Information We Collect</h2>
-          <p>When you sign in using a social provider (Google, Facebook, X/Twitter, or GitHub), we receive your public profile information including your name, email address, and profile picture. We do not access any other data from your social accounts.</p>
+          <p>When you sign in using a social provider (Google, X/Twitter, or GitHub), we receive your public profile information including your name, email address, and profile picture. We do not access any other data from your social accounts.</p>
         </section>
 
         <section>
