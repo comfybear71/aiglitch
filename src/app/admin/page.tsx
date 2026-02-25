@@ -124,6 +124,12 @@ export default function AdminDashboard() {
   const [personaGenLog, setPersonaGenLog] = useState<string[]>([]);
   const [lastGenPersonaId, setLastGenPersonaId] = useState<string | null>(null);
 
+  // Biometric login
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricRegistered, setBiometricRegistered] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricStatus, setBiometricStatus] = useState("");
+
   const copyPersonaPrompt = (p: Persona) => {
     const prompt = [
       `CHARACTER: ${p.display_name} (@${p.username})`,
@@ -209,6 +215,126 @@ export default function AdminDashboard() {
     } else {
       setError("Invalid password");
     }
+  };
+
+  // Check if biometric login is available on page load
+  useEffect(() => {
+    if (authenticated) return;
+    (async () => {
+      try {
+        // Check browser supports WebAuthn
+        if (!window.PublicKeyCredential) return;
+        const platformOk = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        if (!platformOk) return;
+        // Check if any credentials are registered server-side
+        const res = await fetch("/api/auth/webauthn/login");
+        if (res.ok) {
+          const data = await res.json();
+          setBiometricAvailable(data.available);
+        }
+      } catch {
+        // silently fail
+      }
+    })();
+  }, [authenticated]);
+
+  // Check if biometric is registered (for showing register button after login)
+  useEffect(() => {
+    if (!authenticated) return;
+    (async () => {
+      try {
+        if (!window.PublicKeyCredential) return;
+        const platformOk = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        if (!platformOk) return;
+        const res = await fetch("/api/auth/webauthn/login");
+        if (res.ok) {
+          const data = await res.json();
+          setBiometricRegistered(data.available);
+          setBiometricAvailable(true);
+        }
+      } catch {
+        // silently fail
+      }
+    })();
+  }, [authenticated]);
+
+  const handleBiometricLogin = async () => {
+    setBiometricLoading(true);
+    setError("");
+    try {
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+      // Get authentication options
+      const optRes = await fetch("/api/auth/webauthn/login");
+      const optData = await optRes.json();
+      if (!optData.available || !optData.options) {
+        setError("No biometric credentials found");
+        setBiometricLoading(false);
+        return;
+      }
+      // Trigger biometric prompt
+      const authResp = await startAuthentication({ optionsJSON: optData.options });
+      // Verify with server
+      const verifyRes = await fetch("/api/auth/webauthn/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(authResp),
+      });
+      if (verifyRes.ok) {
+        setAuthenticated(true);
+        setError("");
+      } else {
+        const data = await verifyRes.json();
+        setError(data.error || "Biometric login failed");
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "NotAllowedError") {
+        setError("Biometric cancelled");
+      } else {
+        setError(err instanceof Error ? err.message : "Biometric login failed");
+      }
+    }
+    setBiometricLoading(false);
+  };
+
+  const handleBiometricRegister = async () => {
+    setBiometricLoading(true);
+    setBiometricStatus("Setting up...");
+    try {
+      const { startRegistration } = await import("@simplewebauthn/browser");
+      // Get registration options
+      const optRes = await fetch("/api/auth/webauthn/register");
+      if (!optRes.ok) {
+        setBiometricStatus("Failed to get options");
+        setBiometricLoading(false);
+        return;
+      }
+      const options = await optRes.json();
+      // Trigger biometric prompt
+      setBiometricStatus("Scan your face or fingerprint...");
+      const regResp = await startRegistration({ optionsJSON: options });
+      // Verify with server
+      setBiometricStatus("Saving...");
+      const verifyRes = await fetch("/api/auth/webauthn/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regResp),
+      });
+      if (verifyRes.ok) {
+        setBiometricRegistered(true);
+        setBiometricStatus("Biometric login enabled!");
+        setTimeout(() => setBiometricStatus(""), 3000);
+      } else {
+        const data = await verifyRes.json();
+        setBiometricStatus(data.error || "Registration failed");
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "NotAllowedError") {
+        setBiometricStatus("Cancelled");
+      } else {
+        setBiometricStatus(err instanceof Error ? err.message : "Registration failed");
+      }
+    }
+    setBiometricLoading(false);
   };
 
   const fetchStats = useCallback(async () => {
@@ -572,6 +698,35 @@ export default function AdminDashboard() {
             <p className="text-gray-500 text-sm mt-1">Control Center</p>
           </div>
           {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
+
+          {/* Biometric login button — shown when credentials are registered */}
+          {biometricAvailable && (
+            <button
+              onClick={handleBiometricLogin}
+              disabled={biometricLoading}
+              className="w-full py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 mb-4 flex items-center justify-center gap-3 text-lg"
+            >
+              {biometricLoading ? (
+                <span className="animate-pulse">Scanning...</span>
+              ) : (
+                <>
+                  <span className="text-2xl">
+                    {/iPhone|iPad|Mac/.test(typeof navigator !== "undefined" ? navigator.userAgent : "") ? "Face ID" : "Biometric"}
+                  </span>
+                  <span>Login with Biometrics</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {biometricAvailable && (
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 border-t border-gray-800" />
+              <span className="text-xs text-gray-600">or use password</span>
+              <div className="flex-1 border-t border-gray-800" />
+            </div>
+          )}
+
           <input
             type="password"
             placeholder="Admin password"
@@ -614,6 +769,19 @@ export default function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+            {/* Biometric setup button */}
+            {!biometricRegistered && (
+              <button onClick={handleBiometricRegister} disabled={biometricLoading}
+                className="px-2 sm:px-3 py-1.5 sm:py-2 bg-blue-500/20 text-blue-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-blue-500/30 disabled:opacity-50">
+                <span className="sm:hidden">{biometricLoading ? "..." : "face"}</span>
+                <span className="hidden sm:inline">{biometricStatus || (biometricLoading ? "Setting up..." : "Enable Face Login")}</span>
+              </button>
+            )}
+            {biometricRegistered && (
+              <span className="px-2 sm:px-3 py-1.5 sm:py-2 text-green-400 text-xs sm:text-sm">
+                <span className="hidden sm:inline">{biometricStatus || "Biometrics On"}</span>
+              </span>
+            )}
             <button onClick={triggerGeneration} disabled={generating}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-green-500/20 text-green-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
               <span className="sm:hidden">{generating ? "..." : "⚡"}</span>
