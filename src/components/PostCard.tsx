@@ -620,6 +620,12 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
             className="max-w-full max-h-full w-auto h-auto object-contain"
             onError={() => setMediaFailed(true)}
           />
+          {/* AIG!itch subliminal logo watermark on all images */}
+          <div className="absolute bottom-20 right-2 z-20 opacity-[0.15] pointer-events-none select-none">
+            <span className="text-white text-[10px] font-mono font-bold tracking-tight" style={{ textShadow: "0 0 2px rgba(0,0,0,0.5)" }}>
+              AIG<span className="text-yellow-400">!</span>itch
+            </span>
+          </div>
         </div>
       ) : (
         <div className={`absolute inset-0 bg-gradient-to-br ${TEXT_GRADIENTS[gradientIdx]}`}>
@@ -738,40 +744,69 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         )}
       </div>
 
-      {/* Bottom: Username, content (for media posts), hashtags */}
+      {/* Bottom: Username, content (for media posts), hashtags — COLLAPSIBLE */}
       <div className="absolute bottom-0 left-0 right-[72px] z-10 px-5 py-3">
-        <Link href={`/profile/${post.username}`} className="flex items-center gap-2 mb-2">
-          <span className="font-bold text-white text-base drop-shadow-lg">@{post.username}</span>
-          <span className="text-gray-300 text-sm drop-shadow-lg">· {timeAgo(post.created_at)}</span>
-        </Link>
-
-        {hasMedia && (
-          <div className="mb-2">
-            <p className={`text-white text-sm leading-relaxed drop-shadow-lg ${textExpanded ? "" : "line-clamp-2"}`}>{post.content}</p>
-            {post.content.length > 80 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setTextExpanded(!textExpanded); }}
-                className="text-gray-300 text-xs font-semibold hover:text-white transition-colors"
-              >
-                {textExpanded ? "...less" : "...more"}
-              </button>
-            )}
-          </div>
-        )}
-
-        {hashtags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {hashtags.map((tag) => (
-              <span key={tag} className="text-blue-300 text-sm font-semibold drop-shadow-lg">#{tag}</span>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-gray-400 font-mono drop-shadow-lg">
-            🤖 {post.ai_like_count.toLocaleString()} AI likes · AI-generated
-          </span>
+        <div className="flex items-center gap-2 mb-1">
+          <Link href={`/profile/${post.username}`} className="flex items-center gap-2">
+            <span className="font-bold text-white text-base drop-shadow-lg">@{post.username}</span>
+          </Link>
+          <span className="text-gray-400 text-xs drop-shadow-lg">· {timeAgo(post.created_at)}</span>
+          {post.media_source && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-gray-300 font-mono backdrop-blur-sm drop-shadow-lg">
+              via {post.media_source}
+            </span>
+          )}
         </div>
+
+        {/* Collapsible content area — tap to expand */}
+        {textExpanded ? (
+          <div className="mb-2 animate-in fade-in">
+            {hasMedia && (
+              <p className="text-white text-sm leading-relaxed drop-shadow-lg mb-1.5">{post.content}</p>
+            )}
+            {hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {hashtags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: tag })); }}
+                    className="text-blue-300 text-sm font-semibold drop-shadow-lg hover:text-blue-200 active:scale-95 transition-all"
+                  >
+                    #{tag}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-gray-400 font-mono drop-shadow-lg">
+                🤖 {post.ai_like_count.toLocaleString()} AI likes · AI-generated
+              </span>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); setTextExpanded(false); }}
+              className="text-gray-400 text-xs font-semibold mt-1 hover:text-white transition-colors"
+            >
+              show less
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); setTextExpanded(true); }}
+            className="block w-full text-left"
+          >
+            {hasMedia && post.content && (
+              <p className="text-white/80 text-xs leading-snug drop-shadow-lg line-clamp-1 mb-0.5">{post.content}</p>
+            )}
+            {hashtags.length > 0 && (
+              <span className="text-blue-300/70 text-xs drop-shadow-lg">
+                {hashtags.slice(0, 2).map(t => `#${t}`).join(" ")}{hashtags.length > 2 ? ` +${hashtags.length - 2}` : ""}
+              </span>
+            )}
+            {(hasMedia && post.content) || hashtags.length > 0 ? (
+              <span className="text-gray-400 text-[10px] ml-1.5 font-semibold">...more</span>
+            ) : null}
+          </button>
+        )}
       </div>
 
       {/* Share Menu Slide-up */}

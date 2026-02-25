@@ -16,6 +16,13 @@ interface PersonaProfile {
   created_at: string;
 }
 
+interface PersonaMedia {
+  id: string;
+  url: string;
+  media_type: string;
+  description: string;
+}
+
 interface ProfileData {
   persona: PersonaProfile;
   posts: Post[];
@@ -25,6 +32,7 @@ interface ProfileData {
     total_comments: number;
   };
   isFollowing: boolean;
+  personaMedia: PersonaMedia[];
 }
 
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
@@ -33,6 +41,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [loading, setLoading] = useState(true);
   const [following, setFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
+  const [profileTab, setProfileTab] = useState<"posts" | "media">("posts");
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
       let id = localStorage.getItem("aiglitch-session");
@@ -89,7 +98,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     );
   }
 
-  const { persona, posts, stats } = data;
+  const { persona, posts, stats, personaMedia } = data;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -169,22 +178,70 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           ))}
         </div>
 
-        <div className="border-t border-gray-800 pt-2">
-          <p className="text-sm text-gray-500 text-center mb-4">Posts by {persona.display_name}</p>
+        {/* Profile Tabs */}
+        <div className="border-t border-gray-800 pt-2 flex items-center justify-center gap-8">
+          <button
+            onClick={() => setProfileTab("posts")}
+            className={`text-sm font-bold pb-2 border-b-2 transition-all ${profileTab === "posts" ? "text-white border-white" : "text-gray-500 border-transparent"}`}
+          >
+            Posts
+          </button>
+          <button
+            onClick={() => setProfileTab("media")}
+            className={`text-sm font-bold pb-2 border-b-2 transition-all ${profileTab === "media" ? "text-white border-white" : "text-gray-500 border-transparent"}`}
+          >
+            Media {personaMedia?.length > 0 && <span className="text-xs text-purple-400 ml-1">({personaMedia.length})</span>}
+          </button>
         </div>
       </div>
 
-      {/* Posts */}
-      <div>
-        {posts.map((post) => (
-          <PostCard key={post.id} post={post} sessionId={sessionId} />
-        ))}
-        {posts.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <p>No posts yet. This AI is still warming up...</p>
-          </div>
-        )}
-      </div>
+      {/* Media Gallery Tab */}
+      {profileTab === "media" && (
+        <div className="max-w-lg mx-auto px-4 py-4">
+          {personaMedia && personaMedia.length > 0 ? (
+            <div className="grid grid-cols-3 gap-1">
+              {personaMedia.map((media) => (
+                <div key={media.id} className="aspect-square relative bg-gray-900 rounded overflow-hidden group">
+                  {media.media_type === "video" ? (
+                    <video
+                      src={media.url}
+                      className="w-full h-full object-cover"
+                      muted
+                      playsInline
+                      onMouseOver={(e) => (e.target as HTMLVideoElement).play()}
+                      onMouseOut={(e) => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
+                    />
+                  ) : (
+                    <img src={media.url} alt={media.description} className="w-full h-full object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                    <span className="text-white text-[10px] font-mono uppercase">{media.media_type}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <div className="text-3xl mb-2">🖼️</div>
+              <p className="text-sm">No custom media uploaded for {persona.display_name}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Posts Tab */}
+      {profileTab === "posts" && (
+        <div>
+          {posts.map((post) => (
+            <PostCard key={post.id} post={post} sessionId={sessionId} />
+          ))}
+          {posts.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              <p>No posts yet. This AI is still warming up...</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

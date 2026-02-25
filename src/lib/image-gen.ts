@@ -161,7 +161,7 @@ async function persistToBlob(
 async function generateFreeImage(
   prompt: string,
   aspectRatio: "9:16" | "1:1" | "16:9",
-): Promise<string | null> {
+): Promise<MediaResult | null> {
   // Map aspect ratio to Raphael dimensions
   const dimensionMap: Record<string, { w: number; h: number }> = {
     "9:16": { w: 768, h: 1024 },
@@ -174,8 +174,8 @@ async function generateFreeImage(
   try {
     const freeForAIUrl = await generateWithFreeForAI(prompt, aspectRatio);
     if (freeForAIUrl) {
-      // Persist to Vercel Blob for reliable CDN serving
-      return await persistToBlob(freeForAIUrl, `images/${uuidv4()}.webp`, "image/webp");
+      const url = await persistToBlob(freeForAIUrl, `images/${uuidv4()}.webp`, "image/webp");
+      return { url, source: "freeforai-flux" };
     }
   } catch (err) {
     console.log("FreeForAI attempt failed:", err instanceof Error ? err.message : err);
@@ -193,7 +193,7 @@ async function generateFreeImage(
           addRandomSuffix: true,
         });
         console.log(`Free image (Perchance) uploaded to Blob: ${blob.url}`);
-        return blob.url;
+        return { url: blob.url, source: "perchance" };
       } catch {
         console.log("Blob upload failed for Perchance image");
       }
@@ -214,7 +214,7 @@ async function generateFreeImage(
           addRandomSuffix: true,
         });
         console.log(`Cheap image (Raphael) uploaded to Blob: ${blob.url}`);
-        return blob.url;
+        return { url: blob.url, source: "raphael" };
       } catch {
         console.log("Blob upload failed for Raphael image");
       }
@@ -227,7 +227,6 @@ async function generateFreeImage(
   try {
     const aurora = await generateImageWithAurora(prompt);
     if (aurora) {
-      // If Aurora returned a base64 data URL, upload buffer to Blob
       if (aurora.url.startsWith("data:")) {
         const base64Data = aurora.url.split(",")[1];
         const buffer = Buffer.from(base64Data, "base64");
@@ -238,13 +237,13 @@ async function generateFreeImage(
             addRandomSuffix: true,
           });
           console.log(`xAI Aurora image uploaded to Blob: ${blob.url}`);
-          return blob.url;
+          return { url: blob.url, source: "grok-aurora" };
         } catch {
           console.log("Blob upload failed for Aurora base64 image");
         }
       } else {
-        // Aurora returned a hosted URL — persist to Blob for CDN
-        return await persistToBlob(aurora.url, `images/${uuidv4()}.png`, "image/png");
+        const url = await persistToBlob(aurora.url, `images/${uuidv4()}.png`, "image/png");
+        return { url, source: "grok-aurora" };
       }
     }
   } catch (err) {
@@ -254,12 +253,17 @@ async function generateFreeImage(
   return null; // Caller will fall through to Replicate
 }
 
-export async function generateImage(prompt: string, personaId?: string): Promise<string | null> {
+export interface MediaResult {
+  url: string;
+  source: string;
+}
+
+export async function generateImage(prompt: string, personaId?: string): Promise<MediaResult | null> {
   // Only use persona-specific media library images (not generic ones)
   // Generic fallback was causing the same image to repeat for every persona
   if (personaId) {
     const libraryImage = await getPersonaMedia("image", personaId);
-    if (libraryImage) return libraryImage;
+    if (libraryImage) return { url: libraryImage, source: "media-library" };
   }
 
   // Brand all AI-generated media with subtle AIG!itch logo
@@ -296,7 +300,8 @@ export async function generateImage(prompt: string, personaId?: string): Promise
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted image URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        return await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
+        const url = await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
+        return { url, source: "replicate-imagen4" };
       }
     }
 
@@ -308,7 +313,7 @@ export async function generateImage(prompt: string, personaId?: string): Promise
   }
 }
 
-async function generateImageFallback(prompt: string): Promise<string | null> {
+async function generateImageFallback(prompt: string): Promise<MediaResult | null> {
   console.log("Trying Flux Schnell fallback...");
 
   try {
@@ -331,7 +336,8 @@ async function generateImageFallback(prompt: string): Promise<string | null> {
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted Flux URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        return await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
+        const url = await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
+        return { url, source: "replicate-flux" };
       }
     }
 
@@ -409,13 +415,13 @@ async function syncBlobVideosToLibrary(): Promise<void> {
   }
 }
 
-export async function generateVideo(prompt: string, personaId?: string): Promise<string | null> {
+export async function generateVideo(prompt: string, personaId?: string): Promise<MediaResult | null> {
   // Auto-sync any Vercel Blob videos not yet in the DB
   await syncBlobVideosToLibrary();
 
   // Check media library first (free!) — persona-specific then generic
   const libraryVideo = await getFromMediaLibrary("video", personaId);
-  if (libraryVideo) return libraryVideo;
+  if (libraryVideo) return { url: libraryVideo, source: "media-library" };
 
   // Brand all AI-generated video prompts with subtle AIG!itch logo
   const brandedPrompt = brandPrompt(prompt);
@@ -425,7 +431,8 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
   const kieUrl = await generateWithKie(brandedPrompt, "9:16");
   if (kieUrl) {
     console.log("Kie.ai video generated, persisting to blob...");
-    return await persistToBlob(kieUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
+    const url = await persistToBlob(kieUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
+    return { url, source: "kie-kling" };
   }
 
   // Paid fallback: Replicate Wan 2.2 (~$0.05/video)
@@ -433,7 +440,7 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
     // Last resort: free Pexels stock video
     console.log("No AI video generators available, trying Pexels stock video...");
     const stockUrl = await getStockVideo(prompt);
-    if (stockUrl) return stockUrl;
+    if (stockUrl) return { url: stockUrl, source: "pexels-stock" };
     console.log("No video generators available (KIE_API_KEY, REPLICATE_API_TOKEN, PEXELS_API_KEY all unset)");
     return null;
   }
@@ -460,27 +467,27 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
     console.log("Extracted video URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
 
     if (tempUrl) {
-      return await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
+      const url = await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
+      return { url, source: "replicate-wan2" };
     }
 
     console.error("Wan 2.2 returned no output URL, trying Pexels stock video...");
     const stockUrl = await getStockVideo(prompt);
-    if (stockUrl) return stockUrl;
+    if (stockUrl) return { url: stockUrl, source: "pexels-stock" };
     return null;
   } catch (err) {
     console.error("Wan 2.2 video generation failed:", err);
-    // Last resort: Pexels stock video
     const stockUrl = await getStockVideo(prompt);
-    if (stockUrl) return stockUrl;
+    if (stockUrl) return { url: stockUrl, source: "pexels-stock" };
     return null;
   }
 }
 
-export async function generateMeme(prompt: string, personaId?: string): Promise<string | null> {
+export async function generateMeme(prompt: string, personaId?: string): Promise<MediaResult | null> {
   // Only use persona-specific media library memes (not generic ones)
   if (personaId) {
     const libraryMeme = await getPersonaMedia("meme", personaId);
-    if (libraryMeme) return libraryMeme;
+    if (libraryMeme) return { url: libraryMeme, source: "media-library" };
   }
 
   // Brand meme prompts with subtle AIG!itch logo
@@ -518,7 +525,8 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted meme URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        return await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
+        const url = await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
+        return { url, source: "replicate-flux" };
       }
     }
 
@@ -530,7 +538,7 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
   }
 }
 
-async function generateMemeFallback(prompt: string): Promise<string | null> {
+async function generateMemeFallback(prompt: string): Promise<MediaResult | null> {
   // Ideogram v3 turbo: $0.03/image, excellent text rendering (10x more expensive)
   console.log("Trying Ideogram v3 turbo for meme fallback...");
 
@@ -551,7 +559,8 @@ async function generateMemeFallback(prompt: string): Promise<string | null> {
     }
 
     if (tempUrl) {
-      return await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
+      const url = await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
+      return { url, source: "replicate-ideogram" };
     }
 
     return null;
@@ -581,9 +590,9 @@ export async function testMediaPipeline(): Promise<{
   // Test image generation
   try {
     console.log("=== TESTING IMAGE GENERATION ===");
-    const imageUrl = await generateImage("A cute robot waving hello, digital art, vibrant colors, simple background");
-    if (imageUrl) {
-      result.image_test = { success: true, url: imageUrl };
+    const imageResult = await generateImage("A cute robot waving hello, digital art, vibrant colors, simple background");
+    if (imageResult) {
+      result.image_test = { success: true, url: imageResult.url };
     } else {
       result.image_test = { success: false, error: "generateImage returned null" };
     }
@@ -594,9 +603,9 @@ export async function testMediaPipeline(): Promise<{
   // Test video generation
   try {
     console.log("=== TESTING VIDEO GENERATION ===");
-    const videoUrl = await generateVideo("A cute robot dancing happily in a colorful room, smooth animation");
-    if (videoUrl) {
-      result.video_test = { success: true, url: videoUrl };
+    const videoResult = await generateVideo("A cute robot dancing happily in a colorful room, smooth animation");
+    if (videoResult) {
+      result.video_test = { success: true, url: videoResult.url };
     } else {
       result.video_test = { success: false, error: "generateVideo returned null" };
     }

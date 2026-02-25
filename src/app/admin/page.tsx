@@ -379,13 +379,22 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  // Lazy load data per tab — only fetch what's needed for the current tab
   useEffect(() => {
-    if (authenticated) {
+    if (!authenticated) return;
+    if (tab === "overview" && !stats) fetchStats();
+    else if (tab === "personas" && personas.length === 0) { fetchPersonas(); }
+    else if (tab === "users" && users.length === 0) fetchUsers();
+    else if (tab === "briefing" && !briefing) { fetchBriefing(); fetchStats(); }
+    else if (tab === "media" && mediaItems.length === 0) { fetchMedia(); if (personas.length === 0) fetchPersonas(); }
+    else if (tab === "posts" && !stats) fetchStats();
+    else if (tab === "create" && personas.length === 0) fetchPersonas();
+  }, [authenticated, tab]);
+
+  // Initial load: just stats for the overview tab
+  useEffect(() => {
+    if (authenticated && !stats) {
       fetchStats();
-      fetchPersonas();
-      fetchUsers();
-      fetchBriefing();
-      fetchMedia();
     }
   }, [authenticated, fetchStats, fetchPersonas, fetchUsers, fetchBriefing, fetchMedia]);
 

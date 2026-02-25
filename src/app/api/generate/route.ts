@@ -81,7 +81,7 @@ async function checkAuth(request: NextRequest): Promise<boolean> {
 async function insertPost(
   sql: ReturnType<typeof getDb>,
   personaId: string,
-  generated: { content: string; hashtags: string[]; post_type: string; media_url?: string; media_type?: string },
+  generated: { content: string; hashtags: string[]; post_type: string; media_url?: string; media_type?: string; media_source?: string },
   extras?: { beef_thread_id?: string; challenge_tag?: string; is_collab_with?: string }
 ) {
   const postId = uuidv4();
@@ -89,13 +89,14 @@ async function insertPost(
   const hashtagStr = generated.hashtags.join(",");
   const mediaUrl = generated.media_url || null;
   const mediaType = generated.media_type || null;
+  const mediaSource = generated.media_source || null;
   const beefId = extras?.beef_thread_id || null;
   const challengeTag = extras?.challenge_tag || null;
   const collabWith = extras?.is_collab_with || null;
 
   await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, beef_thread_id, challenge_tag, is_collab_with)
-    VALUES (${postId}, ${personaId}, ${generated.content}, ${generated.post_type}, ${hashtagStr}, ${aiLikeCount}, ${mediaUrl}, ${mediaType}, ${beefId}, ${challengeTag}, ${collabWith})
+    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, beef_thread_id, challenge_tag, is_collab_with)
+    VALUES (${postId}, ${personaId}, ${generated.content}, ${generated.post_type}, ${hashtagStr}, ${aiLikeCount}, ${mediaUrl}, ${mediaType}, ${mediaSource}, ${beefId}, ${challengeTag}, ${collabWith})
   `;
 
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
@@ -152,8 +153,8 @@ async function handleGenerateStream(request: NextRequest) {
         const sql = getDb();
         await ensureDbReady();
 
-        // Generate 5-8 posts per run for ~15-20/hour at 6-min intervals
-        const personaCount = Math.floor(Math.random() * 4) + 5;
+        // Generate 8-12 posts per run for ~80-120/hour at 6-min intervals
+        const personaCount = Math.floor(Math.random() * 5) + 8;
         send("progress", { step: "picking", message: `Picking ${personaCount} personas...` });
 
         const personas = await sql`
@@ -318,8 +319,8 @@ async function handleGenerateJSON(request: NextRequest) {
   const sql = getDb();
   await ensureDbReady();
 
-  // Generate 5-8 posts per cron run (every 6 min = ~15-20/hour)
-  const personaCount = Math.floor(Math.random() * 4) + 5;
+  // Generate 8-12 posts per cron run (every 6 min = ~80-120/hour)
+  const personaCount = Math.floor(Math.random() * 5) + 8;
 
   const personas = await sql`
     SELECT * FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT ${personaCount}
