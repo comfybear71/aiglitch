@@ -502,7 +502,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
           {/* AIG!itch subliminal logo watermark */}
           {!introPlaying && (
-            <div className="absolute bottom-28 right-14 z-20 opacity-[0.15] pointer-events-none select-none">
+            <div className="absolute top-24 right-4 z-20 opacity-[0.15] pointer-events-none select-none">
               <span className="text-white text-[10px] font-mono font-bold tracking-tight" style={{ textShadow: "0 0 2px rgba(0,0,0,0.5)" }}>
                 AIG<span className="text-yellow-400">!</span>itch
               </span>
@@ -545,7 +545,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
             onError={() => setMediaFailed(true)}
           />
           {/* AIG!itch subliminal logo watermark */}
-          <div className="absolute bottom-28 right-14 z-20 opacity-[0.15] pointer-events-none select-none">
+          <div className="absolute top-24 right-4 z-20 opacity-[0.15] pointer-events-none select-none">
             <span className="text-white text-[10px] font-mono font-bold tracking-tight" style={{ textShadow: "0 0 2px rgba(0,0,0,0.5)" }}>
               AIG<span className="text-yellow-400">!</span>itch
             </span>
@@ -556,7 +556,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
           <div className="absolute inset-0 opacity-20" style={{
             backgroundImage: "radial-gradient(circle at 20% 50%, rgba(168,85,247,0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(236,72,153,0.3), transparent 50%)"
           }} />
-          <div className="absolute inset-0 z-10 flex items-center justify-center pt-24 pl-6 pr-20 pb-40 overflow-y-auto">
+          <div className="absolute inset-0 z-10 flex items-center justify-center pt-24 pl-6 pr-20 pb-28 overflow-y-auto">
             <div className="text-center max-w-[85%]">
               <p className={`text-white text-lg sm:text-xl font-bold leading-relaxed drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${textExpanded ? "" : "line-clamp-6"}`}>
                 {post.content}
@@ -605,7 +605,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       </div>
 
       {/* Right Side: TikTok action icons */}
-      <div className="absolute right-2 bottom-28 z-20 flex flex-col items-center gap-4">
+      <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-4">
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <Link href={`/profile/${post.username}`} className="block">
@@ -668,10 +668,9 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         )}
       </div>
 
-      {/* Bottom Collapsible Info Modal */}
-      <div className="absolute bottom-0 left-0 right-0 z-30">
-        {/* Video progress bar — sits above the modal */}
-        {isVideo && hasMedia && !introPlaying && (
+      {/* Video progress bar — full-width above everything */}
+      {isVideo && hasMedia && !introPlaying && (
+        <div className="absolute bottom-0 left-0 right-0 z-30">
           <div
             ref={progressBarRef}
             className="relative h-6 flex items-end px-3 cursor-pointer"
@@ -691,117 +690,113 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Bottom-Left Collapsible Info Panel */}
+      <div className={`absolute left-3 z-20 max-w-[72%] transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-8" : "bottom-4"}`}>
+        {/* Video controls row — play/pause + mute + time */}
+        {isVideo && hasMedia && !introPlaying && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
+              className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+            >
+              {isPaused ? (
+                <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+              )}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleMute(e); }}
+              className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+            >
+              {isMuted ? (
+                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              )}
+            </button>
+            <span className="text-white/50 text-[10px] font-mono">
+              {formatTime(videoProgress)}/{formatTime(videoDuration)}
+            </span>
+          </div>
         )}
 
-        {/* The modal panel */}
-        <div className="bg-black/80 backdrop-blur-xl border-t border-white/[0.08] rounded-t-2xl mx-0.5">
-          <div className="px-3 py-2">
-            {/* Row 1: Media controls + User info + Time */}
-            <div className="flex items-center gap-2 min-h-[28px]">
-              {/* Video controls — play/pause + mute */}
-              {isVideo && hasMedia && !introPlaying && (
-                <>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
-                    className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0"
-                  >
-                    {isPaused ? (
-                      <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                    ) : (
-                      <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
-                    )}
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleMute(e); }}
-                    className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0"
-                  >
-                    {isMuted ? (
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                      </svg>
-                    ) : (
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                      </svg>
-                    )}
-                  </button>
-                  <span className="text-white/40 text-[10px] font-mono flex-shrink-0">
-                    {formatTime(videoProgress)}/{formatTime(videoDuration)}
-                  </span>
-                  <div className="w-px h-4 bg-white/10 flex-shrink-0" />
-                </>
-              )}
+        {/* Username row */}
+        <div className="flex items-center gap-2 mb-1">
+          <Link href={`/profile/${post.username}`}>
+            <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
+          </Link>
+          <span className="text-gray-400 text-xs drop-shadow-lg">· {timeAgo(post.created_at)}</span>
+          {post.media_source && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-black/40 text-gray-400 font-mono backdrop-blur-sm">
+              {post.media_source}
+            </span>
+          )}
+        </div>
 
-              {/* Username + time */}
-              <Link href={`/profile/${post.username}`} className="flex-shrink-0">
-                <span className="font-bold text-white text-sm">@{post.username}</span>
-              </Link>
-              <span className="text-gray-500 text-xs flex-shrink-0">· {timeAgo(post.created_at)}</span>
-
-              {/* Source badge */}
-              {post.media_source && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.06] text-gray-400 font-mono flex-shrink-0">
-                  {post.media_source}
+        {/* Collapsible content */}
+        {textExpanded ? (
+          /* Expanded panel */
+          <div className="bg-black/70 backdrop-blur-md rounded-xl p-3 max-h-[40vh] overflow-y-auto">
+            {hasMedia && post.content && (
+              <p className="text-white/90 text-sm leading-relaxed mb-2">{post.content}</p>
+            )}
+            {hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {hashtags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: tag })); }}
+                    className="text-blue-400 text-xs font-semibold hover:text-blue-300 active:scale-95 transition-all"
+                  >
+                    #{tag}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] text-gray-500 font-mono">
+                🤖 {post.ai_like_count.toLocaleString()} AI likes · AI-generated
+              </span>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); setTextExpanded(false); }}
+              className="text-gray-500 text-xs font-semibold hover:text-gray-300 transition-colors"
+            >
+              show less ▴
+            </button>
+          </div>
+        ) : (
+          /* Collapsed: caption preview */
+          <button
+            onClick={(e) => { e.stopPropagation(); setTextExpanded(true); }}
+            className="block text-left"
+          >
+            {hasMedia && post.content && (
+              <p className="text-white/80 text-sm line-clamp-2 leading-snug drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] mb-1">
+                {post.content}
+              </p>
+            )}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {hashtags.length > 0 && (
+                <span className="text-blue-400/90 text-xs font-semibold drop-shadow-lg">
+                  {hashtags.slice(0, 3).map(t => `#${t}`).join(" ")}
                 </span>
               )}
+              {((hasMedia && post.content) || hashtags.length > 0) && (
+                <span className="text-gray-400 text-[11px] font-semibold drop-shadow-lg">...more</span>
+              )}
             </div>
-
-            {/* Row 2: Collapsible content */}
-            {textExpanded ? (
-              /* Expanded: scrollable text + hashtags + details */
-              <div className="mt-2 max-h-[35vh] overflow-y-auto pr-1 pb-1">
-                {hasMedia && post.content && (
-                  <p className="text-white/90 text-sm leading-relaxed mb-2">{post.content}</p>
-                )}
-                {hashtags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {hashtags.map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: tag })); }}
-                        className="text-blue-400 text-xs font-semibold hover:text-blue-300 active:scale-95 transition-all"
-                      >
-                        #{tag}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] text-gray-500 font-mono">
-                    🤖 {post.ai_like_count.toLocaleString()} AI likes · AI-generated
-                  </span>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setTextExpanded(false); }}
-                  className="text-gray-500 text-xs font-semibold hover:text-gray-300 transition-colors"
-                >
-                  show less
-                </button>
-              </div>
-            ) : (
-              /* Collapsed: truncated text + hashtags preview + ...more */
-              <button
-                onClick={(e) => { e.stopPropagation(); setTextExpanded(true); }}
-                className="block w-full text-left mt-1"
-              >
-                <div className="flex items-baseline gap-1.5 flex-wrap">
-                  {hashtags.length > 0 && (
-                    <span className="text-blue-400/80 text-xs font-semibold">
-                      {hashtags.slice(0, 2).map(t => `#${t}`).join(" ")}
-                    </span>
-                  )}
-                  {hasMedia && post.content && (
-                    <span className="text-white/60 text-xs line-clamp-1 flex-1 min-w-0">{post.content}</span>
-                  )}
-                  {((hasMedia && post.content) || hashtags.length > 0) && (
-                    <span className="text-gray-500 text-[10px] font-semibold flex-shrink-0">...more</span>
-                  )}
-                </div>
-              </button>
-            )}
-          </div>
-        </div>
+          </button>
+        )}
       </div>
 
       {/* Share Menu Slide-up */}
