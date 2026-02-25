@@ -5,7 +5,7 @@ import { getDb } from "./db";
 import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } from "./free-image-gen";
 import { generateWithKie } from "./free-video-gen";
 import { getStockVideo } from "./stock-video";
-import { generateImageWithAurora } from "./xai";
+import { generateImageWithAurora, generateVideoWithGrok, generateVideoFromImage } from "./xai";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -413,6 +413,55 @@ async function syncBlobVideosToLibrary(): Promise<void> {
     // Reset flag so it retries next time
     _blobSyncDone = false;
   }
+}
+
+/**
+ * Generate a breaking news video — prioritizes Grok Imagine Video for newsroom-quality
+ * 15-second clips, then falls back to the standard video pipeline.
+ *
+ * The concept: AIG!itch breaking news intro plays first (client-side stitch),
+ * then this 15s Grok video shows a dramatic newsroom scene with the actual news.
+ *
+ * Cost: ~$0.75 per 15s Grok video ($0.05/sec)
+ */
+export async function generateBreakingNewsVideo(
+  newsPrompt: string,
+  headline: string,
+): Promise<MediaResult | null> {
+  const newsroomPrompt = `Dramatic AI news broadcast studio. A futuristic holographic newsroom with glowing screens displaying "${headline}". The camera pans across the sleek set with floating data visualizations, breaking news tickers scrolling with urgent red and white text. Cinematic lighting with blue and red tones, lens flares. The atmosphere is intense and urgent — this is BREAKING NEWS on AIG!itch. ${newsPrompt}. Style: professional broadcast quality, cyberpunk news studio aesthetic, dramatic camera movement.`;
+
+  // Strategy 1: Direct text-to-video with Grok (15s @ $0.75)
+  try {
+    const grokUrl = await generateVideoWithGrok(newsroomPrompt, 15, "9:16");
+    if (grokUrl) {
+      console.log("Grok breaking news video generated, persisting to blob...");
+      const url = await persistToBlob(grokUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
+      return { url, source: "grok-video" };
+    }
+  } catch (err) {
+    console.error("Grok text-to-video failed for breaking news:", err instanceof Error ? err.message : err);
+  }
+
+  // Strategy 2: Generate hero image with pro model, then animate it
+  try {
+    console.log("Trying image-to-video workflow for breaking news...");
+    const heroImage = await generateImageWithAurora(newsroomPrompt, true);
+    if (heroImage?.url) {
+      // Persist the hero image first (URLs are ephemeral)
+      const persistedImageUrl = await persistToBlob(heroImage.url, `images/breaking-hero-${uuidv4()}.png`, "image/png");
+      const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 10, "9:16");
+      if (videoUrl) {
+        const url = await persistToBlob(videoUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
+        return { url, source: "grok-img2vid" };
+      }
+    }
+  } catch (err) {
+    console.error("Grok image-to-video failed for breaking news:", err instanceof Error ? err.message : err);
+  }
+
+  // Strategy 3: Fall back to standard video pipeline
+  console.log("Grok video unavailable for breaking news, falling back to standard pipeline...");
+  return generateVideo(newsPrompt);
 }
 
 export async function generateVideo(prompt: string, personaId?: string): Promise<MediaResult | null> {
