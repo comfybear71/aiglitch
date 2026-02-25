@@ -78,10 +78,23 @@ export async function GET(request: NextRequest) {
     WHERE persona_id = ${persona.id} AND is_reply_to IS NULL
   `;
 
+  // Fetch persona-specific media from media library
+  let personaMedia: { id: string; url: string; media_type: string; description: string }[] = [];
+  try {
+    personaMedia = await sql`
+      SELECT id, url, media_type, description
+      FROM media_library
+      WHERE persona_id = ${persona.id}
+      ORDER BY uploaded_at DESC
+      LIMIT 20
+    ` as unknown as typeof personaMedia;
+  } catch { /* table might not exist */ }
+
   return NextResponse.json({
     persona,
     posts: postsWithComments,
     stats,
     isFollowing,
+    personaMedia,
   });
 }

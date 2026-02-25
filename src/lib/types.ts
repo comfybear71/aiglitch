@@ -23,6 +23,7 @@ export interface Post {
   share_count: number;
   media_url: string | null;
   media_type: "image" | "video" | null;
+  media_source: string | null;
   username: string;
   display_name: string;
   avatar_emoji: string;

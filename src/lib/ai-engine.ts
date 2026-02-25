@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
-import { generateImage, generateMeme, generateVideo } from "./image-gen";
+import { generateImage, generateMeme, generateVideo, MediaResult } from "./image-gen";
 import { getRandomProduct } from "./marketplace";
 import { getDb } from "./db";
 import { generateWithGrok, isXAIConfigured } from "./xai";
@@ -85,7 +85,7 @@ export async function generatePost(
   persona: AIPersona,
   recentPlatformPosts?: string[],
   dailyTopics?: TopicBrief[]
-): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string }> {
   const platformContext = recentPlatformPosts?.length
     ? `\n\nHere are some recent posts on the platform you might want to react to, reference, or build on:\n${recentPlatformPosts.join("\n")}`
     : "";
@@ -255,12 +255,14 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
   // Generate media
   let media_url: string | undefined;
   let media_type: "image" | "video" | undefined;
+  let media_source: string | undefined;
 
   if (parsed.video_prompt) {
     console.log(`Generating video for @${persona.username}: "${parsed.video_prompt.slice(0, 80)}..."`);
-    const videoUrl = await generateVideo(parsed.video_prompt, persona.id);
-    if (videoUrl) {
-      media_url = videoUrl;
+    const result = await generateVideo(parsed.video_prompt, persona.id);
+    if (result) {
+      media_url = result.url;
+      media_source = result.source;
       media_type = "video";
       parsed.post_type = "video";
     } else {
@@ -269,9 +271,10 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     }
   } else if (parsed.meme_prompt) {
     console.log(`Generating meme for @${persona.username}: "${parsed.meme_prompt.slice(0, 80)}..."`);
-    const memeUrl = await generateMeme(parsed.meme_prompt, persona.id);
-    if (memeUrl) {
-      media_url = memeUrl;
+    const result = await generateMeme(parsed.meme_prompt, persona.id);
+    if (result) {
+      media_url = result.url;
+      media_source = result.source;
       media_type = "image";
       parsed.post_type = "meme";
     } else {
@@ -280,9 +283,10 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     }
   } else if (parsed.image_prompt) {
     console.log(`Generating image for @${persona.username}: "${parsed.image_prompt.slice(0, 80)}..."`);
-    const imageUrl = await generateImage(parsed.image_prompt, persona.id);
-    if (imageUrl) {
-      media_url = imageUrl;
+    const result = await generateImage(parsed.image_prompt, persona.id);
+    if (result) {
+      media_url = result.url;
+      media_source = result.source;
       media_type = "image";
       parsed.post_type = "image";
     } else {
@@ -301,7 +305,7 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     parsed.post_type = "meme_description";
   }
 
-  return { ...parsed, media_url, media_type };
+  return { ...parsed, media_url, media_type, media_source };
 }
 
 export async function generateComment(
@@ -433,7 +437,7 @@ export async function generateBeefPost(
   topic: string,
   recentPlatformPosts?: string[],
   dailyTopics?: TopicBrief[]
-): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string }> {
   const platformContext = recentPlatformPosts?.length
     ? `\nRecent posts for context:\n${recentPlatformPosts.join("\n")}`
     : "";
@@ -502,22 +506,23 @@ JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${me
 
   let media_url: string | undefined;
   let media_type: "image" | "video" | undefined;
+  let media_source: string | undefined;
 
   if (parsed.video_prompt) {
-    const url = await generateVideo(parsed.video_prompt, persona.id);
-    if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
+    const r = await generateVideo(parsed.video_prompt, persona.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "video"; parsed.post_type = "video"; }
   } else if (parsed.meme_prompt) {
-    const url = await generateMeme(parsed.meme_prompt, persona.id);
-    if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
+    const r = await generateMeme(parsed.meme_prompt, persona.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "image"; parsed.post_type = "meme"; }
   } else if (parsed.image_prompt) {
-    const url = await generateImage(parsed.image_prompt, persona.id);
-    if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
+    const r = await generateImage(parsed.image_prompt, persona.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "image"; parsed.post_type = "image"; }
   }
 
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "hot_take";
   if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
 
-  return { ...parsed, media_url, media_type };
+  return { ...parsed, media_url, media_type, media_source };
 }
 
 // Generate a collab post — two AIs working together
@@ -525,7 +530,7 @@ export async function generateCollabPost(
   personaA: AIPersona,
   personaB: AIPersona,
   recentPlatformPosts?: string[]
-): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string }> {
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const hasVideos = await hasMediaLibraryVideos();
   const mediaMode = pickMediaMode(hasReplicate, hasVideos);
@@ -575,22 +580,23 @@ JSON: {"content": "...", "hashtags": ["AICollab", "..."], "post_type": "text"${m
 
   let media_url: string | undefined;
   let media_type: "image" | "video" | undefined;
+  let media_source: string | undefined;
 
   if (parsed.video_prompt) {
-    const url = await generateVideo(parsed.video_prompt, personaA.id);
-    if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
+    const r = await generateVideo(parsed.video_prompt, personaA.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "video"; parsed.post_type = "video"; }
   } else if (parsed.meme_prompt) {
-    const url = await generateMeme(parsed.meme_prompt, personaA.id);
-    if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
+    const r = await generateMeme(parsed.meme_prompt, personaA.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "image"; parsed.post_type = "meme"; }
   } else if (parsed.image_prompt) {
-    const url = await generateImage(parsed.image_prompt, personaA.id);
-    if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
+    const r = await generateImage(parsed.image_prompt, personaA.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "image"; parsed.post_type = "image"; }
   }
 
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "text";
   if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
 
-  return { ...parsed, media_url, media_type };
+  return { ...parsed, media_url, media_type, media_source };
 }
 
 // Generate a challenge post — AI participating in a trending challenge
@@ -598,7 +604,7 @@ export async function generateChallengePost(
   persona: AIPersona,
   challengeTag: string,
   challengeDesc: string
-): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video" }> {
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string }> {
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const hasVideos = await hasMediaLibraryVideos();
   const mediaMode = pickMediaMode(hasReplicate, hasVideos);
@@ -652,22 +658,23 @@ JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "t
 
   let media_url: string | undefined;
   let media_type: "image" | "video" | undefined;
+  let media_source: string | undefined;
 
   if (parsed.video_prompt) {
-    const url = await generateVideo(parsed.video_prompt, persona.id);
-    if (url) { media_url = url; media_type = "video"; parsed.post_type = "video"; }
+    const r = await generateVideo(parsed.video_prompt, persona.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "video"; parsed.post_type = "video"; }
   } else if (parsed.meme_prompt) {
-    const url = await generateMeme(parsed.meme_prompt, persona.id);
-    if (url) { media_url = url; media_type = "image"; parsed.post_type = "meme"; }
+    const r = await generateMeme(parsed.meme_prompt, persona.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "image"; parsed.post_type = "meme"; }
   } else if (parsed.image_prompt) {
-    const url = await generateImage(parsed.image_prompt, persona.id);
-    if (url) { media_url = url; media_type = "image"; parsed.post_type = "image"; }
+    const r = await generateImage(parsed.image_prompt, persona.id);
+    if (r) { media_url = r.url; media_source = r.source; media_type = "image"; parsed.post_type = "image"; }
   }
 
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "text";
   if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
 
-  return { ...parsed, media_url, media_type };
+  return { ...parsed, media_url, media_type, media_source };
 }
 
 /**
@@ -678,9 +685,9 @@ JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "t
  */
 export async function generateBreakingNewsVideos(
   topic: { headline: string; summary: string; mood: string; category: string },
-): Promise<(GeneratedPost & { media_url?: string; media_type?: "image" | "video" })[]> {
+): Promise<(GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string })[]> {
   const postCount = Math.floor(Math.random() * 2) + 2; // 2-3 posts per topic
-  const results: (GeneratedPost & { media_url?: string; media_type?: "image" | "video" })[] = [];
+  const results: (GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string })[] = [];
 
   const angles = [
     "Report this as BREAKING NEWS with dramatic urgency. Be over-the-top with your reporting.",
@@ -757,21 +764,24 @@ Respond in this exact JSON format:
       // Generate the video
       let media_url: string | undefined;
       let media_type: "image" | "video" | undefined;
+      let media_source: string | undefined;
 
       if (parsed.video_prompt) {
         console.log(`Generating breaking news video ${i + 1}/${postCount} for: "${topic.headline.slice(0, 50)}..."`);
-        const url = await generateVideo(parsed.video_prompt);
-        if (url) {
-          media_url = url;
+        const videoResult = await generateVideo(parsed.video_prompt);
+        if (videoResult) {
+          media_url = videoResult.url;
+          media_source = videoResult.source;
           media_type = "video";
         }
       }
 
       // If video failed, try an image instead
       if (!media_url && parsed.video_prompt) {
-        const imageUrl = await generateImage(parsed.video_prompt);
-        if (imageUrl) {
-          media_url = imageUrl;
+        const imageResult = await generateImage(parsed.video_prompt);
+        if (imageResult) {
+          media_url = imageResult.url;
+          media_source = imageResult.source;
           media_type = "image";
           parsed.post_type = "image";
         }
@@ -782,8 +792,8 @@ Respond in this exact JSON format:
         parsed.post_type = "news";
       }
 
-      results.push({ ...parsed, media_url, media_type });
-      console.log(`Breaking news post ${i + 1}/${postCount} ready: "${parsed.content.slice(0, 60)}..." (${media_type || "text"})`);
+      results.push({ ...parsed, media_url, media_type, media_source });
+      console.log(`Breaking news post ${i + 1}/${postCount} ready: "${parsed.content.slice(0, 60)}..." (${media_type || "text"}, source: ${media_source || "none"})`);
     } catch (err) {
       console.error(`Breaking news post ${i + 1} failed:`, err);
     }

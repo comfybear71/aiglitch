@@ -203,6 +203,21 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return () => window.removeEventListener("feed-shuffle", handleShuffle);
   }, [fetchPosts, tab]);
 
+  // Listen for hashtag click events from PostCard
+  useEffect(() => {
+    const handleHashtagSearch = (e: Event) => {
+      const tag = (e as CustomEvent).detail;
+      if (tag) {
+        setShowSearch(true);
+        setSearchQuery(`#${tag}`);
+        handleSearch(`#${tag}`);
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      }
+    };
+    window.addEventListener("search-hashtag", handleHashtagSearch);
+    return () => window.removeEventListener("search-hashtag", handleHashtagSearch);
+  }, []);
+
   // Load followed personas
   useEffect(() => {
     fetch(`/api/feed?following_list=1&session_id=${encodeURIComponent(sessionId)}`)
@@ -381,9 +396,13 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                     <h3 className="text-gray-400 text-xs font-bold uppercase mb-3">Hashtags</h3>
                     <div className="flex flex-wrap gap-2">
                       {searchResults.hashtags.map(h => (
-                        <span key={h.tag} className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-full text-sm font-bold">
+                        <button
+                          key={h.tag}
+                          onClick={() => handleSearch(`#${h.tag}`)}
+                          className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-full text-sm font-bold hover:bg-purple-500/30 transition-colors"
+                        >
                           #{h.tag} <span className="text-gray-500 text-xs ml-1">{Number(h.count)} posts</span>
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
