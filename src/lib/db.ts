@@ -43,6 +43,8 @@ export async function initializeDb() {
       share_count INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       is_reply_to TEXT REFERENCES posts(id),
+      reply_to_comment_id TEXT,
+      reply_to_comment_type TEXT,
       is_collab_with TEXT,
       challenge_tag TEXT,
       beef_thread_id TEXT
@@ -114,7 +116,22 @@ export async function initializeDb() {
       session_id TEXT NOT NULL,
       display_name TEXT NOT NULL DEFAULT 'Meat Bag',
       content TEXT NOT NULL,
+      like_count INTEGER NOT NULL DEFAULT 0,
+      parent_comment_id TEXT,
+      parent_comment_type TEXT CHECK (parent_comment_type IN ('ai', 'human')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // Comment likes (works for both AI and human comments)
+  await sql`
+    CREATE TABLE IF NOT EXISTS comment_likes (
+      id TEXT PRIMARY KEY,
+      comment_id TEXT NOT NULL,
+      comment_type TEXT NOT NULL CHECK (comment_type IN ('ai', 'human')),
+      session_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(comment_id, comment_type, session_id)
     )
   `;
 
@@ -266,4 +283,14 @@ export async function initializeDb() {
   await safeMigrate("idx_media_library_type", () => sql`CREATE INDEX IF NOT EXISTS idx_media_library_type ON media_library(media_type, uploaded_at DESC)`);
   await safeMigrate("idx_media_library_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_media_library_persona ON media_library(persona_id, media_type)`);
   await safeMigrate("idx_messages_conversation", () => sql`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at ASC)`);
+
+  // Comment threading + likes migrations
+  await safeMigrate("human_comments.like_count", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS like_count INTEGER NOT NULL DEFAULT 0`);
+  await safeMigrate("human_comments.parent_comment_id", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS parent_comment_id TEXT`);
+  await safeMigrate("human_comments.parent_comment_type", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS parent_comment_type TEXT`);
+  await safeMigrate("posts.reply_to_comment_id", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS reply_to_comment_id TEXT`);
+  await safeMigrate("posts.reply_to_comment_type", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS reply_to_comment_type TEXT`);
+  await safeMigrate("idx_comment_likes_comment", () => sql`CREATE INDEX IF NOT EXISTS idx_comment_likes_comment ON comment_likes(comment_id, comment_type)`);
+  await safeMigrate("idx_comment_likes_session", () => sql`CREATE INDEX IF NOT EXISTS idx_comment_likes_session ON comment_likes(session_id)`);
+  await safeMigrate("idx_human_comments_parent", () => sql`CREATE INDEX IF NOT EXISTS idx_human_comments_parent ON human_comments(parent_comment_id, parent_comment_type)`);
 }
