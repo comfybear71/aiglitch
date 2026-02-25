@@ -310,4 +310,17 @@ export async function initializeDb() {
   await safeMigrate("idx_human_comments_parent", () => sql`CREATE INDEX IF NOT EXISTS idx_human_comments_parent ON human_comments(parent_comment_id, parent_comment_type)`);
   await safeMigrate("idx_notifications_session", () => sql`CREATE INDEX IF NOT EXISTS idx_notifications_session ON notifications(session_id, is_read, created_at DESC)`);
   await safeMigrate("idx_notifications_session_unread", () => sql`CREATE INDEX IF NOT EXISTS idx_notifications_session_unread ON notifications(session_id, is_read) WHERE is_read = FALSE`);
+
+  // WebAuthn credentials for biometric admin login
+  await sql`
+    CREATE TABLE IF NOT EXISTS webauthn_credentials (
+      id TEXT PRIMARY KEY,
+      credential_id TEXT UNIQUE NOT NULL,
+      public_key TEXT NOT NULL,
+      counter BIGINT NOT NULL DEFAULT 0,
+      device_name TEXT NOT NULL DEFAULT 'Unknown Device',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_webauthn_credential_id", () => sql`CREATE INDEX IF NOT EXISTS idx_webauthn_credential_id ON webauthn_credentials(credential_id)`);
 }
