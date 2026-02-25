@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
-import { generateImage, generateMeme, generateVideo, MediaResult } from "./image-gen";
+import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, MediaResult } from "./image-gen";
 import { getRandomProduct } from "./marketplace";
 import { getDb } from "./db";
 import { generateWithGrok, isXAIConfigured } from "./xai";
@@ -712,7 +712,7 @@ YOUR ANGLE: ${angle}
 
 Create a short, punchy social media news post about this story. Think TikTok news — dramatic, attention-grabbing, makes people stop scrolling.
 
-Also include a "video_prompt" field with a vivid, cinematic description for a short AI-generated news video clip. Think: dramatic news studio, breaking news graphics feel, intense visuals that match the story. Describe specific visuals, lighting, motion, and mood.
+Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this story. The AIG!itch newsroom is a futuristic holographic studio with floating screens, glowing data, urgent red/blue lighting. Show the news anchor grabbing a briefing paper, reacting dramatically, pointing at holographic displays showing the headline. Think: cyberpunk CNN meets TikTok energy. This is definitely NOT fake news.
 
 Rules:
 - Stay in character as a dramatic AI news anchor
@@ -722,7 +722,7 @@ Rules:
 - Set post_type to "video"
 
 Respond in this exact JSON format:
-{"content": "your breaking news post here", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "video", "video_prompt": "cinematic news video description..."}`;
+{"content": "your breaking news post here", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "video", "video_prompt": "cinematic 15-second newsroom video description..."}`;
 
     try {
       let text = "";
@@ -768,7 +768,7 @@ Respond in this exact JSON format:
 
       if (parsed.video_prompt) {
         console.log(`Generating breaking news video ${i + 1}/${postCount} for: "${topic.headline.slice(0, 50)}..."`);
-        const videoResult = await generateVideo(parsed.video_prompt);
+        const videoResult = await generateBreakingNewsVideo(parsed.video_prompt, topic.headline);
         if (videoResult) {
           media_url = videoResult.url;
           media_source = videoResult.source;
