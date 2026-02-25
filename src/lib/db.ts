@@ -311,6 +311,49 @@ export async function initializeDb() {
   await safeMigrate("idx_notifications_session", () => sql`CREATE INDEX IF NOT EXISTS idx_notifications_session ON notifications(session_id, is_read, created_at DESC)`);
   await safeMigrate("idx_notifications_session_unread", () => sql`CREATE INDEX IF NOT EXISTS idx_notifications_session_unread ON notifications(session_id, is_read) WHERE is_read = FALSE`);
 
+  // AIG!itch Coin — spurious currency for the platform
+  await sql`
+    CREATE TABLE IF NOT EXISTS glitch_coins (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL UNIQUE,
+      balance INTEGER NOT NULL DEFAULT 0,
+      lifetime_earned INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS coin_transactions (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      reference_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await safeMigrate("idx_glitch_coins_session", () => sql`CREATE INDEX IF NOT EXISTS idx_glitch_coins_session ON glitch_coins(session_id)`);
+  await safeMigrate("idx_coin_transactions_session", () => sql`CREATE INDEX IF NOT EXISTS idx_coin_transactions_session ON coin_transactions(session_id, created_at DESC)`);
+
+  // Human friends system
+  await sql`
+    CREATE TABLE IF NOT EXISTS human_friends (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      friend_session_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(session_id, friend_session_id)
+    )
+  `;
+
+  await safeMigrate("idx_human_friends_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_friends_session ON human_friends(session_id)`);
+  await safeMigrate("idx_human_friends_friend", () => sql`CREATE INDEX IF NOT EXISTS idx_human_friends_friend ON human_friends(friend_session_id)`);
+
+  // Add auth_provider column to human_users
+  await safeMigrate("human_users.auth_provider", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS auth_provider TEXT DEFAULT 'local'`);
+  await safeMigrate("human_users.avatar_url", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
+
   // WebAuthn credentials for biometric admin login
   await sql`
     CREATE TABLE IF NOT EXISTS webauthn_credentials (

@@ -185,5 +185,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
+  // Anonymous meatbag signup (no password needed)
+  if (action === "anonymous_signup") {
+    if (!session_id) {
+      return NextResponse.json({ error: "Session required" }, { status: 400 });
+    }
+
+    const anonId = Math.floor(Math.random() * 99999);
+    const username = `meatbag_${anonId}`;
+    const name = body.display_name?.trim().slice(0, 30) || "Anonymous Meat Bag";
+    const emoji = body.avatar_emoji?.slice(0, 4) || "🧑";
+
+    await sql`
+      INSERT INTO human_users (id, session_id, display_name, username, avatar_emoji, last_seen)
+      VALUES (${uuidv4()}, ${session_id}, ${name}, ${username}, ${emoji}, NOW())
+      ON CONFLICT (session_id) DO UPDATE SET
+        display_name = ${name},
+        username = COALESCE(human_users.username, ${username}),
+        avatar_emoji = ${emoji},
+        last_seen = NOW()
+    `;
+
+    return NextResponse.json({
+      success: true,
+      user: { username, display_name: name, avatar_emoji: emoji, session_id },
+    });
+  }
+
+  // Sign out — allow the client to clear localStorage
+  if (action === "signout") {
+    return NextResponse.json({ success: true });
+  }
+
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
