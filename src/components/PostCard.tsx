@@ -97,6 +97,10 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
 
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
+  // Breaking news intro state
+  const [introPlaying, setIntroPlaying] = useState(true);
+  const introVideoRef = useRef<HTMLVideoElement>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
@@ -108,6 +112,7 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     ? "text" : post.post_type;
   const badge = POST_TYPE_BADGES[effectiveType] || POST_TYPE_BADGES.text;
   const isVideo = post.media_type === "video";
+  const isBreakingNews = post.hashtags?.includes("AIGlitchBreaking");
   const gradientIdx = post.id.charCodeAt(0) % TEXT_GRADIENTS.length;
 
   // Auto-play/pause video based on visibility
@@ -115,34 +120,39 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
     if (!cardRef.current) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (videoRef.current) {
-          if (entry.isIntersecting) {
-            if (!isPaused) {
-              const playPromise = videoRef.current.play();
-              if (playPromise !== undefined) {
-                playPromise.then(() => {
-                  // Autoplay succeeded — unmute so audio plays by default
-                  if (videoRef.current) {
-                    videoRef.current.muted = false;
-                    setIsMuted(false);
-                  }
-                }).catch(() => {
-                  // Autoplay blocked (common on iOS) - show play button
-                  setAutoplayBlocked(true);
-                  setIsPaused(true);
-                });
-              }
-            }
-          } else {
-            videoRef.current.pause();
+        if (entry.isIntersecting) {
+          // If breaking news intro should play first, start the intro
+          if (isBreakingNews && introPlaying && introVideoRef.current) {
+            introVideoRef.current.play().catch(() => {
+              // Intro failed to play, skip to main video
+              setIntroPlaying(false);
+            });
+            return;
           }
+          if (videoRef.current && !isPaused) {
+            const playPromise = videoRef.current.play();
+            if (playPromise !== undefined) {
+              playPromise.then(() => {
+                if (videoRef.current) {
+                  videoRef.current.muted = false;
+                  setIsMuted(false);
+                }
+              }).catch(() => {
+                setAutoplayBlocked(true);
+                setIsPaused(true);
+              });
+            }
+          }
+        } else {
+          if (videoRef.current) videoRef.current.pause();
+          if (introVideoRef.current) introVideoRef.current.pause();
         }
       },
       { threshold: 0.6 }
     );
     observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [isPaused]);
+  }, [isPaused, introPlaying, isBreakingNews]);
 
   // Video time update
   useEffect(() => {
@@ -414,11 +424,40 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
       {/* Background: Video, Image, or Gradient */}
       {hasMedia && isVideo ? (
         <div className="absolute inset-0" onClick={togglePlayPause} onMouseMove={showControlsTemporarily}>
+          {/* Breaking News Intro Video — plays first for #AIGlitchBreaking posts */}
+          {isBreakingNews && introPlaying && (
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            <video
+              ref={introVideoRef}
+              src="/breaking-news-intro.mp4"
+              className="absolute inset-0 w-full h-full object-contain bg-black z-10"
+              muted
+              playsInline
+              autoPlay
+              {...({ "webkit-playsinline": "" } as any)}
+              onEnded={() => {
+                setIntroPlaying(false);
+                // Start the main video after intro ends
+                if (videoRef.current) {
+                  videoRef.current.currentTime = 0;
+                  const p = videoRef.current.play();
+                  if (p) p.then(() => {
+                    if (videoRef.current) { videoRef.current.muted = false; setIsMuted(false); }
+                  }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                }
+              }}
+              onError={() => {
+                // If intro video not found, skip straight to main content
+                setIntroPlaying(false);
+              }}
+            />
+          )}
+
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           <video
             ref={videoRef}
             src={post.media_url!}
-            className="absolute inset-0 w-full h-full object-contain bg-black"
+            className={`absolute inset-0 w-full h-full object-contain bg-black ${isBreakingNews && introPlaying ? "opacity-0" : "opacity-100"}`}
             loop
             muted
             playsInline
@@ -426,7 +465,8 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
             preload="metadata"
             onError={() => setMediaFailed(true)}
             onLoadedData={() => {
-              // Try to play once data is loaded (helps on iOS)
+              // Only auto-play if not waiting for intro
+              if (isBreakingNews && introPlaying) return;
               if (videoRef.current && !isPaused) {
                 const p = videoRef.current.play();
                 if (p) p.then(() => {
@@ -435,6 +475,15 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
               }
             }}
           />
+
+          {/* AIG!itch subliminal logo watermark on all videos */}
+          {!introPlaying && (
+            <div className="absolute bottom-20 right-2 z-20 opacity-[0.15] pointer-events-none select-none">
+              <span className="text-white text-[10px] font-mono font-bold tracking-tight" style={{ textShadow: "0 0 2px rgba(0,0,0,0.5)" }}>
+                AIG<span className="text-yellow-400">!</span>itch
+              </span>
+            </div>
+          )}
 
           {/* Play/Pause overlay icon */}
           {isPaused && (

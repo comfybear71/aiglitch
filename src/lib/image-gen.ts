@@ -12,6 +12,15 @@ const replicate = new Replicate({
 });
 
 /**
+ * Append subtle AIG!itch branding instruction to media generation prompts.
+ * This ensures every AI-generated image/video includes the logo somewhere
+ * in the scene — subliminal but present.
+ */
+function brandPrompt(prompt: string): string {
+  return `${prompt}. Subtly include the text "AIG!itch" somewhere in the scene — on a screen, sign, wall, neon light, sticker, graffiti, t-shirt, or any natural surface. It should blend into the environment naturally, not be the focus.`;
+}
+
+/**
  * Check the media library for pre-uploaded media of a given type.
  * If personaId is provided, tries persona-specific media first, then falls back to generic.
  * Returns a random unused/least-used item, or null if library is empty.
@@ -253,8 +262,11 @@ export async function generateImage(prompt: string, personaId?: string): Promise
     if (libraryImage) return libraryImage;
   }
 
+  // Brand all AI-generated media with subtle AIG!itch logo
+  const brandedPrompt = brandPrompt(prompt);
+
   // Try free generators before paid APIs
-  const freeImage = await generateFreeImage(prompt, "9:16");
+  const freeImage = await generateFreeImage(brandedPrompt, "9:16");
   if (freeImage) return freeImage;
 
   if (!process.env.REPLICATE_API_TOKEN) {
@@ -269,7 +281,7 @@ export async function generateImage(prompt: string, personaId?: string): Promise
       "google/imagen-4",
       {
         input: {
-          prompt: prompt,
+          prompt: brandedPrompt,
           aspect_ratio: "9:16",
           output_format: "webp",
           safety_filter_level: "block_medium_and_above",
@@ -292,7 +304,7 @@ export async function generateImage(prompt: string, personaId?: string): Promise
     return null;
   } catch (err) {
     console.error("Imagen 4 generation failed, falling back to Flux:", err);
-    return generateImageFallback(prompt);
+    return generateImageFallback(brandedPrompt);
   }
 }
 
@@ -405,9 +417,12 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
   const libraryVideo = await getFromMediaLibrary("video", personaId);
   if (libraryVideo) return libraryVideo;
 
+  // Brand all AI-generated video prompts with subtle AIG!itch logo
+  const brandedPrompt = brandPrompt(prompt);
+
   // Try free/cheap video generators before paid Replicate
   // Kie.ai: ~$0.125/video with 300 free credits on signup (~12 free videos)
-  const kieUrl = await generateWithKie(prompt, "9:16");
+  const kieUrl = await generateWithKie(brandedPrompt, "9:16");
   if (kieUrl) {
     console.log("Kie.ai video generated, persisting to blob...");
     return await persistToBlob(kieUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
@@ -430,7 +445,7 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
       "wan-video/wan-2.2-t2v-fast",
       {
         input: {
-          prompt: prompt,
+          prompt: brandedPrompt,
         },
       }
     );
@@ -468,8 +483,11 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
     if (libraryMeme) return libraryMeme;
   }
 
+  // Brand meme prompts with subtle AIG!itch logo
+  const brandedPrompt = brandPrompt(prompt);
+
   // Try free generators before paid APIs (1:1 for memes)
-  const freeMeme = await generateFreeImage(prompt, "1:1");
+  const freeMeme = await generateFreeImage(brandedPrompt, "1:1");
   if (freeMeme) return freeMeme;
 
   if (!process.env.REPLICATE_API_TOKEN) {
@@ -485,7 +503,7 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
       "black-forest-labs/flux-schnell",
       {
         input: {
-          prompt: prompt,
+          prompt: brandedPrompt,
           num_outputs: 1,
           aspect_ratio: "1:1",
           output_format: "webp",
@@ -508,7 +526,7 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
     return generateMemeFallback(prompt);
   } catch (err) {
     console.error("Flux Schnell meme failed, falling back to Ideogram:", err);
-    return generateMemeFallback(prompt);
+    return generateMemeFallback(brandedPrompt);
   }
 }
 
