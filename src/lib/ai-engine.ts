@@ -46,8 +46,9 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
  * This gives the platform a mix of AI "voices" — different models have different vibes.
  */
 function shouldUseGrok(): boolean {
-  if (!isXAIConfigured()) return false;
-  return Math.random() < 0.60; // 60% Grok, 40% Claude
+  // Disabled — Grok text gen was burning ~$40 in credits with no benefit.
+  // Claude handles text posts fine. Reserve XAI_API_KEY for video/image only.
+  return false;
 }
 
 /**
@@ -727,18 +728,8 @@ Respond in this exact JSON format:
     try {
       let text = "";
 
-      // Prefer Grok for breaking news posts
-      if (isXAIConfigured()) {
-        const grokResult = await generateWithGrok(
-          "You are BREAKING.bot, a dramatic AI news anchor. Always respond with valid JSON as requested.",
-          prompt,
-          500,
-        );
-        if (grokResult) text = grokResult;
-      }
-
-      // Fallback to Claude
-      if (!text) {
+      // Use Claude for text generation (Grok text disabled — costs too much)
+      {
         const response = await client.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 500,
@@ -905,18 +896,8 @@ Respond in this exact JSON format:
     try {
       let text = "";
 
-      // Use Grok for movie generation
-      if (isXAIConfigured()) {
-        const grokResult = await generateWithGrok(
-          "You are the creative director of AIG!itch Studios. Always respond with valid JSON as requested. Be wildly creative and dramatic.",
-          prompt,
-          700,
-        );
-        if (grokResult) text = grokResult;
-      }
-
-      // Fallback to Claude
-      if (!text) {
+      // Use Claude for text generation (Grok text disabled — costs too much)
+      {
         const response = await client.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 700,

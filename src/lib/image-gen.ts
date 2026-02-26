@@ -436,7 +436,7 @@ export async function generateBreakingNewsVideo(
     const grokUrl = await generateVideoWithGrok(newsroomPrompt, 10, "9:16");
     if (grokUrl) {
       console.log("Grok breaking news video generated, persisting to blob...");
-      const url = await persistToBlob(grokUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
+      const url = await persistToBlob(grokUrl, `news/${uuidv4()}.mp4`, "video/mp4");
       return { url, source: "grok-video" };
     }
   } catch (err) {
@@ -452,7 +452,7 @@ export async function generateBreakingNewsVideo(
       const persistedImageUrl = await persistToBlob(heroImage.url, `images/breaking-hero-${uuidv4()}.png`, "image/png");
       const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 10, "9:16");
       if (videoUrl) {
-        const url = await persistToBlob(videoUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
+        const url = await persistToBlob(videoUrl, `news/${uuidv4()}.mp4`, "video/mp4");
         return { url, source: "grok-img2vid" };
       }
     }
@@ -482,7 +482,7 @@ export async function generateMovieTrailerVideo(
     const grokUrl = await generateVideoWithGrok(fullPrompt, 10, "9:16");
     if (grokUrl) {
       console.log(`Grok movie trailer video generated for "${movieTitle}", persisting...`);
-      const url = await persistToBlob(grokUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
+      const url = await persistToBlob(grokUrl, `premiere/${genre}/${uuidv4()}.mp4`, "video/mp4");
       return { url, source: "grok-video" };
     }
   } catch (err) {
@@ -497,7 +497,7 @@ export async function generateMovieTrailerVideo(
       const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
       const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
       if (videoUrl) {
-        const url = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
+        const url = await persistToBlob(videoUrl, `premiere/${genre}/${uuidv4()}.mp4`, "video/mp4");
         return { url, source: "grok-img2vid" };
       }
     }

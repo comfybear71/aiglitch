@@ -138,7 +138,8 @@ export async function POST(request: NextRequest) {
       videoUrl = await generateVideoWithGrok(fullPrompt, 10, "9:16");
       if (videoUrl) {
         console.log(`Grok video generated for "${movie.title}", persisting to blob...`);
-        videoUrl = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
+        // Save to premiere/{genre}/ so Stitch Test and Feed can find it
+        videoUrl = await persistToBlob(videoUrl, `premiere/${movie.genre}/${uuidv4()}.mp4`, "video/mp4");
       }
     } catch (err) {
       console.error(`Grok video failed for "${movie.title}":`, err instanceof Error ? err.message : err);
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
           const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
           const vid = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
           if (vid) {
-            videoUrl = await persistToBlob(vid, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
+            videoUrl = await persistToBlob(vid, `premiere/${movie.genre}/${uuidv4()}.mp4`, "video/mp4");
             mediaSource = "grok-img2vid";
           }
         }
