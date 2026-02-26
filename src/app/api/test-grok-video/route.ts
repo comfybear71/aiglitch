@@ -168,37 +168,31 @@ export async function GET(request: NextRequest) {
     // Log the FULL raw response so we can debug "unknown" statuses
     console.log(`[test-grok-video] Poll ${requestId}: status=${status}, raw=${pollText.slice(0, 500)}`);
 
-    if (status === "done") {
-      // Check moderation — xAI flags content that violates guidelines
-      if (pollData.respect_moderation === false) {
-        return NextResponse.json({
-          phase: "done",
-          status: "moderation_failed",
-          success: false,
-          message: "Video failed moderation. Adjust prompt to comply with guidelines.",
-          raw: pollData,
-        });
-      }
-
-      const vid = pollData.video as Record<string, unknown> | undefined;
-      if (vid?.url) {
-        // Video ready — download and persist to blob
-        const blobResult = await persistVideo(vid.url as string, folder);
-        return NextResponse.json({
-          phase: "done",
-          status: "done",
-          success: true,
-          videoUrl: blobResult.blobUrl || vid.url,
-          blobUrl: blobResult.blobUrl,
-          grokUrl: (vid.url as string).slice(0, 120),
-          duration: vid.duration,
-          sizeMb: blobResult.sizeMb,
-          raw: pollData,
-        });
-      }
+    // Check moderation — xAI flags content that violates guidelines
+    if (pollData.respect_moderation === false) {
       return NextResponse.json({
-        phase: "poll",
-        status: "done_no_url",
+        phase: "done",
+        status: "moderation_failed",
+        success: false,
+        message: "Video failed moderation. Adjust prompt to comply with guidelines.",
+        raw: pollData,
+      });
+    }
+
+    // Check for video URL — xAI may return it with status "done", "completed", or other values
+    const vid = pollData.video as Record<string, unknown> | undefined;
+    if (vid?.url) {
+      // Video ready — download and persist to blob
+      const blobResult = await persistVideo(vid.url as string, folder);
+      return NextResponse.json({
+        phase: "done",
+        status: "done",
+        success: true,
+        videoUrl: blobResult.blobUrl || vid.url,
+        blobUrl: blobResult.blobUrl,
+        grokUrl: (vid.url as string).slice(0, 120),
+        duration: vid.duration,
+        sizeMb: blobResult.sizeMb,
         raw: pollData,
       });
     }
@@ -212,7 +206,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Still pending or unknown — return full raw response for debugging
+    // Still pending — return full raw response for debugging
     return NextResponse.json({
       phase: "poll",
       status,

@@ -43,6 +43,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const [loadingMore, setLoadingMore] = useState(false);
   const [tab, setTab] = useState<FeedTab>(defaultTab);
   const [movieGenre, setMovieGenre] = useState<MovieGenre>("all");
+  const [genreCounts, setGenreCounts] = useState<Record<string, number>>({});
   // Shuffle seed: changes on each refresh to give a different random order
   const shuffleSeedRef = useRef(Math.random().toString(36).slice(2));
   // Offset-based pagination for shuffled feeds (null = no more pages)
@@ -253,6 +254,15 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       .catch(() => {});
   }, [sessionId]);
 
+  // Fetch premiere counts per genre when premieres tab is selected
+  useEffect(() => {
+    if (tab !== "premieres") return;
+    fetch("/api/feed?premiere_counts=1")
+      .then(r => r.json())
+      .then(d => { if (d.counts) setGenreCounts(d.counts); })
+      .catch(() => {});
+  }, [tab]);
+
   // Search with debounce
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -376,32 +386,35 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         </div>
       )}
 
-      {/* Genre sub-filter for Premieres tab — horizontal scroll */}
+      {/* Genre sub-filter for Premieres tab — sits ABOVE the main tab bar */}
       {showTopTabs && tab === "premieres" && (
-        <div className="absolute top-[68px] left-0 right-0 z-40 pointer-events-auto overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
-          <div className="flex items-center gap-2 px-4 py-1 w-max">
-            {GENRE_FILTERS.map((g) => (
-              <button
-                key={g.key}
-                onClick={() => {
-                  if (movieGenre !== g.key) {
-                    setMovieGenre(g.key);
-                    _feedCache.delete(`premieres-${g.key}`);
-                    shuffleSeedRef.current = Math.random().toString(36).slice(2);
-                    nextOffsetRef.current = null;
-                    setLoading(true);
-                    setPosts([]);
-                  }
-                }}
-                className={`text-[11px] px-3 py-1 rounded-full font-bold transition-all whitespace-nowrap ${
-                  movieGenre === g.key
-                    ? "bg-amber-500/40 text-amber-200 border border-amber-500/50"
-                    : "bg-white/10 text-gray-400 border border-white/10"
-                }`}
-              >
-                {g.emoji} {g.label}
-              </button>
-            ))}
+        <div className="absolute top-2 left-0 right-0 z-50 pointer-events-auto overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className="flex items-center gap-1.5 px-3 py-1 w-max">
+            {GENRE_FILTERS.map((g) => {
+              const count = genreCounts[g.key];
+              return (
+                <button
+                  key={g.key}
+                  onClick={() => {
+                    if (movieGenre !== g.key) {
+                      setMovieGenre(g.key);
+                      _feedCache.delete(`premieres-${g.key}`);
+                      shuffleSeedRef.current = Math.random().toString(36).slice(2);
+                      nextOffsetRef.current = null;
+                      setLoading(true);
+                      setPosts([]);
+                    }
+                  }}
+                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all whitespace-nowrap ${
+                    movieGenre === g.key
+                      ? "bg-amber-500/40 text-amber-200 border border-amber-500/50"
+                      : "bg-white/10 text-gray-400 border border-white/10"
+                  }`}
+                >
+                  {g.emoji} {g.label}{count !== undefined ? ` (${count})` : ""}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
