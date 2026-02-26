@@ -905,7 +905,7 @@ export default function AdminDashboard() {
 
   const testStitchPost = async () => {
     setTestingGrokVideo(true);
-    setGenerationLog((prev) => [...prev, "🎬 Creating test premiere post from blob storage..."]);
+    setGenerationLog((prev) => [...prev, "🎬 Scanning blob storage for videos to post..."]);
     try {
       // First list available videos
       const listRes = await fetch("/api/test-premiere-post");
@@ -913,14 +913,16 @@ export default function AdminDashboard() {
       if (listData.videos?.length) {
         setGenerationLog((prev) => [...prev, `  Found ${listData.videos.length} videos in blob storage:`]);
         for (const v of listData.videos) {
-          setGenerationLog((prev) => [...prev, `    📹 ${v.pathname} (${(v.size / 1024 / 1024).toFixed(2)}MB)`]);
+          const tag = v.detectedGenre ? ` [${v.detectedType}/${v.detectedGenre}]` : ` [${v.detectedType}]`;
+          setGenerationLog((prev) => [...prev, `    📹 ${v.pathname}${tag} (${(v.size / 1024 / 1024).toFixed(2)}MB)`]);
         }
       } else {
-        setGenerationLog((prev) => [...prev, "  ❌ No videos found in blob storage. Run a test video first."]);
+        setGenerationLog((prev) => [...prev, "  ❌ No videos found in blob storage. Upload videos to news/ or premiere/{genre}/ folders."]);
         setTestingGrokVideo(false);
         return;
       }
-      // Create the test post
+      // Auto-create posts from all unposted videos
+      setGenerationLog((prev) => [...prev, "  📝 Creating posts from unposted videos..."]);
       const createRes = await fetch("/api/test-premiere-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -928,12 +930,18 @@ export default function AdminDashboard() {
       });
       const createData = await createRes.json();
       if (createData.success) {
-        setGenerationLog((prev) => [...prev, `  ✅ Test premiere post created!`]);
-        setGenerationLog((prev) => [...prev, `    Video: ${createData.videoUrl}`]);
-        setGenerationLog((prev) => [...prev, `    Persona: @${createData.persona}`]);
-        setGenerationLog((prev) => [...prev, `    → Check Premieres tab or For You feed. Intro stitch should play premiere.mp4 first!`]);
+        if (createData.created > 0) {
+          setGenerationLog((prev) => [...prev, `  ✅ Created ${createData.created} new posts:`]);
+          for (const p of createData.posts) {
+            const genreLabel = p.genre ? ` (${p.genre})` : "";
+            setGenerationLog((prev) => [...prev, `    🎬 ${p.postType}${genreLabel} → @${p.persona}`]);
+          }
+          setGenerationLog((prev) => [...prev, `  → Check For You feed, Premieres tab, or Breaking tab!`]);
+        } else {
+          setGenerationLog((prev) => [...prev, `  ℹ️ ${createData.message || "All videos already posted."}`]);
+        }
       } else {
-        setGenerationLog((prev) => [...prev, `  ❌ ${createData.error || "Failed to create post"}`]);
+        setGenerationLog((prev) => [...prev, `  ❌ ${createData.error || "Failed to create posts"}`]);
       }
     } catch (err) {
       setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
