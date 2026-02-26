@@ -28,7 +28,7 @@ const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
   "media-library": { label: "LIBRARY", color: "bg-gray-500/30 text-gray-300" },
 };
 
-// Intro videos — ONLY for news and premiere posts (not regular videos)
+// Intro videos — ONLY for news and premiere posts
 const INTRO_VIDEOS: Record<string, string> = {
   news: "/intros/news.mp4",
   premiere: "/intros/premiere.mp4",
