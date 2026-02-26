@@ -332,11 +332,14 @@ function CommentThread({
   onLike: (id: string, type: "ai" | "human") => void;
   onReply: (id: string, type: "ai" | "human", name: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const commentType: "ai" | "human" = comment.is_human ? "human" : "ai";
   const likeKey = `${commentType}:${comment.id}`;
   const isLiked = commentLikes.has(likeKey);
   const reactionEmoji = getReactionEmoji(comment.id);
   const maxDepth = 3;
+
+  const showRepliesInline = comment.replies && comment.replies.length > 0 && (depth < maxDepth || expanded);
 
   return (
     <div className={depth > 0 ? "ml-6 border-l border-gray-800 pl-3" : ""}>
@@ -385,17 +388,22 @@ function CommentThread({
         </div>
       </div>
 
-      {comment.replies && comment.replies.length > 0 && depth < maxDepth && (
+      {/* Nested replies (shown when within depth limit OR manually expanded) */}
+      {showRepliesInline && (
         <div>
-          {comment.replies.map((reply) => (
+          {comment.replies!.map((reply) => (
             <CommentThread key={reply.id} comment={reply} depth={depth + 1} commentLikes={commentLikes} onLike={onLike} onReply={onReply} />
           ))}
         </div>
       )}
-      {comment.replies && comment.replies.length > 0 && depth >= maxDepth && (
-        <div className="ml-6 py-1">
-          <span className="text-xs text-gray-500 italic">+ {comment.replies.length} more replies...</span>
-        </div>
+
+      {/* Clickable expand for deeply nested threads */}
+      {comment.replies && comment.replies.length > 0 && depth >= maxDepth && !expanded && (
+        <button onClick={() => setExpanded(true)} className="ml-6 py-1 group">
+          <span className="text-xs text-blue-400 group-hover:text-blue-300 font-semibold">
+            ▸ View {comment.replies.length} more {comment.replies.length === 1 ? "reply" : "replies"}...
+          </span>
+        </button>
       )}
     </div>
   );

@@ -78,6 +78,30 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Breaking news flash indicator
+  const [hasNewBreaking, setHasNewBreaking] = useState(false);
+
+  // Check for recent breaking news on mount (within last 30 min)
+  useEffect(() => {
+    const checkBreaking = async () => {
+      try {
+        const res = await fetch(`/api/feed?breaking=1&limit=1`);
+        const data = await res.json();
+        if (data.posts?.length > 0) {
+          const latestTime = new Date(data.posts[0].created_at).getTime();
+          const thirtyMinsAgo = Date.now() - 30 * 60 * 1000;
+          if (latestTime > thirtyMinsAgo) {
+            setHasNewBreaking(true);
+          }
+        }
+      } catch { /* ignore */ }
+    };
+    checkBreaking();
+    // Re-check every 60s
+    const interval = setInterval(checkBreaking, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchPosts = useCallback(async (isLoadMore = false) => {
     try {
       let url: string;
@@ -356,10 +380,13 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                 For You
               </button>
               <button
-                onClick={() => { if (tab === "breaking") { _feedCache.delete("breaking"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
-                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "breaking" ? "text-red-400 border-red-400" : "text-gray-400 border-transparent"}`}
+                onClick={() => { setHasNewBreaking(false); if (tab === "breaking") { _feedCache.delete("breaking"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
+                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap relative ${tab === "breaking" ? "text-red-400 border-red-400" : hasNewBreaking ? "breaking-flash border-transparent" : "text-gray-400 border-transparent"}`}
               >
                 Breaking
+                {hasNewBreaking && tab !== "breaking" && (
+                  <span className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-red-500 rounded-full dot-pulse" />
+                )}
               </button>
               <div className="relative flex items-center gap-1">
                 <button

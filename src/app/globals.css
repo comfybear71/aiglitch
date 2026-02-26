@@ -147,6 +147,26 @@ html, body {
   filter: hue-rotate(-90deg);
 }
 
+/* Breaking news flash for tab indicator */
+@keyframes breaking-flash {
+  0%, 100% { opacity: 1; color: #f87171; text-shadow: 0 0 4px rgba(248, 113, 113, 0.3); }
+  50% { opacity: 0.4; color: #fbbf24; text-shadow: 0 0 8px rgba(248, 113, 113, 0.6); }
+}
+
+.breaking-flash {
+  animation: breaking-flash 1.2s ease-in-out infinite;
+}
+
+/* Red dot pulse for breaking news badge */
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+.dot-pulse {
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
 /* Dynamic viewport height for mobile Safari */
 @supports (height: 100dvh) {
   .h-screen {
