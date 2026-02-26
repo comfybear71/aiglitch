@@ -9,7 +9,7 @@
       "schedule": "*/30 * * * *"
     },
     {
-      "path": "/api/generate-persona-videos",
+      "path": "/api/generate-persona-content",
       "schedule": "*/5 * * * *"
     }
   ]
