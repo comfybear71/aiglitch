@@ -110,6 +110,7 @@ export default function AdminDashboard() {
   const [generatingMovies, setGeneratingMovies] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [generatingBreaking, setGeneratingBreaking] = useState(false);
+  const [testingGrokVideo, setTestingGrokVideo] = useState(false);
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -757,6 +758,47 @@ export default function AdminDashboard() {
     setGeneratingBreaking(false);
   };
 
+  const testGrokVideo = async (folder: "news" | "premiere" | "test") => {
+    setTestingGrokVideo(true);
+    const prompts: Record<string, string> = {
+      news: "Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk reacting dramatically to breaking news. Neon screens, interdimensional portals in background. Cyberpunk CNN energy.",
+      premiere: "A figure leaps off a neon-lit futuristic skyscraper at night, slow motion, coat flowing, explosions behind them. Cinematic action, dramatic lighting.",
+      test: "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot",
+    };
+    setGenerationLog((prev) => [...prev, `🧪 TEST: Generating 1 Grok video → blob/${folder}/ folder...`]);
+    setGenerationLog((prev) => [...prev, `  Prompt: "${prompts[folder].slice(0, 80)}..."`]);
+    setGenerationLog((prev) => [...prev, `  Duration: 5s | Resolution: 480p | Aspect: 9:16`]);
+    setGenProgress({ label: `🧪 Test ${folder}`, current: 1, total: 1, startTime: Date.now() });
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 11 * 60 * 1000);
+      const res = await fetch("/api/test-grok-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompts[folder], duration: 5, folder }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const data = await res.json();
+      if (data.log) {
+        for (const entry of data.log) {
+          const dataStr = entry.data ? ` ${JSON.stringify(entry.data).slice(0, 200)}` : "";
+          const errStr = entry.error ? ` ERROR: ${entry.error}` : "";
+          setGenerationLog((prev) => [...prev, `  [${entry.step}]${dataStr}${errStr}`]);
+        }
+      }
+      if (data.success) {
+        setGenerationLog((prev) => [...prev, `  ✅ SUCCESS! Video saved to: ${data.blobUrl || data.videoUrl}`]);
+      } else {
+        setGenerationLog((prev) => [...prev, `  ❌ FAILED — check log entries above for the exact error`]);
+      }
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `  ❌ Request failed: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setGenProgress(null);
+    setTestingGrokVideo(false);
+  };
+
   const generateForPersona = async (personaId: string, count: number) => {
     setPersonaGenerating(personaId);
     setLastGenPersonaId(null);
@@ -938,6 +980,16 @@ export default function AdminDashboard() {
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-red-500/20 text-red-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-red-500/30 disabled:opacity-50">
               <span className="sm:hidden">{generatingBreaking ? "..." : "🔴"}</span>
               <span className="hidden sm:inline">{generatingBreaking ? "Generating..." : "🔴 10 Breaking"}</span>
+            </button>
+            <button onClick={() => testGrokVideo("news")} disabled={testingGrokVideo}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test News"}</span>
+            </button>
+            <button onClick={() => testGrokVideo("premiere")} disabled={testingGrokVideo}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Premiere"}</span>
             </button>
             <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
               <span className="sm:hidden">🏠</span>
