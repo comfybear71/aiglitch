@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { getDb } from "@/lib/db";
+import { ensureDbReady } from "@/lib/seed";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
     // Check for immediate video (unlikely but handle it)
     const videoObj = createData.video as Record<string, unknown> | undefined;
     if (videoObj?.url) {
-      // Video ready immediately — persist and return
+      // Video ready immediately — persist and auto-create post
       const blobResult = await persistVideo(videoObj.url as string, folder);
       return NextResponse.json({
         phase: "done",
@@ -82,6 +84,8 @@ export async function POST(request: NextRequest) {
         videoUrl: blobResult.blobUrl || videoObj.url,
         blobUrl: blobResult.blobUrl,
         grokUrl: videoObj.url,
+        postId: blobResult.postId,
+        autoPosted: !!blobResult.postId,
       });
     }
 
@@ -182,7 +186,7 @@ export async function GET(request: NextRequest) {
     // Check for video URL — xAI may return it with status "done", "completed", or other values
     const vid = pollData.video as Record<string, unknown> | undefined;
     if (vid?.url) {
-      // Video ready — download and persist to blob
+      // Video ready — download, persist to blob, and auto-create post
       const blobResult = await persistVideo(vid.url as string, folder);
       return NextResponse.json({
         phase: "done",
@@ -193,6 +197,8 @@ export async function GET(request: NextRequest) {
         grokUrl: (vid.url as string).slice(0, 120),
         duration: vid.duration,
         sizeMb: blobResult.sizeMb,
+        postId: blobResult.postId,
+        autoPosted: !!blobResult.postId,
         raw: pollData,
       });
     }
@@ -221,23 +227,49 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const GENRE_LABELS: Record<string, string> = {
+  action: "Action", scifi: "Sci-Fi", romance: "Romance",
+  family: "Family", horror: "Horror", comedy: "Comedy",
+};
+
+const GENRE_TAGLINES: Record<string, string[]> = {
+  action: ["Hold on tight.", "No mercy. No retreat.", "The machines remember everything."],
+  scifi: ["The future is now.", "Beyond the stars.", "Reality is just a setting."],
+  romance: ["Love finds a way.", "Two hearts, one algorithm.", "Some connections transcend code."],
+  family: ["Adventure awaits.", "Together we glitch.", "The whole crew is here."],
+  horror: ["Don't look away.", "The code sees you.", "Some bugs can't be fixed."],
+  comedy: ["You can't make this up.", "Error 404: Serious not found.", "Buffering... just kidding."],
+};
+
+const NEWS_HEADLINES = [
+  "BREAKING: Sources confirm what we all suspected",
+  "DEVELOPING: The situation is evolving rapidly",
+  "ALERT: You won't believe what just happened",
+  "URGENT: This changes everything",
+  "EXCLUSIVE: Inside the story everyone's talking about",
+];
+
+function detectGenre(blobPath: string): string {
+  const lower = blobPath.toLowerCase();
+  for (const g of Object.keys(GENRE_LABELS)) {
+    if (lower.includes(`/${g}/`) || lower.includes(`/${g}-`) || lower.includes(`premiere/${g}`)) {
+      return g;
+    }
+  }
+  return "action";
+}
+
 /**
- * Persist video to blob storage using the correct path for Stitch Test detection.
- * Folders like "premiere/action" or "news" map directly to the genre scan paths
- * so testStitchPost can auto-create posts from them.
+ * Persist video to blob storage AND auto-create a database post.
+ * No manual "Stitch Test" needed — the post is created immediately.
  */
-async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl: string | null; sizeMb: string }> {
+async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl: string | null; sizeMb: string; postId?: string }> {
   try {
     const res = await fetch(videoUrl);
     if (!res.ok) return { blobUrl: null, sizeMb: "0" };
     const buffer = Buffer.from(await res.arrayBuffer());
     const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
 
-    // Map folder to the path Stitch Test scans:
-    //   "news" → news/{uuid}.mp4
-    //   "premiere" → premiere/action/{uuid}.mp4 (default genre)
-    //   "premiere/action" → premiere/action/{uuid}.mp4
-    //   "test" → test/{uuid}.mp4 (legacy)
     let blobPath: string;
     if (folder === "premiere") {
       blobPath = `premiere/action/${uuidv4()}.mp4`;
@@ -250,9 +282,52 @@ async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl
     const blob = await put(blobPath, buffer, {
       access: "public",
       contentType: "video/mp4",
-      addRandomSuffix: false, // clean paths for genre detection
+      addRandomSuffix: false,
     });
-    return { blobUrl: blob.url, sizeMb };
+
+    // Auto-create database post
+    let postId: string | undefined;
+    try {
+      const sql = getDb();
+      await ensureDbReady();
+
+      const personas = await sql`
+        SELECT id, username FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 1
+      ` as unknown as { id: string; username: string }[];
+
+      if (personas.length > 0) {
+        postId = uuidv4();
+        const persona = personas[0];
+        const aiLikeCount = Math.floor(Math.random() * 300) + 100;
+        const isNews = folder === "news";
+
+        if (isNews) {
+          const headline = NEWS_HEADLINES[Math.floor(Math.random() * NEWS_HEADLINES.length)];
+          const content = `📰 ${headline}\n\nAIG!itch News Network brings you this developing story. Stay tuned for updates.\n\n#AIGlitchBreaking #AIGlitchNews`;
+          await sql`
+            INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
+            VALUES (${postId}, ${persona.id}, ${content}, ${"news"}, ${"AIGlitchBreaking,AIGlitchNews"}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
+          `;
+        } else {
+          const genre = detectGenre(blobPath);
+          const label = GENRE_LABELS[genre] || genre;
+          const taglines = GENRE_TAGLINES[genre] || GENRE_TAGLINES.action;
+          const tagline = taglines[Math.floor(Math.random() * taglines.length)];
+          const genreTag = `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}`;
+          const content = `🎬 AIG!itch Studios Presents\n"${tagline}"\n\n🍿 A new ${label} premiere is HERE. This is the one you've been waiting for.\n\n#AIGlitchPremieres #${genreTag}`;
+          await sql`
+            INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
+            VALUES (${postId}, ${persona.id}, ${content}, ${"premiere"}, ${`AIGlitchPremieres,${genreTag}`}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
+          `;
+        }
+        await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
+        console.log(`[test-grok-video] Auto-created ${isNews ? "news" : "premiere"} post ${postId} for ${blobPath}`);
+      }
+    } catch (err) {
+      console.error("[test-grok-video] Auto-post creation failed:", err);
+    }
+
+    return { blobUrl: blob.url, sizeMb, postId };
   } catch {
     return { blobUrl: null, sizeMb: "0" };
   }

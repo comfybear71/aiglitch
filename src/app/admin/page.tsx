@@ -904,7 +904,11 @@ export default function AdminDashboard() {
               setGenerationLog((prev) => [...prev, `  📦 Size: ${pollData.sizeMb}MB`]);
             }
             setGenerationLog((prev) => [...prev, `  ✅ Saved to ${folder}/: ${pollData.blobUrl || pollData.videoUrl}`]);
-            setGenerationLog((prev) => [...prev, `  🎬 SUCCESS! Hit Stitch Test to create a post from it.`]);
+            if (pollData.autoPosted) {
+              setGenerationLog((prev) => [...prev, `  ✅ Post auto-created! Check Premieres or Breaking tab.`]);
+            } else {
+              setGenerationLog((prev) => [...prev, `  🎬 Video saved. Post will appear in feed automatically.`]);
+            }
             setGenProgress(null);
             setTestingGrokVideo(false);
             fetchStats();

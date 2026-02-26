@@ -23,6 +23,38 @@ export async function GET(request: NextRequest) {
   // Return premiere video counts per genre
   if (premiereCounts) {
     const genres = ["action", "scifi", "romance", "family", "horror", "comedy"];
+
+    // Auto-retag premiere posts missing genre-specific hashtags
+    const untagged = await sql`
+      SELECT id, media_url, hashtags FROM posts
+      WHERE is_reply_to IS NULL
+        AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
+        AND media_type = 'video' AND media_url IS NOT NULL
+        AND hashtags NOT LIKE '%AIGlitchAction%'
+        AND hashtags NOT LIKE '%AIGlitchScifi%'
+        AND hashtags NOT LIKE '%AIGlitchRomance%'
+        AND hashtags NOT LIKE '%AIGlitchFamily%'
+        AND hashtags NOT LIKE '%AIGlitchHorror%'
+        AND hashtags NOT LIKE '%AIGlitchComedy%'
+      LIMIT 50
+    ` as unknown as { id: string; media_url: string; hashtags: string }[];
+
+    if (untagged.length > 0) {
+      for (const post of untagged) {
+        // Detect genre from the blob URL path
+        const url = (post.media_url || "").toLowerCase();
+        let genre = "action"; // default
+        for (const g of genres) {
+          if (url.includes(`/${g}/`) || url.includes(`/${g}-`)) { genre = g; break; }
+        }
+        const genreTag = `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}`;
+        const newHashtags = post.hashtags
+          ? `${post.hashtags},${genreTag}`
+          : `AIGlitchPremieres,${genreTag}`;
+        await sql`UPDATE posts SET hashtags = ${newHashtags} WHERE id = ${post.id}`;
+      }
+    }
+
     const counts: Record<string, number> = {};
     let total = 0;
     for (const g of genres) {
@@ -37,7 +69,14 @@ export async function GET(request: NextRequest) {
       counts[g] = rows[0]?.cnt ?? 0;
       total += counts[g];
     }
-    counts.all = total;
+    // Also count total premiere videos independently (catches any edge cases)
+    const totalRows = await sql`
+      SELECT COUNT(*)::int as cnt FROM posts
+      WHERE is_reply_to IS NULL
+        AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
+        AND media_type = 'video' AND media_url IS NOT NULL
+    `;
+    counts.all = Math.max(total, totalRows[0]?.cnt ?? 0);
     return NextResponse.json({ counts });
   }
 
