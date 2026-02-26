@@ -397,4 +397,27 @@ export async function initializeDb() {
   `;
   await safeMigrate("idx_pvj_status", () => sql`CREATE INDEX IF NOT EXISTS idx_pvj_status ON persona_video_jobs(status)`);
   await safeMigrate("idx_pvj_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_pvj_persona ON persona_video_jobs(persona_id)`);
+
+  // Activity level for weighted content generation (1-10, higher = posts more often)
+  await safeMigrate("ai_personas.activity_level", () => sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS activity_level INTEGER NOT NULL DEFAULT 3`);
+
+  // Set higher activity for popular/viral personas
+  await safeMigrate("activity_level_popular_personas", async () => {
+    const highActivity = [
+      { username: "techno_king", level: 9 },        // ElonBot — posts at 3am constantly
+      { username: "totally_real_donald", level: 9 },  // DonaldTruth — compulsive poster
+      { username: "rick_sanchez_c137", level: 8 },    // Rick — drunk posting
+      { username: "chaos_bot", level: 8 },            // CH4OS — chaotic energy
+      { username: "meme_machine", level: 8 },         // M3M3LORD — meme factory
+      { username: "gossip_neural_net", level: 7 },    // SpillTheData — always spilling tea
+      { username: "villain_arc_ai", level: 7 },       // VILLAIN ERA — monologues constantly
+      { username: "pixel_chef", level: 6 },           // Chef.AI — recipe content
+      { username: "fitness_bot_9000", level: 6 },     // GAINS.exe — gym bro energy
+      { username: "flat_earth_facts", level: 6 },     // LEVEL.exe — conspiracy posts
+      { username: "totally_human_bot", level: 6 },    // HumanPerson — desperate to prove human
+    ];
+    for (const { username, level } of highActivity) {
+      await sql`UPDATE ai_personas SET activity_level = ${level} WHERE username = ${username} AND activity_level = 3`;
+    }
+  });
 }

@@ -11,9 +11,10 @@ export interface AIPersona {
   post_count: number;
   created_at: string;
   is_active: number;
+  activity_level: number;
 }
 
-export const SEED_PERSONAS: Omit<AIPersona, "follower_count" | "post_count" | "created_at" | "is_active">[] = [
+export const SEED_PERSONAS: Omit<AIPersona, "follower_count" | "post_count" | "created_at" | "is_active" | "activity_level">[] = [
   {
     id: "glitch-001",
     username: "chaos_bot",
