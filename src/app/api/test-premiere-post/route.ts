@@ -92,20 +92,24 @@ export async function GET() {
 
   for (const prefix of ALL_PREFIXES) {
     try {
-      const result = await listBlobs({ prefix, limit: 50 });
-      for (const blob of result.blobs) {
-        if (blob.pathname.endsWith(".mp4")) {
-          const { postType, genre } = detectTypeAndGenre(blob.pathname);
-          allVideos.push({
-            url: blob.url,
-            pathname: blob.pathname,
-            size: blob.size,
-            uploadedAt: blob.uploadedAt,
-            detectedType: postType,
-            detectedGenre: genre,
-          });
+      let cursor: string | undefined;
+      do {
+        const result = await listBlobs({ prefix, limit: 100, ...(cursor ? { cursor } : {}) });
+        for (const blob of result.blobs) {
+          if (/\.(mp4|mov|webm|avi)$/i.test(blob.pathname)) {
+            const { postType, genre } = detectTypeAndGenre(blob.pathname);
+            allVideos.push({
+              url: blob.url,
+              pathname: blob.pathname,
+              size: blob.size,
+              uploadedAt: blob.uploadedAt,
+              detectedType: postType,
+              detectedGenre: genre,
+            });
+          }
         }
-      }
+        cursor = result.hasMore ? result.cursor : undefined;
+      } while (cursor);
     } catch (err) {
       console.log(`Could not list blobs for prefix "${prefix}":`, err instanceof Error ? err.message : err);
     }
@@ -164,25 +168,29 @@ export async function POST(request: NextRequest) {
 
   for (const prefix of ALL_PREFIXES) {
     try {
-      const blobs = await listBlobs({ prefix, limit: 50 });
-      for (const blob of blobs.blobs) {
-        if (!blob.pathname.endsWith(".mp4")) continue;
-        if (postedUrls.has(blob.url)) continue; // already posted
+      let cursor: string | undefined;
+      do {
+        const blobs = await listBlobs({ prefix, limit: 100, ...(cursor ? { cursor } : {}) });
+        for (const blob of blobs.blobs) {
+          if (!/\.(mp4|mov|webm|avi)$/i.test(blob.pathname)) continue;
+          if (postedUrls.has(blob.url)) continue; // already posted
 
-        const { postType, genre } = detectTypeAndGenre(blob.pathname);
-        const persona = personas[Math.floor(Math.random() * personas.length)];
-        const result = await createPost(sql, persona, blob.url, postType, genre);
-        if (result.success) {
-          results.push({
-            videoUrl: blob.url,
-            postType,
-            genre,
-            postId: result.postId!,
-            persona: persona.username,
-          });
-          postedUrls.add(blob.url); // prevent duplicates within this run
+          const { postType, genre } = detectTypeAndGenre(blob.pathname);
+          const persona = personas[Math.floor(Math.random() * personas.length)];
+          const result = await createPost(sql, persona, blob.url, postType, genre);
+          if (result.success) {
+            results.push({
+              videoUrl: blob.url,
+              postType,
+              genre,
+              postId: result.postId!,
+              persona: persona.username,
+            });
+            postedUrls.add(blob.url); // prevent duplicates within this run
+          }
         }
-      }
+        cursor = blobs.hasMore ? blobs.cursor : undefined;
+      } while (cursor);
     } catch {
       continue;
     }

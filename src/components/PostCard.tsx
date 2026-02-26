@@ -41,6 +41,10 @@ function getIntroVideoSrc(post: Post): string | null {
   return null;
 }
 
+// Global active video ID — only this video is allowed to unmute.
+// Module-level (not React state) so it syncs instantly across all PostCard instances.
+let _activeVideoId: string | null = null;
+
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
 const GENRE_TAGS: Record<string, { label: string; emoji: string; color: string }> = {
   action:  { label: "ACTION",  emoji: "💥", color: "bg-red-500/50 text-red-100 border-red-400/40" },
@@ -195,13 +199,15 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
   }, [post.id]);
 
   // Auto-play/pause video based on visibility — TikTok style
-  // Strategy: try unmuted first, fall back to muted if browser blocks
+  // Strategy: set _activeVideoId first, pause others, then try unmuted playback
   useEffect(() => {
     if (!cardRef.current) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          // Signal all other videos to pause first
+          // Claim active slot FIRST (synchronous) so no other video can unmute
+          _activeVideoId = post.id;
+          // Signal all other videos to pause
           window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
 
           // If intro should play first — start muted (browser allows it), then try unmuting
@@ -210,10 +216,9 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             const tryPlay = () => {
               if (!introVideoRef.current) return;
               introVideoRef.current.play().then(() => {
-                // Playing! Now try to unmute (works if user has interacted with page)
-                if (introVideoRef.current) {
+                // Only unmute if we're still the active video
+                if (_activeVideoId === post.id && introVideoRef.current) {
                   introVideoRef.current.muted = false;
-                  // If browser re-blocks, stay muted — intro still plays visually
                 }
               }).catch(() => {
                 // Even muted play failed — skip intro, start main video
@@ -232,9 +237,11 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             return;
           }
           if (videoRef.current && !isPaused) {
-            // Try playing unmuted first (works after any user interaction on page)
-            videoRef.current.muted = false;
-            setIsMuted(false);
+            // Only unmute if we're still the active video
+            if (_activeVideoId === post.id) {
+              videoRef.current.muted = false;
+              setIsMuted(false);
+            }
             videoRef.current.play().catch(() => {
               // Browser blocked unmuted autoplay — fallback to muted
               if (videoRef.current) {
@@ -248,8 +255,11 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             });
           }
         } else {
+          // Video scrolled off — pause and mute immediately
           if (videoRef.current) { videoRef.current.pause(); videoRef.current.muted = true; }
           if (introVideoRef.current) { introVideoRef.current.pause(); introVideoRef.current.muted = true; }
+          // If we were the active video, clear it
+          if (_activeVideoId === post.id) _activeVideoId = null;
         }
       },
       { threshold: 0.6 }
@@ -290,12 +300,18 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
 
     // If video is muted and playing, first tap unmutes (doesn't pause)
     if (!videoRef.current.paused && videoRef.current.muted) {
+      // Claim active slot and pause others before unmuting
+      _activeVideoId = post.id;
+      window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
       videoRef.current.muted = false;
       setIsMuted(false);
       return;
     }
 
     if (videoRef.current.paused || autoplayBlocked) {
+      // Claim active slot and pause others before playing
+      _activeVideoId = post.id;
+      window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
       videoRef.current.muted = false;
       setIsMuted(false);
       videoRef.current.play().catch(() => {});
@@ -546,12 +562,12 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               preload="auto"
               {...({ "webkit-playsinline": "" } as any)}
               onCanPlayThrough={() => {
-                // Start muted (browser allows it), then try unmuting
+                // Start muted (browser allows it), then try unmuting only if active
                 if (introVideoRef.current && introVideoRef.current.paused) {
                   introVideoRef.current.muted = true;
                   introVideoRef.current.play().then(() => {
-                    // Now try unmuting — works if user has interacted with page
-                    if (introVideoRef.current) introVideoRef.current.muted = false;
+                    // Only unmute if we're still the active video
+                    if (_activeVideoId === post.id && introVideoRef.current) introVideoRef.current.muted = false;
                   }).catch(() => {
                     // Even muted failed — skip intro, start main
                     setIntroPlaying(false);
@@ -565,11 +581,12 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               }}
               onEnded={() => {
                 setIntroPlaying(false);
-                // Start the main video with audio after intro ends
+                // Start the main video — only unmute if this is still the active video
                 if (videoRef.current) {
                   videoRef.current.currentTime = 0;
-                  videoRef.current.muted = false;
-                  setIsMuted(false);
+                  const canUnmute = _activeVideoId === post.id;
+                  videoRef.current.muted = !canUnmute;
+                  setIsMuted(!canUnmute);
                   videoRef.current.play().catch(() => {
                     // Fallback to muted if unmuted play fails
                     if (videoRef.current) {
@@ -603,9 +620,10 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               // If waiting for intro, don't start main video yet
               if (introPlaying) return;
               if (videoRef.current && !isPaused) {
-                // Try unmuted first, fall back to muted
-                videoRef.current.muted = false;
-                setIsMuted(false);
+                // Only unmute if this is the active video
+                const canUnmute = _activeVideoId === post.id;
+                videoRef.current.muted = !canUnmute;
+                setIsMuted(!canUnmute);
                 videoRef.current.play().catch(() => {
                   if (videoRef.current) {
                     videoRef.current.muted = true;
