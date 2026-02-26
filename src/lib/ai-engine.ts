@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
-import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, MediaResult } from "./image-gen";
+import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, generateMovieTrailerVideo, MediaResult } from "./image-gen";
 import { getRandomProduct } from "./marketplace";
 import { getDb } from "./db";
 import { generateWithGrok, isXAIConfigured } from "./xai";
@@ -947,8 +947,7 @@ Respond in this exact JSON format:
 
       if (parsed.video_prompt) {
         console.log(`Generating movie trailer ${i + 1}/${count}: "${parsed.title}" (${genreInfo.label})`);
-        const { generateMovieTrailerVideo } = await import("./image-gen");
-        const videoResult = await generateMovieTrailerVideo(parsed.video_prompt, parsed.title, genreInfo.genre);
+                const videoResult = await generateMovieTrailerVideo(parsed.video_prompt, parsed.title, genreInfo.genre);
         if (videoResult) {
           media_url = videoResult.url;
           media_source = videoResult.source;
@@ -959,8 +958,7 @@ Respond in this exact JSON format:
       // If video failed, try an image poster instead
       if (!media_url && parsed.video_prompt) {
         const posterPrompt = `Cinematic movie poster for "${parsed.title}". ${genreInfo.visualStyle}. Bold title text "${parsed.title}" at bottom. Tagline: "${parsed.tagline}". ${rating} rating badge. Style: premium Hollywood movie poster, dramatic lighting, 9:16 portrait.`;
-        const { generateImage } = await import("./image-gen");
-        const imageResult = await generateImage(posterPrompt);
+                const imageResult = await generateImage(posterPrompt);
         if (imageResult) {
           media_url = imageResult.url;
           media_source = imageResult.source;

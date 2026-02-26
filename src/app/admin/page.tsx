@@ -635,84 +635,104 @@ export default function AdminDashboard() {
 
   const triggerMovieGeneration = async () => {
     setGeneratingMovies(true);
-    setGenerationLog((prev) => [...prev, "🎬 Generating AI movie trailers..."]);
-    try {
-      const res = await fetch("/api/generate-movies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 4 }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setGenerationLog((prev) => [
-          ...prev,
-          `🎬 Generated ${data.generated} movie trailers:`,
-          ...data.movies.map((m: { title: string; genre: string; hasVideo: boolean }) =>
-            `  🎬 "${m.title}" (${m.genre}) ${m.hasVideo ? "📹" : "📝"}`
-          ),
-        ]);
-      } else {
-        setGenerationLog((prev) => [...prev, `Movie generation error: ${data.error}`]);
+    const total = 4;
+    setGenerationLog((prev) => [...prev, `🎬 Generating ${total} movie trailers (1 at a time, ~2 min each)...`]);
+    let successCount = 0;
+    for (let i = 0; i < total; i++) {
+      try {
+        setGenerationLog((prev) => [...prev, `🎬 Movie ${i + 1}/${total}: generating...`]);
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
+        const res = await fetch("/api/generate-movies", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ count: 1 }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        const data = await res.json();
+        if (data.success && data.movies?.[0]) {
+          const m = data.movies[0];
+          setGenerationLog((prev) => [...prev, `  ✅ "${m.title}" (${m.genre}) ${m.hasVideo ? "📹" : "📝"}`]);
+          successCount++;
+        } else {
+          setGenerationLog((prev) => [...prev, `  ❌ Movie ${i + 1} error: ${data.error || "unknown"}`]);
+        }
+      } catch (err) {
+        setGenerationLog((prev) => [...prev, `  ❌ Movie ${i + 1} failed: ${err instanceof Error ? err.message : "unknown"}`]);
       }
-    } catch (err) {
-      setGenerationLog((prev) => [...prev, `Movie generation failed: ${err instanceof Error ? err.message : "unknown"}`]);
     }
+    setGenerationLog((prev) => [...prev, `🎬 Done: ${successCount}/${total} movies created`]);
     fetchStats();
     setGeneratingMovies(false);
   };
 
   const triggerVideoGeneration = async () => {
     setGeneratingVideos(true);
-    setGenerationLog((prev) => [...prev, "🎥 Generating 5 Grok movie trailer videos..."]);
-    try {
-      const res = await fetch("/api/generate-videos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 5 }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setGenerationLog((prev) => [
-          ...prev,
-          `🎥 Generated ${data.generated}/${data.total} videos:`,
-          ...data.videos.map((v: { title: string; genre: string; status: string }) =>
-            `  ${v.status === "success" ? "✅" : "❌"} "${v.title}" (${v.genre})`
-          ),
-        ]);
-      } else {
-        setGenerationLog((prev) => [...prev, `Video generation error: ${data.error}`]);
+    const total = 5;
+    setGenerationLog((prev) => [...prev, `🎥 Generating ${total} Grok videos (1 at a time, ~2 min each)...`]);
+    let successCount = 0;
+    for (let i = 0; i < total; i++) {
+      try {
+        setGenerationLog((prev) => [...prev, `🎥 Video ${i + 1}/${total}: generating...`]);
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
+        const res = await fetch("/api/generate-videos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ count: 1 }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        const data = await res.json();
+        if (data.success && data.videos?.[0]) {
+          const v = data.videos[0];
+          setGenerationLog((prev) => [...prev, `  ${v.status === "success" ? "✅" : "❌"} "${v.title}" (${v.genre})`]);
+          if (v.status === "success") successCount++;
+        } else {
+          setGenerationLog((prev) => [...prev, `  ❌ Video ${i + 1} error: ${data.error || "unknown"}`]);
+        }
+      } catch (err) {
+        setGenerationLog((prev) => [...prev, `  ❌ Video ${i + 1} failed: ${err instanceof Error ? err.message : "unknown"}`]);
       }
-    } catch (err) {
-      setGenerationLog((prev) => [...prev, `Video generation failed: ${err instanceof Error ? err.message : "unknown"}`]);
     }
+    setGenerationLog((prev) => [...prev, `🎥 Done: ${successCount}/${total} videos created`]);
     fetchStats();
     setGeneratingVideos(false);
   };
 
   const triggerBreakingVideos = async () => {
     setGeneratingBreaking(true);
-    setGenerationLog((prev) => [...prev, "📰 Generating 10 breaking news videos from briefing topics..."]);
-    try {
-      const res = await fetch("/api/generate-breaking-videos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 10 }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setGenerationLog((prev) => [
-          ...prev,
-          `📰 Generated ${data.generated} breaking posts (${data.videoCount} with video) from ${data.briefingTopicsUsed} topics:`,
-          ...data.results.map((r: { headline: string; status: string; mediaSource?: string }) =>
-            `  ${r.status === "video" ? "📹" : r.status === "image" ? "🖼️" : r.status === "failed" ? "❌" : "📝"} "${r.headline}" [${r.mediaSource || r.status}]`
-          ),
-        ]);
-      } else {
-        setGenerationLog((prev) => [...prev, `Breaking news error: ${data.error}${data.hint ? ` (${data.hint})` : ""}`]);
+    const total = 10;
+    setGenerationLog((prev) => [...prev, `📰 Generating ${total} breaking news posts (1 at a time from briefing topics)...`]);
+    let successCount = 0;
+    let videoCount = 0;
+    for (let i = 0; i < total; i++) {
+      try {
+        setGenerationLog((prev) => [...prev, `📰 Breaking ${i + 1}/${total}: generating...`]);
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
+        const res = await fetch("/api/generate-breaking-videos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ count: 1 }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        const data = await res.json();
+        if (data.success && data.results?.[0]) {
+          const r = data.results[0];
+          setGenerationLog((prev) => [...prev, `  ${r.hasVideo ? "📹" : r.status === "image" ? "🖼️" : "📝"} "${r.headline}" [${r.mediaSource || r.status}]`]);
+          successCount++;
+          if (r.hasVideo) videoCount++;
+        } else {
+          setGenerationLog((prev) => [...prev, `  ❌ Breaking ${i + 1}: ${data.error || "failed"}`]);
+        }
+      } catch (err) {
+        setGenerationLog((prev) => [...prev, `  ❌ Breaking ${i + 1} failed: ${err instanceof Error ? err.message : "unknown"}`]);
       }
-    } catch (err) {
-      setGenerationLog((prev) => [...prev, `Breaking news failed: ${err instanceof Error ? err.message : "unknown"}`]);
     }
+    setGenerationLog((prev) => [...prev, `📰 Done: ${successCount}/${total} posts (${videoCount} with video)`]);
     fetchStats();
     setGeneratingBreaking(false);
   };
