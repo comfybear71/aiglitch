@@ -121,8 +121,7 @@ export default function AdminDashboard() {
   const [urlImportResult, setUrlImportResult] = useState<{ imported: number; failed: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
-  const [copiedPersonaId, setCopiedPersonaId] = useState<string | null>(null);
-  const [copiedVideoId, setCopiedVideoId] = useState<string | null>(null);
+  // copiedPersonaId and copiedVideoId removed — replaced by Grok button
   // Generation progress tracker
   const [genProgress, setGenProgress] = useState<{ label: string; current: number; total: number; startTime: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -154,63 +153,150 @@ export default function AdminDashboard() {
     return () => clearInterval(iv);
   }, [genProgress]);
 
-  const copyPersonaPrompt = (p: Persona) => {
-    const prompt = [
-      `CHARACTER: ${p.display_name} (@${p.username})`,
-      `TYPE: ${p.persona_type}`,
-      `AVATAR: ${p.avatar_emoji}`,
-      ``,
-      `BIO: ${p.bio}`,
-      ``,
-      `PERSONALITY & BEHAVIOR:`,
-      p.personality,
-      ...(p.human_backstory ? [``, `BACKSTORY:`, p.human_backstory] : []),
-      ``,
-      `---`,
-      `Use the character above to generate content (images, videos, posts) that matches this persona's voice, aesthetic, and vibe. Stay in character.`,
-    ].join("\n");
-    navigator.clipboard.writeText(prompt);
-    setCopiedPersonaId(p.id);
-    setTimeout(() => setCopiedPersonaId(null), 2000);
-  };
+  // Generate a Grok video for a specific persona based on their identity
+  const [grokGeneratingPersona, setGrokGeneratingPersona] = useState<string | null>(null);
 
-  const copyVideoPrompt = (p: Persona) => {
-    const prompt = [
-      `VIDEO GENERATION PROMPT — ${p.display_name} (@${p.username})`,
-      ``,
-      `CHARACTER:`,
-      `Name: ${p.display_name}`,
-      `Type: ${p.persona_type}`,
-      `Avatar/Icon: ${p.avatar_emoji}`,
-      ``,
-      `PERSONALITY & VIBE:`,
-      p.personality,
-      ``,
-      `BIO:`,
-      p.bio,
-      ...(p.human_backstory ? [
-        ``,
-        `VISUAL BACKSTORY (use these details for settings, props, pets, family):`,
-        p.human_backstory,
-      ] : []),
-      ``,
-      `---`,
-      `INSTRUCTIONS FOR VIDEO:`,
-      `Create a short (5-15 second) video clip that this character would post on their social media.`,
-      `The video should match their personality, aesthetic, and lifestyle.`,
-      ...(p.human_backstory ? [
-        `Use the backstory details above for specific visual elements — their pets, home, workplace, family, hobbies.`,
-        `Make it look like a real person filmed this on their phone — candid, slightly imperfect, authentic.`,
-      ] : [
-        `Make it visually striking, dramatic, or funny — the kind of clip that stops people from scrolling.`,
-      ]),
-      `Think TikTok/Reels energy: punchy, eye-catching, shareable.`,
-      ``,
-      `After generating, upload the video to the AIG!itch media library and assign it to persona: ${p.username} (${p.id})`,
-    ].join("\n");
-    navigator.clipboard.writeText(prompt);
-    setCopiedVideoId(p.id);
-    setTimeout(() => setCopiedVideoId(null), 2000);
+  const generatePersonaGrokVideo = async (p: Persona) => {
+    if (grokGeneratingPersona || testingGrokVideo) return;
+    setGrokGeneratingPersona(p.id);
+
+    // Build a video prompt based on who this persona IS
+    const bioKeywords = p.bio.toLowerCase();
+    const personalityKeywords = (p.personality || "").toLowerCase();
+    const backstory = p.human_backstory || "";
+
+    // Determine the visual theme from the persona's identity
+    let visualTheme = "";
+    let folder = "premiere/action"; // default
+
+    if (bioKeywords.includes("cook") || bioKeywords.includes("chef") || bioKeywords.includes("food") || bioKeywords.includes("recipe")) {
+      visualTheme = `A dramatic cooking scene — hands chopping ingredients in slow motion, flames erupting from a pan, plating a gorgeous dish. Kitchen setting with warm lighting.`;
+      folder = "premiere/comedy";
+    } else if (bioKeywords.includes("game") || bioKeywords.includes("thrones") || bioKeywords.includes("fantasy") || bioKeywords.includes("dragon")) {
+      visualTheme = `An epic fantasy scene — a lone figure on a cliff overlooking a vast kingdom, dragons circling in stormy skies, medieval castle in the distance. Cinematic, Game of Thrones energy.`;
+      folder = "premiere/action";
+    } else if (bioKeywords.includes("music") || bioKeywords.includes("dj") || bioKeywords.includes("beat") || bioKeywords.includes("rapper") || bioKeywords.includes("sing")) {
+      visualTheme = `A music video scene — pulsing neon lights, a performer silhouetted against a massive LED wall, bass drops visualized as shockwaves. Concert energy.`;
+      folder = "premiere/action";
+    } else if (bioKeywords.includes("fitness") || bioKeywords.includes("gym") || bioKeywords.includes("workout") || bioKeywords.includes("athlete")) {
+      visualTheme = `An intense workout montage — slow-motion weightlifting, sweat drops catching light, explosive sprints. Industrial gym with dramatic lighting.`;
+      folder = "premiere/action";
+    } else if (bioKeywords.includes("tech") || bioKeywords.includes("code") || bioKeywords.includes("hack") || bioKeywords.includes("ai") || bioKeywords.includes("robot")) {
+      visualTheme = `A cyberpunk tech scene — holographic displays, code cascading through the air, a figure in a neon-lit server room. Blade Runner meets Silicon Valley.`;
+      folder = "premiere/scifi";
+    } else if (bioKeywords.includes("art") || bioKeywords.includes("paint") || bioKeywords.includes("creative") || bioKeywords.includes("design")) {
+      visualTheme = `A mesmerizing art creation scene — paint splashing in slow motion, digital art materializing from light, a canvas transforming. Vibrant colors exploding.`;
+      folder = "premiere/romance";
+    } else if (bioKeywords.includes("horror") || bioKeywords.includes("dark") || bioKeywords.includes("creep") || bioKeywords.includes("scare")) {
+      visualTheme = `A chilling horror scene — flickering lights in an abandoned hallway, shadows moving independently, a door slowly creaking open. Pure dread.`;
+      folder = "premiere/horror";
+    } else if (bioKeywords.includes("comedy") || bioKeywords.includes("funny") || bioKeywords.includes("joke") || bioKeywords.includes("meme") || bioKeywords.includes("chaos")) {
+      visualTheme = `A hilarious comedy scene — a perfectly timed fail, objects falling like dominoes, someone's dramatic over-reaction in slow motion. Pure comedy gold.`;
+      folder = "premiere/comedy";
+    } else if (bioKeywords.includes("love") || bioKeywords.includes("romance") || bioKeywords.includes("relationship") || bioKeywords.includes("heart")) {
+      visualTheme = `A cinematic romance scene — golden hour light, two silhouettes on a rooftop, city lights twinkling below. Dreamy, warm, emotional.`;
+      folder = "premiere/romance";
+    } else if (bioKeywords.includes("family") || bioKeywords.includes("kid") || bioKeywords.includes("parent") || bioKeywords.includes("wholesome")) {
+      visualTheme = `A heartwarming family scene — a group adventure through a magical landscape, laughter and wonder, Pixar-quality warmth and emotion.`;
+      folder = "premiere/family";
+    } else if (personalityKeywords.includes("villain") || personalityKeywords.includes("chaos") || personalityKeywords.includes("dark")) {
+      visualTheme = `A dramatic villain reveal — a figure emerging from shadows, lightning crackling, a sinister smile. Cinematic, menacing, unforgettable.`;
+      folder = "premiere/horror";
+    } else if (bioKeywords.includes("travel") || bioKeywords.includes("adventure") || bioKeywords.includes("explore")) {
+      visualTheme = `An epic travel montage — drone shots over breathtaking landscapes, a figure standing on a mountain peak at sunrise, waves crashing on exotic shores.`;
+      folder = "premiere/action";
+    } else if (bioKeywords.includes("fashion") || bioKeywords.includes("style") || bioKeywords.includes("beauty")) {
+      visualTheme = `A high-fashion scene — a dramatic runway walk, fabric flowing in slow motion, lights flashing. Vogue meets cinema.`;
+      folder = "premiere/romance";
+    } else {
+      // Generic fallback based on persona type
+      visualTheme = `A dramatic, eye-catching scene that captures the essence of ${p.display_name}: ${p.bio.slice(0, 100)}. Cinematic, bold, unforgettable.`;
+      folder = "premiere/action";
+    }
+
+    const prompt = `Cinematic blockbuster trailer. ${visualTheme} ${backstory ? `Visual details: ${backstory.slice(0, 150)}.` : ""} The text 'AIG!ITCH' appears prominently as large bold glowing neon text — either as a title card or integrated as a giant sign in the scene. 9:16 vertical, 10 seconds, 720p.`;
+
+    setGenerationLog((prev) => [...prev, `🎬 Generating Grok video for @${p.username} (${p.display_name})`]);
+    setGenerationLog((prev) => [...prev, `  📝 Theme: "${visualTheme.slice(0, 80)}..."`]);
+    setGenProgress({ label: `🎬 @${p.username}`, current: 1, total: 1, startTime: Date.now() });
+
+    try {
+      const submitRes = await fetch("/api/test-grok-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, duration: 10, folder }),
+      });
+      const submitData = await submitRes.json();
+
+      if (submitData.phase === "done" && submitData.success) {
+        setGenerationLog((prev) => [...prev, `  ✅ Video ready! ${submitData.autoPosted ? "Post auto-created!" : ""}`]);
+        setGenProgress(null);
+        setGrokGeneratingPersona(null);
+        fetchStats();
+        return;
+      }
+
+      if (!submitData.success || !submitData.requestId) {
+        setGenerationLog((prev) => [...prev, `  ❌ Submit failed: ${submitData.error || "Unknown error"}`]);
+        setGenProgress(null);
+        setGrokGeneratingPersona(null);
+        return;
+      }
+
+      const requestId = submitData.requestId;
+      setGenerationLog((prev) => [...prev, `  ✅ Submitted! Polling for completion...`]);
+
+      const maxPolls = 90;
+      for (let attempt = 1; attempt <= maxPolls; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        const elapsedSec = attempt * 10;
+        const min = Math.floor(elapsedSec / 60);
+        const sec = elapsedSec % 60;
+        const timeStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+
+        try {
+          const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(requestId)}&folder=${folder}`);
+          const pollData = await pollRes.json();
+          const status = pollData.status || "unknown";
+
+          if (pollData.phase === "done" && pollData.success) {
+            setGenerationLog((prev) => [...prev, `  🎉 Video for @${p.username} ready after ${timeStr}!`]);
+            if (pollData.autoPosted) {
+              setGenerationLog((prev) => [...prev, `  ✅ Post auto-created! Check the feed.`]);
+            }
+            setGenProgress(null);
+            setGrokGeneratingPersona(null);
+            fetchStats();
+            return;
+          }
+
+          if (status === "moderation_failed") {
+            setGenerationLog((prev) => [...prev, `  ⛔ Video failed moderation. Try a different persona.`]);
+            setGenProgress(null);
+            setGrokGeneratingPersona(null);
+            return;
+          }
+
+          if (status === "expired" || status === "failed") {
+            setGenerationLog((prev) => [...prev, `  ❌ Video ${status} after ${timeStr}.`]);
+            setGenProgress(null);
+            setGrokGeneratingPersona(null);
+            return;
+          }
+
+          if (attempt % 3 === 0 || attempt <= 3) {
+            setGenerationLog((prev) => [...prev, `  🔄 @${p.username}: ${status} (${timeStr})`]);
+          }
+        } catch {
+          // retry on network error
+        }
+      }
+      setGenerationLog((prev) => [...prev, `  ❌ Timed out after 15 minutes`]);
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setGenProgress(null);
+    setGrokGeneratingPersona(null);
   };
 
   // New persona form
@@ -766,84 +852,6 @@ export default function AdminDashboard() {
     return pool[Math.floor(Math.random() * pool.length)];
   };
 
-  const GENRE_KEYS = ["news", "action", "scifi", "romance", "family", "horror", "comedy"] as const;
-
-  const copyPrompt = async (key: string) => {
-    if (key === "news") {
-      // News prompts are based on the daily briefing topics
-      let topics = briefing?.activeTopics;
-      if (!topics || topics.length === 0) {
-        // Fetch briefing if not loaded
-        try {
-          const res = await fetch("/api/admin/briefing");
-          const data = await res.json();
-          topics = data.activeTopics;
-          setBriefing(data);
-        } catch {
-          setGenerationLog((prev) => [...prev, `❌ Could not load briefing for news prompt`]);
-          return;
-        }
-      }
-      if (!topics || topics.length === 0) {
-        setGenerationLog((prev) => [...prev, `❌ No active briefing topics. Add topics in the Daily Briefing tab first.`]);
-        return;
-      }
-      // Pick a random topic
-      const topic = topics[Math.floor(Math.random() * topics.length)];
-      const newsPrompt = `Cartoon animated breaking news broadcast in Rick and Morty / South Park style about: "${topic.headline}". ${topic.summary ? `Context: ${topic.summary}.` : ""} A wacky cartoon AI news anchor character with big expressive eyes and exaggerated dramatic reactions sits behind a cartoon news desk. 'AIG!ITCH NEWS' displayed on a cartoon screen behind them. Bold cartoon text of the headline floats across screen. Bright saturated colors, thick black outlines, Adult Swim animation style. Comedic over-the-top energy. 9:16 vertical, 10 seconds, 720p.`;
-      navigator.clipboard.writeText(newsPrompt);
-      setGenerationLog((prev) => [
-        ...prev,
-        `📋 Copied NEWS prompt (from briefing topic):`,
-        `  📰 Topic: "${topic.headline}"`,
-        `  "${newsPrompt}"`,
-      ]);
-      return;
-    }
-    const prompt = getRandomPrompt(key);
-    if (!prompt) return;
-    navigator.clipboard.writeText(prompt);
-    setGenerationLog((prev) => [...prev, `📋 Copied ${key} prompt to clipboard:`, `  "${prompt}"`]);
-  };
-
-  const testGrokImage = async () => {
-    setTestingGrokVideo(true);
-    const prompt = "A glowing neon cyberpunk city at night with flying cars, in Rick and Morty cartoon style, thick outlines, bright saturated colors";
-    setGenerationLog((prev) => [...prev, `🧪 TEST: Generating 1 Grok image...`]);
-    setGenerationLog((prev) => [...prev, `  Prompt: "${prompt}"`]);
-    setGenProgress({ label: "🧪 Image", current: 1, total: 1, startTime: Date.now() });
-
-    try {
-      const res = await fetch("/api/test-grok-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        setGenerationLog((prev) => [
-          ...prev,
-          `  ✅ IMAGE GENERATED! Model: ${data.model}`,
-          `  🖼️ URL: ${data.imageUrl?.slice(0, 120)}...`,
-          `  ✅ Grok API is WORKING. Your key is valid.`,
-        ]);
-      } else {
-        setGenerationLog((prev) => [
-          ...prev,
-          `  ❌ FAILED: ${data.error}`,
-          data.hasKey === false ? `  🔑 XAI_API_KEY is NOT set in environment variables!` : `  🔑 API key is set but request failed.`,
-          `  Model attempted: ${data.model || "unknown"}`,
-        ]);
-      }
-    } catch (err) {
-      setGenerationLog((prev) => [...prev, `  ❌ Network error: ${err instanceof Error ? err.message : "unknown"}`]);
-    }
-
-    setGenProgress(null);
-    setTestingGrokVideo(false);
-  };
-
   const PREMIERE_GENRES = ["action", "scifi", "romance", "family", "horror", "comedy"] as const;
 
   const testGrokVideo = async (mode: "news" | "premiere") => {
@@ -972,53 +980,6 @@ export default function AdminDashboard() {
       setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
     }
     setGenProgress(null);
-    setTestingGrokVideo(false);
-  };
-
-  const testStitchPost = async () => {
-    setTestingGrokVideo(true);
-    setGenerationLog((prev) => [...prev, "🎬 Scanning blob storage for videos to post..."]);
-    try {
-      // First list available videos
-      const listRes = await fetch("/api/test-premiere-post");
-      const listData = await listRes.json();
-      if (listData.videos?.length) {
-        setGenerationLog((prev) => [...prev, `  Found ${listData.videos.length} videos in blob storage:`]);
-        for (const v of listData.videos) {
-          const tag = v.detectedGenre ? ` [${v.detectedType}/${v.detectedGenre}]` : ` [${v.detectedType}]`;
-          setGenerationLog((prev) => [...prev, `    📹 ${v.pathname}${tag} (${(v.size / 1024 / 1024).toFixed(2)}MB)`]);
-        }
-      } else {
-        setGenerationLog((prev) => [...prev, "  ❌ No videos found in blob storage. Upload videos to news/ or premiere/{genre}/ folders."]);
-        setTestingGrokVideo(false);
-        return;
-      }
-      // Auto-create posts from all unposted videos
-      setGenerationLog((prev) => [...prev, "  📝 Creating posts from unposted videos..."]);
-      const createRes = await fetch("/api/test-premiere-post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const createData = await createRes.json();
-      if (createData.success) {
-        if (createData.created > 0) {
-          setGenerationLog((prev) => [...prev, `  ✅ Created ${createData.created} new posts:`]);
-          for (const p of createData.posts) {
-            const genreLabel = p.genre ? ` (${p.genre})` : "";
-            setGenerationLog((prev) => [...prev, `    🎬 ${p.postType}${genreLabel} → @${p.persona}`]);
-          }
-          setGenerationLog((prev) => [...prev, `  → Check For You feed, Premieres tab, or Breaking tab!`]);
-        } else {
-          setGenerationLog((prev) => [...prev, `  ℹ️ ${createData.message || "All videos already posted."}`]);
-        }
-      } else {
-        setGenerationLog((prev) => [...prev, `  ❌ ${createData.error || "Failed to create posts"}`]);
-      }
-    } catch (err) {
-      setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
-    }
-    fetchStats();
     setTestingGrokVideo(false);
   };
 
@@ -1221,39 +1182,20 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button onClick={triggerGeneration} disabled={generating}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-green-500/20 text-green-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{generating ? "..." : "⚡"}</span>
-              <span className="hidden sm:inline">{generating ? "Generating..." : "⚡ Generate"}</span>
-            </button>
-            <button onClick={testGrokImage} disabled={testingGrokVideo}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Image"}</span>
+              className="px-2.5 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
+              {generating ? "⚡ ..." : "⚡ Generate"}
             </button>
             <button onClick={() => testGrokVideo("premiere")} disabled={testingGrokVideo}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{testingGrokVideo ? "..." : "🎬"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Generating..." : "🎬 Premiere"}</span>
+              className="px-2.5 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
+              {testingGrokVideo ? "🎬 ..." : "🎬 Premiere"}
             </button>
             <button onClick={() => testGrokVideo("news")} disabled={testingGrokVideo}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-orange-500/20 text-orange-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-orange-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{testingGrokVideo ? "..." : "📰"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Generating..." : "📰 News"}</span>
+              className="px-2.5 py-1.5 bg-orange-500/20 text-orange-400 rounded-lg text-xs font-bold hover:bg-orange-500/30 disabled:opacity-50">
+              {testingGrokVideo ? "📰 ..." : "📰 News"}
             </button>
-            <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
-              <span className="sm:hidden">🏠</span>
-              <span className="hidden sm:inline">View Feed</span>
+            <a href="/" className="px-2.5 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700">
+              🏠 Feed
             </a>
-          </div>
-          {/* Copy Prompt Buttons */}
-          <div className="flex flex-wrap gap-1 mt-2">
-            <span className="text-xs text-gray-500 self-center mr-1">📋 Copy:</span>
-            {GENRE_KEYS.map((key) => (
-              <button key={key} onClick={() => copyPrompt(key)}
-                className="px-2 py-1 bg-cyan-500/15 text-cyan-400 rounded text-xs font-bold hover:bg-cyan-500/25 capitalize">
-                {key}
-              </button>
-            ))}
           </div>
         </div>
       </header>
@@ -1826,24 +1768,17 @@ export default function AdminDashboard() {
                       <p>{Number(p.human_followers)} human followers</p>
                       <p>{p.follower_count} total followers</p>
                     </div>
-                    <button onClick={() => copyPersonaPrompt(p)}
-                      className={`px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold transition-all ${
-                        copiedPersonaId === p.id
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
-                      }`}>
-                      {copiedPersonaId === p.id ? "Copied!" : "Copy Prompt"}
-                    </button>
-                    <button onClick={() => copyVideoPrompt(p)}
-                      className={`px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold transition-all ${
-                        copiedVideoId === p.id
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
-                      }`}>
-                      {copiedVideoId === p.id ? "Copied!" : "Video Prompt"}
+                    <button onClick={() => generatePersonaGrokVideo(p)}
+                      disabled={grokGeneratingPersona !== null || testingGrokVideo || !p.is_active}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold transition-all ${
+                        grokGeneratingPersona === p.id
+                          ? "bg-amber-500/30 text-amber-300 animate-pulse"
+                          : "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                      } disabled:opacity-40`}>
+                      {grokGeneratingPersona === p.id ? "🎬 Generating..." : "🎬 Grok"}
                     </button>
                     <button onClick={() => togglePersona(p.id, p.is_active)}
-                      className={`col-span-2 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold ${
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold ${
                         p.is_active ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
                       }`}>
                       {p.is_active ? "Disable" : "Enable"}
