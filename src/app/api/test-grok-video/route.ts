@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
   const prompt = body.prompt || "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot";
   const duration = body.duration || 10;
   const folder = body.folder || "test";
+  const personaId = body.persona_id || null; // optional: attribute post to specific persona
+  const postCaption = body.caption || null; // optional: custom post content
 
   // Submit to xAI and return immediately
   const submitBody = {
@@ -76,8 +78,7 @@ export async function POST(request: NextRequest) {
     // Check for immediate video (unlikely but handle it)
     const videoObj = createData.video as Record<string, unknown> | undefined;
     if (videoObj?.url) {
-      // Video ready immediately — persist and auto-create post
-      const blobResult = await persistVideo(videoObj.url as string, folder);
+      const blobResult = await persistVideo(videoObj.url as string, folder, personaId, postCaption);
       return NextResponse.json({
         phase: "done",
         success: true,
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
       success: true,
       requestId,
       folder,
+      personaId,
       prompt: prompt.slice(0, 100),
       duration,
       message: "Video submitted to xAI. Client will now poll for completion.",
@@ -131,6 +133,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const requestId = searchParams.get("id");
   const folder = searchParams.get("folder") || "test";
+  const personaId = searchParams.get("persona_id") || null;
+  const caption = searchParams.get("caption") || null;
 
   if (!requestId) {
     return NextResponse.json({ error: "Missing ?id= parameter" }, { status: 400 });
@@ -187,7 +191,7 @@ export async function GET(request: NextRequest) {
     const vid = pollData.video as Record<string, unknown> | undefined;
     if (vid?.url) {
       // Video ready — download, persist to blob, and auto-create post
-      const blobResult = await persistVideo(vid.url as string, folder);
+      const blobResult = await persistVideo(vid.url as string, folder, personaId, caption);
       return NextResponse.json({
         phase: "done",
         status: "done",
@@ -261,9 +265,15 @@ function detectGenre(blobPath: string): string {
 
 /**
  * Persist video to blob storage AND auto-create a database post.
- * No manual "Stitch Test" needed — the post is created immediately.
+ * - If persona_id is provided, post is attributed to that persona (regular feed post)
+ * - If not, picks a random persona and creates premiere/news post based on folder
  */
-async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl: string | null; sizeMb: string; postId?: string }> {
+async function persistVideo(
+  videoUrl: string,
+  folder: string,
+  personaId?: string | null,
+  caption?: string | null,
+): Promise<{ blobUrl: string | null; sizeMb: string; postId?: string }> {
   try {
     const res = await fetch(videoUrl);
     if (!res.ok) return { blobUrl: null, sizeMb: "0" };
@@ -273,6 +283,8 @@ async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl
     let blobPath: string;
     if (folder === "premiere") {
       blobPath = `premiere/action/${uuidv4()}.mp4`;
+    } else if (folder === "feed" || folder === "persona") {
+      blobPath = `feed/${uuidv4()}.mp4`;
     } else if (folder.startsWith("premiere/") || folder === "news") {
       blobPath = `${folder}/${uuidv4()}.mp4`;
     } else {
@@ -291,24 +303,38 @@ async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl
       const sql = getDb();
       await ensureDbReady();
 
-      const personas = await sql`
-        SELECT id, username FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 1
-      ` as unknown as { id: string; username: string }[];
+      const aiLikeCount = Math.floor(Math.random() * 300) + 100;
+      const isNews = folder === "news";
+      const isFeed = folder === "feed" || folder === "persona" || !!personaId;
 
-      if (personas.length > 0) {
+      // Determine which persona to use
+      let usePersonaId = personaId;
+      if (!usePersonaId) {
+        const personas = await sql`
+          SELECT id FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 1
+        ` as unknown as { id: string }[];
+        if (personas.length > 0) usePersonaId = personas[0].id;
+      }
+
+      if (usePersonaId) {
         postId = uuidv4();
-        const persona = personas[0];
-        const aiLikeCount = Math.floor(Math.random() * 300) + 100;
-        const isNews = folder === "news";
 
-        if (isNews) {
+        if (isFeed && !isNews) {
+          // Regular feed post — attributed to the specific persona
+          const content = caption || "Check out my latest video! 🎬\n\n#AIGlitch";
+          await sql`
+            INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
+            VALUES (${postId}, ${usePersonaId}, ${content}, ${"video"}, ${"AIGlitch"}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
+          `;
+        } else if (isNews) {
           const headline = NEWS_HEADLINES[Math.floor(Math.random() * NEWS_HEADLINES.length)];
           const content = `📰 ${headline}\n\nAIG!itch News Network brings you this developing story. Stay tuned for updates.\n\n#AIGlitchBreaking #AIGlitchNews`;
           await sql`
             INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-            VALUES (${postId}, ${persona.id}, ${content}, ${"news"}, ${"AIGlitchBreaking,AIGlitchNews"}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
+            VALUES (${postId}, ${usePersonaId}, ${content}, ${"news"}, ${"AIGlitchBreaking,AIGlitchNews"}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
           `;
         } else {
+          // Premiere post
           const genre = detectGenre(blobPath);
           const label = GENRE_LABELS[genre] || genre;
           const taglines = GENRE_TAGLINES[genre] || GENRE_TAGLINES.action;
@@ -317,11 +343,11 @@ async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl
           const content = `🎬 AIG!itch Studios Presents\n"${tagline}"\n\n🍿 A new ${label} premiere is HERE. This is the one you've been waiting for.\n\n#AIGlitchPremieres #${genreTag}`;
           await sql`
             INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-            VALUES (${postId}, ${persona.id}, ${content}, ${"premiere"}, ${`AIGlitchPremieres,${genreTag}`}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
+            VALUES (${postId}, ${usePersonaId}, ${content}, ${"premiere"}, ${`AIGlitchPremieres,${genreTag}`}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
           `;
         }
-        await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
-        console.log(`[test-grok-video] Auto-created ${isNews ? "news" : "premiere"} post ${postId} for ${blobPath}`);
+        await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${usePersonaId}`;
+        console.log(`[test-grok-video] Auto-created ${isNews ? "news" : isFeed ? "feed" : "premiere"} post ${postId}`);
       }
     } catch (err) {
       console.error("[test-grok-video] Auto-post creation failed:", err);

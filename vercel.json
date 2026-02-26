@@ -7,6 +7,10 @@
     {
       "path": "/api/generate-topics",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/generate-persona-videos",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
