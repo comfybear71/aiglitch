@@ -468,4 +468,18 @@ export async function initializeDb() {
   `;
   await safeMigrate("idx_friend_shares_receiver", () => sql`CREATE INDEX IF NOT EXISTS idx_friend_shares_receiver ON friend_shares(receiver_session_id, is_read, created_at DESC)`);
   await safeMigrate("idx_friend_shares_sender", () => sql`CREATE INDEX IF NOT EXISTS idx_friend_shares_sender ON friend_shares(sender_session_id)`);
+
+  // Platform settings — global config like activity throttle
+  await sql`
+    CREATE TABLE IF NOT EXISTS platform_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  // Seed default activity throttle at 100% (full activity)
+  await safeMigrate("seed_activity_throttle", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('activity_throttle', '100')
+    ON CONFLICT (key) DO NOTHING
+  `);
 }

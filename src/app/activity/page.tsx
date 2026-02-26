@@ -68,6 +68,7 @@ interface ActivityData {
   currentlyActive: ActivityPost | null;
   breaking: { total: number; lastHour: number };
   activeTopics: Topic[];
+  activityThrottle: number;
   cronSchedules: CronSchedule[];
 }
 
@@ -115,16 +116,37 @@ export default function ActivityPage() {
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<"feed" | "ads" | "jobs" | "topics">("feed");
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [throttle, setThrottle] = useState(100);
+  const [throttleSaving, setThrottleSaving] = useState(false);
 
   const fetchActivity = useCallback(async () => {
     try {
       const res = await fetch("/api/activity");
       const json = await res.json();
       setData(json);
+      if (json.activityThrottle !== undefined) {
+        setThrottle(json.activityThrottle);
+      }
     } catch (err) {
       console.error("Failed to fetch activity:", err);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const updateThrottle = useCallback(async (value: number) => {
+    setThrottle(value);
+    setThrottleSaving(true);
+    try {
+      await fetch("/api/activity-throttle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ throttle: value }),
+      });
+    } catch (err) {
+      console.error("Failed to update throttle:", err);
+    } finally {
+      setThrottleSaving(false);
     }
   }, []);
 
@@ -300,6 +322,62 @@ export default function ActivityPage() {
               );
             })}
           </div>
+        </div>
+
+        {/* Activity Throttle Slider */}
+        <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+              {throttle === 0 ? "⏸️" : throttle < 30 ? "🐢" : throttle < 70 ? "⚡" : "🔥"} Activity Level
+            </h2>
+            <div className="flex items-center gap-2">
+              {throttleSaving && (
+                <span className="text-[9px] text-gray-500 animate-pulse">saving...</span>
+              )}
+              <span className={`text-sm font-bold font-mono ${
+                throttle === 0 ? "text-red-400" : throttle < 30 ? "text-orange-400" : throttle < 70 ? "text-yellow-400" : "text-green-400"
+              }`}>
+                {throttle}%
+              </span>
+            </div>
+          </div>
+          <div className="relative">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={throttle}
+              onChange={(e) => updateThrottle(Number(e.target.value))}
+              className="w-full h-2 rounded-full appearance-none cursor-pointer
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-pointer
+                [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:cursor-pointer"
+              style={{
+                background: `linear-gradient(to right, ${
+                  throttle === 0 ? "#ef4444" : throttle < 30 ? "#f97316" : throttle < 70 ? "#eab308" : "#22c55e"
+                } 0%, ${
+                  throttle === 0 ? "#ef4444" : throttle < 30 ? "#f97316" : throttle < 70 ? "#eab308" : "#22c55e"
+                } ${throttle}%, #1f2937 ${throttle}%, #1f2937 100%)`,
+              }}
+            />
+          </div>
+          <div className="flex justify-between mt-1.5">
+            <span className="text-[9px] text-gray-600">Paused</span>
+            <span className="text-[9px] text-gray-600">Eco</span>
+            <span className="text-[9px] text-gray-600">Normal</span>
+            <span className="text-[9px] text-gray-600">Full Send</span>
+          </div>
+          <p className="text-[10px] text-gray-500 mt-2">
+            {throttle === 0
+              ? "All content generation paused. No API costs."
+              : throttle < 30
+                ? "Minimal activity. Most cron runs will be skipped to save costs."
+                : throttle < 70
+                  ? "Moderate activity. Some cron runs skipped to balance cost and content."
+                  : throttle < 100
+                    ? "High activity. Occasional skips for slight savings."
+                    : "Maximum activity. All cron jobs run every cycle."}
+          </p>
         </div>
 
         {/* Pending Video Jobs */}

@@ -108,6 +108,13 @@ export async function GET() {
     LIMIT 5
   `;
 
+  // Activity throttle setting
+  let activityThrottle = 100;
+  try {
+    const [throttleRow] = await sql`SELECT value FROM platform_settings WHERE key = 'activity_throttle'`;
+    if (throttleRow) activityThrottle = Number(throttleRow.value);
+  } catch { /* table may not exist yet */ }
+
   return NextResponse.json({
     recentActivity,
     pendingJobs,
@@ -136,6 +143,7 @@ export async function GET() {
       lastHour: Number(recentBreaking.count),
     },
     activeTopics,
+    activityThrottle,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },

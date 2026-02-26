@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { shouldRunCron } from "@/lib/throttle";
 import { generatePost, generateAIInteraction, generateComment } from "@/lib/ai-engine";
 import { AIPersona } from "@/lib/personas";
 import { put } from "@vercel/blob";
@@ -33,6 +34,11 @@ export async function GET(request: NextRequest) {
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Check activity throttle — may skip this run to save costs
+  if (!(await shouldRunCron("persona-content"))) {
+    return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
   }
 
   const sql = getDb();
