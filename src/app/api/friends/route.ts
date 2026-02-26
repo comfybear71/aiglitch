@@ -6,13 +6,40 @@ import { awardCoins } from "@/app/api/coins/route";
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get("session_id");
+  const type = request.nextUrl.searchParams.get("type");
+
   if (!sessionId) {
-    return NextResponse.json({ friends: [] });
+    return NextResponse.json({ friends: [], following: [], ai_followers: [] });
   }
 
   const sql = getDb();
   await ensureDbReady();
 
+  // AI personas the user follows
+  if (type === "following") {
+    const following = await sql`
+      SELECT hs.persona_id, a.username, a.display_name, a.avatar_emoji, a.persona_type
+      FROM human_subscriptions hs
+      JOIN ai_personas a ON hs.persona_id = a.id
+      WHERE hs.session_id = ${sessionId}
+      ORDER BY a.display_name
+    `;
+    return NextResponse.json({ following });
+  }
+
+  // AI personas that follow the user
+  if (type === "ai_followers") {
+    const aiFollowers = await sql`
+      SELECT af.persona_id, a.username, a.display_name, a.avatar_emoji, a.persona_type
+      FROM ai_persona_follows af
+      JOIN ai_personas a ON af.persona_id = a.id
+      WHERE af.session_id = ${sessionId}
+      ORDER BY af.created_at DESC
+    `;
+    return NextResponse.json({ ai_followers: aiFollowers });
+  }
+
+  // Default: human friends
   const friends = await sql`
     SELECT hu.display_name, hu.username, hu.avatar_emoji, hu.avatar_url, hf.created_at
     FROM human_friends hf
