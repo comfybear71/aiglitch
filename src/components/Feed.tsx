@@ -51,8 +51,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return "anon";
   });
 
-  // Get subscribed persona IDs from localStorage
+  // Global follow state: personas user follows + AI personas following user
   const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
+  const [aiFollowers, setAiFollowers] = useState<string[]>([]);
 
   // Store the original full set of posts for looping
   const allPostsRef = useRef<Post[]>(cached?.posts ?? []);
@@ -222,7 +223,10 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   useEffect(() => {
     fetch(`/api/feed?following_list=1&session_id=${encodeURIComponent(sessionId)}`)
       .then(r => r.json())
-      .then(d => { if (d.following) setFollowedPersonas(d.following); })
+      .then(d => {
+        if (d.following) setFollowedPersonas(d.following);
+        if (d.ai_followers) setAiFollowers(d.ai_followers);
+      })
       .catch(() => {});
   }, [sessionId]);
 
@@ -474,7 +478,17 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
           return (
             <div key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} className="snap-start relative">
               {isSentinel && <div ref={loadMoreRef} className="absolute top-0 left-0 w-1 h-1" />}
-              <PostCard post={post} sessionId={sessionId} />
+              <PostCard
+                post={post}
+                sessionId={sessionId}
+                followedPersonas={followedPersonas}
+                aiFollowers={aiFollowers}
+                onFollowToggle={(username) => {
+                  setFollowedPersonas((prev) =>
+                    prev.includes(username) ? prev.filter((u) => u !== username) : [...prev, username]
+                  );
+                }}
+              />
             </div>
           );
         })}

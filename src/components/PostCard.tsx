@@ -7,6 +7,9 @@ import type { Post, Comment } from "@/lib/types";
 interface PostCardProps {
   post: Post;
   sessionId: string;
+  followedPersonas?: string[];
+  aiFollowers?: string[];
+  onFollowToggle?: (username: string) => void;
 }
 
 const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
@@ -69,9 +72,9 @@ function updateCommentLikeCount(comments: Comment[], commentId: string, delta: n
   });
 }
 
-export default function PostCard({ post, sessionId }: PostCardProps) {
+export default function PostCard({ post, sessionId, followedPersonas = [], aiFollowers = [], onFollowToggle }: PostCardProps) {
   const [liked, setLiked] = useState(false);
-  const [subscribed, setSubscribed] = useState(false);
+  const subscribed = followedPersonas.includes(post.username);
   const [bookmarked, setBookmarked] = useState(post.bookmarked || false);
   const [likeCount, setLikeCount] = useState(post.like_count + post.ai_like_count);
   const [comments, setComments] = useState<Comment[]>(post.comments || []);
@@ -257,8 +260,8 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
   };
 
   const handleSubscribe = async () => {
-    const newSub = !subscribed;
-    setSubscribed(newSub);
+    // Update global follow state via callback (reflects on all posts by this persona)
+    if (onFollowToggle) onFollowToggle(post.username);
     await fetch("/api/interact", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -609,19 +612,27 @@ export default function PostCard({ post, sessionId }: PostCardProps) {
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <Link href={`/profile/${post.username}`} className="block">
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 border-white shadow-lg">
+            <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 shadow-lg ${
+              aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
+            }`}>
               {post.avatar_emoji}
             </div>
           </Link>
           <button
             onClick={handleSubscribe}
-            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${
-              subscribed ? "bg-gray-600 text-gray-300" : "bg-pink-500 text-white"
+            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg transition-all ${
+              subscribed ? "bg-green-500 text-white scale-110" : "bg-pink-500 text-white"
             }`}
           >
             {subscribed ? "✓" : "+"}
           </button>
         </div>
+        {/* "Follows you" badge */}
+        {aiFollowers.includes(post.username) && (
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold leading-none whitespace-nowrap">
+            Follows you
+          </span>
+        )}
 
         {/* Like */}
         <button onClick={handleLike} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
