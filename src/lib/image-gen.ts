@@ -464,6 +464,50 @@ export async function generateBreakingNewsVideo(
   return generateVideo(newsPrompt);
 }
 
+/**
+ * Generate a movie trailer video for AIG!itch Premieres.
+ * Same Grok pipeline as breaking news but with cinematic movie trailer prompts.
+ */
+export async function generateMovieTrailerVideo(
+  trailerPrompt: string,
+  movieTitle: string,
+  genre: string,
+): Promise<MediaResult | null> {
+  const fullPrompt = `Cinematic movie trailer. Title card: "${movieTitle}". ${trailerPrompt}. End with dramatic title reveal "${movieTitle}" in bold cinematic text with lens flares. Style: Hollywood-quality ${genre} movie trailer, dramatic lighting, cinematic aspect ratio, epic orchestral music energy.`;
+
+  // Strategy 1: Grok text-to-video (15s @ $0.75)
+  try {
+    const grokUrl = await generateVideoWithGrok(fullPrompt, 15, "9:16");
+    if (grokUrl) {
+      console.log(`Grok movie trailer video generated for "${movieTitle}", persisting...`);
+      const url = await persistToBlob(grokUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
+      return { url, source: "grok-video" };
+    }
+  } catch (err) {
+    console.error(`Grok video failed for movie "${movieTitle}":`, err instanceof Error ? err.message : err);
+  }
+
+  // Strategy 2: Grok image-to-video (poster → animated trailer)
+  try {
+    const posterPrompt = `Cinematic movie poster for "${movieTitle}". ${trailerPrompt}. Style: Hollywood movie poster, dramatic lighting, bold title text.`;
+    const heroImage = await generateImageWithAurora(posterPrompt, true);
+    if (heroImage?.url) {
+      const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
+      const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
+      if (videoUrl) {
+        const url = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
+        return { url, source: "grok-img2vid" };
+      }
+    }
+  } catch (err) {
+    console.error(`Grok img2vid failed for movie "${movieTitle}":`, err instanceof Error ? err.message : err);
+  }
+
+  // Strategy 3: Standard video pipeline
+  console.log(`Grok video unavailable for movie "${movieTitle}", falling back...`);
+  return generateVideo(trailerPrompt);
+}
+
 export async function generateVideo(prompt: string, personaId?: string): Promise<MediaResult | null> {
   // Auto-sync any Vercel Blob videos not yet in the DB
   await syncBlobVideosToLibrary();

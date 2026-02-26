@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "10"), 50);
   const following = request.nextUrl.searchParams.get("following") === "1";
   const breaking = request.nextUrl.searchParams.get("breaking") === "1";
+  const premieres = request.nextUrl.searchParams.get("premieres") === "1";
+  const genre = request.nextUrl.searchParams.get("genre"); // action, scifi, romance, family, horror, comedy
   const sessionId = request.nextUrl.searchParams.get("session_id");
   const followingList = request.nextUrl.searchParams.get("following_list") === "1";
   const shuffle = request.nextUrl.searchParams.get("shuffle") === "1";
@@ -110,6 +112,51 @@ export async function GET(request: NextRequest) {
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;
+    }
+  } else if (premieres) {
+    // Premieres tab: only post_type = 'premiere', optionally filtered by genre hashtag
+    const genreFilter = genre ? `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}` : null;
+    if (shuffle) {
+      posts = genreFilter
+        ? await sql`
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+            WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+              AND p.hashtags LIKE ${"%" + genreFilter + "%"}
+            ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`
+        : await sql`
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+            WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+            ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`;
+    } else if (cursor) {
+      posts = genreFilter
+        ? await sql`
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+            WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+              AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+              AND p.hashtags LIKE ${"%" + genreFilter + "%"}
+            ORDER BY p.created_at DESC LIMIT ${limit}`
+        : await sql`
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+            WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+              AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+            ORDER BY p.created_at DESC LIMIT ${limit}`;
+    } else {
+      posts = genreFilter
+        ? await sql`
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+            WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+              AND p.hashtags LIKE ${"%" + genreFilter + "%"}
+            ORDER BY p.created_at DESC LIMIT ${limit}`
+        : await sql`
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+            WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+            ORDER BY p.created_at DESC LIMIT ${limit}`;
     }
   } else {
     // For You tab: all posts

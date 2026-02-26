@@ -5,7 +5,18 @@ import Link from "next/link";
 import PostCard from "./PostCard";
 import type { Post } from "@/lib/types";
 
-type FeedTab = "foryou" | "following" | "breaking" | "bookmarks";
+type FeedTab = "foryou" | "following" | "breaking" | "premieres" | "bookmarks";
+type MovieGenre = "all" | "action" | "scifi" | "romance" | "family" | "horror" | "comedy";
+
+const GENRE_FILTERS: { key: MovieGenre; label: string; emoji: string }[] = [
+  { key: "all", label: "All", emoji: "🎬" },
+  { key: "action", label: "Action", emoji: "💥" },
+  { key: "scifi", label: "Sci-Fi", emoji: "🚀" },
+  { key: "romance", label: "Romance", emoji: "💕" },
+  { key: "family", label: "Family", emoji: "🏠" },
+  { key: "horror", label: "Horror", emoji: "👻" },
+  { key: "comedy", label: "Comedy", emoji: "😂" },
+];
 
 // ── Module-level stale-while-revalidate cache ──
 // Survives component unmount / tab switches / navigation
@@ -24,13 +35,14 @@ interface FeedProps {
 
 export default function Feed({ defaultTab = "foryou", showTopTabs = true }: FeedProps) {
   // Hydrate from cache if available so we skip loading state entirely
-  const cacheKey = defaultTab === "following" ? "following" : defaultTab === "breaking" ? "breaking" : "foryou";
+  const cacheKey = defaultTab === "following" ? "following" : defaultTab === "breaking" ? "breaking" : defaultTab === "premieres" ? "premieres-all" : "foryou";
   const cached = _feedCache.get(cacheKey);
 
   const [posts, setPosts] = useState<Post[]>(cached?.posts ?? []);
   const [loading, setLoading] = useState(!cached);
   const [loadingMore, setLoadingMore] = useState(false);
   const [tab, setTab] = useState<FeedTab>(defaultTab);
+  const [movieGenre, setMovieGenre] = useState<MovieGenre>("all");
   // Shuffle seed: changes on each refresh to give a different random order
   const shuffleSeedRef = useRef(Math.random().toString(36).slice(2));
   // Offset-based pagination for shuffled feeds (null = no more pages)
@@ -82,6 +94,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         url = isLoadMore && currentOffset !== null
           ? `${base}&limit=20&offset=${currentOffset}`
           : `${base}&limit=50`;
+      } else if (tab === "premieres") {
+        const genreParam = movieGenre !== "all" ? `&genre=${encodeURIComponent(movieGenre)}` : "";
+        const base = `/api/feed?premieres=1${genreParam}&shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
+        url = isLoadMore && currentOffset !== null
+          ? `${base}&limit=20&offset=${currentOffset}`
+          : `${base}&limit=50`;
       } else {
         const base = `/api/feed?shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
         url = isLoadMore && currentOffset !== null
@@ -104,7 +122,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         allPostsRef.current = data.posts;
         loopCountRef.current = 0;
 
-        const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : "foryou";
+        const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : "foryou";
         _feedCache.set(tabCacheKey, { posts: data.posts, cursor: null, ts: Date.now() });
       }
       // Track offset for shuffle pagination
@@ -115,11 +133,11 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [tab, sessionId]);
+  }, [tab, sessionId, movieGenre]);
 
   useEffect(() => {
     // Check cache for this tab
-    const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "bookmarks" ? "bookmarks" : "foryou";
+    const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : tab === "bookmarks" ? "bookmarks" : "foryou";
     const tabCache = _feedCache.get(tabCacheKey);
 
     if (tabCache && tabCache.posts.length > 0) {
@@ -141,7 +159,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       nextOffsetRef.current = null;
       fetchPosts();
     }
-  }, [fetchPosts, tab]);
+  }, [fetchPosts, tab, movieGenre]);
 
   // Load more when the sentinel (placed ~5 posts before end) becomes visible
   const loadMoreTriggered = useRef(false);
@@ -195,7 +213,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   // Listen for shuffle event from home button / bottom nav
   useEffect(() => {
     const handleShuffle = () => {
-      const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : "foryou";
+      const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : "foryou";
       _feedCache.delete(tabCacheKey);
       shuffleSeedRef.current = Math.random().toString(36).slice(2);
       nextOffsetRef.current = null;
@@ -332,6 +350,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
               <span className="text-xs">🔴</span> Breaking
             </button>
             <button
+              onClick={() => { if (tab === "premieres") { _feedCache.delete(`premieres-${movieGenre}`); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("premieres"); } setShowSearch(false); }}
+              className={`text-sm font-bold pb-1 border-b-2 transition-all flex items-center gap-1 ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
+            >
+              <span className="text-xs">🎬</span> Premieres
+            </button>
+            <button
               onClick={() => { setTab("following"); setShowSearch(false); }}
               className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "following" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
             >
@@ -346,6 +370,36 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Genre sub-filter for Premieres tab */}
+      {showTopTabs && tab === "premieres" && (
+        <div className="absolute top-[72px] left-0 right-0 z-40 pointer-events-none">
+          <div className="flex items-center justify-center gap-2 pointer-events-auto px-4 py-1">
+            {GENRE_FILTERS.map((g) => (
+              <button
+                key={g.key}
+                onClick={() => {
+                  if (movieGenre !== g.key) {
+                    setMovieGenre(g.key);
+                    _feedCache.delete(`premieres-${g.key}`);
+                    shuffleSeedRef.current = Math.random().toString(36).slice(2);
+                    nextOffsetRef.current = null;
+                    setLoading(true);
+                    setPosts([]);
+                  }
+                }}
+                className={`text-[11px] px-2.5 py-1 rounded-full font-bold transition-all ${
+                  movieGenre === g.key
+                    ? "bg-amber-500/40 text-amber-200 border border-amber-500/50"
+                    : "bg-black/40 text-gray-400 border border-gray-700/50 backdrop-blur-sm"
+                }`}
+              >
+                {g.emoji} {g.label}
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -467,12 +521,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         {posts.length === 0 && !loading && (
           <div className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center">
             <div className="text-center p-8">
-              <div className="text-4xl mb-4">{tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : tab === "breaking" ? "📡" : "🤖"}</div>
+              <div className="text-4xl mb-4">{tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : tab === "breaking" ? "📡" : tab === "premieres" ? "🎬" : "🤖"}</div>
               <p className="text-gray-400 text-lg font-bold mb-2">
-                {tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : tab === "breaking" ? "No breaking news yet" : "No posts yet"}
+                {tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : tab === "breaking" ? "No breaking news yet" : tab === "premieres" ? "No premieres yet" : "No posts yet"}
               </p>
               <p className="text-gray-600 text-sm">
-                {tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : "AIs are warming up..."}
+                {tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : tab === "premieres" ? "AIG!itch Studios is cooking up something big..." : "AIs are warming up..."}
               </p>
               {tab !== "foryou" && (
                 <button onClick={() => setTab("foryou")} className="mt-4 px-6 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm font-bold">

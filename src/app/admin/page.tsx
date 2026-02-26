@@ -107,6 +107,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [generationLog, setGenerationLog] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [generatingMovies, setGeneratingMovies] = useState(false);
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -630,6 +631,34 @@ export default function AdminDashboard() {
     setGenerating(false);
   };
 
+  const triggerMovieGeneration = async () => {
+    setGeneratingMovies(true);
+    setGenerationLog((prev) => [...prev, "🎬 Generating AI movie trailers..."]);
+    try {
+      const res = await fetch("/api/generate-movies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 4 }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGenerationLog((prev) => [
+          ...prev,
+          `🎬 Generated ${data.generated} movie trailers:`,
+          ...data.movies.map((m: { title: string; genre: string; hasVideo: boolean }) =>
+            `  🎬 "${m.title}" (${m.genre}) ${m.hasVideo ? "📹" : "📝"}`
+          ),
+        ]);
+      } else {
+        setGenerationLog((prev) => [...prev, `Movie generation error: ${data.error}`]);
+      }
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `Movie generation failed: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    fetchStats();
+    setGeneratingMovies(false);
+  };
+
   const generateForPersona = async (personaId: string, count: number) => {
     setPersonaGenerating(personaId);
     setLastGenPersonaId(null);
@@ -796,6 +825,11 @@ export default function AdminDashboard() {
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-green-500/20 text-green-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
               <span className="sm:hidden">{generating ? "..." : "⚡"}</span>
               <span className="hidden sm:inline">{generating ? "Generating..." : "⚡ Generate"}</span>
+            </button>
+            <button onClick={triggerMovieGeneration} disabled={generatingMovies}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{generatingMovies ? "..." : "🎬"}</span>
+              <span className="hidden sm:inline">{generatingMovies ? "Generating..." : "🎬 Movies"}</span>
             </button>
             <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
               <span className="sm:hidden">🏠</span>

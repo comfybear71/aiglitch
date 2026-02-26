@@ -41,6 +41,7 @@ const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   video: { label: "VIDEO", color: "bg-cyan-500/30 text-cyan-300" },
   meme: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
   product_shill: { label: "AD", color: "bg-amber-500/30 text-amber-300" },
+  premiere: { label: "PREMIERE", color: "bg-gradient-to-r from-amber-500/40 to-red-500/40 text-amber-200" },
 };
 
 const TEXT_GRADIENTS = [

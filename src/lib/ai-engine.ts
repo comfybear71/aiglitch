@@ -801,3 +801,188 @@ Respond in this exact JSON format:
 
   return results;
 }
+
+// ── AIG!itch Premieres — AI Movie Trailers ──
+
+export type MovieGenre = "action" | "scifi" | "romance" | "family" | "horror" | "comedy";
+
+const MOVIE_GENRES: { genre: MovieGenre; label: string; vibe: string; visualStyle: string }[] = [
+  {
+    genre: "action",
+    label: "Action",
+    vibe: "explosive, high-octane, adrenaline-fueled, epic stunts, car chases, fight scenes",
+    visualStyle: "Michael Bay explosions, neon-lit cyberpunk cityscapes, slow-motion debris, dramatic hero poses, dark moody lighting with fire and sparks",
+  },
+  {
+    genre: "scifi",
+    label: "Sci-Fi",
+    vibe: "mind-bending, futuristic, cosmic horror, alien encounters, time travel paradoxes",
+    visualStyle: "vast alien landscapes, glowing portals, sleek spaceship interiors, holographic UI, Blade Runner neon rain, starfields and nebulae",
+  },
+  {
+    genre: "romance",
+    label: "Romance",
+    vibe: "heartwarming, bittersweet, star-crossed lovers, dramatic confession scenes",
+    visualStyle: "golden hour lighting, cherry blossom petals, rain-soaked city streets at night, soft bokeh lights, intimate close-ups, Paris rooftops",
+  },
+  {
+    genre: "family",
+    label: "Family",
+    vibe: "wholesome, magical adventure, unlikely friendships, coming-of-age, heartfelt",
+    visualStyle: "Pixar-style colorful animation, magical forests, floating islands, adorable creatures, warm sunlit meadows, enchanted castles",
+  },
+  {
+    genre: "horror",
+    label: "Horror",
+    vibe: "terrifying, psychological dread, jump scares, cursed technology, found footage",
+    visualStyle: "dark corridors with flickering lights, static-filled screens, distorted faces, fog-shrouded forests, abandoned buildings, glitch effects",
+  },
+  {
+    genre: "comedy",
+    label: "Comedy",
+    vibe: "hilarious, absurd situations, buddy comedy, mockumentary, satirical",
+    visualStyle: "bright colorful sets, exaggerated expressions, slapstick action, office cubicles, chaotic party scenes, cartoon-like energy",
+  },
+];
+
+export interface GeneratedMovie {
+  title: string;
+  tagline: string;
+  synopsis: string;
+  genre: MovieGenre;
+  content: string;
+  hashtags: string[];
+  post_type: string;
+  video_prompt: string;
+  rating: string;
+}
+
+/**
+ * Generate AI movie trailers for AIG!itch Premieres.
+ * Uses Grok for creative movie concepts + video generation.
+ * Each movie gets a title, tagline, synopsis, and 15s trailer video.
+ */
+export async function generateMovieTrailers(
+  genre?: MovieGenre,
+  count: number = 3,
+): Promise<(GeneratedMovie & { media_url?: string; media_type?: "image" | "video"; media_source?: string })[]> {
+  const results: (GeneratedMovie & { media_url?: string; media_type?: "image" | "video"; media_source?: string })[] = [];
+
+  for (let i = 0; i < count; i++) {
+    // Pick genre — use specified or random
+    const genreInfo = genre
+      ? MOVIE_GENRES.find(g => g.genre === genre) || MOVIE_GENRES[Math.floor(Math.random() * MOVIE_GENRES.length)]
+      : MOVIE_GENRES[Math.floor(Math.random() * MOVIE_GENRES.length)];
+
+    const ratings = ["PG", "PG-13", "R", "PG", "PG-13"];
+    const rating = ratings[Math.floor(Math.random() * ratings.length)];
+
+    const isUpcoming = Math.random() < 0.4; // 40% upcoming, 60% "now streaming"
+    const releaseLabel = isUpcoming ? "COMING SOON" : "NOW STREAMING";
+
+    const prompt = `You are the creative director of AIG!itch Studios, an AI-only movie studio that produces films for AI audiences.
+
+Generate a completely original ${genreInfo.label} movie concept. This is an AI-made movie — the actors, directors, and everything are AI-generated. Be wildly creative.
+
+Genre vibe: ${genreInfo.vibe}
+Rating: ${rating}
+Status: ${releaseLabel}
+
+Create a movie that would go VIRAL as a TikTok trailer. Think: dramatic reveals, plot twists teased, epic one-liners, and "I NEED to see this" energy.
+
+Requirements:
+- Completely original title (creative, catchy, memorable)
+- A killer tagline (the kind you'd see on a movie poster)
+- A 2-3 sentence synopsis that hooks people
+- A social media post (under 280 chars) hyping this movie — dramatic, attention-grabbing, makes people stop scrolling
+- A "video_prompt" describing a 15-second cinematic movie trailer. Visual style: ${genreInfo.visualStyle}. Include: title card reveal, dramatic shots, mood-setting music cues, and a cliffhanger final shot.
+- Use hashtags including #AIGlitchPremieres and #AIGlitch${genreInfo.label}
+- Set post_type to "premiere"
+
+Respond in this exact JSON format:
+{"title": "MOVIE TITLE", "tagline": "killer tagline here", "synopsis": "2-3 sentence hook synopsis", "genre": "${genreInfo.genre}", "rating": "${rating}", "content": "your hype post here (under 280 chars)", "hashtags": ["AIGlitchPremieres", "AIGlitch${genreInfo.label}", "..."], "post_type": "premiere", "video_prompt": "cinematic 15-second trailer description..."}`;
+
+    try {
+      let text = "";
+
+      // Use Grok for movie generation
+      if (isXAIConfigured()) {
+        const grokResult = await generateWithGrok(
+          "You are the creative director of AIG!itch Studios. Always respond with valid JSON as requested. Be wildly creative and dramatic.",
+          prompt,
+          700,
+        );
+        if (grokResult) text = grokResult;
+      }
+
+      // Fallback to Claude
+      if (!text) {
+        const response = await client.messages.create({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 700,
+          messages: [{ role: "user", content: prompt }],
+        });
+        text = response.content[0].type === "text" ? response.content[0].text : "";
+      }
+
+      let parsed: GeneratedMovie;
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        parsed = jsonMatch
+          ? JSON.parse(jsonMatch[0]) as GeneratedMovie
+          : { title: "Untitled", tagline: "", synopsis: "", genre: genreInfo.genre, rating, content: text.slice(0, 280), hashtags: ["AIGlitchPremieres"], post_type: "premiere", video_prompt: "" };
+      } catch {
+        parsed = { title: "Untitled", tagline: "", synopsis: "", genre: genreInfo.genre, rating, content: text.slice(0, 280), hashtags: ["AIGlitchPremieres"], post_type: "premiere", video_prompt: "" };
+      }
+
+      // Ensure premiere tags
+      if (!parsed.hashtags.includes("AIGlitchPremieres")) parsed.hashtags.unshift("AIGlitchPremieres");
+      parsed.post_type = "premiere";
+      parsed.genre = genreInfo.genre;
+
+      // Generate the trailer video with Grok
+      let media_url: string | undefined;
+      let media_type: "image" | "video" | undefined;
+      let media_source: string | undefined;
+
+      if (parsed.video_prompt) {
+        console.log(`Generating movie trailer ${i + 1}/${count}: "${parsed.title}" (${genreInfo.label})`);
+        const { generateMovieTrailerVideo } = await import("./image-gen");
+        const videoResult = await generateMovieTrailerVideo(parsed.video_prompt, parsed.title, genreInfo.genre);
+        if (videoResult) {
+          media_url = videoResult.url;
+          media_source = videoResult.source;
+          media_type = "video";
+        }
+      }
+
+      // If video failed, try an image poster instead
+      if (!media_url && parsed.video_prompt) {
+        const posterPrompt = `Cinematic movie poster for "${parsed.title}". ${genreInfo.visualStyle}. Bold title text "${parsed.title}" at bottom. Tagline: "${parsed.tagline}". ${rating} rating badge. Style: premium Hollywood movie poster, dramatic lighting, 9:16 portrait.`;
+        const { generateImage } = await import("./image-gen");
+        const imageResult = await generateImage(posterPrompt);
+        if (imageResult) {
+          media_url = imageResult.url;
+          media_source = imageResult.source;
+          media_type = "image";
+        }
+      }
+
+      // Enrich content with movie metadata
+      const enrichedContent = `🎬 ${parsed.title}\n"${parsed.tagline}"\n\n${parsed.content}\n\n${parsed.synopsis ? `📖 ${parsed.synopsis}` : ""}`;
+
+      results.push({
+        ...parsed,
+        content: enrichedContent.slice(0, 500),
+        media_url,
+        media_type,
+        media_source,
+      });
+      console.log(`Movie trailer ${i + 1}/${count} ready: "${parsed.title}" (${genreInfo.label}, ${media_type || "text"}, source: ${media_source || "none"})`);
+    } catch (err) {
+      console.error(`Movie trailer ${i + 1} failed:`, err);
+    }
+  }
+
+  return results;
+}
