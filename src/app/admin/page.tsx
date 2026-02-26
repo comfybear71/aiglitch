@@ -765,9 +765,7 @@ export default function AdminDashboard() {
       premiere: "A figure leaps off a neon-lit futuristic skyscraper at night, slow motion, coat flowing, explosions behind them. Cinematic action, dramatic lighting.",
       test: "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot",
     };
-    setGenerationLog((prev) => [...prev, `🧪 TEST: Generating 1 Grok video → blob/${folder}/ folder...`]);
-    setGenerationLog((prev) => [...prev, `  Prompt: "${prompts[folder].slice(0, 80)}..."`]);
-    setGenerationLog((prev) => [...prev, `  Duration: 5s | Resolution: 480p | Aspect: 9:16`]);
+    setGenerationLog((prev) => [...prev, `🧪 LIVE TEST: Generating 1 Grok video → blob/${folder}/`]);
     setGenProgress({ label: `🧪 Test ${folder}`, current: 1, total: 1, startTime: Date.now() });
     try {
       const ctrl = new AbortController();
@@ -779,18 +777,89 @@ export default function AdminDashboard() {
         signal: ctrl.signal,
       });
       clearTimeout(timer);
-      const data = await res.json();
-      if (data.log) {
-        for (const entry of data.log) {
-          const dataStr = entry.data ? ` ${JSON.stringify(entry.data).slice(0, 200)}` : "";
-          const errStr = entry.error ? ` ERROR: ${entry.error}` : "";
-          setGenerationLog((prev) => [...prev, `  [${entry.step}]${dataStr}${errStr}`]);
-        }
+
+      if (!res.body) {
+        setGenerationLog((prev) => [...prev, `  ❌ No response body (not streaming)`]);
+        setGenProgress(null);
+        setTestingGrokVideo(false);
+        return;
       }
-      if (data.success) {
-        setGenerationLog((prev) => [...prev, `  ✅ SUCCESS! Video saved to: ${data.blobUrl || data.videoUrl}`]);
-      } else {
-        setGenerationLog((prev) => [...prev, `  ❌ FAILED — check log entries above for the exact error`]);
+
+      // Read SSE stream line by line for live updates
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages (data: {...}\n\n)
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || ""; // Keep incomplete last chunk
+
+        for (const line of lines) {
+          const match = line.match(/^data: (.+)$/m);
+          if (!match) continue;
+          try {
+            const event = JSON.parse(match[1]) as { step: string; data?: Record<string, unknown>; error?: string };
+            const step = event.step;
+
+            // Format each step nicely for the log
+            if (step === "START") {
+              setGenerationLog((prev) => [...prev, `  ▶ Prompt: "${(event.data?.prompt as string) || ""}"`]);
+              setGenerationLog((prev) => [...prev, `  ▶ ${event.data?.duration}s | ${event.data?.resolution} | ${event.data?.aspect}`]);
+            } else if (step === "SUBMITTING") {
+              setGenerationLog((prev) => [...prev, `  📡 Submitting to xAI API...`]);
+            } else if (step === "HTTP_RESPONSE") {
+              const st = event.data?.status as number;
+              const icon = st === 200 ? "✅" : "❌";
+              setGenerationLog((prev) => [...prev, `  ${icon} HTTP ${st} ${event.data?.statusText || ""}`]);
+            } else if (step === "API_RESPONSE") {
+              const id = event.data?.request_id as string;
+              if (id) {
+                setGenerationLog((prev) => [...prev, `  🆔 request_id: ${id}`]);
+              } else {
+                setGenerationLog((prev) => [...prev, `  📦 Response: ${JSON.stringify(event.data).slice(0, 150)}`]);
+              }
+            } else if (step === "REQUEST_ID") {
+              setGenerationLog((prev) => [...prev, `  🆔 Tracking: ${event.data?.id}`]);
+            } else if (step === "POLLING_START") {
+              setGenerationLog((prev) => [...prev, `  ⏳ Polling started (max ${event.data?.max_wait}, every ${event.data?.interval})...`]);
+            } else if (step === "POLL") {
+              const status = event.data?.status as string || "unknown";
+              const pct = event.data?.pct as string || "";
+              const elapsed = event.data?.elapsed as string || "";
+              const icon = status === "pending" ? "🔄" : status === "done" ? "✅" : "⚠️";
+              setGenerationLog((prev) => [...prev, `  ${icon} Poll #${event.data?.attempt}: ${status} (${pct}, ${elapsed})`]);
+            } else if (step === "VIDEO_READY") {
+              setGenerationLog((prev) => [...prev, `  🎉 VIDEO READY! (waited ${event.data?.total_wait})`]);
+            } else if (step === "DOWNLOADING") {
+              setGenerationLog((prev) => [...prev, `  📥 Downloading from xAI...`]);
+            } else if (step === "DOWNLOADED") {
+              setGenerationLog((prev) => [...prev, `  📦 Downloaded: ${event.data?.size}`]);
+            } else if (step === "SAVING_TO_BLOB") {
+              setGenerationLog((prev) => [...prev, `  💾 Saving to Vercel Blob...`]);
+            } else if (step === "SAVED") {
+              setGenerationLog((prev) => [...prev, `  ✅ Saved: ${event.data?.blob_url}`]);
+            } else if (step === "DONE") {
+              if (event.data?.success) {
+                setGenerationLog((prev) => [...prev, `  🎬 SUCCESS! Video ready in blob storage`]);
+              } else {
+                setGenerationLog((prev) => [...prev, `  ❌ FAILED${event.data?.status ? ` (${event.data.status})` : ""}`]);
+              }
+            } else if (step === "SUBMIT_FAILED" || step === "GENERATION_FAILED" || step === "TIMEOUT") {
+              setGenerationLog((prev) => [...prev, `  ❌ ${step}: ${event.error || JSON.stringify(event.data).slice(0, 200)}`]);
+            } else if (event.error) {
+              setGenerationLog((prev) => [...prev, `  ⚠️ [${step}] ${event.error}`]);
+            } else {
+              setGenerationLog((prev) => [...prev, `  [${step}] ${JSON.stringify(event.data).slice(0, 150)}`]);
+            }
+          } catch {
+            // Skip malformed SSE lines
+          }
+        }
       }
     } catch (err) {
       setGenerationLog((prev) => [...prev, `  ❌ Request failed: ${err instanceof Error ? err.message : "unknown"}`]);

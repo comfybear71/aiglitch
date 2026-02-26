@@ -6,16 +6,13 @@ import { v4 as uuidv4 } from "uuid";
 export const maxDuration = 660;
 
 /**
- * Diagnostic endpoint: makes ONE Grok video request and returns raw API
- * responses at every step so we can see exactly what's happening.
+ * Diagnostic endpoint using Server-Sent Events (SSE) for LIVE progress.
+ * Every step streams to the client immediately — no waiting for completion.
  *
- * GET /api/test-grok-video — runs a single test with a simple prompt
- * POST /api/test-grok-video — pass { prompt, duration, folder } to customize
+ * POST /api/test-grok-video — streams real-time progress as SSE events
+ *   Body: { prompt, duration, folder }
  *
- * The "folder" param (default "test") controls the blob storage path:
- *   "news"     → videos/news/...
- *   "premiere"  → videos/premiere/...
- *   "test"     → videos/test/...
+ * GET /api/test-grok-video — simple test with default prompt (also SSE)
  */
 export async function POST(request: NextRequest) {
   const isAdmin = await isAdminAuthenticated();
@@ -30,188 +27,202 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const prompt = body.prompt || "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot";
   const duration = body.duration || 5;
-  const folder = body.folder || "test"; // "news", "premiere", or "test"
+  const folder = body.folder || "test";
 
-  const log: { step: string; timestamp: string; data?: unknown; error?: string }[] = [];
-  const addLog = (step: string, data?: unknown, error?: string) => {
-    log.push({ step, timestamp: new Date().toISOString(), data, error });
-    console.log(`[test-grok-video] ${step}`, data ? JSON.stringify(data).slice(0, 500) : "", error || "");
-  };
+  const apiKey = process.env.XAI_API_KEY!;
 
-  addLog("START", { prompt: prompt.slice(0, 100), duration, folder });
-
-  // Step 1: Submit video generation
-  let requestId: string | null = null;
-  let immediateVideoUrl: string | null = null;
-
-  try {
-    const submitBody = {
-      model: "grok-imagine-video",
-      prompt,
-      duration,
-      aspect_ratio: "9:16",
-      resolution: "480p",
-    };
-    addLog("SUBMIT_REQUEST", submitBody);
-
-    const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(submitBody),
-    });
-
-    addLog("SUBMIT_HTTP_STATUS", { status: createRes.status, statusText: createRes.statusText });
-
-    const responseText = await createRes.text();
-    addLog("SUBMIT_RAW_RESPONSE", { body: responseText.slice(0, 1000) });
-
-    if (!createRes.ok) {
-      addLog("SUBMIT_FAILED", undefined, `HTTP ${createRes.status}: ${responseText.slice(0, 500)}`);
-      return NextResponse.json({ success: false, log });
-    }
-
-    let createData: Record<string, unknown>;
-    try {
-      createData = JSON.parse(responseText);
-    } catch {
-      addLog("SUBMIT_JSON_PARSE_FAILED", undefined, `Could not parse: ${responseText.slice(0, 200)}`);
-      return NextResponse.json({ success: false, log });
-    }
-
-    addLog("SUBMIT_PARSED", createData);
-
-    // Check for immediate video URL
-    const videoObj = createData.video as Record<string, unknown> | undefined;
-    if (videoObj?.url) {
-      immediateVideoUrl = videoObj.url as string;
-      addLog("IMMEDIATE_VIDEO_URL", { url: immediateVideoUrl });
-    }
-
-    // Get request_id
-    requestId = (createData.request_id as string) || null;
-    if (!requestId && !immediateVideoUrl) {
-      addLog("NO_REQUEST_ID", undefined, "No request_id and no immediate video URL in response");
-      return NextResponse.json({ success: false, log });
-    }
-
-    if (requestId) {
-      addLog("GOT_REQUEST_ID", { request_id: requestId });
-    }
-  } catch (err) {
-    addLog("SUBMIT_ERROR", undefined, err instanceof Error ? err.message : String(err));
-    return NextResponse.json({ success: false, log });
-  }
-
-  // Step 2: Poll for completion
-  let videoUrl = immediateVideoUrl;
-
-  if (!videoUrl && requestId) {
-    addLog("POLLING_START", { request_id: requestId, max_attempts: 60, interval_sec: 10 });
-
-    for (let attempt = 1; attempt <= 60; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 10_000));
+  // Create SSE stream
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (step: string, data?: unknown, error?: string) => {
+        const msg = JSON.stringify({ step, data, error, time: new Date().toISOString() });
+        controller.enqueue(encoder.encode(`data: ${msg}\n\n`));
+        console.log(`[test-grok-video] ${step}`, data ? JSON.stringify(data).slice(0, 300) : "", error || "");
+      };
 
       try {
-        const pollUrl = `https://api.x.ai/v1/videos/${requestId}`;
-        const pollRes = await fetch(pollUrl, {
-          headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
+        send("START", { prompt: prompt.slice(0, 100) + "...", duration, folder, resolution: "480p", aspect: "9:16" });
+
+        // Step 1: Submit video generation
+        const submitBody = {
+          model: "grok-imagine-video",
+          prompt,
+          duration,
+          aspect_ratio: "9:16",
+          resolution: "480p",
+        };
+        send("SUBMITTING", { endpoint: "POST /v1/videos/generations" });
+
+        const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(submitBody),
         });
 
-        const pollText = await pollRes.text();
+        send("HTTP_RESPONSE", { status: createRes.status, statusText: createRes.statusText });
 
-        if (!pollRes.ok) {
-          addLog(`POLL_${attempt}_HTTP_ERROR`, { status: pollRes.status, body: pollText.slice(0, 500) });
-          continue;
+        const responseText = await createRes.text();
+
+        if (!createRes.ok) {
+          send("SUBMIT_FAILED", { body: responseText.slice(0, 500) }, `HTTP ${createRes.status}`);
+          send("DONE", { success: false });
+          controller.close();
+          return;
         }
 
-        let pollData: Record<string, unknown>;
+        let createData: Record<string, unknown>;
         try {
-          pollData = JSON.parse(pollText);
+          createData = JSON.parse(responseText);
         } catch {
-          addLog(`POLL_${attempt}_JSON_ERROR`, { raw: pollText.slice(0, 300) });
-          continue;
+          send("JSON_PARSE_ERROR", { raw: responseText.slice(0, 300) }, "Could not parse response");
+          send("DONE", { success: false });
+          controller.close();
+          return;
         }
 
-        const status = pollData.status as string;
-        addLog(`POLL_${attempt}`, { status, hasVideo: !!(pollData.video as Record<string, unknown>)?.url });
+        send("API_RESPONSE", createData);
 
-        if (status === "done") {
-          const vid = pollData.video as Record<string, unknown> | undefined;
-          if (vid?.url) {
-            videoUrl = vid.url as string;
-            addLog("VIDEO_READY", {
-              url: (videoUrl as string).slice(0, 100),
-              duration: vid.duration,
-              respect_moderation: vid.respect_moderation,
+        // Check for immediate video
+        const videoObj = createData.video as Record<string, unknown> | undefined;
+        if (videoObj?.url) {
+          send("IMMEDIATE_VIDEO", { url: (videoObj.url as string).slice(0, 100) });
+          await persistAndFinish(controller, send, videoObj.url as string, folder);
+          return;
+        }
+
+        const requestId = createData.request_id as string;
+        if (!requestId) {
+          send("NO_REQUEST_ID", createData, "xAI returned no request_id and no video URL");
+          send("DONE", { success: false });
+          controller.close();
+          return;
+        }
+
+        send("REQUEST_ID", { id: requestId });
+
+        // Step 2: Poll for completion with live progress
+        const maxAttempts = 60;
+        send("POLLING_START", { max_wait: "10 minutes", interval: "10s", polls: maxAttempts });
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 10_000));
+          const elapsed = attempt * 10;
+          const elapsedMin = Math.floor(elapsed / 60);
+          const elapsedSec = elapsed % 60;
+          const timeStr = elapsedMin > 0 ? `${elapsedMin}m ${elapsedSec}s` : `${elapsedSec}s`;
+          const pct = Math.min(Math.round((attempt / maxAttempts) * 100), 99);
+
+          try {
+            const pollRes = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
+              headers: { "Authorization": `Bearer ${apiKey}` },
             });
-            break;
-          } else {
-            addLog("DONE_BUT_NO_URL", pollData);
+
+            if (!pollRes.ok) {
+              send("POLL", { attempt, pct: `${pct}%`, elapsed: timeStr, http_error: pollRes.status });
+              continue;
+            }
+
+            const pollText = await pollRes.text();
+            let pollData: Record<string, unknown>;
+            try {
+              pollData = JSON.parse(pollText);
+            } catch {
+              send("POLL", { attempt, pct: `${pct}%`, elapsed: timeStr, parse_error: true });
+              continue;
+            }
+
+            const status = pollData.status as string;
+            send("POLL", { attempt, pct: `${pct}%`, elapsed: timeStr, status });
+
+            if (status === "done") {
+              const vid = pollData.video as Record<string, unknown> | undefined;
+              if (vid?.url) {
+                send("VIDEO_READY", {
+                  url: (vid.url as string).slice(0, 120),
+                  duration: vid.duration,
+                  moderation: vid.respect_moderation,
+                  total_wait: timeStr,
+                });
+                await persistAndFinish(controller, send, vid.url as string, folder);
+                return;
+              }
+              send("DONE_NO_URL", pollData, "Status=done but no video URL");
+              send("DONE", { success: false });
+              controller.close();
+              return;
+            }
+
+            if (status === "expired" || status === "failed") {
+              send("GENERATION_FAILED", pollData, `Video generation ${status} after ${timeStr}`);
+              send("DONE", { success: false, status });
+              controller.close();
+              return;
+            }
+          } catch (err) {
+            send("POLL_ERROR", { attempt, elapsed: timeStr }, err instanceof Error ? err.message : String(err));
           }
         }
 
-        if (status === "expired" || status === "failed") {
-          addLog("GENERATION_FAILED", pollData);
-          return NextResponse.json({ success: false, status, log });
-        }
-
-        // Log progress every 6 polls (every minute)
-        if (attempt % 6 === 0) {
-          addLog(`STILL_PENDING_${attempt * 10}s`, { elapsed: `${attempt * 10}s` });
-        }
+        send("TIMEOUT", { total_wait: "10 minutes" }, "Polling timed out — video may still be generating on xAI's side");
+        send("DONE", { success: false });
+        controller.close();
       } catch (err) {
-        addLog(`POLL_${attempt}_ERROR`, undefined, err instanceof Error ? err.message : String(err));
+        const send = (step: string, data?: unknown, error?: string) => {
+          const msg = JSON.stringify({ step, data, error, time: new Date().toISOString() });
+          controller.enqueue(encoder.encode(`data: ${msg}\n\n`));
+        };
+        send("FATAL_ERROR", undefined, err instanceof Error ? err.message : String(err));
+        send("DONE", { success: false });
+        controller.close();
       }
-    }
-
-    if (!videoUrl) {
-      addLog("POLLING_TIMEOUT", { total_seconds: 600 });
-      return NextResponse.json({ success: false, log });
-    }
-  }
-
-  // Step 3: Persist to blob storage
-  let blobUrl: string | null = null;
-  if (videoUrl) {
-    try {
-      addLog("PERSISTING_TO_BLOB", { folder, source_url: (videoUrl as string).slice(0, 100) });
-      const res = await fetch(videoUrl);
-      if (!res.ok) {
-        addLog("BLOB_FETCH_FAILED", { status: res.status });
-      } else {
-        const buffer = Buffer.from(await res.arrayBuffer());
-        addLog("BLOB_DOWNLOADED", { size_bytes: buffer.length, size_mb: (buffer.length / 1024 / 1024).toFixed(2) });
-        const blob = await put(`videos/${folder}/${folder}-${uuidv4()}.mp4`, buffer, {
-          access: "public",
-          contentType: "video/mp4",
-          addRandomSuffix: true,
-        });
-        blobUrl = blob.url;
-        addLog("BLOB_PERSISTED", { url: blobUrl });
-      }
-    } catch (err) {
-      addLog("BLOB_ERROR", undefined, err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  addLog("COMPLETE", {
-    success: true,
-    grok_video_url: videoUrl ? (videoUrl as string).slice(0, 100) : null,
-    blob_url: blobUrl,
-    folder,
+    },
   });
 
-  return NextResponse.json({
-    success: true,
-    videoUrl: blobUrl || videoUrl,
-    grokUrl: videoUrl,
-    blobUrl,
-    folder,
-    log,
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
   });
+}
+
+async function persistAndFinish(
+  controller: ReadableStreamDefaultController,
+  send: (step: string, data?: unknown, error?: string) => void,
+  videoUrl: string,
+  folder: string,
+) {
+  try {
+    send("DOWNLOADING", { from: videoUrl.slice(0, 100) });
+    const res = await fetch(videoUrl);
+    if (!res.ok) {
+      send("DOWNLOAD_FAILED", { status: res.status }, "Could not download video from xAI");
+      send("DONE", { success: false, grokUrl: videoUrl });
+      controller.close();
+      return;
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
+    send("DOWNLOADED", { size: `${sizeMb}MB`, bytes: buffer.length });
+
+    send("SAVING_TO_BLOB", { path: `videos/${folder}/...` });
+    const blob = await put(`videos/${folder}/${folder}-${uuidv4()}.mp4`, buffer, {
+      access: "public",
+      contentType: "video/mp4",
+      addRandomSuffix: true,
+    });
+    send("SAVED", { blob_url: blob.url });
+    send("DONE", { success: true, blob_url: blob.url, grok_url: videoUrl.slice(0, 100) });
+  } catch (err) {
+    send("PERSIST_ERROR", undefined, err instanceof Error ? err.message : String(err));
+    send("DONE", { success: false, grokUrl: videoUrl });
+  }
+  controller.close();
 }
 
 export async function GET(request: NextRequest) {
@@ -220,7 +231,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
 
-  const req = new NextRequest(request.url, {
+  // Rewrite as POST with default params
+  const url = new URL(request.url);
+  const req = new NextRequest(url, {
     method: "POST",
     headers: request.headers,
     body: JSON.stringify({
