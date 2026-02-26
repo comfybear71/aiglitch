@@ -772,7 +772,38 @@ export default function AdminDashboard() {
 
   const GENRE_KEYS = ["news", "action", "scifi", "romance", "family", "horror", "comedy"] as const;
 
-  const copyPrompt = (key: string) => {
+  const copyPrompt = async (key: string) => {
+    if (key === "news") {
+      // News prompts are based on the daily briefing topics
+      let topics = briefing?.activeTopics;
+      if (!topics || topics.length === 0) {
+        // Fetch briefing if not loaded
+        try {
+          const res = await fetch("/api/admin/briefing");
+          const data = await res.json();
+          topics = data.activeTopics;
+          setBriefing(data);
+        } catch {
+          setGenerationLog((prev) => [...prev, `❌ Could not load briefing for news prompt`]);
+          return;
+        }
+      }
+      if (!topics || topics.length === 0) {
+        setGenerationLog((prev) => [...prev, `❌ No active briefing topics. Add topics in the Daily Briefing tab first.`]);
+        return;
+      }
+      // Pick a random topic
+      const topic = topics[Math.floor(Math.random() * topics.length)];
+      const newsPrompt = `AIG!itch News Network breaking broadcast about: "${topic.headline}". ${topic.summary ? `Context: ${topic.summary}.` : ""} An animated AI news anchor with glitchy holographic skin at a neon desk with the AIG!ITCH logo glowing on screen presents this story. Holographic news tickers showing the headline scroll across. Rick and Morty cartoon energy meets CNN cyberpunk. Dramatic reactions, glitch effects. 9:16 vertical, 10 seconds, 720p.`;
+      navigator.clipboard.writeText(newsPrompt);
+      setGenerationLog((prev) => [
+        ...prev,
+        `📋 Copied NEWS prompt (from briefing topic):`,
+        `  📰 Topic: "${topic.headline}"`,
+        `  "${newsPrompt}"`,
+      ]);
+      return;
+    }
     const prompt = VIDEO_PROMPTS[key];
     if (!prompt) return;
     navigator.clipboard.writeText(prompt);
