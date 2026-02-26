@@ -759,15 +759,24 @@ export default function AdminDashboard() {
   };
 
   const VIDEO_PROMPTS: Record<string, string> = {
-    news: "Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk reacting dramatically to breaking news. Neon screens, interdimensional portals in background. Cyberpunk CNN energy.",
-    premiere: "A figure leaps off a neon-lit futuristic skyscraper at night, slow motion, coat flowing, explosions behind them. Cinematic action, dramatic lighting.",
-    test: "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot",
+    news: "AIG!itch News Network breaking broadcast. An animated AI anchor with glitchy holographic skin sits behind a sleek neon desk with 'AIG!ITCH' logo glowing on screen. Multiple floating holographic news tickers, glitch effects, digital rain. The anchor reacts dramatically to breaking headlines. Rick and Morty cartoon energy meets CNN cyberpunk. 9:16 vertical cinematic.",
+    premiere: "AIG!itch Studios cinematic logo reveal. The text 'AIG!ITCH' forms from glitching neon particles against a dark void, electric sparks fly, the logo pulses with energy then explodes into a movie scene. 9:16 vertical cinematic.",
+    action: "AIG!itch Studios presents: Action movie trailer. A hero in tactical gear sprints across a collapsing neon bridge, the AIG!ITCH logo flickers in the smoke, explosions erupt behind them, helicopter overhead, debris flying in slow motion. Michael Bay energy. 9:16 vertical cinematic.",
+    scifi: "AIG!itch Studios presents: Sci-fi movie trailer. An astronaut floats inside a massive alien space station, bioluminescent walls pulse with the AIG!ITCH logo pattern, a mysterious portal opens revealing another galaxy. Blade Runner meets Interstellar vibes. 9:16 vertical cinematic.",
+    romance: "AIG!itch Studios presents: Romance movie trailer. Two silhouettes meet on a rain-soaked rooftop at golden hour, city lights twinkling below with a faint AIG!ITCH neon sign in the distance, umbrellas blowing away in wind. Dramatic slow motion, warm cinematic lighting. 9:16 vertical.",
+    family: "AIG!itch Studios presents: Family adventure trailer. A group of kids discover a glowing treasure map in an attic, the map reveals the AIG!ITCH logo then comes alive with animated golden light paths through a magical forest. Pixar meets Goonies energy. 9:16 vertical cinematic.",
+    horror: "AIG!itch Studios presents: Horror movie trailer. A dark corridor in an abandoned hospital, flickering lights reveal the AIG!ITCH logo on a glitching monitor, a shadowy figure at the end slowly turns with glowing red eyes. Fog, jump scare energy. 9:16 vertical cinematic.",
+    comedy: "AIG!itch Studios presents: Comedy movie trailer. A man in a suit accidentally launches himself out of an office chair through a window into a rooftop pool party. An AIG!ITCH banner falls into the pool. Over-the-top slapstick, dramatic reactions. 9:16 vertical cinematic.",
+    test: "The AIG!ITCH logo glowing in neon against a cyberpunk city at night, flying cars, cinematic atmosphere. 9:16 vertical.",
   };
 
-  const copyPrompt = (folder: "news" | "premiere" | "test") => {
-    const prompt = VIDEO_PROMPTS[folder];
+  const GENRE_KEYS = ["news", "action", "scifi", "romance", "family", "horror", "comedy"] as const;
+
+  const copyPrompt = (key: string) => {
+    const prompt = VIDEO_PROMPTS[key];
+    if (!prompt) return;
     navigator.clipboard.writeText(prompt);
-    setGenerationLog((prev) => [...prev, `📋 Copied ${folder} prompt to clipboard:`, `  "${prompt}"`]);
+    setGenerationLog((prev) => [...prev, `📋 Copied ${key} prompt to clipboard:`, `  "${prompt}"`]);
   };
 
   const testGrokVideo = async (folder: "news" | "premiere" | "test") => {
@@ -1094,11 +1103,6 @@ export default function AdminDashboard() {
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
               <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Premiere"}</span>
             </button>
-            <button onClick={() => copyPrompt("premiere")}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-cyan-500/30">
-              <span className="sm:hidden">📋</span>
-              <span className="hidden sm:inline">📋 Copy Prompt</span>
-            </button>
             <button onClick={testStitchPost} disabled={testingGrokVideo}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🎬"}</span>
@@ -1108,6 +1112,16 @@ export default function AdminDashboard() {
               <span className="sm:hidden">🏠</span>
               <span className="hidden sm:inline">View Feed</span>
             </a>
+          </div>
+          {/* Copy Prompt Buttons */}
+          <div className="flex flex-wrap gap-1 mt-2">
+            <span className="text-xs text-gray-500 self-center mr-1">📋 Copy:</span>
+            {GENRE_KEYS.map((key) => (
+              <button key={key} onClick={() => copyPrompt(key)}
+                className="px-2 py-1 bg-cyan-500/15 text-cyan-400 rounded text-xs font-bold hover:bg-cyan-500/25 capitalize">
+                {key}
+              </button>
+            ))}
           </div>
         </div>
       </header>

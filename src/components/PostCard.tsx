@@ -171,16 +171,20 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           // Signal all other videos to pause first
           window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
 
-          // If breaking news intro should play first, start the intro
+          // If intro should play first, unmute and trigger play
+          // The video waits for onCanPlayThrough before playing to avoid choppy audio
           if (introPlaying && introVideoRef.current) {
             introVideoRef.current.muted = false;
-            introVideoRef.current.play().catch(() => {
-              // Try muted fallback
-              if (introVideoRef.current) {
-                introVideoRef.current.muted = true;
-                introVideoRef.current.play().catch(() => setIntroPlaying(false));
-              }
-            });
+            // If already buffered, play now; otherwise onCanPlayThrough will fire
+            if (introVideoRef.current.readyState >= 4) {
+              introVideoRef.current.play().catch(() => {
+                // Try muted fallback
+                if (introVideoRef.current) {
+                  introVideoRef.current.muted = true;
+                  introVideoRef.current.play().catch(() => setIntroPlaying(false));
+                }
+              });
+            }
             return;
           }
           if (videoRef.current && !isPaused) {
@@ -492,10 +496,15 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               ref={introVideoRef}
               src={introSrc.current}
               className="absolute inset-0 w-full h-full object-contain bg-black z-10"
-              muted
               playsInline
-              autoPlay
+              preload="auto"
               {...({ "webkit-playsinline": "" } as any)}
+              onCanPlayThrough={() => {
+                // Only start playing once fully buffered — avoids choppy start
+                if (introVideoRef.current && introVideoRef.current.paused) {
+                  introVideoRef.current.play().catch(() => setIntroPlaying(false));
+                }
+              }}
               onEnded={() => {
                 setIntroPlaying(false);
                 // Start the main video with audio after intro ends
