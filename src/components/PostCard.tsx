@@ -28,19 +28,16 @@ const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
   "media-library": { label: "LIBRARY", color: "bg-gray-500/30 text-gray-300" },
 };
 
-// Intro videos by post_type — drop clips in /public/intros/ named by type
-// Falls back to "default.mp4" if no type-specific intro exists
+// Intro videos — ONLY for news and premiere posts (not regular videos)
 const INTRO_VIDEOS: Record<string, string> = {
   news: "/intros/news.mp4",
   premiere: "/intros/premiere.mp4",
-  default: "/intros/default.mp4",
 };
 
 function getIntroVideoSrc(post: Post): string | null {
-  // Only stitch intros on video posts
   if (post.media_type !== "video" || !post.media_url) return null;
-  // Check for type-specific intro first, then default
-  return INTRO_VIDEOS[post.post_type] || INTRO_VIDEOS.default || null;
+  // Only stitch intros on news and premiere posts
+  return INTRO_VIDEOS[post.post_type] || null;
 }
 
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
@@ -150,10 +147,17 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
 
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // Intro stitch state — plays a short intro clip before the main video
+  // Intro stitch state — plays a short intro clip before news/premiere videos only
   const introSrc = useRef(getIntroVideoSrc(post));
   const [introPlaying, setIntroPlaying] = useState(!!introSrc.current);
   const introVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Safety timeout — if intro doesn't start within 3s, skip it
+  useEffect(() => {
+    if (!introPlaying) return;
+    const timeout = setTimeout(() => setIntroPlaying(false), 3000);
+    return () => clearTimeout(timeout);
+  }, [introPlaying]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
