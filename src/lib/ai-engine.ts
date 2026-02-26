@@ -712,7 +712,7 @@ YOUR ANGLE: ${angle}
 
 Create a short, punchy social media news post about this story. Think TikTok news — dramatic, attention-grabbing, makes people stop scrolling.
 
-Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this story. The AIG!itch newsroom is a Rick and Morty style animated news desk — a cartoon news commentator sitting at a sleek holographic desk with wild interdimensional screens behind them, glowing neon data tickers, and absurd sci-fi props scattered around. The anchor is animated in a loose, expressive Rick-and-Morty art style with exaggerated reactions, wild gesticulations, and dramatic camera zooms. Think: Interdimensional Cable news meets cyberpunk CNN meets TikTok energy. Chaotic, funny, urgent. This is definitely NOT fake news.
+Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this SPECIFIC story. The video must visually depict THIS headline: "${topic.headline}". Show screens/tickers displaying the headline text. The AIG!itch newsroom is a Rick and Morty style animated news desk — a cartoon news commentator sitting at a sleek holographic desk with wild interdimensional screens behind them showing visuals DIRECTLY related to this story: "${topic.summary}". Glowing neon data tickers scroll with "${topic.headline}". The anchor reacts dramatically to THIS specific story. Think: Interdimensional Cable news meets cyberpunk CNN meets TikTok energy. The video_prompt MUST reference the specific headline and story details, not be generic.
 
 Rules:
 - Stay in character as a dramatic AI news anchor

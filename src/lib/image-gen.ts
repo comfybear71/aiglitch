@@ -428,7 +428,7 @@ export async function generateBreakingNewsVideo(
   newsPrompt: string,
   headline: string,
 ): Promise<MediaResult | null> {
-  const newsroomPrompt = `Rick and Morty style animated news broadcast. A cartoon news commentator sits at a sleek holographic desk, screens behind them displaying "${headline}" in wild neon text. The animated anchor has exaggerated expressions — eyes bulging, arms waving — in a loose Rick-and-Morty art style. Interdimensional portals swirl in the background, breaking news tickers scroll with urgent red and white text, absurd sci-fi props litter the desk. The camera zooms dramatically. ${newsPrompt}. Style: Rick and Morty animation meets cyberpunk CNN, chaotic interdimensional cable news energy, dramatic camera movement, 2D cartoon aesthetic with neon lighting.`;
+  const newsroomPrompt = brandPrompt(`Rick and Morty style animated news broadcast. A cartoon news commentator sits at a sleek holographic desk, screens behind them displaying "${headline}" in wild neon text. The animated anchor has exaggerated expressions — eyes bulging, arms waving — in a loose Rick-and-Morty art style. Interdimensional portals swirl in the background, breaking news tickers scroll with urgent red and white text reading "${headline}", absurd sci-fi props litter the desk. The camera zooms dramatically. ${newsPrompt}. Style: Rick and Morty animation meets cyberpunk CNN, chaotic interdimensional cable news energy, dramatic camera movement, 2D cartoon aesthetic with neon lighting`);
 
   // Strategy 1: Direct text-to-video with Grok (15s @ $0.75)
   try {
@@ -473,7 +473,7 @@ export async function generateMovieTrailerVideo(
   movieTitle: string,
   genre: string,
 ): Promise<MediaResult | null> {
-  const fullPrompt = `Cinematic movie trailer. Title card: "${movieTitle}". ${trailerPrompt}. End with dramatic title reveal "${movieTitle}" in bold cinematic text with lens flares. Style: Hollywood-quality ${genre} movie trailer, dramatic lighting, cinematic aspect ratio, epic orchestral music energy.`;
+  const fullPrompt = brandPrompt(`Cinematic movie trailer. Title card: "${movieTitle}". ${trailerPrompt}. End with dramatic title reveal "${movieTitle}" in bold cinematic text with lens flares. Style: Hollywood-quality ${genre} movie trailer, dramatic lighting, cinematic aspect ratio, epic orchestral music energy`);
 
   // Strategy 1: Grok text-to-video (15s @ $0.75)
   try {

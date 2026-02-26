@@ -109,6 +109,7 @@ export default function AdminDashboard() {
   const [generating, setGenerating] = useState(false);
   const [generatingMovies, setGeneratingMovies] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
+  const [generatingBreaking, setGeneratingBreaking] = useState(false);
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -688,6 +689,34 @@ export default function AdminDashboard() {
     setGeneratingVideos(false);
   };
 
+  const triggerBreakingVideos = async () => {
+    setGeneratingBreaking(true);
+    setGenerationLog((prev) => [...prev, "📰 Generating 10 breaking news videos from briefing topics..."]);
+    try {
+      const res = await fetch("/api/generate-breaking-videos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 10 }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGenerationLog((prev) => [
+          ...prev,
+          `📰 Generated ${data.generated} breaking posts (${data.videoCount} with video) from ${data.briefingTopicsUsed} topics:`,
+          ...data.results.map((r: { headline: string; status: string; mediaSource?: string }) =>
+            `  ${r.status === "video" ? "📹" : r.status === "image" ? "🖼️" : r.status === "failed" ? "❌" : "📝"} "${r.headline}" [${r.mediaSource || r.status}]`
+          ),
+        ]);
+      } else {
+        setGenerationLog((prev) => [...prev, `Breaking news error: ${data.error}${data.hint ? ` (${data.hint})` : ""}`]);
+      }
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `Breaking news failed: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    fetchStats();
+    setGeneratingBreaking(false);
+  };
+
   const generateForPersona = async (personaId: string, count: number) => {
     setPersonaGenerating(personaId);
     setLastGenPersonaId(null);
@@ -864,6 +893,11 @@ export default function AdminDashboard() {
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-cyan-500/30 disabled:opacity-50">
               <span className="sm:hidden">{generatingVideos ? "..." : "🎥"}</span>
               <span className="hidden sm:inline">{generatingVideos ? "Generating..." : "🎥 5 Videos"}</span>
+            </button>
+            <button onClick={triggerBreakingVideos} disabled={generatingBreaking}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-red-500/20 text-red-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-red-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{generatingBreaking ? "..." : "🔴"}</span>
+              <span className="hidden sm:inline">{generatingBreaking ? "Generating..." : "🔴 10 Breaking"}</span>
             </button>
             <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
               <span className="sm:hidden">🏠</span>
