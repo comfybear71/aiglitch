@@ -19,8 +19,8 @@ export async function GET() {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
 
-  // List all videos in the blob store (premiere folder)
-  const folders = ["videos/premiere", "videos/test", "videos/news", "videos/breaking"];
+  // List all videos in the blob store — check both root and videos/ prefixes
+  const folders = ["premiere", "news", "test", "videos/premiere", "videos/test", "videos/news", "videos/breaking"];
   const allVideos: { url: string; pathname: string; size: number; uploadedAt: Date }[] = [];
 
   for (const prefix of folders) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   // If no URL provided, find the first premiere video in blob storage
   if (!videoUrl) {
-    const prefixes = ["videos/premiere", "videos/test", "videos/news"];
+    const prefixes = ["premiere", "news", "test", "videos/premiere", "videos/test", "videos/news"];
     for (const prefix of prefixes) {
       try {
         const result = await listBlobs({ prefix, limit: 10 });

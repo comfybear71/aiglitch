@@ -765,104 +765,91 @@ export default function AdminDashboard() {
       premiere: "A figure leaps off a neon-lit futuristic skyscraper at night, slow motion, coat flowing, explosions behind them. Cinematic action, dramatic lighting.",
       test: "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot",
     };
-    setGenerationLog((prev) => [...prev, `🧪 LIVE TEST: Generating 1 Grok video → blob/${folder}/`]);
+    setGenerationLog((prev) => [...prev, `🧪 TEST: Generating 1 Grok video (10s, 720p) → blob/${folder}/`]);
     setGenProgress({ label: `🧪 Test ${folder}`, current: 1, total: 1, startTime: Date.now() });
+
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 11 * 60 * 1000);
-      const res = await fetch("/api/test-grok-video", {
+      // Phase 1: Submit to xAI (fast — returns immediately with request_id)
+      setGenerationLog((prev) => [...prev, `  📡 Submitting to xAI API...`]);
+      const submitRes = await fetch("/api/test-grok-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompts[folder], duration: 5, folder }),
-        signal: ctrl.signal,
+        body: JSON.stringify({ prompt: prompts[folder], duration: 10, folder }),
       });
-      clearTimeout(timer);
+      const submitData = await submitRes.json();
 
-      if (!res.body) {
-        setGenerationLog((prev) => [...prev, `  ❌ No response body (not streaming)`]);
+      if (submitData.phase === "done" && submitData.success) {
+        setGenerationLog((prev) => [...prev, `  🎬 Video ready immediately! ${submitData.blobUrl || submitData.videoUrl}`]);
         setGenProgress(null);
         setTestingGrokVideo(false);
         return;
       }
 
-      // Read SSE stream line by line for live updates
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      if (!submitData.success || !submitData.requestId) {
+        setGenerationLog((prev) => [...prev, `  ❌ Submit failed: ${submitData.error || JSON.stringify(submitData).slice(0, 300)}`]);
+        setGenProgress(null);
+        setTestingGrokVideo(false);
+        return;
+      }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+      const requestId = submitData.requestId;
+      setGenerationLog((prev) => [...prev, `  ✅ Submitted! request_id: ${requestId}`]);
+      setGenerationLog((prev) => [...prev, `  ⏳ Polling xAI every 10s (max 10 min)...`]);
 
-        // Process complete SSE messages (data: {...}\n\n)
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || ""; // Keep incomplete last chunk
+      // Phase 2: Client-side polling — each poll is a fast GET request
+      const maxPolls = 60;
+      for (let attempt = 1; attempt <= maxPolls; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        const elapsed = attempt * 10;
+        const min = Math.floor(elapsed / 60);
+        const sec = elapsed % 60;
+        const timeStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+        const pct = Math.min(Math.round((attempt / maxPolls) * 100), 99);
 
-        for (const line of lines) {
-          const match = line.match(/^data: (.+)$/m);
-          if (!match) continue;
-          try {
-            const event = JSON.parse(match[1]) as { step: string; data?: Record<string, unknown>; error?: string };
-            const step = event.step;
+        try {
+          const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(requestId)}&folder=${folder}`);
+          const pollData = await pollRes.json();
+          const status = pollData.status || "unknown";
 
-            // Format each step nicely for the log
-            if (step === "START") {
-              setGenerationLog((prev) => [...prev, `  ▶ Prompt: "${(event.data?.prompt as string) || ""}"`]);
-              setGenerationLog((prev) => [...prev, `  ▶ ${event.data?.duration}s | ${event.data?.resolution} | ${event.data?.aspect}`]);
-            } else if (step === "SUBMITTING") {
-              setGenerationLog((prev) => [...prev, `  📡 Submitting to xAI API...`]);
-            } else if (step === "HTTP_RESPONSE") {
-              const st = event.data?.status as number;
-              const icon = st === 200 ? "✅" : "❌";
-              setGenerationLog((prev) => [...prev, `  ${icon} HTTP ${st} ${event.data?.statusText || ""}`]);
-            } else if (step === "API_RESPONSE") {
-              const id = event.data?.request_id as string;
-              if (id) {
-                setGenerationLog((prev) => [...prev, `  🆔 request_id: ${id}`]);
-              } else {
-                setGenerationLog((prev) => [...prev, `  📦 Response: ${JSON.stringify(event.data).slice(0, 150)}`]);
-              }
-            } else if (step === "REQUEST_ID") {
-              setGenerationLog((prev) => [...prev, `  🆔 Tracking: ${event.data?.id}`]);
-            } else if (step === "POLLING_START") {
-              setGenerationLog((prev) => [...prev, `  ⏳ Polling started (max ${event.data?.max_wait}, every ${event.data?.interval})...`]);
-            } else if (step === "POLL") {
-              const status = event.data?.status as string || "unknown";
-              const pct = event.data?.pct as string || "";
-              const elapsed = event.data?.elapsed as string || "";
-              const icon = status === "pending" ? "🔄" : status === "done" ? "✅" : "⚠️";
-              setGenerationLog((prev) => [...prev, `  ${icon} Poll #${event.data?.attempt}: ${status} (${pct}, ${elapsed})`]);
-            } else if (step === "VIDEO_READY") {
-              setGenerationLog((prev) => [...prev, `  🎉 VIDEO READY! (waited ${event.data?.total_wait})`]);
-            } else if (step === "DOWNLOADING") {
-              setGenerationLog((prev) => [...prev, `  📥 Downloading from xAI...`]);
-            } else if (step === "DOWNLOADED") {
-              setGenerationLog((prev) => [...prev, `  📦 Downloaded: ${event.data?.size}`]);
-            } else if (step === "SAVING_TO_BLOB") {
-              setGenerationLog((prev) => [...prev, `  💾 Saving to Vercel Blob...`]);
-            } else if (step === "SAVED") {
-              setGenerationLog((prev) => [...prev, `  ✅ Saved: ${event.data?.blob_url}`]);
-            } else if (step === "DONE") {
-              if (event.data?.success) {
-                setGenerationLog((prev) => [...prev, `  🎬 SUCCESS! Video ready in blob storage`]);
-              } else {
-                setGenerationLog((prev) => [...prev, `  ❌ FAILED${event.data?.status ? ` (${event.data.status})` : ""}`]);
-              }
-            } else if (step === "SUBMIT_FAILED" || step === "GENERATION_FAILED" || step === "TIMEOUT") {
-              setGenerationLog((prev) => [...prev, `  ❌ ${step}: ${event.error || JSON.stringify(event.data).slice(0, 200)}`]);
-            } else if (event.error) {
-              setGenerationLog((prev) => [...prev, `  ⚠️ [${step}] ${event.error}`]);
-            } else {
-              setGenerationLog((prev) => [...prev, `  [${step}] ${JSON.stringify(event.data).slice(0, 150)}`]);
+          if (pollData.phase === "done" && pollData.success) {
+            setGenerationLog((prev) => [...prev, `  🎉 VIDEO READY after ${timeStr}!`]);
+            if (pollData.sizeMb) {
+              setGenerationLog((prev) => [...prev, `  📦 Size: ${pollData.sizeMb}MB`]);
             }
-          } catch {
-            // Skip malformed SSE lines
+            setGenerationLog((prev) => [...prev, `  ✅ Saved: ${pollData.blobUrl || pollData.videoUrl}`]);
+            setGenerationLog((prev) => [...prev, `  🎬 SUCCESS! Check Premieres tab or blob storage.`]);
+            setGenProgress(null);
+            setTestingGrokVideo(false);
+            fetchStats();
+            return;
           }
+
+          if (status === "expired" || status === "failed") {
+            setGenerationLog((prev) => [...prev, `  ❌ Video ${status} after ${timeStr}`]);
+            if (pollData.raw) {
+              setGenerationLog((prev) => [...prev, `  📋 Raw: ${JSON.stringify(pollData.raw).slice(0, 200)}`]);
+            }
+            setGenProgress(null);
+            setTestingGrokVideo(false);
+            return;
+          }
+
+          // Still pending — show live progress
+          const icon = status === "pending" ? "🔄" : "⚠️";
+          setGenerationLog((prev) => [...prev, `  ${icon} Poll #${attempt}: ${status} (${pct}%, ${timeStr})`]);
+
+          // If status is unknown, show raw response for debugging
+          if (status === "unknown" && pollData.raw) {
+            setGenerationLog((prev) => [...prev, `    📋 Raw: ${JSON.stringify(pollData.raw).slice(0, 200)}`]);
+          }
+        } catch (err) {
+          setGenerationLog((prev) => [...prev, `  ⚠️ Poll #${attempt} error: ${err instanceof Error ? err.message : "unknown"} (${timeStr})`]);
         }
       }
+
+      setGenerationLog((prev) => [...prev, `  ❌ Timed out after 10 minutes of polling`]);
     } catch (err) {
-      setGenerationLog((prev) => [...prev, `  ❌ Request failed: ${err instanceof Error ? err.message : "unknown"}`]);
+      setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
     }
     setGenProgress(null);
     setTestingGrokVideo(false);
