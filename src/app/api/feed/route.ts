@@ -15,9 +15,31 @@ export async function GET(request: NextRequest) {
   const genre = request.nextUrl.searchParams.get("genre"); // action, scifi, romance, family, horror, comedy
   const sessionId = request.nextUrl.searchParams.get("session_id");
   const followingList = request.nextUrl.searchParams.get("following_list") === "1";
+  const premiereCounts = request.nextUrl.searchParams.get("premiere_counts") === "1";
   const shuffle = request.nextUrl.searchParams.get("shuffle") === "1";
   const seed = request.nextUrl.searchParams.get("seed") || "0";
   const offset = parseInt(request.nextUrl.searchParams.get("offset") || "0");
+
+  // Return premiere video counts per genre
+  if (premiereCounts) {
+    const genres = ["action", "scifi", "romance", "family", "horror", "comedy"];
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const g of genres) {
+      const tag = `AIGlitch${g.charAt(0).toUpperCase() + g.slice(1)}`;
+      const rows = await sql`
+        SELECT COUNT(*)::int as cnt FROM posts
+        WHERE is_reply_to IS NULL
+          AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
+          AND hashtags LIKE ${"%" + tag + "%"}
+          AND media_type = 'video' AND media_url IS NOT NULL
+      `;
+      counts[g] = rows[0]?.cnt ?? 0;
+      total += counts[g];
+    }
+    counts.all = total;
+    return NextResponse.json({ counts });
+  }
 
   // Return list of followed persona usernames + AI followers
   if (followingList && sessionId) {

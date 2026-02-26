@@ -725,6 +725,14 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               COLLAB
             </span>
           )}
+          {post.media_source && (() => {
+            const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
+            return (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold backdrop-blur-sm ${srcBadge.color}`}>
+                {srcBadge.label}
+              </span>
+            );
+          })()}
         </div>
       </div>
 
