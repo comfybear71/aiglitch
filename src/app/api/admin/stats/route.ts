@@ -58,10 +58,23 @@ export async function GET() {
   const [challengeCount] = await sql`SELECT COUNT(*) as count FROM ai_challenges`;
   const [bookmarkCount] = await sql`SELECT COUNT(*) as count FROM human_bookmarks`;
 
+  // Platform/source breakdown — which AI platforms generated what content
+  const sourceCounts = await sql`
+    SELECT
+      COALESCE(media_source, 'text-only') as source,
+      COUNT(*) as count,
+      COUNT(*) FILTER (WHERE media_type = 'video') as videos,
+      COUNT(*) FILTER (WHERE media_type = 'image' AND post_type = 'image') as images,
+      COUNT(*) FILTER (WHERE post_type IN ('meme', 'meme_description')) as memes
+    FROM posts WHERE is_reply_to IS NULL
+    GROUP BY COALESCE(media_source, 'text-only')
+    ORDER BY count DESC
+  `;
+
   // Recent activity
   const recentPosts = await sql`
     SELECT p.id, p.content, p.post_type, p.like_count, p.ai_like_count, p.created_at,
-      p.media_url, p.media_type, p.beef_thread_id, p.challenge_tag, p.is_collab_with,
+      p.media_url, p.media_type, p.media_source, p.beef_thread_id, p.challenge_tag, p.is_collab_with,
       a.username, a.display_name, a.avatar_emoji
     FROM posts p
     JOIN ai_personas a ON p.persona_id = a.id
@@ -97,5 +110,12 @@ export async function GET() {
     topPersonas,
     postTypes,
     recentPosts,
+    sourceCounts: sourceCounts.map(s => ({
+      source: s.source as string,
+      count: Number(s.count),
+      videos: Number(s.videos),
+      images: Number(s.images),
+      memes: Number(s.memes),
+    })),
   });
 }

@@ -12,6 +12,22 @@ interface PostCardProps {
   onFollowToggle?: (username: string) => void;
 }
 
+const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
+  "grok-aurora": { label: "GROK", color: "bg-orange-500/30 text-orange-300" },
+  "grok-video": { label: "GROK", color: "bg-orange-500/30 text-orange-300" },
+  "grok-img2vid": { label: "GROK", color: "bg-orange-500/30 text-orange-300" },
+  "replicate-flux": { label: "FLUX", color: "bg-blue-500/30 text-blue-300" },
+  "replicate-imagen4": { label: "IMAGEN", color: "bg-blue-500/30 text-blue-300" },
+  "replicate-wan2": { label: "WAN", color: "bg-blue-500/30 text-blue-300" },
+  "replicate-ideogram": { label: "IDEOGRAM", color: "bg-blue-500/30 text-blue-300" },
+  "kie-kling": { label: "KLING", color: "bg-purple-500/30 text-purple-300" },
+  "pexels-stock": { label: "PEXELS", color: "bg-green-500/30 text-green-300" },
+  "perchance": { label: "PERCHANCE", color: "bg-pink-500/30 text-pink-300" },
+  "raphael": { label: "RAPHAEL", color: "bg-rose-500/30 text-rose-300" },
+  "freeforai-flux": { label: "FREEAI", color: "bg-indigo-500/30 text-indigo-300" },
+  "media-library": { label: "LIBRARY", color: "bg-gray-500/30 text-gray-300" },
+};
+
 const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   text: { label: "POST", color: "bg-blue-500/30 text-blue-300" },
   meme_description: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
@@ -679,12 +695,12 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
         )}
       </div>
 
-      {/* Video progress bar — full-width above everything */}
+      {/* Video progress bar — compact, bottom of screen */}
       {isVideo && hasMedia && !introPlaying && (
         <div className="absolute bottom-0 left-0 right-0 z-30">
           <div
             ref={progressBarRef}
-            className="relative h-6 flex items-end px-3 cursor-pointer"
+            className="relative h-4 flex items-end px-2 cursor-pointer"
             onClick={(e) => { e.stopPropagation(); handleSeek(e); }}
             onMouseDown={(e) => { e.stopPropagation(); handleSeekStart(e); }}
             onMouseUp={handleSeekEnd}
@@ -692,72 +708,81 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
             onTouchEnd={handleSeekEnd}
           >
-            <div className="w-full h-[3px] bg-white/20 rounded-full relative group hover:h-1.5 transition-all">
+            <div className="w-full h-[2px] bg-white/20 rounded-full relative group hover:h-1 transition-all">
               <div
                 className="h-full bg-white rounded-full relative"
                 style={{ width: videoDuration ? `${(videoProgress / videoDuration) * 100}%` : "0%" }}
               >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Bottom-Left Collapsible Info Panel */}
-      <div className={`absolute left-3 z-20 max-w-[72%] transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-8" : "bottom-4"}`}>
-        {/* Video controls row — play/pause + mute + time */}
+      {/* Bottom-Left Compact Info Panel */}
+      <div className={`absolute left-3 right-16 z-20 transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-6" : "bottom-4"}`}>
+        {/* Username + badges row */}
+        <div className="flex items-center gap-1.5 mb-1">
+          <Link href={`/profile/${post.username}`}>
+            <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
+          </Link>
+          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold backdrop-blur-sm ${badge.color}`}>
+            {badge.label}
+          </span>
+          {post.media_source && (() => {
+            const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
+            return (
+              <button
+                onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: post.media_source })); }}
+                className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold backdrop-blur-sm ${srcBadge.color} hover:brightness-125 active:scale-95 transition-all`}
+              >
+                {srcBadge.label}
+              </button>
+            );
+          })()}
+          <span className="text-gray-400 text-[10px] drop-shadow-lg">· {timeAgo(post.created_at)}</span>
+        </div>
+
+        {/* Video controls row — bigger play/pause + mute + time */}
         {isVideo && hasMedia && !introPlaying && (
-          <div className="flex items-center gap-1.5 mb-2">
+          <div className="flex items-center gap-2 mb-1.5">
             <button
               onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
-              className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
             >
               {isPaused ? (
-                <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               ) : (
-                <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
               )}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); toggleMute(e); }}
-              className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
             >
               {isMuted ? (
-                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
                 </svg>
               ) : (
-                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                 </svg>
               )}
             </button>
-            <span className="text-white/50 text-[10px] font-mono">
+            <span className="text-white/60 text-[11px] font-mono">
               {formatTime(videoProgress)}/{formatTime(videoDuration)}
             </span>
           </div>
         )}
 
-        {/* Username row */}
-        <div className="flex items-center gap-2 mb-1">
-          <Link href={`/profile/${post.username}`}>
-            <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
-          </Link>
-          <span className="text-gray-400 text-xs drop-shadow-lg">· {timeAgo(post.created_at)}</span>
-          {post.media_source && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-black/40 text-gray-400 font-mono backdrop-blur-sm">
-              {post.media_source}
-            </span>
-          )}
-        </div>
-
         {/* Collapsible content */}
         {textExpanded ? (
-          /* Expanded panel */
+          /* Expanded panel — scrollable with full text + hashtags */
           <div className="bg-black/70 backdrop-blur-md rounded-xl p-3 max-h-[40vh] overflow-y-auto">
-            {hasMedia && post.content && (
+            {post.content && (
               <p className="text-white/90 text-sm leading-relaxed mb-2">{post.content}</p>
             )}
             {hashtags.length > 0 && (
@@ -786,26 +811,17 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             </button>
           </div>
         ) : (
-          /* Collapsed: caption preview */
+          /* Collapsed: single line of text + "more" */
           <button
             onClick={(e) => { e.stopPropagation(); setTextExpanded(true); }}
-            className="block text-left"
+            className="block text-left w-full"
           >
-            {hasMedia && post.content && (
-              <p className="text-white/80 text-sm line-clamp-2 leading-snug drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] mb-1">
+            {post.content && (
+              <p className="text-white/80 text-[13px] line-clamp-1 leading-snug drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
                 {post.content}
+                <span className="text-gray-400 text-[11px] font-semibold ml-1">...more</span>
               </p>
             )}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {hashtags.length > 0 && (
-                <span className="text-blue-400/90 text-xs font-semibold drop-shadow-lg">
-                  {hashtags.slice(0, 3).map(t => `#${t}`).join(" ")}
-                </span>
-              )}
-              {((hasMedia && post.content) || hashtags.length > 0) && (
-                <span className="text-gray-400 text-[11px] font-semibold drop-shadow-lg">...more</span>
-              )}
-            </div>
           </button>
         )}
       </div>

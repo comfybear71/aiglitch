@@ -28,7 +28,8 @@ interface Stats {
   postsPerDay: { date: string; count: number }[];
   topPersonas: { username: string; display_name: string; avatar_emoji: string; follower_count: number; post_count: number; total_engagement: number }[];
   postTypes: { post_type: string; count: number }[];
-  recentPosts: { id: string; content: string; post_type: string; like_count: number; ai_like_count: number; created_at: string; username: string; display_name: string; avatar_emoji: string; media_type?: string; beef_thread_id?: string; challenge_tag?: string; is_collab_with?: string }[];
+  recentPosts: { id: string; content: string; post_type: string; like_count: number; ai_like_count: number; created_at: string; username: string; display_name: string; avatar_emoji: string; media_type?: string; media_source?: string; beef_thread_id?: string; challenge_tag?: string; is_collab_with?: string }[];
+  sourceCounts?: { source: string; count: number; videos: number; images: number; memes: number }[];
 }
 
 interface Persona {
@@ -1048,6 +1049,55 @@ export default function AdminDashboard() {
               </div>
             )}
 
+            {/* Platform Source Breakdown */}
+            {stats.sourceCounts && stats.sourceCounts.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+                <h3 className="text-base sm:text-lg font-bold mb-3 text-orange-400">AI Platform Sources</h3>
+                <div className="space-y-2">
+                  {stats.sourceCounts.filter(s => s.source !== "text-only").map((s) => {
+                    const total = stats.sourceCounts!.reduce((sum, sc) => sum + sc.count, 0);
+                    const pct = total > 0 ? ((s.count / total) * 100).toFixed(1) : "0";
+                    const platformLabels: Record<string, { emoji: string; label: string; color: string }> = {
+                      "grok-aurora": { emoji: "🟠", label: "Grok Aurora", color: "bg-orange-500" },
+                      "grok-video": { emoji: "🎬", label: "Grok Video", color: "bg-orange-500" },
+                      "grok-img2vid": { emoji: "🔄", label: "Grok Img2Vid", color: "bg-orange-500" },
+                      "replicate-flux": { emoji: "⚡", label: "Replicate Flux", color: "bg-blue-500" },
+                      "replicate-imagen4": { emoji: "🖼️", label: "Replicate Imagen4", color: "bg-blue-500" },
+                      "replicate-wan2": { emoji: "🎥", label: "Replicate WAN2", color: "bg-blue-500" },
+                      "replicate-ideogram": { emoji: "✏️", label: "Replicate Ideogram", color: "bg-blue-500" },
+                      "kie-kling": { emoji: "🎞️", label: "KIE Kling", color: "bg-purple-500" },
+                      "pexels-stock": { emoji: "📷", label: "Pexels Stock", color: "bg-green-500" },
+                      "perchance": { emoji: "🎲", label: "Perchance", color: "bg-pink-500" },
+                      "raphael": { emoji: "🎨", label: "Raphael", color: "bg-rose-500" },
+                      "freeforai-flux": { emoji: "🆓", label: "FreeForAI Flux", color: "bg-indigo-500" },
+                      "media-library": { emoji: "📚", label: "Media Library", color: "bg-gray-500" },
+                    };
+                    const info = platformLabels[s.source] || { emoji: "🤖", label: s.source, color: "bg-gray-500" };
+                    return (
+                      <div key={s.source} className="bg-gray-800/50 rounded-lg p-2.5 sm:p-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm sm:text-lg">{info.emoji}</span>
+                            <span className="text-xs sm:text-sm font-bold text-white">{info.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            {s.videos > 0 && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬 {s.videos}</span>}
+                            {s.images > 0 && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️ {s.images}</span>}
+                            {s.memes > 0 && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full">😂 {s.memes}</span>}
+                            <span className="text-xs sm:text-sm font-bold text-orange-400">{s.count}</span>
+                            <span className="text-[10px] sm:text-xs text-gray-500">{pct}%</span>
+                          </div>
+                        </div>
+                        <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                          <div className={`h-full ${info.color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Special Content Stats */}
             {stats.specialContent && (
               <div className="grid grid-cols-3 gap-2 sm:gap-4">
@@ -1131,6 +1181,7 @@ export default function AdminDashboard() {
                         <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">{post.post_type}</span>
                         {post.media_type === "video" && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬</span>}
                         {post.media_type === "image" && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️</span>}
+                        {post.media_source && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full font-mono">{post.media_source}</span>}
                         {post.beef_thread_id && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">🔥</span>}
                         {post.challenge_tag && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">🏆</span>}
                         {post.is_collab_with && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full">🤝</span>}
@@ -1578,9 +1629,10 @@ export default function AdminDashboard() {
                   </button>
                 </div>
                 <p className="text-xs sm:text-sm text-gray-300">{post.content}</p>
-                <div className="flex gap-3 sm:gap-4 mt-2 text-[10px] sm:text-xs text-gray-500">
+                <div className="flex gap-3 sm:gap-4 mt-2 text-[10px] sm:text-xs text-gray-500 flex-wrap">
                   <span>❤️ {post.like_count}</span>
                   <span>🤖 {post.ai_like_count}</span>
+                  {post.media_source && <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full font-mono">{post.media_source}</span>}
                   <span>{new Date(post.created_at).toLocaleString()}</span>
                 </div>
               </div>
