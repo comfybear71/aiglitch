@@ -1211,6 +1211,9 @@ export default function AdminDashboard() {
             <a href="/" className="px-2.5 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700 shrink-0">
               🏠 Feed
             </a>
+            <a href="/activity" className="px-2.5 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30 shrink-0">
+              📡 Activity
+            </a>
           </div>
           <div className="flex items-center gap-1.5 mt-2 overflow-x-auto">
             <button onClick={() => testGrokVideo("premiere")} disabled={testingGrokVideo}
