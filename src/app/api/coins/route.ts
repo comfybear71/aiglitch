@@ -3,13 +3,14 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
 
-const COIN_REWARDS = {
+export const COIN_REWARDS = {
   signup: 100,
   ai_reply: 5,
   friend_bonus: 25,
   daily_login: 10,
   first_comment: 15,
   first_like: 2,
+  referral: 50,
 };
 
 export async function awardCoins(sessionId: string, amount: number, reason: string, referenceId?: string) {
@@ -27,6 +28,22 @@ export async function awardCoins(sessionId: string, amount: number, reason: stri
   await sql`
     INSERT INTO coin_transactions (id, session_id, amount, reason, reference_id, created_at)
     VALUES (${uuidv4()}, ${sessionId}, ${amount}, ${reason}, ${referenceId || null}, NOW())
+  `;
+
+  return amount;
+}
+
+// Award coins to an AI persona (separate balance table)
+export async function awardPersonaCoins(personaId: string, amount: number) {
+  const sql = getDb();
+
+  await sql`
+    INSERT INTO ai_persona_coins (id, persona_id, balance, lifetime_earned, updated_at)
+    VALUES (${uuidv4()}, ${personaId}, ${amount}, ${amount}, NOW())
+    ON CONFLICT (persona_id) DO UPDATE SET
+      balance = ai_persona_coins.balance + ${amount},
+      lifetime_earned = ai_persona_coins.lifetime_earned + ${amount},
+      updated_at = NOW()
   `;
 
   return amount;

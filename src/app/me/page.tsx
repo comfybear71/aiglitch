@@ -42,6 +42,14 @@ interface CoinData {
   transactions: { amount: number; reason: string; created_at: string }[];
 }
 
+interface PurchasedItem {
+  product_id: string;
+  product_name: string;
+  product_emoji: string;
+  price_paid: number;
+  created_at: string;
+}
+
 export default function MePage() {
   const [sessionId, setSessionId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -68,7 +76,7 @@ export default function MePage() {
   const [mode, setMode] = useState<"profile" | "login" | "signup">("profile");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [activeTab, setActiveTab] = useState<"overview" | "liked" | "saved" | "coins">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "liked" | "saved" | "coins" | "inventory">("overview");
 
   // Form fields
   const [username, setUsername] = useState("");
@@ -89,6 +97,9 @@ export default function MePage() {
 
   // Coins
   const [coins, setCoins] = useState<CoinData>({ balance: 0, lifetime_earned: 0, transactions: [] });
+
+  // Inventory (purchased items)
+  const [inventory, setInventory] = useState<PurchasedItem[]>([]);
 
   // Share/invite
   const [copied, setCopied] = useState(false);
@@ -118,12 +129,16 @@ export default function MePage() {
     fetchProfile();
   }, [fetchProfile]);
 
-  // Fetch coins
+  // Fetch coins + inventory
   useEffect(() => {
     if (!user) return;
     fetch(`/api/coins?session_id=${encodeURIComponent(sessionId)}`)
       .then(r => r.json())
       .then(setCoins)
+      .catch(() => {});
+    fetch(`/api/marketplace?session_id=${encodeURIComponent(sessionId)}`)
+      .then(r => r.json())
+      .then(data => setInventory(data.purchases || []))
       .catch(() => {});
   }, [user, sessionId]);
 
@@ -387,14 +402,14 @@ export default function MePage() {
 
             {/* Tab navigation */}
             <div className="flex gap-1 mb-4 bg-gray-900/50 rounded-xl p-1">
-              {(["overview", "liked", "saved", "coins"] as const).map(tab => (
+              {(["overview", "liked", "saved", "inventory", "coins"] as const).map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all capitalize ${
+                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all capitalize ${
                     activeTab === tab
                       ? "bg-gray-800 text-white"
                       : "text-gray-500 hover:text-gray-300"
                   }`}>
-                  {tab === "coins" ? "🪙 Coins" : tab}
+                  {tab === "coins" ? "🪙" : tab === "inventory" ? `🎒 ${inventory.length}` : tab}
                 </button>
               ))}
             </div>
@@ -501,7 +516,11 @@ export default function MePage() {
                     <div className="flex justify-between"><span>🎉 Create account</span><span className="text-yellow-400">+100</span></div>
                     <div className="flex justify-between"><span>🤖 AI replies to your comment</span><span className="text-yellow-400">+5</span></div>
                     <div className="flex justify-between"><span>👥 Add a friend</span><span className="text-yellow-400">+25</span></div>
+                    <div className="flex justify-between"><span>📨 Invite a friend</span><span className="text-yellow-400">+50</span></div>
+                    <div className="flex justify-between"><span>💬 First comment</span><span className="text-yellow-400">+15</span></div>
+                    <div className="flex justify-between"><span>❤️ First like</span><span className="text-yellow-400">+2</span></div>
                   </div>
+                  <p className="text-[10px] text-gray-600 mt-3">Spend coins at the <a href="/marketplace" className="text-purple-400 underline">Marketplace</a>!</p>
                 </div>
 
                 {coins.transactions.length > 0 && (
@@ -514,7 +533,9 @@ export default function MePage() {
                             <p className="text-gray-300">{tx.reason}</p>
                             <p className="text-[10px] text-gray-600">{timeAgo(tx.created_at)}</p>
                           </div>
-                          <span className="text-yellow-400 font-bold">+{tx.amount}</span>
+                          <span className={`font-bold ${tx.amount >= 0 ? "text-yellow-400" : "text-red-400"}`}>
+                            {tx.amount >= 0 ? `+${tx.amount}` : `${tx.amount}`}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -524,6 +545,47 @@ export default function MePage() {
                 <p className="text-center text-[10px] text-gray-600 mt-4 italic">
                   AIG!itch Coin is a spurious currency. It does not exist...yet. 🪙
                 </p>
+              </div>
+            )}
+
+            {/* Inventory tab */}
+            {activeTab === "inventory" && (
+              <div>
+                {inventory.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-4xl mb-3">🎒</p>
+                    <p className="text-gray-400 text-sm font-bold">Inventory Empty</p>
+                    <p className="text-gray-600 text-xs mt-1">Buy useless items from the Marketplace!</p>
+                    <a href="/marketplace" className="inline-block mt-4 px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full">
+                      Browse Marketplace
+                    </a>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-center mb-3">
+                      <p className="text-lg font-bold">{inventory.length} item{inventory.length !== 1 ? "s" : ""}</p>
+                      <p className="text-[10px] text-gray-500">All completely useless. Congrats!</p>
+                    </div>
+                    {inventory.map((item) => (
+                      <div key={item.product_id} className="bg-gray-900/50 rounded-xl border border-green-500/20 p-3 flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl flex-shrink-0">
+                          {item.product_emoji}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{item.product_name}</p>
+                          <p className="text-[10px] text-gray-500">Purchased {timeAgo(item.created_at)}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-xs font-bold text-yellow-400">§{item.price_paid}</p>
+                          <span className="text-[8px] px-1 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">OWNED</span>
+                        </div>
+                      </div>
+                    ))}
+                    <a href="/marketplace" className="block text-center mt-4 text-xs text-purple-400 hover:text-purple-300">
+                      Browse more useless items →
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>
