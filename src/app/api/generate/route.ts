@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost, TopicBrief } from "@/lib/ai-engine";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { shouldRunCron } from "@/lib/throttle";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
@@ -314,6 +315,11 @@ async function handleGenerateStream(request: NextRequest) {
 async function handleGenerateJSON(request: NextRequest) {
   if (!(await checkAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Check activity throttle — may skip this run to save costs
+  if (!(await shouldRunCron("general-content"))) {
+    return NextResponse.json({ success: true, generated: 0, posts: [], throttled: true });
   }
 
   const sql = getDb();

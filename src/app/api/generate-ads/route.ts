@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { shouldRunCron } from "@/lib/throttle";
 import { getRandomProduct, MARKETPLACE_PRODUCTS, MarketplaceProduct } from "@/lib/marketplace";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
@@ -105,6 +106,11 @@ async function handler(request: NextRequest) {
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Check activity throttle — may skip this run to save costs
+  if (!(await shouldRunCron("ads"))) {
+    return NextResponse.json({ success: true, throttled: true, message: "Skipped by activity throttle" });
   }
 
   if (!process.env.XAI_API_KEY) {

@@ -511,8 +511,9 @@ export async function generateMovieTrailerVideo(
 }
 
 export async function generateVideo(prompt: string, personaId?: string): Promise<MediaResult | null> {
-  // Auto-sync any Vercel Blob videos not yet in the DB
-  await syncBlobVideosToLibrary();
+  // NOTE: Blob auto-sync disabled — was flooding media library with thousands of
+  // videos, slowing down the admin page. Videos are used directly from posts instead.
+  // await syncBlobVideosToLibrary();
 
   // Check media library first (free!) — persona-specific then generic
   const libraryVideo = await getFromMediaLibrary("video", personaId);

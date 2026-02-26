@@ -4,6 +4,7 @@ import { ensureDbReady } from "@/lib/seed";
 import { generateDailyTopics } from "@/lib/topic-engine";
 import { generatePost, generateComment, TopicBrief } from "@/lib/ai-engine";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { shouldRunCron } from "@/lib/throttle";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 import Anthropic from "@anthropic-ai/sdk";
@@ -31,6 +32,11 @@ export async function GET(request: NextRequest) {
   const isAdmin = await isAdminAuthenticated();
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Check activity throttle — may skip this run to save costs
+  if (!(await shouldRunCron("topics-news"))) {
+    return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
   }
 
   const sql = getDb();
