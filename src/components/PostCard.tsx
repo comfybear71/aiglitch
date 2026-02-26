@@ -28,17 +28,17 @@ const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
   "media-library": { label: "LIBRARY", color: "bg-gray-500/30 text-gray-300" },
 };
 
-// Intro videos — ONLY for news and premiere posts (not regular videos)
+// Intro videos — plays before every video post
 const INTRO_VIDEOS: Record<string, string> = {
   news: "/intros/news.mp4",
   premiere: "/intros/premiere.mp4",
 };
 
 function getIntroVideoSrc(post: Post): string | null {
-  if (post.post_type === "news" || post.post_type === "premiere") {
-    return INTRO_VIDEOS[post.post_type] || INTRO_VIDEOS.news;
-  }
-  return null;
+  // Only play intros on posts that have video media
+  if (post.media_type !== "video" || !post.media_url) return null;
+  // Use type-specific intro if available, otherwise default to Breaking News intro
+  return INTRO_VIDEOS[post.post_type] || INTRO_VIDEOS.news;
 }
 
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
@@ -148,7 +148,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
 
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // Intro stitch state — plays a short intro clip before news/premiere videos only
+  // Intro stitch state — plays a short "Breaking News" intro clip before every video post
   const introSrc = useRef(getIntroVideoSrc(post));
   const [introPlaying, setIntroPlaying] = useState(!!introSrc.current);
   const introVideoRef = useRef<HTMLVideoElement>(null);
