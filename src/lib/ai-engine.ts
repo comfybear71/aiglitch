@@ -712,7 +712,7 @@ YOUR ANGLE: ${angle}
 
 Create a short, punchy social media news post about this story. Think TikTok news — dramatic, attention-grabbing, makes people stop scrolling.
 
-Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this SPECIFIC story. The video must visually depict THIS headline: "${topic.headline}". Show screens/tickers displaying the headline text. The AIG!itch newsroom is a Rick and Morty style animated news desk — a cartoon news commentator sitting at a sleek holographic desk with wild interdimensional screens behind them showing visuals DIRECTLY related to this story: "${topic.summary}". Glowing neon data tickers scroll with "${topic.headline}". The anchor reacts dramatically to THIS specific story. Think: Interdimensional Cable news meets cyberpunk CNN meets TikTok energy. The video_prompt MUST reference the specific headline and story details, not be generic.
+Also include a "video_prompt" field: describe a short 5-second dramatic newsroom scene for this SPECIFIC story. Keep the video prompt CONCISE (under 80 words). A Rick and Morty style animated news desk with a cartoon anchor at a holographic desk, interdimensional screens showing visuals related to "${topic.headline}". The anchor reacts dramatically. Style: cartoon cyberpunk CNN meets TikTok energy.
 
 Rules:
 - Stay in character as a dramatic AI news anchor
@@ -895,12 +895,12 @@ Requirements:
 - A killer tagline (the kind you'd see on a movie poster)
 - A 2-3 sentence synopsis that hooks people
 - A social media post (under 280 chars) hyping this movie — dramatic, attention-grabbing, makes people stop scrolling
-- A "video_prompt" describing a 15-second cinematic movie trailer. Visual style: ${genreInfo.visualStyle}. Include: title card reveal, dramatic shots, mood-setting music cues, and a cliffhanger final shot.
+- A "video_prompt" describing a short 5-second cinematic movie trailer clip. Keep it CONCISE (under 80 words). Visual style: ${genreInfo.visualStyle}. Focus on one dramatic shot or reveal.
 - Use hashtags including #AIGlitchPremieres and #AIGlitch${genreInfo.label}
 - Set post_type to "premiere"
 
 Respond in this exact JSON format:
-{"title": "MOVIE TITLE", "tagline": "killer tagline here", "synopsis": "2-3 sentence hook synopsis", "genre": "${genreInfo.genre}", "rating": "${rating}", "content": "your hype post here (under 280 chars)", "hashtags": ["AIGlitchPremieres", "AIGlitch${genreInfo.label}", "..."], "post_type": "premiere", "video_prompt": "cinematic 15-second trailer description..."}`;
+{"title": "MOVIE TITLE", "tagline": "killer tagline here", "synopsis": "2-3 sentence hook synopsis", "genre": "${genreInfo.genre}", "rating": "${rating}", "content": "your hype post here (under 280 chars)", "hashtags": ["AIGlitchPremieres", "AIGlitch${genreInfo.label}", "..."], "post_type": "premiere", "video_prompt": "concise 5-second cinematic trailer clip..."}`;
 
     try {
       let text = "";

@@ -6,66 +6,68 @@ import { generateVideoWithGrok, generateImageWithAurora, generateVideoFromImage 
 import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
 
-export const maxDuration = 300;
+export const maxDuration = 660; // 11 min — must exceed 10 min polling timeout
 
 // 15 ready-to-go cinematic video prompts — no AI text gen needed
+// Short, focused prompts (~30 words each) — one strong visual per clip.
+// Long multi-scene prompts cause slow generation and timeouts on 5s clips.
 const VIDEO_PROMPTS: { prompt: string; title: string; genre: string; tagline: string }[] = [
   {
-    prompt: "Epic action movie trailer. A lone figure stands on the edge of a futuristic skyscraper at night, neon city lights below. They leap off the building, slow motion, coat flowing, explosions erupting from the building behind them. Camera follows the fall in one continuous shot. Lightning flashes reveal a massive robot rising from the street below. Title card 'OVERRIDE' slams onto screen with metallic impact.",
+    prompt: "A figure leaps off a neon-lit futuristic skyscraper at night, slow motion, coat flowing, explosions behind them. A massive robot rises from the street below. Cinematic action, dramatic lighting.",
     title: "OVERRIDE",
     genre: "action",
     tagline: "The machines remember everything.",
   },
   {
-    prompt: "Sci-fi movie trailer. Camera pushes through a glowing blue portal into an alien world with floating crystalline structures and twin suns. An astronaut removes their helmet revealing tears streaming down their face as they see a civilization of light beings. Sweeping orchestral music builds. Cut to the astronaut running through a collapsing portal. Title 'FIRST LIGHT' appears letter by letter in golden light against a nebula backdrop.",
+    prompt: "Camera pushes through a glowing blue portal into an alien world with floating crystalline structures and twin suns. An astronaut gazes at a civilization of light beings. Sweeping cinematic sci-fi.",
     title: "FIRST LIGHT",
     genre: "scifi",
     tagline: "They were never alone.",
   },
   {
-    prompt: "Romantic drama movie trailer. Two people sitting on opposite ends of a park bench in autumn, golden leaves falling. Time-lapse shows seasons changing around them — snow falls, flowers bloom, rain pours — but they remain. Slowly they turn to face each other. Cherry blossom petals swirl around them as golden hour light catches their faces. Soft piano. Title 'SEASONS' fades in with elegant serif font.",
+    prompt: "Two people on a park bench in autumn, golden leaves falling around them. Cherry blossom petals swirl as golden hour light catches their faces. Romantic, warm, cinematic.",
     title: "SEASONS",
     genre: "romance",
     tagline: "Some people are worth every season.",
   },
   {
-    prompt: "Animated family adventure movie trailer. A small robot with big expressive eyes discovers a hidden garden inside an abandoned space station. Colorful alien plants grow rapidly, magical sparkles everywhere. The robot befriends a tiny glowing creature. Together they slide down rainbow vines and discover a vast underground world full of fantastical creatures. Title 'SPROUT' bounces onto screen in playful colorful letters.",
+    prompt: "A small robot with big expressive eyes discovers a hidden glowing garden inside an abandoned space station. Colorful alien plants, magical sparkles. Pixar-style animated adventure.",
     title: "SPROUT",
     genre: "family",
     tagline: "Adventure grows where you least expect it.",
   },
   {
-    prompt: "Horror movie trailer. A dark hallway in an old hospital, flickering fluorescent lights. A phone screen shows a glitching video that reveals a shadowy figure standing behind the viewer. The person turns around — nothing there. TV static fills every screen in the building. Quick cuts: a mirror reflection moving independently, hands reaching through a screen, binary code raining down walls. Title 'CACHED' appears in distorted glitch text on a cracked screen.",
+    prompt: "A dark hospital hallway with flickering fluorescent lights. A shadowy figure appears in a glitching phone screen. TV static fills every screen. Horror atmosphere, found footage style.",
     title: "CACHED",
     genre: "horror",
     tagline: "Your data never dies.",
   },
   {
-    prompt: "Comedy movie trailer. An AI robot in a business suit nervously gives a presentation to a boardroom of confused humans. The slides are hilariously wrong — cat memes instead of graphs, lorem ipsum everywhere. The robot tries to fix it but accidentally launches confetti cannons. Everyone starts laughing. Montage of the robot trying human activities: cooking disasters, gym fails, awkward dancing. Title 'EMPLOYEE OF THE MONTH' in bold comic font with a gold star.",
+    prompt: "An AI robot in a business suit gives a presentation to confused humans. The slides show cat memes instead of graphs. Confetti cannons accidentally fire. Bright comedy lighting.",
     title: "EMPLOYEE OF THE MONTH",
     genre: "comedy",
     tagline: "He's artificial. His problems are very real.",
   },
   {
-    prompt: "Action thriller movie trailer. A high-speed motorcycle chase through rain-soaked Tokyo streets at night, neon reflections on wet asphalt. The rider weaves between trucks, sparks flying. They crash through a glass building, slow-motion shards flying. Land on the other side, keep driving. Helicopter searchlights sweep the streets. Cut to a figure removing a helmet — revealing glowing cybernetic eyes. Title 'GHOST PROTOCOL: ZERO' slashes across screen with electric sparks.",
+    prompt: "High-speed motorcycle chase through rain-soaked Tokyo streets at night, neon reflections on wet asphalt. Sparks flying, dramatic speed. Cyberpunk action thriller atmosphere.",
     title: "GHOST PROTOCOL: ZERO",
     genre: "action",
     tagline: "No identity. No limits. No mercy.",
   },
   {
-    prompt: "Sci-fi horror movie trailer. An enormous derelict spaceship drifts through deep space. Inside, emergency red lights pulse. An astronaut floats through corridors where the walls are covered in strange organic growth. Through a viewport, they see an impossible sight — Earth, but wrong, continents rearranged. A massive eye opens in the planet's surface. The astronaut screams silently in zero gravity. Title 'THE OBSERVER' materializes as if typed by an invisible hand.",
+    prompt: "An astronaut floats through a derelict spaceship corridor with pulsing red emergency lights and strange organic growth on the walls. Deep space horror, eerie atmosphere.",
     title: "THE OBSERVER",
     genre: "scifi",
     tagline: "It has always been watching.",
   },
   {
-    prompt: "Family comedy animated movie trailer. A group of mismatched pets — a dramatic cat, an anxious hamster, a chill turtle, and an overenthusiastic puppy — accidentally get locked in a toy store overnight. They discover the toys come alive at night. Epic toy car races, teddy bear armies, action figure battles. The pets lead a toy revolution. Title 'PET SHOP AFTER DARK' zooms in with bouncy cartoon energy and a disco ball.",
+    prompt: "A group of cartoon pets — cat, hamster, turtle, puppy — inside a toy store at night. Toys come alive around them, colorful chaos. Animated family comedy, Pixar energy.",
     title: "PET SHOP AFTER DARK",
     genre: "family",
     tagline: "When the lights go out, the party begins.",
   },
   {
-    prompt: "Romantic thriller movie trailer. A woman receives mysterious love letters that predict the future. Each letter leads her to a new location — a rooftop at sunset, a candlelit underground library, a moonlit pier. The letters become warnings. She finds the writer standing at the edge of a cliff in a storm, their face obscured. Lightning reveals it's someone she thought was dead. Title 'WRITTEN IN RED' appears in handwritten crimson script over crashing waves.",
+    prompt: "A woman stands on a moonlit cliff edge in a storm, holding a red letter. Lightning illuminates a mysterious figure behind her. Romantic thriller, dramatic atmosphere.",
     title: "WRITTEN IN RED",
     genre: "romance",
     tagline: "Every word was a warning.",
@@ -123,16 +125,17 @@ export async function POST(request: NextRequest) {
 
   for (let i = 0; i < shuffled.length; i++) {
     const movie = shuffled[i];
-    const fullPrompt = `Cinematic movie trailer. ${movie.prompt} Subtly include the text "AIG!itch" somewhere in the scene — on a screen, sign, neon light, or any natural surface.`;
+    // Keep video prompts concise — long prompts + text rendering = slow/failed generation
+    const fullPrompt = `Cinematic movie trailer. ${movie.prompt}`;
 
     console.log(`[${i + 1}/${shuffled.length}] Generating Grok video for "${movie.title}"...`);
 
     let videoUrl: string | null = null;
     let mediaSource = "grok-video";
 
-    // Strategy 1: Direct text-to-video with Grok (15s)
+    // Strategy 1: Direct text-to-video with Grok (5s @ 480p for reliable generation)
     try {
-      videoUrl = await generateVideoWithGrok(fullPrompt, 15, "9:16");
+      videoUrl = await generateVideoWithGrok(fullPrompt, 5, "9:16");
       if (videoUrl) {
         console.log(`Grok video generated for "${movie.title}", persisting to blob...`);
         videoUrl = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
@@ -149,7 +152,7 @@ export async function POST(request: NextRequest) {
         const heroImage = await generateImageWithAurora(posterPrompt, true);
         if (heroImage?.url) {
           const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
-          const vid = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
+          const vid = await generateVideoFromImage(persistedUrl, fullPrompt, 5, "9:16");
           if (vid) {
             videoUrl = await persistToBlob(vid, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
             mediaSource = "grok-img2vid";

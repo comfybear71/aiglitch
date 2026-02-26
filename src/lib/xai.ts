@@ -4,8 +4,11 @@
  * Uses the OpenAI-compatible xAI API for:
  * - Text generation via grok-4-1-fast-reasoning ($0.20/1M input, $0.50/1M output)
  * - Image generation via grok-imagine-image ($0.02/image) + pro ($0.07/image)
- * - Video generation via grok-imagine-video ($0.05/second)
+ * - Video generation via grok-imagine-video ($0.05/second, 480p for speed)
  * - Image-to-video: pass an image_url to animate a still into video
+ *
+ * Polling: videos are async — submit, get request_id, poll GET /v1/videos/{id}
+ * until status="done". Timeout: 10 minutes (60 polls * 10s).
  *
  * API base: https://api.x.ai/v1
  * Requires XAI_API_KEY environment variable.
@@ -144,7 +147,7 @@ export async function generateVideoFromImage(
     return null;
   }
 
-  console.log(`Attempting image-to-video via xAI Grok (${duration}s)...`);
+  console.log(`Attempting image-to-video via xAI Grok (${duration}s, 480p)...`);
 
   try {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
@@ -159,7 +162,7 @@ export async function generateVideoFromImage(
         image_url: imageUrl,
         duration,
         aspect_ratio: aspectRatio,
-        resolution: "720p",
+        resolution: "480p",
       }),
     });
 
@@ -170,6 +173,7 @@ export async function generateVideoFromImage(
     }
 
     const createData = await createRes.json();
+    console.log("Grok img2vid response:", JSON.stringify(createData).slice(0, 500));
     const requestId = createData.request_id;
 
     if (!requestId) {
@@ -178,21 +182,27 @@ export async function generateVideoFromImage(
       return null;
     }
 
-    // Poll for completion (up to 5 minutes)
-    const maxAttempts = 30;
+    // Poll for completion (up to 10 minutes — video gen can be slow)
+    const maxAttempts = 60;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 10_000));
       const pollRes = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
         headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
       });
-      if (!pollRes.ok) continue;
+      if (!pollRes.ok) {
+        console.log(`Grok img2vid poll ${attempt + 1} HTTP error: ${pollRes.status}`);
+        continue;
+      }
       const pollData = await pollRes.json();
       console.log(`Grok img2vid poll ${attempt + 1}/${maxAttempts}: status=${pollData.status}`);
       if (pollData.status === "done" && pollData.video?.url) return pollData.video.url;
-      if (pollData.status === "expired" || pollData.status === "failed") return null;
+      if (pollData.status === "expired" || pollData.status === "failed") {
+        console.error(`Grok img2vid ${pollData.status}:`, JSON.stringify(pollData).slice(0, 300));
+        return null;
+      }
     }
 
-    console.error("Grok image-to-video timed out");
+    console.error("Grok image-to-video timed out after 10 minutes");
     return null;
   } catch (err) {
     console.error("Grok image-to-video error:", err instanceof Error ? err.message : err);
@@ -209,7 +219,7 @@ export async function generateVideoFromImage(
  */
 export async function generateVideoWithGrok(
   prompt: string,
-  duration: number = 10,
+  duration: number = 5,
   aspectRatio: "9:16" | "16:9" | "1:1" = "9:16",
 ): Promise<string | null> {
   if (!process.env.XAI_API_KEY) {
@@ -217,10 +227,11 @@ export async function generateVideoWithGrok(
     return null;
   }
 
-  console.log(`Attempting video generation via xAI Grok Imagine Video (${duration}s, ${aspectRatio})...`);
+  console.log(`Attempting video generation via xAI Grok Imagine Video (${duration}s, ${aspectRatio}, 480p)...`);
 
   try {
     // Step 1: Submit video generation request
+    // Using 480p for faster generation (720p takes much longer and often times out)
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
       headers: {
@@ -232,7 +243,7 @@ export async function generateVideoWithGrok(
         prompt,
         duration,
         aspect_ratio: aspectRatio,
-        resolution: "720p",
+        resolution: "480p",
       }),
     });
 
@@ -243,6 +254,7 @@ export async function generateVideoWithGrok(
     }
 
     const createData = await createRes.json();
+    console.log("Grok video submit response:", JSON.stringify(createData).slice(0, 500));
     const requestId = createData.request_id;
 
     if (!requestId) {
@@ -257,8 +269,9 @@ export async function generateVideoWithGrok(
 
     console.log(`Grok video request submitted: ${requestId}, polling for result...`);
 
-    // Step 2: Poll for completion (up to 5 minutes, check every 10s)
-    const maxAttempts = 30;
+    // Step 2: Poll for completion (up to 10 minutes, check every 10s)
+    // Video gen can take several minutes — 5min was too short and caused wasted spend
+    const maxAttempts = 60;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 10_000)); // Wait 10s between polls
 
@@ -269,7 +282,7 @@ export async function generateVideoWithGrok(
       });
 
       if (!pollRes.ok) {
-        console.log(`Grok video poll attempt ${attempt + 1} failed (${pollRes.status})`);
+        console.log(`Grok video poll attempt ${attempt + 1} HTTP error (${pollRes.status})`);
         continue;
       }
 
@@ -282,14 +295,14 @@ export async function generateVideoWithGrok(
       }
 
       if (pollData.status === "expired" || pollData.status === "failed") {
-        console.error(`Grok video generation ${pollData.status}`);
+        console.error(`Grok video generation ${pollData.status}:`, JSON.stringify(pollData).slice(0, 300));
         return null;
       }
 
       // Still pending, continue polling
     }
 
-    console.error("Grok video generation timed out after 5 minutes");
+    console.error("Grok video generation timed out after 10 minutes");
     return null;
   } catch (err) {
     console.error("Grok video generation error:", err instanceof Error ? err.message : err);

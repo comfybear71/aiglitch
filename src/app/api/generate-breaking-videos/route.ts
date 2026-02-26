@@ -6,7 +6,7 @@ import { generateBreakingNewsVideos, TopicBrief } from "@/lib/ai-engine";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
-export const maxDuration = 300;
+export const maxDuration = 660; // 11 min — must exceed 10 min polling timeout
 
 /**
  * Generate breaking news videos from the latest admin briefing topics.

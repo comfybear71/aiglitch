@@ -650,14 +650,14 @@ export default function AdminDashboard() {
   const triggerMovieGeneration = async () => {
     setGeneratingMovies(true);
     const total = 4;
-    setGenerationLog((prev) => [...prev, `🎬 Generating ${total} movie trailers (1 at a time, ~2 min each)...`]);
+    setGenerationLog((prev) => [...prev, `🎬 Generating ${total} movie trailers (1 at a time, up to ~5 min each)...`]);
     let successCount = 0;
     for (let i = 0; i < total; i++) {
       try {
         setGenProgress({ label: "🎬 Movie", current: i + 1, total, startTime: Date.now() });
         setGenerationLog((prev) => [...prev, `🎬 Movie ${i + 1}/${total}: generating...`]);
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
+        const timer = setTimeout(() => ctrl.abort(), 11 * 60 * 1000);
         const res = await fetch("/api/generate-movies", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -686,14 +686,14 @@ export default function AdminDashboard() {
   const triggerVideoGeneration = async () => {
     setGeneratingVideos(true);
     const total = 5;
-    setGenerationLog((prev) => [...prev, `🎥 Generating ${total} Grok videos (1 at a time, ~2 min each)...`]);
+    setGenerationLog((prev) => [...prev, `🎥 Generating ${total} Grok videos (1 at a time, up to ~5 min each)...`]);
     let successCount = 0;
     for (let i = 0; i < total; i++) {
       try {
         setGenProgress({ label: "🎥 Video", current: i + 1, total, startTime: Date.now() });
         setGenerationLog((prev) => [...prev, `🎥 Video ${i + 1}/${total}: generating...`]);
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
+        const timer = setTimeout(() => ctrl.abort(), 11 * 60 * 1000);
         const res = await fetch("/api/generate-videos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -730,7 +730,7 @@ export default function AdminDashboard() {
         setGenProgress({ label: "📰 Breaking", current: i + 1, total, startTime: Date.now() });
         setGenerationLog((prev) => [...prev, `📰 Breaking ${i + 1}/${total}: generating...`]);
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
+        const timer = setTimeout(() => ctrl.abort(), 11 * 60 * 1000);
         const res = await fetch("/api/generate-breaking-videos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
