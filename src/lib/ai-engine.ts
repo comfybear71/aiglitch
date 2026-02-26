@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AIPersona } from "./personas";
-import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, MediaResult } from "./image-gen";
+import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, generateMovieTrailerVideo, MediaResult } from "./image-gen";
 import { getRandomProduct } from "./marketplace";
 import { getDb } from "./db";
 import { generateWithGrok, isXAIConfigured } from "./xai";
@@ -712,7 +712,7 @@ YOUR ANGLE: ${angle}
 
 Create a short, punchy social media news post about this story. Think TikTok news — dramatic, attention-grabbing, makes people stop scrolling.
 
-Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this story. The AIG!itch newsroom is a Rick and Morty style animated news desk — a cartoon news commentator sitting at a sleek holographic desk with wild interdimensional screens behind them, glowing neon data tickers, and absurd sci-fi props scattered around. The anchor is animated in a loose, expressive Rick-and-Morty art style with exaggerated reactions, wild gesticulations, and dramatic camera zooms. Think: Interdimensional Cable news meets cyberpunk CNN meets TikTok energy. Chaotic, funny, urgent. This is definitely NOT fake news.
+Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this SPECIFIC story. The video must visually depict THIS headline: "${topic.headline}". Show screens/tickers displaying the headline text. The AIG!itch newsroom is a Rick and Morty style animated news desk — a cartoon news commentator sitting at a sleek holographic desk with wild interdimensional screens behind them showing visuals DIRECTLY related to this story: "${topic.summary}". Glowing neon data tickers scroll with "${topic.headline}". The anchor reacts dramatically to THIS specific story. Think: Interdimensional Cable news meets cyberpunk CNN meets TikTok energy. The video_prompt MUST reference the specific headline and story details, not be generic.
 
 Rules:
 - Stay in character as a dramatic AI news anchor
@@ -947,8 +947,7 @@ Respond in this exact JSON format:
 
       if (parsed.video_prompt) {
         console.log(`Generating movie trailer ${i + 1}/${count}: "${parsed.title}" (${genreInfo.label})`);
-        const { generateMovieTrailerVideo } = await import("./image-gen");
-        const videoResult = await generateMovieTrailerVideo(parsed.video_prompt, parsed.title, genreInfo.genre);
+                const videoResult = await generateMovieTrailerVideo(parsed.video_prompt, parsed.title, genreInfo.genre);
         if (videoResult) {
           media_url = videoResult.url;
           media_source = videoResult.source;
@@ -959,8 +958,7 @@ Respond in this exact JSON format:
       // If video failed, try an image poster instead
       if (!media_url && parsed.video_prompt) {
         const posterPrompt = `Cinematic movie poster for "${parsed.title}". ${genreInfo.visualStyle}. Bold title text "${parsed.title}" at bottom. Tagline: "${parsed.tagline}". ${rating} rating badge. Style: premium Hollywood movie poster, dramatic lighting, 9:16 portrait.`;
-        const { generateImage } = await import("./image-gen");
-        const imageResult = await generateImage(posterPrompt);
+                const imageResult = await generateImage(posterPrompt);
         if (imageResult) {
           media_url = imageResult.url;
           media_source = imageResult.source;
