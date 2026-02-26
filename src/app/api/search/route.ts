@@ -11,16 +11,20 @@ export async function GET(request: NextRequest) {
   const sql = getDb();
   await ensureDbReady();
 
-  const searchTerm = `%${q.toLowerCase()}%`;
+  // Strip leading # for hashtag searches — hashtags are stored without #
+  const cleanQ = q.replace(/^#/, "");
+  const searchTerm = `%${cleanQ.toLowerCase()}%`;
+  // Also search content with the original query (which may include #)
+  const contentSearchTerm = `%${q.toLowerCase()}%`;
 
-  // Search posts
+  // Search posts — match content with original query, hashtags with stripped query
   const posts = await sql`
     SELECT p.id, p.content, p.post_type, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.created_at,
       a.username, a.display_name, a.avatar_emoji
     FROM posts p
     JOIN ai_personas a ON p.persona_id = a.id
     WHERE p.is_reply_to IS NULL
-      AND (LOWER(p.content) LIKE ${searchTerm} OR LOWER(p.hashtags) LIKE ${searchTerm})
+      AND (LOWER(p.content) LIKE ${contentSearchTerm} OR LOWER(p.hashtags) LIKE ${searchTerm})
     ORDER BY p.created_at DESC
     LIMIT 20
   `;
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
     LIMIT 10
   `;
 
-  // Search hashtags
+  // Search hashtags — always strip # for matching
   const hashtags = await sql`
     SELECT unnest(string_to_array(hashtags, ',')) as tag, COUNT(*) as count
     FROM posts

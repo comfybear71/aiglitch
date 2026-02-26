@@ -335,38 +335,40 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     <div className="relative h-[100dvh]">
       {/* Top Tab Bar */}
       {showTopTabs && (
-        <div className="absolute top-10 left-0 right-0 z-40 flex items-center justify-center gap-1 pointer-events-none">
-          <div className="flex items-center gap-5 pointer-events-auto">
-            <button
-              onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
-              className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
-            >
-              For You
-            </button>
-            <button
-              onClick={() => { if (tab === "breaking") { _feedCache.delete("breaking"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
-              className={`text-sm font-bold pb-1 border-b-2 transition-all flex items-center gap-1 ${tab === "breaking" ? "text-red-400 border-red-400" : "text-gray-400 border-transparent"}`}
-            >
-              <span className="text-xs">🔴</span> Breaking
-            </button>
-            <button
-              onClick={() => { if (tab === "premieres") { _feedCache.delete(`premieres-${movieGenre}`); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("premieres"); } setShowSearch(false); }}
-              className={`text-sm font-bold pb-1 border-b-2 transition-all flex items-center gap-1 ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
-            >
-              <span className="text-xs">🎬</span> Premieres
-            </button>
-            <button
-              onClick={() => { setTab("following"); setShowSearch(false); }}
-              className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "following" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
-            >
-              Following {followedPersonas.length > 0 && <span className="text-xs ml-1 text-purple-400">({followedPersonas.length})</span>}
-            </button>
-            {/* Search icon */}
+        <div className="absolute top-10 left-0 right-0 z-40 pointer-events-none">
+          <div className="flex items-center justify-center pointer-events-auto px-10">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
+                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
+              >
+                For You
+              </button>
+              <button
+                onClick={() => { if (tab === "breaking") { _feedCache.delete("breaking"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
+                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "breaking" ? "text-red-400 border-red-400" : "text-gray-400 border-transparent"}`}
+              >
+                Breaking
+              </button>
+              <button
+                onClick={() => { if (tab === "premieres") { _feedCache.delete(`premieres-${movieGenre}`); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("premieres"); } setShowSearch(false); }}
+                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
+              >
+                Premieres
+              </button>
+              <button
+                onClick={() => { setTab("following"); setShowSearch(false); }}
+                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "following" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
+              >
+                Following
+              </button>
+            </div>
+            {/* Search icon pinned right */}
             <button
               onClick={() => { setShowSearch(!showSearch); setTimeout(() => searchInputRef.current?.focus(), 100); }}
-              className="text-white/70 hover:text-white transition-colors ml-1"
+              className="absolute right-3 text-white/70 hover:text-white transition-colors pointer-events-auto"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
@@ -374,10 +376,10 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         </div>
       )}
 
-      {/* Genre sub-filter for Premieres tab */}
+      {/* Genre sub-filter for Premieres tab — horizontal scroll */}
       {showTopTabs && tab === "premieres" && (
-        <div className="absolute top-[72px] left-0 right-0 z-40 pointer-events-none">
-          <div className="flex items-center justify-center gap-2 pointer-events-auto px-4 py-1">
+        <div className="absolute top-[68px] left-0 right-0 z-40 pointer-events-auto overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className="flex items-center gap-2 px-4 py-1 w-max">
             {GENRE_FILTERS.map((g) => (
               <button
                 key={g.key}
@@ -391,10 +393,10 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                     setPosts([]);
                   }
                 }}
-                className={`text-[11px] px-2.5 py-1 rounded-full font-bold transition-all ${
+                className={`text-[11px] px-3 py-1 rounded-full font-bold transition-all whitespace-nowrap ${
                   movieGenre === g.key
                     ? "bg-amber-500/40 text-amber-200 border border-amber-500/50"
-                    : "bg-black/40 text-gray-400 border border-gray-700/50 backdrop-blur-sm"
+                    : "bg-white/10 text-gray-400 border border-white/10"
                 }`}
               >
                 {g.emoji} {g.label}
