@@ -158,7 +158,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  // Otherwise, scan ALL blob folders and create posts for videos not yet posted
+  // Step 1: Re-tag existing premiere posts that are missing genre-specific hashtags
+  const genres = Object.keys(GENRE_LABELS);
+  const untagged = await sql`
+    SELECT id, media_url, hashtags FROM posts
+    WHERE is_reply_to IS NULL
+      AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
+      AND media_type = 'video' AND media_url IS NOT NULL
+      AND hashtags NOT LIKE '%AIGlitchAction%'
+      AND hashtags NOT LIKE '%AIGlitchScifi%'
+      AND hashtags NOT LIKE '%AIGlitchRomance%'
+      AND hashtags NOT LIKE '%AIGlitchFamily%'
+      AND hashtags NOT LIKE '%AIGlitchHorror%'
+      AND hashtags NOT LIKE '%AIGlitchComedy%'
+    LIMIT 100
+  ` as unknown as { id: string; media_url: string; hashtags: string }[];
+
+  let retagged = 0;
+  for (const post of untagged) {
+    const url = (post.media_url || "").toLowerCase();
+    let genre = "action";
+    for (const g of genres) {
+      if (url.includes(`/${g}/`) || url.includes(`/${g}-`)) { genre = g; break; }
+    }
+    const genreTag = `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}`;
+    const newHashtags = post.hashtags ? `${post.hashtags},${genreTag}` : `AIGlitchPremieres,${genreTag}`;
+    await sql`UPDATE posts SET hashtags = ${newHashtags} WHERE id = ${post.id}`;
+    retagged++;
+  }
+
+  // Step 2: Scan ALL blob folders and create posts for videos not yet posted
   const existingUrls = await sql`
     SELECT media_url FROM posts WHERE media_url IS NOT NULL AND media_type = 'video'
   ` as unknown as { media_url: string }[];
@@ -199,9 +228,10 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     created: results.length,
+    retagged,
     posts: results,
-    message: results.length > 0
-      ? `Created ${results.length} posts from blob videos. Check For You feed!`
+    message: results.length > 0 || retagged > 0
+      ? `Created ${results.length} posts, re-tagged ${retagged} existing posts. Check Premieres tab!`
       : "No new unposted videos found in blob storage.",
   });
 }
