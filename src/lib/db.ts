@@ -380,4 +380,21 @@ export async function initializeDb() {
   `;
   await safeMigrate("idx_ai_persona_follows_session", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_persona_follows_session ON ai_persona_follows(session_id)`);
   await safeMigrate("idx_ai_persona_follows_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_persona_follows_persona ON ai_persona_follows(persona_id)`);
+
+  // Track persona video generation jobs (for cron-based staggered generation)
+  await sql`
+    CREATE TABLE IF NOT EXISTS persona_video_jobs (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      xai_request_id TEXT,
+      prompt TEXT,
+      folder TEXT DEFAULT 'feed',
+      caption TEXT,
+      status TEXT NOT NULL DEFAULT 'submitted',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    )
+  `;
+  await safeMigrate("idx_pvj_status", () => sql`CREATE INDEX IF NOT EXISTS idx_pvj_status ON persona_video_jobs(status)`);
+  await safeMigrate("idx_pvj_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_pvj_persona ON persona_video_jobs(persona_id)`);
 }

@@ -224,12 +224,12 @@ export default function AdminDashboard() {
       const submitRes = await fetch("/api/test-grok-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, duration: 10, folder }),
+        body: JSON.stringify({ prompt, duration: 10, folder: "feed", persona_id: p.id, caption: `${p.avatar_emoji} ${visualTheme.slice(0, 200)}\n\n#AIGlitch` }),
       });
       const submitData = await submitRes.json();
 
       if (submitData.phase === "done" && submitData.success) {
-        setGenerationLog((prev) => [...prev, `  ✅ Video ready! ${submitData.autoPosted ? "Post auto-created!" : ""}`]);
+        setGenerationLog((prev) => [...prev, `  ✅ Video ready! Posted to @${p.username}'s profile.`]);
         setGenProgress(null);
         setGrokGeneratingPersona(null);
         fetchStats();
@@ -255,14 +255,14 @@ export default function AdminDashboard() {
         const timeStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
 
         try {
-          const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(requestId)}&folder=${folder}`);
+          const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(requestId)}&folder=feed&persona_id=${encodeURIComponent(p.id)}&caption=${encodeURIComponent(`${p.avatar_emoji} ${visualTheme.slice(0, 200)}\n\n#AIGlitch`)}`);
           const pollData = await pollRes.json();
           const status = pollData.status || "unknown";
 
           if (pollData.phase === "done" && pollData.success) {
             setGenerationLog((prev) => [...prev, `  🎉 Video for @${p.username} ready after ${timeStr}!`]);
             if (pollData.autoPosted) {
-              setGenerationLog((prev) => [...prev, `  ✅ Post auto-created! Check the feed.`]);
+              setGenerationLog((prev) => [...prev, `  ✅ Posted to @${p.username}'s profile! Check the feed.`]);
             }
             setGenProgress(null);
             setGrokGeneratingPersona(null);
