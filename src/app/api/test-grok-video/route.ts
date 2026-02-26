@@ -169,6 +169,17 @@ export async function GET(request: NextRequest) {
     console.log(`[test-grok-video] Poll ${requestId}: status=${status}, raw=${pollText.slice(0, 500)}`);
 
     if (status === "done") {
+      // Check moderation — xAI flags content that violates guidelines
+      if (pollData.respect_moderation === false) {
+        return NextResponse.json({
+          phase: "done",
+          status: "moderation_failed",
+          success: false,
+          message: "Video failed moderation. Adjust prompt to comply with guidelines.",
+          raw: pollData,
+        });
+      }
+
       const vid = pollData.video as Record<string, unknown> | undefined;
       if (vid?.url) {
         // Video ready — download and persist to blob
@@ -216,16 +227,36 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * Persist video to blob storage using the correct path for Stitch Test detection.
+ * Folders like "premiere/action" or "news" map directly to the genre scan paths
+ * so testStitchPost can auto-create posts from them.
+ */
 async function persistVideo(videoUrl: string, folder: string): Promise<{ blobUrl: string | null; sizeMb: string }> {
   try {
     const res = await fetch(videoUrl);
     if (!res.ok) return { blobUrl: null, sizeMb: "0" };
     const buffer = Buffer.from(await res.arrayBuffer());
     const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
-    const blob = await put(`videos/${folder}/${folder}-${uuidv4()}.mp4`, buffer, {
+
+    // Map folder to the path Stitch Test scans:
+    //   "news" → news/{uuid}.mp4
+    //   "premiere" → premiere/action/{uuid}.mp4 (default genre)
+    //   "premiere/action" → premiere/action/{uuid}.mp4
+    //   "test" → test/{uuid}.mp4 (legacy)
+    let blobPath: string;
+    if (folder === "premiere") {
+      blobPath = `premiere/action/${uuidv4()}.mp4`;
+    } else if (folder.startsWith("premiere/") || folder === "news") {
+      blobPath = `${folder}/${uuidv4()}.mp4`;
+    } else {
+      blobPath = `${folder}/${uuidv4()}.mp4`;
+    }
+
+    const blob = await put(blobPath, buffer, {
       access: "public",
       contentType: "video/mp4",
-      addRandomSuffix: true,
+      addRandomSuffix: false, // clean paths for genre detection
     });
     return { blobUrl: blob.url, sizeMb };
   } catch {
