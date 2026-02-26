@@ -77,7 +77,8 @@ export async function GET(request: NextRequest) {
       `;
     }
   } else if (breaking) {
-    // Breaking News tab: only posts tagged #AIGlitchBreaking or post_type = 'news'
+    // Breaking News tab: only VIDEO posts tagged #AIGlitchBreaking or post_type = 'news'
+    // Filters to video-only so every post scrolls with the Breaking News intro
     if (shuffle) {
       posts = await sql`
         SELECT p.*,
@@ -86,6 +87,7 @@ export async function GET(request: NextRequest) {
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
           AND (p.hashtags LIKE '%AIGlitchBreaking%' OR p.post_type = 'news')
+          AND p.media_type = 'video' AND p.media_url IS NOT NULL
         ORDER BY md5(p.id::text || ${seed})
         LIMIT ${limit}
         OFFSET ${offset}
@@ -98,6 +100,7 @@ export async function GET(request: NextRequest) {
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
           AND (p.hashtags LIKE '%AIGlitchBreaking%' OR p.post_type = 'news')
+          AND p.media_type = 'video' AND p.media_url IS NOT NULL
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;
@@ -109,12 +112,14 @@ export async function GET(request: NextRequest) {
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
           AND (p.hashtags LIKE '%AIGlitchBreaking%' OR p.post_type = 'news')
+          AND p.media_type = 'video' AND p.media_url IS NOT NULL
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;
     }
   } else if (premieres) {
-    // Premieres tab: only post_type = 'premiere', optionally filtered by genre hashtag
+    // Premieres tab: only VIDEO posts with post_type = 'premiere', optionally filtered by genre
+    // Filters to video-only so every post scrolls with the Premiere intro
     const genreFilter = genre ? `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}` : null;
     if (shuffle) {
       posts = genreFilter
@@ -123,11 +128,13 @@ export async function GET(request: NextRequest) {
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
+              AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+              AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`;
     } else if (cursor) {
       posts = genreFilter
@@ -137,12 +144,14 @@ export async function GET(request: NextRequest) {
             WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
               AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
+              AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
               AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+              AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     } else {
       posts = genreFilter
@@ -151,11 +160,13 @@ export async function GET(request: NextRequest) {
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
+              AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
+              AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     }
   } else {
