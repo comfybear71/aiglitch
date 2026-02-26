@@ -766,11 +766,6 @@ export default function AdminDashboard() {
     return pool[Math.floor(Math.random() * pool.length)];
   };
 
-  // Legacy single-prompt accessor for testGrokVideo
-  const VIDEO_PROMPTS: Record<string, string> = Object.fromEntries(
-    Object.entries(VIDEO_PROMPT_POOLS).map(([k, v]) => [k, v[0]])
-  );
-
   const GENRE_KEYS = ["news", "action", "scifi", "romance", "family", "horror", "comedy"] as const;
 
   const copyPrompt = async (key: string) => {
@@ -849,11 +844,35 @@ export default function AdminDashboard() {
     setTestingGrokVideo(false);
   };
 
-  const testGrokVideo = async (folder: "news" | "premiere" | "test") => {
+  const PREMIERE_GENRES = ["action", "scifi", "romance", "family", "horror", "comedy"] as const;
+
+  const testGrokVideo = async (mode: "news" | "premiere") => {
     setTestingGrokVideo(true);
-    const prompts = VIDEO_PROMPTS;
-    setGenerationLog((prev) => [...prev, `🧪 TEST: Generating 1 Grok video (10s, 720p) → blob/${folder}/`]);
-    setGenProgress({ label: `🧪 Test ${folder}`, current: 1, total: 1, startTime: Date.now() });
+
+    // Pick genre and prompt based on mode
+    let prompt: string;
+    let folder: string;
+    let genreLabel: string;
+
+    if (mode === "news") {
+      prompt = getRandomPrompt("news");
+      folder = "news";
+      genreLabel = "News";
+    } else {
+      // Pick a random premiere genre
+      const genre = PREMIERE_GENRES[Math.floor(Math.random() * PREMIERE_GENRES.length)];
+      prompt = getRandomPrompt(genre);
+      folder = `premiere/${genre}`;
+      genreLabel = genre.charAt(0).toUpperCase() + genre.slice(1);
+    }
+
+    // Ensure AIG!ITCH logo appears prominently in every video
+    const brandingSuffix = " CRITICAL: The text 'AIG!ITCH' must appear as large, bold, glowing neon text prominently displayed in the video — either as a title card, watermark, or integrated into the scene as a giant sign/logo. Make the 'AIG!ITCH' text impossible to miss.";
+    prompt = prompt + brandingSuffix;
+
+    setGenerationLog((prev) => [...prev, `🎬 Generating ${genreLabel} video (10s, 720p) → blob/${folder}/`]);
+    setGenerationLog((prev) => [...prev, `  📝 Prompt: "${prompt.slice(0, 120)}..."`]);
+    setGenProgress({ label: `🎬 ${genreLabel}`, current: 1, total: 1, startTime: Date.now() });
 
     try {
       // Phase 1: Submit to xAI (fast — returns immediately with request_id)
@@ -861,7 +880,7 @@ export default function AdminDashboard() {
       const submitRes = await fetch("/api/test-grok-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompts[folder], duration: 10, folder }),
+        body: JSON.stringify({ prompt, duration: 10, folder }),
       });
       const submitData = await submitRes.json();
 
@@ -1211,15 +1230,15 @@ export default function AdminDashboard() {
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
               <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Image"}</span>
             </button>
-            <button onClick={() => testGrokVideo("news")} disabled={testingGrokVideo}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-orange-500/20 text-orange-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-orange-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{testingGrokVideo ? "..." : "🎬"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🎬 Test Video"}</span>
-            </button>
-            <button onClick={testStitchPost} disabled={testingGrokVideo}
+            <button onClick={() => testGrokVideo("premiere")} disabled={testingGrokVideo}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🎬"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🎬 Stitch Test"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Generating..." : "🎬 Premiere"}</span>
+            </button>
+            <button onClick={() => testGrokVideo("news")} disabled={testingGrokVideo}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-orange-500/20 text-orange-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-orange-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{testingGrokVideo ? "..." : "📰"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Generating..." : "📰 News"}</span>
             </button>
             <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
               <span className="sm:hidden">🏠</span>
