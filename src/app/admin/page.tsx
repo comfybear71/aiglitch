@@ -849,15 +849,15 @@ export default function AdminDashboard() {
 
       const requestId = submitData.requestId;
       setGenerationLog((prev) => [...prev, `  ✅ Submitted! request_id: ${requestId}`]);
-      setGenerationLog((prev) => [...prev, `  ⏳ Polling xAI every 10s (max 10 min)...`]);
+      setGenerationLog((prev) => [...prev, `  ⏳ Polling xAI every 10s (max 15 min, typical: 2-10 min)...`]);
 
       // Phase 2: Client-side polling — each poll is a fast GET request
-      const maxPolls = 60;
+      const maxPolls = 90; // 15 minutes
       for (let attempt = 1; attempt <= maxPolls; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 10_000));
-        const elapsed = attempt * 10;
-        const min = Math.floor(elapsed / 60);
-        const sec = elapsed % 60;
+        const elapsedSec = attempt * 10;
+        const min = Math.floor(elapsedSec / 60);
+        const sec = elapsedSec % 60;
         const timeStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
         const pct = Math.min(Math.round((attempt / maxPolls) * 100), 99);
 
@@ -871,16 +871,24 @@ export default function AdminDashboard() {
             if (pollData.sizeMb) {
               setGenerationLog((prev) => [...prev, `  📦 Size: ${pollData.sizeMb}MB`]);
             }
-            setGenerationLog((prev) => [...prev, `  ✅ Saved: ${pollData.blobUrl || pollData.videoUrl}`]);
-            setGenerationLog((prev) => [...prev, `  🎬 SUCCESS! Check Premieres tab or blob storage.`]);
+            setGenerationLog((prev) => [...prev, `  ✅ Saved to ${folder}/: ${pollData.blobUrl || pollData.videoUrl}`]);
+            setGenerationLog((prev) => [...prev, `  🎬 SUCCESS! Hit Stitch Test to create a post from it.`]);
             setGenProgress(null);
             setTestingGrokVideo(false);
             fetchStats();
+            fetchBlobFolders();
+            return;
+          }
+
+          if (status === "moderation_failed") {
+            setGenerationLog((prev) => [...prev, `  ⛔ Video failed moderation after ${timeStr}. Try a different prompt.`]);
+            setGenProgress(null);
+            setTestingGrokVideo(false);
             return;
           }
 
           if (status === "expired" || status === "failed") {
-            setGenerationLog((prev) => [...prev, `  ❌ Video ${status} after ${timeStr}`]);
+            setGenerationLog((prev) => [...prev, `  ❌ Video ${status} after ${timeStr}. Try simpler prompt or lower duration.`]);
             if (pollData.raw) {
               setGenerationLog((prev) => [...prev, `  📋 Raw: ${JSON.stringify(pollData.raw).slice(0, 200)}`]);
             }
@@ -889,9 +897,11 @@ export default function AdminDashboard() {
             return;
           }
 
-          // Still pending — show live progress
-          const icon = status === "pending" ? "🔄" : "⚠️";
-          setGenerationLog((prev) => [...prev, `  ${icon} Poll #${attempt}: ${status} (${pct}%, ${timeStr})`]);
+          // Still pending — show live progress (only every 3rd attempt to reduce noise)
+          if (attempt % 3 === 0 || attempt <= 3) {
+            const icon = status === "pending" ? "🔄" : "⚠️";
+            setGenerationLog((prev) => [...prev, `  ${icon} Poll #${attempt}: ${status} (${pct}%, ${timeStr})`]);
+          }
 
           // If status is unknown, show raw response for debugging
           if (status === "unknown" && pollData.raw) {
@@ -902,7 +912,7 @@ export default function AdminDashboard() {
         }
       }
 
-      setGenerationLog((prev) => [...prev, `  ❌ Timed out after 10 minutes of polling`]);
+      setGenerationLog((prev) => [...prev, `  ❌ Timed out after 15 minutes of polling`]);
     } catch (err) {
       setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
     }

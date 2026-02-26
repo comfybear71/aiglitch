@@ -17,6 +17,34 @@
 
 import OpenAI from "openai";
 
+/**
+ * Fetch with automatic retry on 429 (rate limit) and transient network errors.
+ * Exponential backoff: 2s, 4s, 8s, 16s.
+ */
+async function fetchWithRetry(url: string, init?: RequestInit, maxRetries = 4): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.status === 429 && attempt < maxRetries) {
+        const wait = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s, 16s
+        console.log(`xAI rate limited (429), retrying in ${wait / 1000}s (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, wait));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        const wait = Math.pow(2, attempt + 1) * 1000;
+        console.log(`xAI fetch error, retrying in ${wait / 1000}s: ${lastError.message}`);
+        await new Promise(resolve => setTimeout(resolve, wait));
+      }
+    }
+  }
+  throw lastError || new Error("fetchWithRetry exhausted all retries");
+}
+
 let _client: OpenAI | null = null;
 
 function getClient(): OpenAI | null {
@@ -182,11 +210,11 @@ export async function generateVideoFromImage(
       return null;
     }
 
-    // Poll for completion (up to 10 minutes — video gen can be slow)
-    const maxAttempts = 60;
+    // Poll for completion (up to 15 minutes — video gen can be slow)
+    const maxAttempts = 90;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 10_000));
-      const pollRes = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
+      const pollRes = await fetchWithRetry(`https://api.x.ai/v1/videos/${requestId}`, {
         headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
       });
       if (!pollRes.ok) {
@@ -195,14 +223,21 @@ export async function generateVideoFromImage(
       }
       const pollData = await pollRes.json();
       console.log(`Grok img2vid poll ${attempt + 1}/${maxAttempts}: status=${pollData.status}`);
-      if (pollData.status === "done" && pollData.video?.url) return pollData.video.url;
+      if (pollData.status === "done") {
+        if (pollData.respect_moderation === false) {
+          console.error("Grok img2vid failed moderation.");
+          return null;
+        }
+        if (pollData.video?.url) return pollData.video.url;
+        return null;
+      }
       if (pollData.status === "expired" || pollData.status === "failed") {
         console.error(`Grok img2vid ${pollData.status}:`, JSON.stringify(pollData).slice(0, 300));
         return null;
       }
     }
 
-    console.error("Grok image-to-video timed out after 10 minutes");
+    console.error("Grok image-to-video timed out after 15 minutes");
     return null;
   } catch (err) {
     console.error("Grok image-to-video error:", err instanceof Error ? err.message : err);
@@ -269,13 +304,13 @@ export async function generateVideoWithGrok(
 
     console.log(`Grok video request submitted: ${requestId}, polling for result...`);
 
-    // Step 2: Poll for completion (up to 10 minutes, check every 10s)
+    // Step 2: Poll for completion (up to 15 minutes, check every 10s)
     // Video gen can take several minutes — 5min was too short and caused wasted spend
-    const maxAttempts = 60;
+    const maxAttempts = 90;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 10_000)); // Wait 10s between polls
 
-      const pollRes = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
+      const pollRes = await fetchWithRetry(`https://api.x.ai/v1/videos/${requestId}`, {
         headers: {
           "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
         },
@@ -289,9 +324,18 @@ export async function generateVideoWithGrok(
       const pollData = await pollRes.json();
       console.log(`Grok video poll ${attempt + 1}/${maxAttempts}: status=${pollData.status}`);
 
-      if (pollData.status === "done" && pollData.video?.url) {
-        console.log(`Grok video generated successfully: ${pollData.video.url.slice(0, 80)}...`);
-        return pollData.video.url;
+      if (pollData.status === "done") {
+        // Check moderation — xAI flags content that violates guidelines
+        if (pollData.respect_moderation === false) {
+          console.error("Grok video failed moderation. Adjust prompt to comply with guidelines.");
+          return null;
+        }
+        if (pollData.video?.url) {
+          console.log(`Grok video generated successfully: ${pollData.video.url.slice(0, 80)}...`);
+          return pollData.video.url;
+        }
+        console.error("Grok video done but no URL:", JSON.stringify(pollData).slice(0, 300));
+        return null;
       }
 
       if (pollData.status === "expired" || pollData.status === "failed") {
@@ -302,7 +346,7 @@ export async function generateVideoWithGrok(
       // Still pending, continue polling
     }
 
-    console.error("Grok video generation timed out after 10 minutes");
+    console.error("Grok video generation timed out after 15 minutes");
     return null;
   } catch (err) {
     console.error("Grok video generation error:", err instanceof Error ? err.message : err);
