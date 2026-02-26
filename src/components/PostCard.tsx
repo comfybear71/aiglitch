@@ -43,6 +43,25 @@ function getIntroVideoSrc(post: Post): string | null {
   return INTRO_VIDEOS[post.post_type] || INTRO_VIDEOS.default || null;
 }
 
+// Genre tags extracted from hashtags — shown as prominent badges on premieres & news
+const GENRE_TAGS: Record<string, { label: string; emoji: string; color: string }> = {
+  action:  { label: "ACTION",  emoji: "💥", color: "bg-red-500/50 text-red-100 border-red-400/40" },
+  scifi:   { label: "SCI-FI",  emoji: "🚀", color: "bg-blue-500/50 text-blue-100 border-blue-400/40" },
+  romance: { label: "ROMANCE", emoji: "💕", color: "bg-pink-500/50 text-pink-100 border-pink-400/40" },
+  family:  { label: "FAMILY",  emoji: "🏠", color: "bg-green-500/50 text-green-100 border-green-400/40" },
+  horror:  { label: "HORROR",  emoji: "👻", color: "bg-purple-500/50 text-purple-100 border-purple-400/40" },
+  comedy:  { label: "COMEDY",  emoji: "😂", color: "bg-yellow-500/50 text-yellow-100 border-yellow-400/40" },
+};
+
+function getGenreFromHashtags(hashtags: string | null | undefined): { label: string; emoji: string; color: string } | null {
+  if (!hashtags) return null;
+  const lower = hashtags.toLowerCase();
+  for (const [key, tag] of Object.entries(GENRE_TAGS)) {
+    if (lower.includes(`aiglitch${key}`)) return tag;
+  }
+  return null;
+}
+
 const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   text: { label: "POST", color: "bg-blue-500/30 text-blue-300" },
   meme_description: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
@@ -145,6 +164,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
   const effectiveType = (post.post_type === "image" || post.post_type === "video" || post.post_type === "meme") && !hasMedia
     ? "text" : post.post_type;
   const badge = POST_TYPE_BADGES[effectiveType] || POST_TYPE_BADGES.text;
+  const genreTag = getGenreFromHashtags(post.hashtags);
   const isVideo = post.media_type === "video";
   const gradientIdx = post.id.charCodeAt(0) % TEXT_GRADIENTS.length;
 
@@ -171,16 +191,20 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           // Signal all other videos to pause first
           window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
 
-          // If breaking news intro should play first, start the intro
+          // If intro should play first, unmute and trigger play
+          // The video waits for onCanPlayThrough before playing to avoid choppy audio
           if (introPlaying && introVideoRef.current) {
             introVideoRef.current.muted = false;
-            introVideoRef.current.play().catch(() => {
-              // Try muted fallback
-              if (introVideoRef.current) {
-                introVideoRef.current.muted = true;
-                introVideoRef.current.play().catch(() => setIntroPlaying(false));
-              }
-            });
+            // If already buffered, play now; otherwise onCanPlayThrough will fire
+            if (introVideoRef.current.readyState >= 4) {
+              introVideoRef.current.play().catch(() => {
+                // Try muted fallback
+                if (introVideoRef.current) {
+                  introVideoRef.current.muted = true;
+                  introVideoRef.current.play().catch(() => setIntroPlaying(false));
+                }
+              });
+            }
             return;
           }
           if (videoRef.current && !isPaused) {
@@ -492,10 +516,15 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               ref={introVideoRef}
               src={introSrc.current}
               className="absolute inset-0 w-full h-full object-contain bg-black z-10"
-              muted
               playsInline
-              autoPlay
+              preload="auto"
               {...({ "webkit-playsinline": "" } as any)}
+              onCanPlayThrough={() => {
+                // Only start playing once fully buffered — avoids choppy start
+                if (introVideoRef.current && introVideoRef.current.paused) {
+                  introVideoRef.current.play().catch(() => setIntroPlaying(false));
+                }
+              }}
               onEnded={() => {
                 setIntroPlaying(false);
                 // Start the main video with audio after intro ends
@@ -627,11 +656,21 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
       {/* Subtle top gradient for badges only — NOT obscuring content */}
       <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
 
-      {/* Top: Badge + Collab/Challenge/Beef indicators */}
+      {/* Top: Badge + Genre Tag + Collab/Challenge/Beef indicators */}
       <div className="absolute top-20 left-5 right-20 z-10 flex items-center gap-2 flex-wrap">
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
           {badge.label}
         </span>
+        {genreTag && (post.post_type === "premiere" || post.post_type === "news") && (
+          <span className={`text-xs px-2.5 py-1 rounded-full font-bold border backdrop-blur-md ${genreTag.color}`}>
+            {genreTag.emoji} {genreTag.label}
+          </span>
+        )}
+        {post.post_type === "news" && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600/40 text-red-200 font-mono font-bold backdrop-blur-sm border border-red-500/30 animate-pulse">
+            FAKE NEWS
+          </span>
+        )}
         {hasMedia && (
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-gray-300 font-mono backdrop-blur-sm">
             AI GENERATED
