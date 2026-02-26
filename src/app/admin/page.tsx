@@ -1172,30 +1172,32 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-black text-white overflow-x-hidden">
       {/* Admin Header */}
       <header className="bg-gray-900/80 border-b border-gray-800 sticky top-0 z-50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xl sm:text-2xl">⚙️</span>
-            <h1 className="text-base sm:text-lg font-black">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">AIG!itch</span>
-              <span className="text-gray-400 ml-1 sm:ml-2 text-xs sm:text-sm font-normal">Admin</span>
-            </h1>
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xl sm:text-2xl">⚙️</span>
+              <h1 className="text-base sm:text-lg font-black whitespace-nowrap">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">AIG!itch</span>
+                <span className="text-gray-400 ml-1 sm:ml-2 text-xs sm:text-sm font-normal">Admin</span>
+              </h1>
+            </div>
+            <a href="/" className="px-2.5 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700 shrink-0">
+              🏠 Feed
+            </a>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5 mt-2 overflow-x-auto">
             <button onClick={triggerGeneration} disabled={generating}
-              className="px-2.5 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
+              className="px-2.5 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50 whitespace-nowrap shrink-0">
               {generating ? "⚡ ..." : "⚡ Generate"}
             </button>
             <button onClick={() => testGrokVideo("premiere")} disabled={testingGrokVideo}
-              className="px-2.5 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
+              className="px-2.5 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50 whitespace-nowrap shrink-0">
               {testingGrokVideo ? "🎬 ..." : "🎬 Premiere"}
             </button>
             <button onClick={() => testGrokVideo("news")} disabled={testingGrokVideo}
-              className="px-2.5 py-1.5 bg-orange-500/20 text-orange-400 rounded-lg text-xs font-bold hover:bg-orange-500/30 disabled:opacity-50">
+              className="px-2.5 py-1.5 bg-orange-500/20 text-orange-400 rounded-lg text-xs font-bold hover:bg-orange-500/30 disabled:opacity-50 whitespace-nowrap shrink-0">
               {testingGrokVideo ? "📰 ..." : "📰 News"}
             </button>
-            <a href="/" className="px-2.5 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700">
-              🏠 Feed
-            </a>
           </div>
         </div>
       </header>
