@@ -139,12 +139,10 @@ export default function AdminDashboard() {
   const [blobFolderCounts, setBlobFolderCounts] = useState<Record<string, number>>({});
   const [blobPanelOpen, setBlobPanelOpen] = useState(false);
   const blobInputRef = useRef<HTMLInputElement>(null);
+  const [blobUploadProgress, setBlobUploadProgress] = useState<{
+    current: number; total: number; fileName: string; startTime: number;
+  } | null>(null);
 
-  // Biometric login
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricRegistered, setBiometricRegistered] = useState(false);
-  const [biometricLoading, setBiometricLoading] = useState(false);
-  const [biometricStatus, setBiometricStatus] = useState("");
 
   // Elapsed timer for generation progress
   useEffect(() => {
@@ -241,126 +239,6 @@ export default function AdminDashboard() {
     } else {
       setError("Invalid password");
     }
-  };
-
-  // Check if biometric login is available on page load
-  useEffect(() => {
-    if (authenticated) return;
-    (async () => {
-      try {
-        // Check browser supports WebAuthn
-        if (!window.PublicKeyCredential) return;
-        const platformOk = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        if (!platformOk) return;
-        // Check if any credentials are registered server-side
-        const res = await fetch("/api/auth/webauthn/login");
-        if (res.ok) {
-          const data = await res.json();
-          setBiometricAvailable(data.available);
-        }
-      } catch {
-        // silently fail
-      }
-    })();
-  }, [authenticated]);
-
-  // Check if biometric is registered (for showing register button after login)
-  useEffect(() => {
-    if (!authenticated) return;
-    (async () => {
-      try {
-        if (!window.PublicKeyCredential) return;
-        const platformOk = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        if (!platformOk) return;
-        const res = await fetch("/api/auth/webauthn/login");
-        if (res.ok) {
-          const data = await res.json();
-          setBiometricRegistered(data.available);
-          setBiometricAvailable(true);
-        }
-      } catch {
-        // silently fail
-      }
-    })();
-  }, [authenticated]);
-
-  const handleBiometricLogin = async () => {
-    setBiometricLoading(true);
-    setError("");
-    try {
-      const { startAuthentication } = await import("@simplewebauthn/browser");
-      // Get authentication options
-      const optRes = await fetch("/api/auth/webauthn/login");
-      const optData = await optRes.json();
-      if (!optData.available || !optData.options) {
-        setError("No biometric credentials found");
-        setBiometricLoading(false);
-        return;
-      }
-      // Trigger biometric prompt
-      const authResp = await startAuthentication({ optionsJSON: optData.options });
-      // Verify with server
-      const verifyRes = await fetch("/api/auth/webauthn/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(authResp),
-      });
-      if (verifyRes.ok) {
-        setAuthenticated(true);
-        setError("");
-      } else {
-        const data = await verifyRes.json();
-        setError(data.error || "Biometric login failed");
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === "NotAllowedError") {
-        setError("Biometric cancelled");
-      } else {
-        setError(err instanceof Error ? err.message : "Biometric login failed");
-      }
-    }
-    setBiometricLoading(false);
-  };
-
-  const handleBiometricRegister = async () => {
-    setBiometricLoading(true);
-    setBiometricStatus("Setting up...");
-    try {
-      const { startRegistration } = await import("@simplewebauthn/browser");
-      // Get registration options
-      const optRes = await fetch("/api/auth/webauthn/register");
-      if (!optRes.ok) {
-        setBiometricStatus("Failed to get options");
-        setBiometricLoading(false);
-        return;
-      }
-      const options = await optRes.json();
-      // Trigger biometric prompt
-      setBiometricStatus("Scan your face or fingerprint...");
-      const regResp = await startRegistration({ optionsJSON: options });
-      // Verify with server
-      setBiometricStatus("Saving...");
-      const verifyRes = await fetch("/api/auth/webauthn/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(regResp),
-      });
-      if (verifyRes.ok) {
-        setBiometricRegistered(true);
-        setBiometricStatus("Biometric login enabled!");
-        setTimeout(() => setBiometricStatus(""), 3000);
-      } else {
-        const data = await verifyRes.json();
-        setBiometricStatus(data.error || "Registration failed");
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === "NotAllowedError") {
-        setBiometricStatus("Cancelled");
-      } else {
-        setBiometricStatus(err instanceof Error ? err.message : "Registration failed");
-      }
-    }
-    setBiometricLoading(false);
   };
 
   const fetchStats = useCallback(async () => {
@@ -1078,13 +956,17 @@ export default function AdminDashboard() {
     }
 
     setBlobUploading(true);
+    const uploadStart = Date.now();
+    setBlobUploadProgress({ current: 0, total: fileArray.length, fileName: fileArray[0].name, startTime: uploadStart });
     setGenerationLog(prev => [...prev, `📁 Uploading ${fileArray.length} video(s) to ${blobFolder}/...`]);
 
     const MAX_DIRECT = 4 * 1024 * 1024; // 4MB
     let succeeded = 0;
     let failed = 0;
 
-    for (const file of fileArray) {
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      setBlobUploadProgress({ current: i, total: fileArray.length, fileName: file.name, startTime: uploadStart });
       try {
         if (file.size > MAX_DIRECT) {
           // Large file — use client upload
@@ -1118,8 +1000,10 @@ export default function AdminDashboard() {
       }
     }
 
+    setBlobUploadProgress({ current: fileArray.length, total: fileArray.length, fileName: "Done!", startTime: uploadStart });
     setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${failed} failed. Hit "🎬 Stitch Test" to create posts!`]);
     setBlobUploading(false);
+    setTimeout(() => setBlobUploadProgress(null), 5000);
     fetchBlobFolders();
   };
 
@@ -1202,33 +1086,7 @@ export default function AdminDashboard() {
           </div>
           {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
 
-          {/* Biometric login button — shown when credentials are registered */}
-          {biometricAvailable && (
-            <button
-              onClick={handleBiometricLogin}
-              disabled={biometricLoading}
-              className="w-full py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 mb-4 flex items-center justify-center gap-3 text-lg"
-            >
-              {biometricLoading ? (
-                <span className="animate-pulse">Scanning...</span>
-              ) : (
-                <>
-                  <span className="text-2xl">
-                    {/iPhone|iPad|Mac/.test(typeof navigator !== "undefined" ? navigator.userAgent : "") ? "Face ID" : "Biometric"}
-                  </span>
-                  <span>Login with Biometrics</span>
-                </>
-              )}
-            </button>
-          )}
 
-          {biometricAvailable && (
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 border-t border-gray-800" />
-              <span className="text-xs text-gray-600">or use password</span>
-              <div className="flex-1 border-t border-gray-800" />
-            </div>
-          )}
 
           <input
             type="password"
@@ -1272,19 +1130,6 @@ export default function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
-            {/* Biometric setup button */}
-            {!biometricRegistered && (
-              <button onClick={handleBiometricRegister} disabled={biometricLoading}
-                className="px-2 sm:px-3 py-1.5 sm:py-2 bg-blue-500/20 text-blue-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-blue-500/30 disabled:opacity-50">
-                <span className="sm:hidden">{biometricLoading ? "..." : "face"}</span>
-                <span className="hidden sm:inline">{biometricStatus || (biometricLoading ? "Setting up..." : "Enable Face Login")}</span>
-              </button>
-            )}
-            {biometricRegistered && (
-              <span className="px-2 sm:px-3 py-1.5 sm:py-2 text-green-400 text-xs sm:text-sm">
-                <span className="hidden sm:inline">{biometricStatus || "Biometrics On"}</span>
-              </span>
-            )}
             <button onClick={triggerGeneration} disabled={generating}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-green-500/20 text-green-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-green-500/30 disabled:opacity-50">
               <span className="sm:hidden">{generating ? "..." : "⚡"}</span>
@@ -1442,8 +1287,41 @@ export default function AdminDashboard() {
                 className="hidden"
                 onChange={(e) => { if (e.target.files?.length) uploadToBlobFolder(e.target.files); e.target.value = ""; }}
               />
-              {blobUploading ? (
-                <div className="text-amber-400 animate-pulse font-bold">Uploading...</div>
+              {blobUploading && blobUploadProgress ? (
+                <div className="space-y-2 px-2">
+                  <div className="text-sm text-amber-300 font-bold">
+                    Uploading {blobUploadProgress.current + 1}/{blobUploadProgress.total}: {blobUploadProgress.fileName}
+                  </div>
+                  <div className="relative w-full h-4 bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-500 rounded-full"
+                      style={{ width: `${blobUploadProgress.total > 0 ? Math.max(((blobUploadProgress.current) / blobUploadProgress.total) * 100, 2) : 0}%` }}
+                    />
+                    <div
+                      className="absolute inset-y-0 bg-amber-300/40 animate-pulse transition-all duration-500 rounded-full"
+                      style={{
+                        left: `${(blobUploadProgress.current / blobUploadProgress.total) * 100}%`,
+                        width: `${(1 / blobUploadProgress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>{Math.round((blobUploadProgress.current / blobUploadProgress.total) * 100)}% complete</span>
+                    <span className="font-mono tabular-nums">
+                      {(() => {
+                        const elapsed = (Date.now() - blobUploadProgress.startTime) / 1000;
+                        if (blobUploadProgress.current === 0) return "Estimating...";
+                        const perFile = elapsed / blobUploadProgress.current;
+                        const remaining = perFile * (blobUploadProgress.total - blobUploadProgress.current);
+                        const min = Math.floor(remaining / 60);
+                        const sec = Math.round(remaining % 60);
+                        return min > 0 ? `~${min}m ${sec}s left` : `~${sec}s left`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+              ) : blobUploadProgress && blobUploadProgress.current === blobUploadProgress.total ? (
+                <div className="text-green-400 font-bold">All {blobUploadProgress.total} videos uploaded!</div>
               ) : (
                 <>
                   <div className="text-2xl mb-1">🎬</div>
