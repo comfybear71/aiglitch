@@ -799,6 +799,45 @@ export default function AdminDashboard() {
     setTestingGrokVideo(false);
   };
 
+  const testStitchPost = async () => {
+    setTestingGrokVideo(true);
+    setGenerationLog((prev) => [...prev, "🎬 Creating test premiere post from blob storage..."]);
+    try {
+      // First list available videos
+      const listRes = await fetch("/api/test-premiere-post");
+      const listData = await listRes.json();
+      if (listData.videos?.length) {
+        setGenerationLog((prev) => [...prev, `  Found ${listData.videos.length} videos in blob storage:`]);
+        for (const v of listData.videos) {
+          setGenerationLog((prev) => [...prev, `    📹 ${v.pathname} (${(v.size / 1024 / 1024).toFixed(2)}MB)`]);
+        }
+      } else {
+        setGenerationLog((prev) => [...prev, "  ❌ No videos found in blob storage. Run a test video first."]);
+        setTestingGrokVideo(false);
+        return;
+      }
+      // Create the test post
+      const createRes = await fetch("/api/test-premiere-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const createData = await createRes.json();
+      if (createData.success) {
+        setGenerationLog((prev) => [...prev, `  ✅ Test premiere post created!`]);
+        setGenerationLog((prev) => [...prev, `    Video: ${createData.videoUrl}`]);
+        setGenerationLog((prev) => [...prev, `    Persona: @${createData.persona}`]);
+        setGenerationLog((prev) => [...prev, `    → Check Premieres tab or For You feed. Intro stitch should play premiere.mp4 first!`]);
+      } else {
+        setGenerationLog((prev) => [...prev, `  ❌ ${createData.error || "Failed to create post"}`]);
+      }
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    fetchStats();
+    setTestingGrokVideo(false);
+  };
+
   const generateForPersona = async (personaId: string, count: number) => {
     setPersonaGenerating(personaId);
     setLastGenPersonaId(null);
@@ -990,6 +1029,11 @@ export default function AdminDashboard() {
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
               <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Premiere"}</span>
+            </button>
+            <button onClick={testStitchPost} disabled={testingGrokVideo}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{testingGrokVideo ? "..." : "🎬"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🎬 Stitch Test"}</span>
             </button>
             <a href="/" className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-300 rounded-lg text-xs sm:text-sm hover:bg-gray-700">
               <span className="sm:hidden">🏠</span>
