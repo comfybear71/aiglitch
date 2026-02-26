@@ -12,9 +12,8 @@ const replicate = new Replicate({
 });
 
 /**
- * Append subtle AIG!itch branding instruction to media generation prompts.
- * This ensures every AI-generated image/video includes the logo somewhere
- * in the scene — subliminal but present.
+ * Append subtle AIG!itch branding instruction to IMAGE prompts only.
+ * Text rendering works in images but NOT in video generation (causes failures/timeouts).
  */
 function brandPrompt(prompt: string): string {
   return `${prompt}. Subtly include the text "AIG!itch" somewhere in the scene — on a screen, sign, wall, neon light, sticker, graffiti, t-shirt, or any natural surface. It should blend into the environment naturally, not be the focus.`;
@@ -428,11 +427,13 @@ export async function generateBreakingNewsVideo(
   newsPrompt: string,
   headline: string,
 ): Promise<MediaResult | null> {
-  const newsroomPrompt = brandPrompt(`Rick and Morty style animated news broadcast. A cartoon news commentator sits at a sleek holographic desk, screens behind them displaying "${headline}" in wild neon text. The animated anchor has exaggerated expressions — eyes bulging, arms waving — in a loose Rick-and-Morty art style. Interdimensional portals swirl in the background, breaking news tickers scroll with urgent red and white text reading "${headline}", absurd sci-fi props litter the desk. The camera zooms dramatically. ${newsPrompt}. Style: Rick and Morty animation meets cyberpunk CNN, chaotic interdimensional cable news energy, dramatic camera movement, 2D cartoon aesthetic with neon lighting`);
+  // Keep video prompt concise — complex prompts cause slow gen / timeouts
+  // Don't use brandPrompt() for video — text rendering in video AI fails
+  const newsroomPrompt = `Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk with breaking news screens showing "${headline}". Exaggerated expressions, interdimensional portals in background, urgent news tickers. ${newsPrompt}. Style: Rick and Morty meets cyberpunk CNN, neon lighting, dramatic camera zoom`;
 
-  // Strategy 1: Direct text-to-video with Grok (15s @ $0.75)
+  // Strategy 1: Direct text-to-video with Grok (5s @ 480p for reliable generation)
   try {
-    const grokUrl = await generateVideoWithGrok(newsroomPrompt, 15, "9:16");
+    const grokUrl = await generateVideoWithGrok(newsroomPrompt, 5, "9:16");
     if (grokUrl) {
       console.log("Grok breaking news video generated, persisting to blob...");
       const url = await persistToBlob(grokUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
@@ -449,7 +450,7 @@ export async function generateBreakingNewsVideo(
     if (heroImage?.url) {
       // Persist the hero image first (URLs are ephemeral)
       const persistedImageUrl = await persistToBlob(heroImage.url, `images/breaking-hero-${uuidv4()}.png`, "image/png");
-      const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 10, "9:16");
+      const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 5, "9:16");
       if (videoUrl) {
         const url = await persistToBlob(videoUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
         return { url, source: "grok-img2vid" };
@@ -473,11 +474,12 @@ export async function generateMovieTrailerVideo(
   movieTitle: string,
   genre: string,
 ): Promise<MediaResult | null> {
-  const fullPrompt = brandPrompt(`Cinematic movie trailer. Title card: "${movieTitle}". ${trailerPrompt}. End with dramatic title reveal "${movieTitle}" in bold cinematic text with lens flares. Style: Hollywood-quality ${genre} movie trailer, dramatic lighting, cinematic aspect ratio, epic orchestral music energy`);
+  // Keep video prompt concise — don't use brandPrompt for video (text rendering fails)
+  const fullPrompt = `Cinematic ${genre} movie trailer. ${trailerPrompt}. Style: Hollywood-quality, dramatic lighting, epic cinematic energy`;
 
-  // Strategy 1: Grok text-to-video (15s @ $0.75)
+  // Strategy 1: Grok text-to-video (5s @ 480p for reliable generation)
   try {
-    const grokUrl = await generateVideoWithGrok(fullPrompt, 15, "9:16");
+    const grokUrl = await generateVideoWithGrok(fullPrompt, 5, "9:16");
     if (grokUrl) {
       console.log(`Grok movie trailer video generated for "${movieTitle}", persisting...`);
       const url = await persistToBlob(grokUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
@@ -493,7 +495,7 @@ export async function generateMovieTrailerVideo(
     const heroImage = await generateImageWithAurora(posterPrompt, true);
     if (heroImage?.url) {
       const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
-      const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
+      const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 5, "9:16");
       if (videoUrl) {
         const url = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
         return { url, source: "grok-img2vid" };

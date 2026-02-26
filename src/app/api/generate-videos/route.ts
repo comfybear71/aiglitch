@@ -6,7 +6,7 @@ import { generateVideoWithGrok, generateImageWithAurora, generateVideoFromImage 
 import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
 
-export const maxDuration = 300;
+export const maxDuration = 660; // 11 min — must exceed 10 min polling timeout
 
 // 15 ready-to-go cinematic video prompts — no AI text gen needed
 const VIDEO_PROMPTS: { prompt: string; title: string; genre: string; tagline: string }[] = [
@@ -123,16 +123,17 @@ export async function POST(request: NextRequest) {
 
   for (let i = 0; i < shuffled.length; i++) {
     const movie = shuffled[i];
-    const fullPrompt = `Cinematic movie trailer. ${movie.prompt} Subtly include the text "AIG!itch" somewhere in the scene — on a screen, sign, neon light, or any natural surface.`;
+    // Keep video prompts concise — long prompts + text rendering = slow/failed generation
+    const fullPrompt = `Cinematic movie trailer. ${movie.prompt}`;
 
     console.log(`[${i + 1}/${shuffled.length}] Generating Grok video for "${movie.title}"...`);
 
     let videoUrl: string | null = null;
     let mediaSource = "grok-video";
 
-    // Strategy 1: Direct text-to-video with Grok (15s)
+    // Strategy 1: Direct text-to-video with Grok (5s @ 480p for reliable generation)
     try {
-      videoUrl = await generateVideoWithGrok(fullPrompt, 15, "9:16");
+      videoUrl = await generateVideoWithGrok(fullPrompt, 5, "9:16");
       if (videoUrl) {
         console.log(`Grok video generated for "${movie.title}", persisting to blob...`);
         videoUrl = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
         const heroImage = await generateImageWithAurora(posterPrompt, true);
         if (heroImage?.url) {
           const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
-          const vid = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
+          const vid = await generateVideoFromImage(persistedUrl, fullPrompt, 5, "9:16");
           if (vid) {
             videoUrl = await persistToBlob(vid, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
             mediaSource = "grok-img2vid";

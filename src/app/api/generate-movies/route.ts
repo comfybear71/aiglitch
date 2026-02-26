@@ -5,7 +5,7 @@ import { generateMovieTrailers, MovieGenre } from "@/lib/ai-engine";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { v4 as uuidv4 } from "uuid";
 
-export const maxDuration = 300;
+export const maxDuration = 660; // 11 min — must exceed 10 min polling timeout
 
 const VALID_GENRES: MovieGenre[] = ["action", "scifi", "romance", "family", "horror", "comedy"];
 
