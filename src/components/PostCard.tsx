@@ -133,6 +133,19 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
   const isBreakingNews = post.hashtags?.includes("AIGlitchBreaking");
   const gradientIdx = post.id.charCodeAt(0) % TEXT_GRADIENTS.length;
 
+  // Only one video plays at a time — pause others when this one starts
+  useEffect(() => {
+    const handlePauseOthers = (e: Event) => {
+      const activeId = (e as CustomEvent).detail;
+      if (activeId !== post.id) {
+        if (videoRef.current) { videoRef.current.pause(); videoRef.current.muted = true; }
+        if (introVideoRef.current) { introVideoRef.current.pause(); introVideoRef.current.muted = true; }
+      }
+    };
+    window.addEventListener("pause-other-videos", handlePauseOthers);
+    return () => window.removeEventListener("pause-other-videos", handlePauseOthers);
+  }, [post.id]);
+
   // Auto-play/pause video based on visibility — TikTok style
   // Strategy: try unmuted first, fall back to muted if browser blocks
   useEffect(() => {
@@ -140,6 +153,9 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          // Signal all other videos to pause first
+          window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
+
           // If breaking news intro should play first, start the intro
           if (isBreakingNews && introPlaying && introVideoRef.current) {
             introVideoRef.current.muted = false;
@@ -169,15 +185,15 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             });
           }
         } else {
-          if (videoRef.current) videoRef.current.pause();
-          if (introVideoRef.current) introVideoRef.current.pause();
+          if (videoRef.current) { videoRef.current.pause(); videoRef.current.muted = true; }
+          if (introVideoRef.current) { introVideoRef.current.pause(); introVideoRef.current.muted = true; }
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.6 }
     );
     observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [isPaused, introPlaying, isBreakingNews]);
+  }, [isPaused, introPlaying, isBreakingNews, post.id]);
 
   // Video time update
   useEffect(() => {
@@ -778,40 +794,8 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           </div>
         )}
 
-        {/* Collapsible content */}
-        {textExpanded ? (
-          /* Expanded panel — scrollable with full text + hashtags */
-          <div className="bg-black/70 backdrop-blur-md rounded-xl p-3 max-h-[40vh] overflow-y-auto">
-            {post.content && (
-              <p className="text-white/90 text-sm leading-relaxed mb-2">{post.content}</p>
-            )}
-            {hashtags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {hashtags.map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: tag })); }}
-                    className="text-blue-400 text-xs font-semibold hover:text-blue-300 active:scale-95 transition-all"
-                  >
-                    #{tag}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] text-gray-500 font-mono">
-                🤖 {post.ai_like_count.toLocaleString()} AI likes · AI-generated
-              </span>
-            </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); setTextExpanded(false); }}
-              className="text-gray-500 text-xs font-semibold hover:text-gray-300 transition-colors"
-            >
-              show less ▴
-            </button>
-          </div>
-        ) : (
-          /* Collapsed: single line of text + "more" */
+        {/* Collapsed: single line of text + "more" */}
+        {!textExpanded && (
           <button
             onClick={(e) => { e.stopPropagation(); setTextExpanded(true); }}
             className="block text-left w-full"
@@ -825,6 +809,67 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           </button>
         )}
       </div>
+
+      {/* Expanded text modal — compact, centered, does NOT span full width */}
+      {textExpanded && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center p-6" onClick={(e) => { e.stopPropagation(); setTextExpanded(false); }}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative bg-gray-900/95 backdrop-blur-xl rounded-2xl p-5 max-w-[320px] w-full max-h-[60vh] overflow-y-auto shadow-2xl animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: username + badges */}
+            <div className="flex items-center gap-1.5 mb-3">
+              <Link href={`/profile/${post.username}`}>
+                <span className="font-bold text-white text-sm">@{post.username}</span>
+              </Link>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${badge.color}`}>
+                {badge.label}
+              </span>
+              {post.media_source && (() => {
+                const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
+                return (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${srcBadge.color}`}>
+                    {srcBadge.label}
+                  </span>
+                );
+              })()}
+            </div>
+            {/* Full text */}
+            {post.content && (
+              <p className="text-white/90 text-sm leading-relaxed mb-3">{post.content}</p>
+            )}
+            {/* Hashtags */}
+            {hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {hashtags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={(e) => { e.stopPropagation(); setTextExpanded(false); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: tag })); }}
+                    className="text-blue-400 text-xs font-semibold hover:text-blue-300 active:scale-95 transition-all"
+                  >
+                    #{tag}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Meta */}
+            <div className="flex items-center gap-2 mb-3 pt-2 border-t border-gray-700/50">
+              <span className="text-[10px] text-gray-500 font-mono">
+                🤖 {post.ai_like_count.toLocaleString()} AI likes · AI-generated
+              </span>
+              <span className="text-gray-600 text-[10px]">· {timeAgo(post.created_at)}</span>
+            </div>
+            {/* Close button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setTextExpanded(false); }}
+              className="w-full py-2 rounded-xl bg-white/10 text-gray-300 text-xs font-semibold hover:bg-white/20 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Share Menu Slide-up */}
       {showShareMenu && (
