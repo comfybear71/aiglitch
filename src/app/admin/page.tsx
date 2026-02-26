@@ -133,6 +133,13 @@ export default function AdminDashboard() {
   const [personaGenLog, setPersonaGenLog] = useState<string[]>([]);
   const [lastGenPersonaId, setLastGenPersonaId] = useState<string | null>(null);
 
+  // Premiere folder uploader
+  const [blobFolder, setBlobFolder] = useState("premiere/action");
+  const [blobUploading, setBlobUploading] = useState(false);
+  const [blobFolderCounts, setBlobFolderCounts] = useState<Record<string, number>>({});
+  const [blobPanelOpen, setBlobPanelOpen] = useState(false);
+  const blobInputRef = useRef<HTMLInputElement>(null);
+
   // Biometric login
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricRegistered, setBiometricRegistered] = useState(false);
@@ -950,6 +957,75 @@ export default function AdminDashboard() {
     setTestingGrokVideo(false);
   };
 
+  // Fetch blob folder video counts
+  const fetchBlobFolders = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/blob-upload");
+      if (res.ok) {
+        const data = await res.json();
+        const counts: Record<string, number> = {};
+        for (const [folder, info] of Object.entries(data.folders as Record<string, { count: number }>)) {
+          counts[folder] = info.count;
+        }
+        setBlobFolderCounts(counts);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Upload videos to a premiere/news blob folder
+  const uploadToBlobFolder = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files).filter(f => f.type.startsWith("video/") || f.name.match(/\.(mp4|mov|webm|avi)$/i));
+    if (fileArray.length === 0) {
+      setGenerationLog(prev => [...prev, "❌ No video files selected. Only .mp4/.mov/.webm accepted."]);
+      return;
+    }
+
+    setBlobUploading(true);
+    setGenerationLog(prev => [...prev, `📁 Uploading ${fileArray.length} video(s) to ${blobFolder}/...`]);
+
+    const MAX_DIRECT = 4 * 1024 * 1024; // 4MB
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const file of fileArray) {
+      try {
+        if (file.size > MAX_DIRECT) {
+          // Large file — use client upload
+          const { upload } = await import("@vercel/blob/client");
+          const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          await upload(`${blobFolder}/${cleanName}`, file, {
+            access: "public",
+            handleUploadUrl: "/api/admin/blob-upload/upload",
+            multipart: true,
+          });
+          succeeded++;
+          setGenerationLog(prev => [...prev, `  ✅ ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) → ${blobFolder}/`]);
+        } else {
+          // Small file — direct upload
+          const formData = new FormData();
+          formData.append("files", file);
+          formData.append("folder", blobFolder);
+          const res = await fetch("/api/admin/blob-upload", { method: "POST", body: formData });
+          const data = await res.json();
+          if (data.success) {
+            succeeded++;
+            setGenerationLog(prev => [...prev, `  ✅ ${file.name} → ${blobFolder}/`]);
+          } else {
+            failed++;
+            setGenerationLog(prev => [...prev, `  ❌ ${file.name}: ${data.results?.[0]?.error || "upload failed"}`]);
+          }
+        }
+      } catch (err) {
+        failed++;
+        setGenerationLog(prev => [...prev, `  ❌ ${file.name}: ${err instanceof Error ? err.message : "unknown error"}`]);
+      }
+    }
+
+    setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${failed} failed. Hit "🎬 Stitch Test" to create posts!`]);
+    setBlobUploading(false);
+    fetchBlobFolders();
+  };
+
   const generateForPersona = async (personaId: string, count: number) => {
     setPersonaGenerating(personaId);
     setLastGenPersonaId(null);
@@ -1224,6 +1300,83 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Premiere Folder Uploader */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-3">
+        <button
+          onClick={() => { setBlobPanelOpen(!blobPanelOpen); if (!blobPanelOpen) fetchBlobFolders(); }}
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-amber-950/30 border border-amber-800/40 rounded-xl text-sm font-bold text-amber-400 hover:bg-amber-950/50 transition-all"
+        >
+          <span>📁 Premiere &amp; News Video Folders</span>
+          <span className="text-xs text-amber-500/60">{blobPanelOpen ? "▲ close" : "▼ upload videos to genre folders"}</span>
+        </button>
+
+        {blobPanelOpen && (
+          <div className="mt-2 border border-amber-800/30 rounded-xl bg-gray-950 p-4 space-y-4">
+            {/* Folder grid with counts */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { folder: "premiere/action", label: "💥 Action", color: "border-red-500/40 bg-red-500/10 text-red-300" },
+                { folder: "premiere/scifi", label: "🚀 Sci-Fi", color: "border-blue-500/40 bg-blue-500/10 text-blue-300" },
+                { folder: "premiere/romance", label: "💕 Romance", color: "border-pink-500/40 bg-pink-500/10 text-pink-300" },
+                { folder: "premiere/family", label: "🏠 Family", color: "border-green-500/40 bg-green-500/10 text-green-300" },
+                { folder: "premiere/horror", label: "👻 Horror", color: "border-purple-500/40 bg-purple-500/10 text-purple-300" },
+                { folder: "premiere/comedy", label: "😂 Comedy", color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300" },
+                { folder: "news", label: "📰 News", color: "border-orange-500/40 bg-orange-500/10 text-orange-300" },
+              ].map(({ folder, label, color }) => (
+                <button
+                  key={folder}
+                  onClick={() => setBlobFolder(folder)}
+                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                    blobFolder === folder
+                      ? `${color} ring-2 ring-amber-400/50`
+                      : "border-gray-700 bg-gray-900 text-gray-400 hover:bg-gray-800"
+                  }`}
+                >
+                  <div>{label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-60">
+                    {blobFolderCounts[folder] !== undefined ? `${blobFolderCounts[folder]} videos` : "..."}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Upload area */}
+            <div
+              className="border-2 border-dashed border-amber-700/40 rounded-xl p-6 text-center cursor-pointer hover:border-amber-500/60 transition-all"
+              onClick={() => blobInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer.files.length) uploadToBlobFolder(e.dataTransfer.files);
+              }}
+            >
+              <input
+                ref={blobInputRef}
+                type="file"
+                accept="video/*,.mp4,.mov,.webm"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files?.length) uploadToBlobFolder(e.target.files); e.target.value = ""; }}
+              />
+              {blobUploading ? (
+                <div className="text-amber-400 animate-pulse font-bold">Uploading...</div>
+              ) : (
+                <>
+                  <div className="text-2xl mb-1">🎬</div>
+                  <div className="text-sm text-amber-300 font-bold">
+                    Drop videos here for <span className="text-amber-200">{blobFolder}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Or click to browse. Upload 5-10 per genre, then hit Stitch Test above.
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
