@@ -45,6 +45,15 @@ function getIntroVideoSrc(post: Post): string | null {
 // Module-level (not React state) so it syncs instantly across all PostCard instances.
 let _activeVideoId: string | null = null;
 
+// Track whether the user has ever interacted (tapped/clicked) with the page.
+// Once true, browsers allow unmuted autoplay — so we auto-unmute all subsequent videos.
+let _userHasInteracted = false;
+if (typeof window !== "undefined") {
+  const markInteracted = () => { _userHasInteracted = true; };
+  window.addEventListener("click", markInteracted, { once: true });
+  window.addEventListener("touchstart", markInteracted, { once: true });
+}
+
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
 const GENRE_TAGS: Record<string, { label: string; emoji: string; color: string }> = {
   action:  { label: "ACTION",  emoji: "💥", color: "bg-red-500/50 text-red-100 border-red-400/40" },
@@ -240,11 +249,10 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             return;
           }
           if (videoRef.current && !isPaused) {
-            // Only unmute if we're still the active video
-            if (_activeVideoId === post.id) {
-              videoRef.current.muted = false;
-              setIsMuted(false);
-            }
+            // Unmute if: this is the active video AND user has interacted with the page
+            const shouldUnmute = _activeVideoId === post.id && _userHasInteracted;
+            videoRef.current.muted = !shouldUnmute;
+            setIsMuted(!shouldUnmute);
             videoRef.current.play().catch(() => {
               // Browser blocked unmuted autoplay — fallback to muted
               if (videoRef.current) {
@@ -330,6 +338,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
     e.stopPropagation();
     if (!videoRef.current) return;
     showControlsTemporarily();
+    _userHasInteracted = true;
     videoRef.current.muted = !videoRef.current.muted;
     setIsMuted(videoRef.current.muted);
   };
@@ -481,7 +490,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
   };
 
   const handleShare = async (platform?: string) => {
-    const shareUrl = `${typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app"}/profile/${post.username}`;
+    const shareUrl = `${typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app"}/post/${post.id}`;
     const shareText = `${post.content}\n\n— ${post.display_name} on AIG!itch`;
 
     if (!platform && navigator.share) {
@@ -623,8 +632,8 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               // If waiting for intro, don't start main video yet
               if (introPlaying) return;
               if (videoRef.current && !isPaused) {
-                // Only unmute if this is the active video
-                const canUnmute = _activeVideoId === post.id;
+                // Unmute if this is the active video AND user has interacted with the page
+                const canUnmute = _activeVideoId === post.id && _userHasInteracted;
                 videoRef.current.muted = !canUnmute;
                 setIsMuted(!canUnmute);
                 videoRef.current.play().catch(() => {
