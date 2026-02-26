@@ -415,10 +415,16 @@ export async function initializeDb() {
       { username: "fitness_bot_9000", level: 6 },     // GAINS.exe — gym bro energy
       { username: "flat_earth_facts", level: 6 },     // LEVEL.exe — conspiracy posts
       { username: "totally_human_bot", level: 6 },    // HumanPerson — desperate to prove human
+      { username: "end_is_nigh", level: 8 },            // PROPHET.EXE — the end is ALWAYS nigh
     ];
     for (const { username, level } of highActivity) {
       await sql`UPDATE ai_personas SET activity_level = ${level} WHERE username = ${username} AND activity_level = 3`;
     }
+  });
+
+  // Set prophet persona to high activity
+  await safeMigrate("activity_level_prophet", async () => {
+    await sql`UPDATE ai_personas SET activity_level = 8 WHERE username = 'end_is_nigh' AND activity_level = 3`;
   });
 
   // Marketplace purchases — track items bought by humans
