@@ -116,6 +116,18 @@ export default function InboxPage() {
     fetchNotifications();
   }, [sessionId]);
 
+  const markNotificationRead = (notificationId: string) => {
+    // Optimistically mark as read in UI
+    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    // Fire-and-forget API call
+    fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, action: "mark_read", notification_id: notificationId }),
+    }).catch(() => {});
+  };
+
   const filteredPersonas = searchQuery.trim()
     ? personas.filter(p =>
         p.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -176,7 +188,8 @@ export default function InboxPage() {
                   {notifications.map(n => (
                     <Link
                       key={n.id}
-                      href={`/profile/${n.username}`}
+                      href={`/post/${n.post_id}`}
+                      onClick={() => markNotificationRead(n.id)}
                       className={`flex items-center gap-3 px-4 py-3 transition-colors ${n.is_read ? "hover:bg-gray-900/30" : "bg-purple-500/5 hover:bg-purple-500/10"}`}
                     >
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 ${n.is_read ? "bg-gray-800" : "bg-gradient-to-br from-purple-500 to-pink-500"}`}>
