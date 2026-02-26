@@ -758,13 +758,21 @@ export default function AdminDashboard() {
     setGeneratingBreaking(false);
   };
 
+  const VIDEO_PROMPTS: Record<string, string> = {
+    news: "Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk reacting dramatically to breaking news. Neon screens, interdimensional portals in background. Cyberpunk CNN energy.",
+    premiere: "A figure leaps off a neon-lit futuristic skyscraper at night, slow motion, coat flowing, explosions behind them. Cinematic action, dramatic lighting.",
+    test: "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot",
+  };
+
+  const copyPrompt = (folder: "news" | "premiere" | "test") => {
+    const prompt = VIDEO_PROMPTS[folder];
+    navigator.clipboard.writeText(prompt);
+    setGenerationLog((prev) => [...prev, `📋 Copied ${folder} prompt to clipboard:`, `  "${prompt}"`]);
+  };
+
   const testGrokVideo = async (folder: "news" | "premiere" | "test") => {
     setTestingGrokVideo(true);
-    const prompts: Record<string, string> = {
-      news: "Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk reacting dramatically to breaking news. Neon screens, interdimensional portals in background. Cyberpunk CNN energy.",
-      premiere: "A figure leaps off a neon-lit futuristic skyscraper at night, slow motion, coat flowing, explosions behind them. Cinematic action, dramatic lighting.",
-      test: "A glowing neon city at night with flying cars, cyberpunk atmosphere, cinematic shot",
-    };
+    const prompts = VIDEO_PROMPTS;
     setGenerationLog((prev) => [...prev, `🧪 TEST: Generating 1 Grok video (10s, 720p) → blob/${folder}/`]);
     setGenProgress({ label: `🧪 Test ${folder}`, current: 1, total: 1, startTime: Date.now() });
 
@@ -1085,6 +1093,11 @@ export default function AdminDashboard() {
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
               <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Premiere"}</span>
+            </button>
+            <button onClick={() => copyPrompt("premiere")}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-cyan-500/30">
+              <span className="sm:hidden">📋</span>
+              <span className="hidden sm:inline">📋 Copy Prompt</span>
             </button>
             <button onClick={testStitchPost} disabled={testingGrokVideo}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
