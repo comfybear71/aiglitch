@@ -694,35 +694,84 @@ export default function AdminDashboard() {
   const triggerVideoGeneration = async () => {
     setGeneratingVideos(true);
     const total = 5;
-    setGenerationLog((prev) => [...prev, `🎥 Generating ${total} Grok videos (1 at a time, up to ~5 min each)...`]);
-    let successCount = 0;
-    for (let i = 0; i < total; i++) {
-      try {
-        setGenProgress({ label: "🎥 Video", current: i + 1, total, startTime: Date.now() });
-        setGenerationLog((prev) => [...prev, `🎥 Video ${i + 1}/${total}: generating...`]);
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 11 * 60 * 1000);
-        const res = await fetch("/api/generate-videos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ count: 1 }),
-          signal: ctrl.signal,
-        });
-        clearTimeout(timer);
-        const data = await res.json();
-        if (data.success && data.videos?.[0]) {
-          const v = data.videos[0];
-          setGenerationLog((prev) => [...prev, `  ${v.status === "success" ? "✅" : "❌"} "${v.title}" (${v.genre})`]);
-          if (v.status === "success") successCount++;
-        } else {
-          setGenerationLog((prev) => [...prev, `  ❌ Video ${i + 1} error: ${data.error || "unknown"}`]);
+    setGenerationLog((prev) => [...prev, `🎥 Submitting ${total} videos to Grok...`]);
+
+    // Phase 1: Submit all videos (fast — returns request_ids immediately)
+    let jobs: { requestId: string | null; title: string; genre: string; tagline: string; error?: string }[] = [];
+    try {
+      setGenProgress({ label: "🎥 Submitting", current: 1, total: 1, startTime: Date.now() });
+      const res = await fetch("/api/generate-videos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: total }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.jobs) {
+        setGenerationLog((prev) => [...prev, `  ❌ Submit failed: ${data.error || "unknown"}`]);
+        setGenProgress(null);
+        setGeneratingVideos(false);
+        return;
+      }
+      jobs = data.jobs;
+      const submitted = jobs.filter((j: { requestId: string | null }) => j.requestId).length;
+      setGenerationLog((prev) => [...prev, `  📡 ${submitted}/${jobs.length} submitted to xAI. Polling for completion...`]);
+      for (const job of jobs) {
+        if (job.error) {
+          setGenerationLog((prev) => [...prev, `  ❌ "${job.title}" submit failed: ${job.error}`]);
         }
-      } catch (err) {
-        setGenerationLog((prev) => [...prev, `  ❌ Video ${i + 1} failed: ${err instanceof Error ? err.message : "unknown"}`]);
+      }
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `  ❌ Submit error: ${err instanceof Error ? err.message : "unknown"}`]);
+      setGenProgress(null);
+      setGeneratingVideos(false);
+      return;
+    }
+
+    // Phase 2: Poll each job until done/failed (client-side, 10s intervals, max 10 min)
+    const activeJobs = jobs.filter((j) => j.requestId);
+    let successCount = 0;
+    for (let i = 0; i < activeJobs.length; i++) {
+      const job = activeJobs[i];
+      setGenProgress({ label: `🎥 "${job.title}"`, current: i + 1, total: activeJobs.length, startTime: Date.now() });
+      setGenerationLog((prev) => [...prev, `  🔄 Polling "${job.title}" (${job.genre})...`]);
+
+      let done = false;
+      for (let attempt = 0; attempt < 60 && !done; attempt++) { // 60 * 10s = 10 min max
+        await new Promise((r) => setTimeout(r, 10_000));
+        try {
+          const params = new URLSearchParams({
+            id: job.requestId!,
+            title: job.title,
+            genre: job.genre,
+            tagline: job.tagline,
+          });
+          const pollRes = await fetch(`/api/generate-videos?${params}`);
+          const pollData = await pollRes.json();
+
+          if (pollData.status === "done" && pollData.success) {
+            setGenerationLog((prev) => [...prev, `  ✅ "${job.title}" (${job.genre}) — video posted!`]);
+            successCount++;
+            done = true;
+          } else if (pollData.status === "pending") {
+            if (attempt % 6 === 5) { // Log every ~60s
+              setGenerationLog((prev) => [...prev, `  ⏳ "${job.title}" still generating... (${Math.round((attempt + 1) * 10 / 60)}min)`]);
+            }
+          } else {
+            // failed, expired, moderation_failed, error
+            setGenerationLog((prev) => [...prev, `  ❌ "${job.title}" ${pollData.status}: ${pollData.error || ""}`]);
+            done = true;
+          }
+        } catch (err) {
+          setGenerationLog((prev) => [...prev, `  ⚠️ "${job.title}" poll error: ${err instanceof Error ? err.message : "unknown"}`]);
+        }
+      }
+      if (!done) {
+        setGenerationLog((prev) => [...prev, `  ❌ "${job.title}" timed out after 10 minutes`]);
       }
     }
+
     setGenProgress(null);
-    setGenerationLog((prev) => [...prev, `🎥 Done: ${successCount}/${total} videos created`]);
+    setGenerationLog((prev) => [...prev, `🎥 Done: ${successCount}/${activeJobs.length} videos created & posted`]);
     fetchStats();
     setGeneratingVideos(false);
   };
@@ -815,6 +864,44 @@ export default function AdminDashboard() {
     if (!prompt) return;
     navigator.clipboard.writeText(prompt);
     setGenerationLog((prev) => [...prev, `📋 Copied ${key} prompt to clipboard:`, `  "${prompt}"`]);
+  };
+
+  const testGrokImage = async () => {
+    setTestingGrokVideo(true);
+    const prompt = "A glowing neon cyberpunk city at night with flying cars, in Rick and Morty cartoon style, thick outlines, bright saturated colors";
+    setGenerationLog((prev) => [...prev, `🧪 TEST: Generating 1 Grok image...`]);
+    setGenerationLog((prev) => [...prev, `  Prompt: "${prompt}"`]);
+    setGenProgress({ label: "🧪 Image", current: 1, total: 1, startTime: Date.now() });
+
+    try {
+      const res = await fetch("/api/test-grok-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setGenerationLog((prev) => [
+          ...prev,
+          `  ✅ IMAGE GENERATED! Model: ${data.model}`,
+          `  🖼️ URL: ${data.imageUrl?.slice(0, 120)}...`,
+          `  ✅ Grok API is WORKING. Your key is valid.`,
+        ]);
+      } else {
+        setGenerationLog((prev) => [
+          ...prev,
+          `  ❌ FAILED: ${data.error}`,
+          data.hasKey === false ? `  🔑 XAI_API_KEY is NOT set in environment variables!` : `  🔑 API key is set but request failed.`,
+          `  Model attempted: ${data.model || "unknown"}`,
+        ]);
+      }
+    } catch (err) {
+      setGenerationLog((prev) => [...prev, `  ❌ Network error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+
+    setGenProgress(null);
+    setTestingGrokVideo(false);
   };
 
   const testGrokVideo = async (folder: "news" | "premiere" | "test") => {
@@ -1203,30 +1290,10 @@ export default function AdminDashboard() {
               <span className="sm:hidden">{generating ? "..." : "⚡"}</span>
               <span className="hidden sm:inline">{generating ? "Generating..." : "⚡ Generate"}</span>
             </button>
-            <button onClick={triggerMovieGeneration} disabled={generatingMovies}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{generatingMovies ? "..." : "🎬"}</span>
-              <span className="hidden sm:inline">{generatingMovies ? "Generating..." : "🎬 Movies"}</span>
-            </button>
-            <button onClick={triggerVideoGeneration} disabled={generatingVideos}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-cyan-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{generatingVideos ? "..." : "🎥"}</span>
-              <span className="hidden sm:inline">{generatingVideos ? "Generating..." : "🎥 5 Videos"}</span>
-            </button>
-            <button onClick={triggerBreakingVideos} disabled={generatingBreaking}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-red-500/20 text-red-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-red-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{generatingBreaking ? "..." : "🔴"}</span>
-              <span className="hidden sm:inline">{generatingBreaking ? "Generating..." : "🔴 10 Breaking"}</span>
-            </button>
-            <button onClick={() => testGrokVideo("news")} disabled={testingGrokVideo}
+            <button onClick={testGrokImage} disabled={testingGrokVideo}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test News"}</span>
-            </button>
-            <button onClick={() => testGrokVideo("premiere")} disabled={testingGrokVideo}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
-              <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Premiere"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Grok"}</span>
             </button>
             <button onClick={testStitchPost} disabled={testingGrokVideo}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
@@ -1262,11 +1329,16 @@ export default function AdminDashboard() {
                   {(generating || genProgress) ? "Generation in progress..." : "Generation complete"}
                 </h3>
               </div>
-              {!generating && !genProgress && (
+              <div className="flex items-center gap-2">
                 <button onClick={() => setGenerationLog([])} className="text-xs text-gray-500 hover:text-gray-300">
-                  Dismiss
+                  Clear
                 </button>
-              )}
+                {!generating && !genProgress && (
+                  <button onClick={() => setGenerationLog([])} className="text-xs text-gray-500 hover:text-gray-300">
+                    Dismiss
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Progress bar with timer */}
