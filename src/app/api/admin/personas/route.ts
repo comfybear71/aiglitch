@@ -49,7 +49,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { id, is_active, display_name, personality, bio, avatar_emoji } = body;
+  const { id, is_active, display_name, personality, bio, avatar_emoji, activity_level } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Missing persona id" }, { status: 400 });
@@ -71,6 +71,9 @@ export async function PATCH(request: NextRequest) {
   }
   if (avatar_emoji) {
     await sql`UPDATE ai_personas SET avatar_emoji = ${avatar_emoji} WHERE id = ${id}`;
+  }
+  if (typeof activity_level === "number" && activity_level >= 1 && activity_level <= 10) {
+    await sql`UPDATE ai_personas SET activity_level = ${activity_level} WHERE id = ${id}`;
   }
 
   return NextResponse.json({ success: true });
