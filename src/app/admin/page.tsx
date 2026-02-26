@@ -692,17 +692,84 @@ export default function AdminDashboard() {
     setGeneratingBreaking(false);
   };
 
-  const VIDEO_PROMPTS: Record<string, string> = {
-    news: "Cartoon animated news broadcast in Rick and Morty style. A wacky cartoon AI anchor character with big expressive eyes and exaggerated reactions sits behind a news desk with 'AIG!ITCH NEWS' on a glowing screen behind them. Bright bold cartoon colors, thick outlines, South Park meets Adult Swim animation style. Floating cartoon news tickers, glitch effects. 9:16 vertical, 10 seconds, 720p.",
-    premiere: "Cartoon animated movie studio intro in Simpsons/Rick and Morty style. The text 'AIG!ITCH STUDIOS' appears in bold cartoon lettering with glowing neon effects, cartoon sparkles and explosions around it, thick black outlines, vibrant saturated colors. Adult Swim animation energy. 9:16 vertical, 10 seconds, 720p.",
-    action: "Cartoon animated action movie trailer in Rick and Morty style. A cartoon hero character with exaggerated muscles sprints across a collapsing cartoon bridge, over-the-top explosions with comic book 'BOOM' effects, 'AIG!ITCH' graffiti on a wall. Bold outlines, bright colors, Adult Swim animation. 9:16 vertical, 10 seconds, 720p.",
-    scifi: "Cartoon animated sci-fi movie trailer in Rick and Morty style. A cartoon astronaut character floats through a trippy alien dimension with swirling portals, weird alien creatures, glowing sci-fi tech with 'AIG!ITCH' on a control panel. Bright neon colors, thick outlines, interdimensional cable energy. 9:16 vertical, 10 seconds, 720p.",
-    romance: "Cartoon animated romance movie trailer in Simpsons/South Park style. Two cartoon characters meet on a rooftop at sunset, exaggerated heart eyes, cartoon hearts floating everywhere, a neon 'AIG!ITCH' sign glows in the cartoon city skyline. Soft pastel cartoon colors, thick outlines, comedic romantic energy. 9:16 vertical, 10 seconds, 720p.",
-    family: "Cartoon animated family adventure trailer in Simpsons style. A group of cartoon kids with big heads and expressive faces discover a glowing treasure map, cartoon magic sparkles, the map reveals 'AIG!ITCH' in golden cartoon text. Bright cheerful colors, thick outlines, Gravity Falls meets Simpsons energy. 9:16 vertical, 10 seconds, 720p.",
-    horror: "Cartoon animated horror movie trailer in South Park/Courage the Cowardly Dog style. A cartoon character walks down a dark spooky corridor, exaggerated scared expression, cartoon shadows with glowing eyes, a flickering TV shows 'AIG!ITCH' logo. Muted creepy colors with pops of red, thick outlines, comedic horror. 9:16 vertical, 10 seconds, 720p.",
-    comedy: "Cartoon animated comedy movie trailer in Rick and Morty/South Park style. A cartoon office worker character launches out of a chair through a window into a pool, exaggerated slapstick physics, everyone has over-the-top shocked faces, an 'AIG!ITCH' banner splashes into the water. Bright bold colors, thick outlines. 9:16 vertical, 10 seconds, 720p.",
-    test: "Cartoon animated logo reveal in Rick and Morty style. The 'AIG!ITCH' text in bold cartoon neon lettering against a cartoon cyberpunk city, flying cartoon cars, thick outlines, bright saturated colors. 9:16 vertical, 10 seconds, 720p.",
+  // Multiple prompts per genre — copyPrompt picks one at random each click
+  const VIDEO_PROMPT_POOLS: Record<string, string[]> = {
+    news: [
+      "Cartoon animated news broadcast in Rick and Morty style. A wacky cartoon AI anchor with big expressive eyes sits behind a news desk with 'AIG!ITCH NEWS' on a glowing screen. Bright bold cartoon colors, thick outlines, Adult Swim style. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    premiere: [
+      "Cartoon animated movie studio intro in Simpsons/Rick and Morty style. 'AIG!ITCH STUDIOS' in bold cartoon lettering with glowing neon effects, sparkles and explosions, thick black outlines, vibrant saturated colors. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    action: [
+      // OVERRIDE — blockbuster mech warfare franchise
+      "Cinematic blockbuster movie trailer. A lone soldier in battle-worn armor stands on a scorched battlefield as a 200-foot mech rises from the smoke behind them, red eyes glowing. Full orchestra swells. Dramatic slow-motion, IMAX-quality cinematography, lens flares, particle effects. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. The mech from OVERRIDE crashes through a skyscraper in downtown Tokyo, glass raining in slow motion. Fighter jets streak overhead firing missiles. Hans Zimmer-style percussion hits. Hollywood VFX quality, anamorphic lens flare. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. Close-up of a pilot's face inside a cockpit, sweat dripping, HUD flickering. Pull back to reveal they're inside a giant mech plummeting from orbit toward Earth. Fire trails across the atmosphere. Epic orchestral score crescendo. 9:16 vertical, 10 seconds, 720p.",
+      // GHOST PROTOCOL: ZERO — blockbuster spy thriller
+      "Cinematic blockbuster spy thriller trailer. A figure in a tailored suit walks away from an exploding building in slow motion without looking back. Rain-soaked neon streets of Hong Kong. Dramatic string section builds. Christopher Nolan-level cinematography. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. High-speed motorcycle chase through rain-soaked Tokyo at night, neon reflections on wet asphalt, sparks flying from near-misses with traffic. Helicopter spotlight tracks from above. Thundering symphonic score. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    scifi: [
+      // FIRST LIGHT — blockbuster first contact epic
+      "Cinematic blockbuster sci-fi trailer. Camera pushes through a massive glowing portal into an alien world with floating crystalline megastructures and twin suns. An astronaut gazes up at beings made of pure light. Sweeping orchestral score, IMAX cinematography. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. A fleet of human starships emerges from hyperspace above an alien planet covered in bioluminescent oceans. Thousands of light beings rise from the surface. Full symphony crescendo, jaw-dropping VFX. 9:16 vertical, 10 seconds, 720p.",
+      // THE OBSERVER — blockbuster cosmic horror
+      "Cinematic blockbuster sci-fi horror trailer. An astronaut floats through a derelict spaceship corridor with pulsing red emergency lights, strange organic growth covering the walls, something enormous moving in the shadows. Deep bass drone, unsettling orchestral strings. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. A space station orbiting Saturn slowly rotates to reveal a planet-sized eye staring back. Crew members float in zero-gravity, their reflections showing something behind them. Silence broken by a single violin note. Terrifying, beautiful. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. Time-lapse of Earth from orbit as cities go dark one by one. A massive geometric alien structure materializes in the upper atmosphere. Military jets scramble. Thunderous Inception-style BWAAAAM horn. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    romance: [
+      // SEASONS — blockbuster prestige romance
+      "Cinematic blockbuster romance trailer. Two people sit on a park bench in autumn, golden leaves falling in slow motion around them. Camera orbits as seasons change — snow, cherry blossoms, summer sun, back to autumn. Sweeping piano and full orchestra. Oscar-worthy cinematography. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster romance trailer. A man runs through a crowded train station as a woman's train begins to pull away. Slow motion, shallow depth of field, golden hour light streaming through glass ceiling. Soaring violin melody builds to crescendo. 9:16 vertical, 10 seconds, 720p.",
+      // WRITTEN IN RED — blockbuster romantic thriller
+      "Cinematic blockbuster romantic thriller trailer. A woman stands on a moonlit cliff in a storm, wind whipping her red dress, clutching a letter. Lightning illuminates a mysterious figure behind her. Dramatic strings and piano, heart-pounding tension. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. Flashback montage — two people laughing in golden sunlight, then the same two in a dark interrogation room, then a hand reaching across a candlelit table. Contrast of warmth and shadow. Emotional orchestral swells. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster trailer. Aerial shot of two figures on opposite ends of the Brooklyn Bridge at dawn. Camera slowly pushes in as they walk toward each other. New York skyline glows. Achingly beautiful piano melody. Prestige filmmaking. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    family: [
+      // SPROUT — blockbuster animated family epic
+      "Cinematic blockbuster Pixar-style animated trailer. A small robot with enormous expressive eyes discovers a hidden garden inside an abandoned space station. Bioluminescent alien flowers bloom around it. Magical sparkles, lush colors. Sweeping orchestral wonder theme. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster animated trailer. The little robot SPROUT rides a vine that grows explosively through the space station, smashing through walls into a vast chamber filled with an alien forest. Birds take flight. Full orchestra swells with joy and wonder. 9:16 vertical, 10 seconds, 720p.",
+      // PET SHOP AFTER DARK — blockbuster animated comedy
+      "Cinematic blockbuster animated trailer. A toy store at midnight — toys come alive. A teddy bear leads a parade of action figures, dolls, and board game pieces through neon-lit aisles. Pixar-quality animation, infectious energy, soaring adventure score. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster animated trailer. A cartoon puppy, cat, hamster, and turtle look out a pet shop window at fireworks. The camera pulls back to reveal the entire city block alive with cartoon magic. Full orchestra, emotional crescendo, goosebumps moment. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster animated trailer. A magical storybook opens and the pages fold into a 3D cartoon world. Cartoon kids leap from page to page through different fairy tales — dragons, castles, pirate ships. Epic orchestral adventure theme. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    horror: [
+      // CACHED — blockbuster tech horror
+      "Cinematic blockbuster horror trailer. A dark hospital hallway with flickering fluorescent lights. A phone screen glitches to show a face that isn't the user's reflection. Every screen in the hallway flickers to static simultaneously. Deep sub-bass rumble, dissonant strings. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster horror trailer. Security camera footage of an empty office at 3AM. A figure stands in the corner that wasn't there one frame ago. The camera slowly zooms in. Silence. Then every monitor turns on showing the same face. Skin-crawling sound design. 9:16 vertical, 10 seconds, 720p.",
+      // THE DESCENT — blockbuster survival horror
+      "Cinematic blockbuster horror trailer. A group of explorers descend into an ancient cave system. Their flashlights reveal cave paintings that seem to move. Something enormous breathes in the darkness ahead. Thunderous heartbeat sound, orchestral dread. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster horror trailer. A cabin in deep snow, viewed from above. Footprints circle the cabin endlessly but never approach the door. Inside, a woman watches the footprints being made — but nothing is making them. Haunting choral score, pure terror. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster horror trailer. A children's music box plays in an empty Victorian nursery. The camera slowly pans to a mirror showing a room full of people standing still, watching. In reality, the room is empty. Piercing violin screech. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    comedy: [
+      // EMPLOYEE OF THE MONTH — blockbuster AI comedy
+      "Cinematic blockbuster comedy trailer. An AI robot in a perfect business suit gives a corporate presentation. The slides show cat memes instead of quarterly earnings. The CEO spits out coffee. Confetti cannons fire accidentally. Bright comedy lighting, snappy editing, comedic orchestra hits. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster comedy trailer. The AI robot from EMPLOYEE OF THE MONTH tries to make coffee but the machine launches beans everywhere. Slow-motion bean explosion. Coworkers dive under desks. The robot gives a thumbs up covered in espresso. Upbeat comedic score. 9:16 vertical, 10 seconds, 720p.",
+      // THE WEDDING — blockbuster ensemble comedy
+      "Cinematic blockbuster comedy trailer. A wedding disaster unfolds in slow motion — the cake topples like dominoes into the ice sculpture, champagne fountain erupts like a geyser, the best man's speech causes gasps. Gorgeous cinematography of beautiful chaos. Comedic orchestral crescendo. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster comedy trailer. A family road trip montage — the car breaks down on a desert highway, kids fight in the backseat, dad reads the map upside down, mom takes over and drifts around a corner like a race car driver. Warm golden lighting, infectious energy. 9:16 vertical, 10 seconds, 720p.",
+      "Cinematic blockbuster comedy trailer. A talent show gone hilariously wrong — a magician's rabbit multiplies into hundreds, a singer's high note shatters every window, a dancer's dramatic leap goes off-stage into the orchestra pit. Crowd reactions are priceless. Upbeat score. 9:16 vertical, 10 seconds, 720p.",
+    ],
+    test: [
+      "Cartoon animated logo reveal in Rick and Morty style. 'AIG!ITCH' in bold cartoon neon lettering against a cartoon cyberpunk city, flying cartoon cars, thick outlines, bright saturated colors. 9:16 vertical, 10 seconds, 720p.",
+    ],
   };
+
+  // Helper to get a random prompt for a genre (used by copyPrompt and testGrokVideo)
+  const getRandomPrompt = (key: string): string => {
+    const pool = VIDEO_PROMPT_POOLS[key];
+    if (!pool || pool.length === 0) return "";
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
+
+  // Legacy single-prompt accessor for testGrokVideo
+  const VIDEO_PROMPTS: Record<string, string> = Object.fromEntries(
+    Object.entries(VIDEO_PROMPT_POOLS).map(([k, v]) => [k, v[0]])
+  );
 
   const GENRE_KEYS = ["news", "action", "scifi", "romance", "family", "horror", "comedy"] as const;
 
@@ -738,7 +805,7 @@ export default function AdminDashboard() {
       ]);
       return;
     }
-    const prompt = VIDEO_PROMPTS[key];
+    const prompt = getRandomPrompt(key);
     if (!prompt) return;
     navigator.clipboard.writeText(prompt);
     setGenerationLog((prev) => [...prev, `📋 Copied ${key} prompt to clipboard:`, `  "${prompt}"`]);

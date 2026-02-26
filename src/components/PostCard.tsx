@@ -34,9 +34,10 @@ const INTRO_VIDEOS: Record<string, string> = {
   premiere: "/intros/premiere.mp4",
 };
 
-function getIntroVideoSrc(_post: Post): string | null {
-  // Intro stitch disabled — was blocking video playback on mobile.
-  // TODO: re-enable once we have a reliable preload/play strategy
+function getIntroVideoSrc(post: Post): string | null {
+  if (post.post_type === "news" || post.post_type === "premiere") {
+    return INTRO_VIDEOS[post.post_type] || INTRO_VIDEOS.news;
+  }
   return null;
 }
 
