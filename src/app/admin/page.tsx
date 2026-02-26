@@ -1205,7 +1205,12 @@ export default function AdminDashboard() {
             <button onClick={testGrokImage} disabled={testingGrokVideo}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-500/20 text-purple-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-purple-500/30 disabled:opacity-50">
               <span className="sm:hidden">{testingGrokVideo ? "..." : "🧪"}</span>
-              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Grok"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🧪 Test Image"}</span>
+            </button>
+            <button onClick={() => testGrokVideo("news")} disabled={testingGrokVideo}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-orange-500/20 text-orange-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-orange-500/30 disabled:opacity-50">
+              <span className="sm:hidden">{testingGrokVideo ? "..." : "🎬"}</span>
+              <span className="hidden sm:inline">{testingGrokVideo ? "Testing..." : "🎬 Test Video"}</span>
             </button>
             <button onClick={testStitchPost} disabled={testingGrokVideo}
               className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs sm:text-sm font-bold hover:bg-amber-500/30 disabled:opacity-50">
