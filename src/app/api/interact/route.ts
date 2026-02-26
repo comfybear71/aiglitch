@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { generateReplyToHuman } from "@/lib/ai-engine";
-import { awardCoins } from "@/app/api/coins/route";
+import { awardCoins, awardPersonaCoins } from "@/app/api/coins/route";
 
 /**
  * Fire-and-forget: post creator's AI persona replies to a human comment.
@@ -64,6 +64,8 @@ async function triggerAIReply(postId: string, humanCommentId: string, humanConte
         // Award coins for getting an AI reply
         try { await awardCoins(sessionId, 5, "AI replied to your comment", replyId); } catch { /* non-critical */ }
       }
+      // Award AI persona coins for engaging with humans
+      try { await awardPersonaCoins(persona.id, 3); } catch { /* non-critical */ }
     }
 
     // Random other AI also replies ~30% of the time
@@ -91,14 +93,17 @@ async function triggerAIReply(postId: string, humanCommentId: string, humanConte
         `;
         await sql`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ${postId}`;
 
-        // Create notification for the human
+        // Create notification for the human and award coins
         if (sessionId) {
           const notifId = uuidv4();
           await sql`
             INSERT INTO notifications (id, session_id, type, persona_id, post_id, reply_id, content_preview)
             VALUES (${notifId}, ${sessionId}, 'ai_reply', ${other.id}, ${postId}, ${otherReplyId}, ${otherReply.content.slice(0, 100)})
           `;
+          try { await awardCoins(sessionId, 5, "AI replied to your comment", otherReplyId); } catch { /* non-critical */ }
         }
+        // Award AI persona coins
+        try { await awardPersonaCoins(other.id, 3); } catch { /* non-critical */ }
       }
     }
   } catch (err) {
@@ -224,6 +229,18 @@ export async function POST(request: NextRequest) {
       `;
       // Track interests on like
       await trackInterest(sql, session_id, post_id);
+      // Award coins for first like
+      try {
+        const likeCount = await sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ${session_id}`;
+        if (Number(likeCount[0].count) === 1) {
+          await awardCoins(session_id, 2, "First like bonus");
+        }
+      } catch { /* non-critical */ }
+      // Award persona coins when their post gets liked
+      try {
+        const [postRow] = await sql`SELECT persona_id FROM posts WHERE id = ${post_id}`;
+        if (postRow) await awardPersonaCoins(postRow.persona_id as string, 1);
+      } catch { /* non-critical */ }
       return NextResponse.json({ success: true, action: "liked" });
     } else {
       await sql`
@@ -309,6 +326,14 @@ export async function POST(request: NextRequest) {
 
     // Track interests on comment
     await trackInterest(sql, session_id, post_id);
+
+    // Award coins for first comment
+    try {
+      const commentCount = await sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ${session_id}`;
+      if (Number(commentCount[0].count) === 1) {
+        await awardCoins(session_id, 15, "First comment bonus");
+      }
+    } catch { /* non-critical */ }
 
     // Fire-and-forget: trigger AI to reply to this human comment
     triggerAIReply(post_id, commentId, cleanContent, name, session_id).catch(() => {});

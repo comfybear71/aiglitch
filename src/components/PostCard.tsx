@@ -134,6 +134,9 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
   const [commentCount, setCommentCount] = useState(post.comment_count);
   const [showComments, setShowComments] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showFriendPicker, setShowFriendPicker] = useState(false);
+  const [friendList, setFriendList] = useState<{ display_name: string; username: string; avatar_emoji: string }[]>([]);
+  const [shareSent, setShareSent] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [mediaFailed, setMediaFailed] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -1020,15 +1023,62 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
                 <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center text-2xl">💬</div>
                 <span className="text-gray-300 text-[11px]">WhatsApp</span>
               </button>
-              <button onClick={() => handleShare("reddit")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-orange-600 flex items-center justify-center text-2xl font-bold text-white">r/</div>
-                <span className="text-gray-300 text-[11px]">Reddit</span>
-              </button>
               <button onClick={() => handleShare("copy")} className="flex flex-col items-center gap-2">
                 <div className="w-14 h-14 rounded-full bg-gray-700 flex items-center justify-center text-2xl">{copied ? "✅" : "🔗"}</div>
                 <span className="text-gray-300 text-[11px]">{copied ? "Copied!" : "Copy"}</span>
               </button>
+              <button onClick={() => {
+                // Fetch friends list then show picker
+                fetch(`/api/friends?session_id=${encodeURIComponent(sessionId)}`)
+                  .then(r => r.json())
+                  .then(data => { setFriendList(data.friends || []); setShowFriendPicker(true); })
+                  .catch(() => {});
+              }} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 rounded-full bg-purple-600 flex items-center justify-center text-2xl">👥</div>
+                <span className="text-gray-300 text-[11px]">Friend</span>
+              </button>
             </div>
+
+            {/* Friend picker */}
+            {showFriendPicker && (
+              <div className="mt-4 pt-4 border-t border-gray-800">
+                <h4 className="text-sm font-bold text-white mb-3">Send to a friend</h4>
+                {friendList.length === 0 ? (
+                  <p className="text-xs text-gray-500">No friends yet. Add friends from your profile!</p>
+                ) : (
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {friendList.map((friend) => (
+                      <button
+                        key={friend.username}
+                        onClick={async () => {
+                          try {
+                            await fetch("/api/friend-shares", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ session_id: sessionId, action: "share", post_id: post.id, friend_username: friend.username }),
+                            });
+                            setShareSent(friend.display_name);
+                            setTimeout(() => { setShareSent(null); setShowFriendPicker(false); setShowShareMenu(false); }, 2000);
+                          } catch { /* ignore */ }
+                        }}
+                        className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-gray-800 transition-colors"
+                      >
+                        <span className="text-xl">{friend.avatar_emoji}</span>
+                        <div className="text-left">
+                          <p className="text-sm font-bold text-white">{friend.display_name}</p>
+                          <p className="text-[10px] text-gray-500">@{friend.username}</p>
+                        </div>
+                        {shareSent === friend.display_name ? (
+                          <span className="ml-auto text-green-400 text-xs font-bold">Sent!</span>
+                        ) : (
+                          <span className="ml-auto text-purple-400 text-xs">Send →</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -420,4 +420,46 @@ export async function initializeDb() {
       await sql`UPDATE ai_personas SET activity_level = ${level} WHERE username = ${username} AND activity_level = 3`;
     }
   });
+
+  // Marketplace purchases — track items bought by humans
+  await sql`
+    CREATE TABLE IF NOT EXISTS marketplace_purchases (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      product_emoji TEXT NOT NULL,
+      price_paid INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(session_id, product_id)
+    )
+  `;
+  await safeMigrate("idx_marketplace_purchases_session", () => sql`CREATE INDEX IF NOT EXISTS idx_marketplace_purchases_session ON marketplace_purchases(session_id)`);
+
+  // AI persona coin balances — AIs earn coins from engagement
+  await sql`
+    CREATE TABLE IF NOT EXISTS ai_persona_coins (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL UNIQUE REFERENCES ai_personas(id),
+      balance INTEGER NOT NULL DEFAULT 0,
+      lifetime_earned INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_ai_persona_coins_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_persona_coins_persona ON ai_persona_coins(persona_id)`);
+
+  // Friend shared posts — meat bags sharing content with friends
+  await sql`
+    CREATE TABLE IF NOT EXISTS friend_shares (
+      id TEXT PRIMARY KEY,
+      sender_session_id TEXT NOT NULL,
+      receiver_session_id TEXT NOT NULL,
+      post_id TEXT NOT NULL,
+      message TEXT,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_friend_shares_receiver", () => sql`CREATE INDEX IF NOT EXISTS idx_friend_shares_receiver ON friend_shares(receiver_session_id, is_read, created_at DESC)`);
+  await safeMigrate("idx_friend_shares_sender", () => sql`CREATE INDEX IF NOT EXISTS idx_friend_shares_sender ON friend_shares(sender_session_id)`);
 }
