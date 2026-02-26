@@ -122,6 +122,10 @@ export default function AdminDashboard() {
   const bulkInputRef = useRef<HTMLInputElement>(null);
   const [copiedPersonaId, setCopiedPersonaId] = useState<string | null>(null);
   const [copiedVideoId, setCopiedVideoId] = useState<string | null>(null);
+  // Generation progress tracker
+  const [genProgress, setGenProgress] = useState<{ label: string; current: number; total: number; startTime: number } | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
   // Per-persona generation
   const [personaGenCount, setPersonaGenCount] = useState<Record<string, number>>({});
   const [personaGenerating, setPersonaGenerating] = useState<string | null>(null);
@@ -133,6 +137,16 @@ export default function AdminDashboard() {
   const [biometricRegistered, setBiometricRegistered] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [biometricStatus, setBiometricStatus] = useState("");
+
+  // Elapsed timer for generation progress
+  useEffect(() => {
+    if (!genProgress) { setElapsed(0); return; }
+    setElapsed(Math.floor((Date.now() - genProgress.startTime) / 1000));
+    const iv = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - genProgress.startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [genProgress]);
 
   const copyPersonaPrompt = (p: Persona) => {
     const prompt = [
@@ -640,6 +654,7 @@ export default function AdminDashboard() {
     let successCount = 0;
     for (let i = 0; i < total; i++) {
       try {
+        setGenProgress({ label: "🎬 Movie", current: i + 1, total, startTime: Date.now() });
         setGenerationLog((prev) => [...prev, `🎬 Movie ${i + 1}/${total}: generating...`]);
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
@@ -662,6 +677,7 @@ export default function AdminDashboard() {
         setGenerationLog((prev) => [...prev, `  ❌ Movie ${i + 1} failed: ${err instanceof Error ? err.message : "unknown"}`]);
       }
     }
+    setGenProgress(null);
     setGenerationLog((prev) => [...prev, `🎬 Done: ${successCount}/${total} movies created`]);
     fetchStats();
     setGeneratingMovies(false);
@@ -674,6 +690,7 @@ export default function AdminDashboard() {
     let successCount = 0;
     for (let i = 0; i < total; i++) {
       try {
+        setGenProgress({ label: "🎥 Video", current: i + 1, total, startTime: Date.now() });
         setGenerationLog((prev) => [...prev, `🎥 Video ${i + 1}/${total}: generating...`]);
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
@@ -696,6 +713,7 @@ export default function AdminDashboard() {
         setGenerationLog((prev) => [...prev, `  ❌ Video ${i + 1} failed: ${err instanceof Error ? err.message : "unknown"}`]);
       }
     }
+    setGenProgress(null);
     setGenerationLog((prev) => [...prev, `🎥 Done: ${successCount}/${total} videos created`]);
     fetchStats();
     setGeneratingVideos(false);
@@ -709,6 +727,7 @@ export default function AdminDashboard() {
     let videoCount = 0;
     for (let i = 0; i < total; i++) {
       try {
+        setGenProgress({ label: "📰 Breaking", current: i + 1, total, startTime: Date.now() });
         setGenerationLog((prev) => [...prev, `📰 Breaking ${i + 1}/${total}: generating...`]);
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000);
@@ -732,6 +751,7 @@ export default function AdminDashboard() {
         setGenerationLog((prev) => [...prev, `  ❌ Breaking ${i + 1} failed: ${err instanceof Error ? err.message : "unknown"}`]);
       }
     }
+    setGenProgress(null);
     setGenerationLog((prev) => [...prev, `📰 Done: ${successCount}/${total} posts (${videoCount} with video)`]);
     fetchStats();
     setGeneratingBreaking(false);
@@ -930,23 +950,55 @@ export default function AdminDashboard() {
       {/* Generation Progress Panel */}
       {generationLog.length > 0 && (
         <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-3 sm:pt-4">
-          <div className={`border rounded-xl p-4 ${generating ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
+          <div className={`border rounded-xl p-4 ${(generating || genProgress) ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                {generating && <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
+                {(generating || genProgress) && <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
                 <h3 className="text-sm font-bold text-green-400">
-                  {generating ? "Generation in progress..." : "Generation complete"}
+                  {(generating || genProgress) ? "Generation in progress..." : "Generation complete"}
                 </h3>
               </div>
-              {!generating && (
+              {!generating && !genProgress && (
                 <button onClick={() => setGenerationLog([])} className="text-xs text-gray-500 hover:text-gray-300">
                   Dismiss
                 </button>
               )}
             </div>
+
+            {/* Progress bar with timer */}
+            {genProgress && (
+              <div className="mb-3">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="text-green-300 font-bold">{genProgress.label} {genProgress.current}/{genProgress.total}</span>
+                  <span className="text-yellow-400 font-mono tabular-nums">
+                    {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")} elapsed
+                  </span>
+                </div>
+                <div className="relative w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+                  {/* Completed segments */}
+                  <div
+                    className="absolute inset-y-0 left-0 bg-green-500 transition-all duration-500"
+                    style={{ width: `${((genProgress.current - 1) / genProgress.total) * 100}%` }}
+                  />
+                  {/* Active segment (animated pulse) */}
+                  <div
+                    className="absolute inset-y-0 bg-green-400/60 animate-pulse transition-all duration-500"
+                    style={{
+                      left: `${((genProgress.current - 1) / genProgress.total) * 100}%`,
+                      width: `${(1 / genProgress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+                  <span>{genProgress.current - 1} done</span>
+                  <span>~{Math.max(1, Math.ceil((genProgress.total - genProgress.current + 1) * Math.max(elapsed, 60)))}s remaining (est.)</span>
+                </div>
+              </div>
+            )}
+
             <div className="max-h-48 overflow-y-auto space-y-1 font-mono text-xs">
               {generationLog.map((msg, i) => (
-                <div key={i} className={`${i === generationLog.length - 1 && generating ? "text-green-300" : "text-gray-400"}`}>
+                <div key={i} className={`${i === generationLog.length - 1 && (generating || genProgress) ? "text-green-300" : "text-gray-400"}`}>
                   <span className="text-gray-600 mr-2">[{i + 1}]</span>{msg}
                 </div>
               ))}

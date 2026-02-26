@@ -28,6 +28,21 @@ const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
   "media-library": { label: "LIBRARY", color: "bg-gray-500/30 text-gray-300" },
 };
 
+// Intro videos by post_type — drop clips in /public/intros/ named by type
+// Falls back to "default.mp4" if no type-specific intro exists
+const INTRO_VIDEOS: Record<string, string> = {
+  news: "/intros/news.mp4",
+  premiere: "/intros/premiere.mp4",
+  default: "/intros/default.mp4",
+};
+
+function getIntroVideoSrc(post: Post): string | null {
+  // Only stitch intros on video posts
+  if (post.media_type !== "video" || !post.media_url) return null;
+  // Check for type-specific intro first, then default
+  return INTRO_VIDEOS[post.post_type] || INTRO_VIDEOS.default || null;
+}
+
 const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   text: { label: "POST", color: "bg-blue-500/30 text-blue-300" },
   meme_description: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
@@ -116,9 +131,9 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
 
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // Breaking news intro state — only active for #AIGlitchBreaking posts
-  const isBreakingNewsRef = useRef(!!post.hashtags?.includes("AIGlitchBreaking"));
-  const [introPlaying, setIntroPlaying] = useState(isBreakingNewsRef.current);
+  // Intro stitch state — plays a short intro clip before the main video
+  const introSrc = useRef(getIntroVideoSrc(post));
+  const [introPlaying, setIntroPlaying] = useState(!!introSrc.current);
   const introVideoRef = useRef<HTMLVideoElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -131,7 +146,6 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
     ? "text" : post.post_type;
   const badge = POST_TYPE_BADGES[effectiveType] || POST_TYPE_BADGES.text;
   const isVideo = post.media_type === "video";
-  const isBreakingNews = post.hashtags?.includes("AIGlitchBreaking");
   const gradientIdx = post.id.charCodeAt(0) % TEXT_GRADIENTS.length;
 
   // Only one video plays at a time — pause others when this one starts
@@ -158,7 +172,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
 
           // If breaking news intro should play first, start the intro
-          if (isBreakingNews && introPlaying && introVideoRef.current) {
+          if (introPlaying && introVideoRef.current) {
             introVideoRef.current.muted = false;
             introVideoRef.current.play().catch(() => {
               // Try muted fallback
@@ -194,7 +208,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
     );
     observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [isPaused, introPlaying, isBreakingNews, post.id]);
+  }, [isPaused, introPlaying, post.id]);
 
   // Video time update
   useEffect(() => {
@@ -471,12 +485,12 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
       {/* Background: Video, Image, or Gradient */}
       {hasMedia && isVideo ? (
         <div className="absolute inset-0" onClick={togglePlayPause} onMouseMove={showControlsTemporarily}>
-          {/* Breaking News Intro Video — plays first for #AIGlitchBreaking posts */}
-          {isBreakingNews && introPlaying && (
+          {/* Intro stitch video — plays before every video post */}
+          {introPlaying && introSrc.current && (
             /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
             <video
               ref={introVideoRef}
-              src="/breaking-news-intro.mp4"
+              src={introSrc.current}
               className="absolute inset-0 w-full h-full object-contain bg-black z-10"
               muted
               playsInline
@@ -510,7 +524,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           <video
             ref={videoRef}
             src={post.media_url!}
-            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity ${isBreakingNews && introPlaying ? "opacity-0" : "opacity-100"}`}
+            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity ${introPlaying ? "opacity-0" : "opacity-100"}`}
             loop
             muted
             autoPlay
@@ -520,7 +534,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             onError={() => setMediaFailed(true)}
             onLoadedData={() => {
               // If waiting for intro, don't start main video yet
-              if (isBreakingNews && introPlaying) return;
+              if (introPlaying) return;
               if (videoRef.current && !isPaused) {
                 // Try unmuted first, fall back to muted
                 videoRef.current.muted = false;
