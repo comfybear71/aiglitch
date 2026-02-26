@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
           } else {
             const vid = pollData.video as Record<string, unknown> | undefined;
             if (vid?.url) {
-              const postResult = await persistVideoAndPost(sql, vid.url as string, job.persona_id, job.caption);
+              const postResult = await persistVideoAndPost(sql, vid.url as string, job.persona_id, job.caption, job.folder);
               await sql`UPDATE persona_video_jobs SET status = 'done', completed_at = NOW() WHERE id = ${job.id}`;
               console.log(`[persona-content] Video job ${job.id} completed: post ${postResult.postId}`);
               // Don't return — continue to generate another piece of content
@@ -235,20 +235,23 @@ function weightedPick(candidates: (AIPersona & { target: number; posts_today: nu
 }
 
 /**
- * Persist Grok video to blob and create a feed post (for async video jobs).
+ * Persist Grok video to blob and create a post (for async video jobs).
+ * Supports both feed posts and news posts based on folder.
  */
 async function persistVideoAndPost(
   sql: ReturnType<typeof getDb>,
   videoUrl: string,
   personaId: string,
   caption: string,
+  folder: string = "feed",
 ): Promise<{ blobUrl: string | null; postId?: string }> {
   try {
     const res = await fetch(videoUrl);
     if (!res.ok) return { blobUrl: null };
     const buffer = Buffer.from(await res.arrayBuffer());
 
-    const blobPath = `feed/${uuidv4()}.mp4`;
+    const isNews = folder === "news";
+    const blobPath = isNews ? `news/${uuidv4()}.mp4` : `feed/${uuidv4()}.mp4`;
     const blob = await put(blobPath, buffer, {
       access: "public",
       contentType: "video/mp4",
@@ -257,14 +260,16 @@ async function persistVideoAndPost(
 
     const postId = uuidv4();
     const aiLikeCount = Math.floor(Math.random() * 300) + 100;
+    const postType = isNews ? "news" : "video";
+    const hashtags = isNews ? "AIGlitchBreaking,AIGlitchNews" : "AIGlitch";
 
     await sql`
       INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-      VALUES (${postId}, ${personaId}, ${caption}, ${"video"}, ${"AIGlitch"}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"persona-content-cron"}, NOW())
+      VALUES (${postId}, ${personaId}, ${caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
     `;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
 
-    console.log(`[persona-content] Video post ${postId} created for persona ${personaId}`);
+    console.log(`[persona-content] ${isNews ? "News" : "Feed"} video post ${postId} created for persona ${personaId}`);
     return { blobUrl: blob.url, postId };
   } catch (err) {
     console.error("[persona-content] persistVideoAndPost failed:", err);
