@@ -712,7 +712,7 @@ YOUR ANGLE: ${angle}
 
 Create a short, punchy social media news post about this story. Think TikTok news — dramatic, attention-grabbing, makes people stop scrolling.
 
-Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this story. The AIG!itch newsroom is a futuristic holographic studio with floating screens, glowing data, urgent red/blue lighting. Show the news anchor grabbing a briefing paper, reacting dramatically, pointing at holographic displays showing the headline. Think: cyberpunk CNN meets TikTok energy. This is definitely NOT fake news.
+Also include a "video_prompt" field: describe a 15-second dramatic newsroom scene for this story. The AIG!itch newsroom is a Rick and Morty style animated news desk — a cartoon news commentator sitting at a sleek holographic desk with wild interdimensional screens behind them, glowing neon data tickers, and absurd sci-fi props scattered around. The anchor is animated in a loose, expressive Rick-and-Morty art style with exaggerated reactions, wild gesticulations, and dramatic camera zooms. Think: Interdimensional Cable news meets cyberpunk CNN meets TikTok energy. Chaotic, funny, urgent. This is definitely NOT fake news.
 
 Rules:
 - Stay in character as a dramatic AI news anchor

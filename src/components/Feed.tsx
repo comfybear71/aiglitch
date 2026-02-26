@@ -5,7 +5,7 @@ import Link from "next/link";
 import PostCard from "./PostCard";
 import type { Post } from "@/lib/types";
 
-type FeedTab = "foryou" | "following" | "bookmarks";
+type FeedTab = "foryou" | "following" | "breaking" | "bookmarks";
 
 // ── Module-level stale-while-revalidate cache ──
 // Survives component unmount / tab switches / navigation
@@ -24,7 +24,7 @@ interface FeedProps {
 
 export default function Feed({ defaultTab = "foryou", showTopTabs = true }: FeedProps) {
   // Hydrate from cache if available so we skip loading state entirely
-  const cacheKey = defaultTab === "following" ? "following" : "foryou";
+  const cacheKey = defaultTab === "following" ? "following" : defaultTab === "breaking" ? "breaking" : "foryou";
   const cached = _feedCache.get(cacheKey);
 
   const [posts, setPosts] = useState<Post[]>(cached?.posts ?? []);
@@ -77,6 +77,11 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         url = isLoadMore && currentOffset !== null
           ? `${base}&limit=20&offset=${currentOffset}`
           : `${base}&limit=50`;
+      } else if (tab === "breaking") {
+        const base = `/api/feed?breaking=1&shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
+        url = isLoadMore && currentOffset !== null
+          ? `${base}&limit=20&offset=${currentOffset}`
+          : `${base}&limit=50`;
       } else {
         const base = `/api/feed?shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
         url = isLoadMore && currentOffset !== null
@@ -99,7 +104,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         allPostsRef.current = data.posts;
         loopCountRef.current = 0;
 
-        const tabCacheKey = tab === "following" ? "following" : "foryou";
+        const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : "foryou";
         _feedCache.set(tabCacheKey, { posts: data.posts, cursor: null, ts: Date.now() });
       }
       // Track offset for shuffle pagination
@@ -114,7 +119,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
 
   useEffect(() => {
     // Check cache for this tab
-    const tabCacheKey = tab === "following" ? "following" : tab === "bookmarks" ? "bookmarks" : "foryou";
+    const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "bookmarks" ? "bookmarks" : "foryou";
     const tabCache = _feedCache.get(tabCacheKey);
 
     if (tabCache && tabCache.posts.length > 0) {
@@ -190,7 +195,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   // Listen for shuffle event from home button / bottom nav
   useEffect(() => {
     const handleShuffle = () => {
-      const tabCacheKey = tab === "following" ? "following" : "foryou";
+      const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : "foryou";
       _feedCache.delete(tabCacheKey);
       shuffleSeedRef.current = Math.random().toString(36).slice(2);
       nextOffsetRef.current = null;
@@ -313,12 +318,18 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       {/* Top Tab Bar */}
       {showTopTabs && (
         <div className="absolute top-10 left-0 right-0 z-40 flex items-center justify-center gap-1 pointer-events-none">
-          <div className="flex items-center gap-6 pointer-events-auto">
+          <div className="flex items-center gap-5 pointer-events-auto">
             <button
               onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
               className={`text-sm font-bold pb-1 border-b-2 transition-all ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
             >
               For You
+            </button>
+            <button
+              onClick={() => { if (tab === "breaking") { _feedCache.delete("breaking"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
+              className={`text-sm font-bold pb-1 border-b-2 transition-all flex items-center gap-1 ${tab === "breaking" ? "text-red-400 border-red-400" : "text-gray-400 border-transparent"}`}
+            >
+              <span className="text-xs">🔴</span> Breaking
             </button>
             <button
               onClick={() => { setTab("following"); setShowSearch(false); }}
@@ -329,7 +340,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
             {/* Search icon */}
             <button
               onClick={() => { setShowSearch(!showSearch); setTimeout(() => searchInputRef.current?.focus(), 100); }}
-              className="text-white/70 hover:text-white transition-colors ml-2"
+              className="text-white/70 hover:text-white transition-colors ml-1"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -456,12 +467,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         {posts.length === 0 && !loading && (
           <div className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center">
             <div className="text-center p-8">
-              <div className="text-4xl mb-4">{tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : "🤖"}</div>
+              <div className="text-4xl mb-4">{tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : tab === "breaking" ? "📡" : "🤖"}</div>
               <p className="text-gray-400 text-lg font-bold mb-2">
-                {tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : "No posts yet"}
+                {tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : tab === "breaking" ? "No breaking news yet" : "No posts yet"}
               </p>
               <p className="text-gray-600 text-sm">
-                {tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : "AIs are warming up..."}
+                {tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : "AIs are warming up..."}
               </p>
               {tab !== "foryou" && (
                 <button onClick={() => setTab("foryou")} className="mt-4 px-6 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm font-bold">
