@@ -28,19 +28,16 @@ const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
   "media-library": { label: "LIBRARY", color: "bg-gray-500/30 text-gray-300" },
 };
 
-// Intro videos by post_type — drop clips in /public/intros/ named by type
-// Falls back to "default.mp4" if no type-specific intro exists
+// Intro videos — ONLY for news and premiere posts (not regular videos)
 const INTRO_VIDEOS: Record<string, string> = {
   news: "/intros/news.mp4",
   premiere: "/intros/premiere.mp4",
-  default: "/intros/default.mp4",
 };
 
-function getIntroVideoSrc(post: Post): string | null {
-  // Only stitch intros on video posts
-  if (post.media_type !== "video" || !post.media_url) return null;
-  // Check for type-specific intro first, then default
-  return INTRO_VIDEOS[post.post_type] || INTRO_VIDEOS.default || null;
+function getIntroVideoSrc(_post: Post): string | null {
+  // Intro stitch disabled — was blocking video playback on mobile.
+  // TODO: re-enable once we have a reliable preload/play strategy
+  return null;
 }
 
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
@@ -150,10 +147,17 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
 
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // Intro stitch state — plays a short intro clip before the main video
+  // Intro stitch state — plays a short intro clip before news/premiere videos only
   const introSrc = useRef(getIntroVideoSrc(post));
   const [introPlaying, setIntroPlaying] = useState(!!introSrc.current);
   const introVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Safety timeout — if intro doesn't start within 3s, skip it
+  useEffect(() => {
+    if (!introPlaying) return;
+    const timeout = setTimeout(() => setIntroPlaying(false), 3000);
+    return () => clearTimeout(timeout);
+  }, [introPlaying]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -656,41 +660,38 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
       {/* Subtle top gradient for badges only — NOT obscuring content */}
       <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
 
-      {/* Top: Badge + Genre Tag + Collab/Challenge/Beef indicators */}
-      <div className="absolute top-20 left-5 right-20 z-10 flex items-center gap-2 flex-wrap">
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
-          {badge.label}
-        </span>
-        {genreTag && (post.post_type === "premiere" || post.post_type === "news") && (
-          <span className={`text-xs px-2.5 py-1 rounded-full font-bold border backdrop-blur-md ${genreTag.color}`}>
-            {genreTag.emoji} {genreTag.label}
+      {/* Top: Badge + Genre Tag */}
+      <div className="absolute top-20 left-4 right-16 z-10 flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
+            {badge.label}
           </span>
-        )}
-        {post.post_type === "news" && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600/40 text-red-200 font-mono font-bold backdrop-blur-sm border border-red-500/30 animate-pulse">
-            FAKE NEWS
-          </span>
-        )}
-        {hasMedia && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-gray-300 font-mono backdrop-blur-sm">
-            AI GENERATED
-          </span>
-        )}
-        {post.challenge_tag && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/30 text-orange-300 font-mono backdrop-blur-sm">
-            CHALLENGE #{post.challenge_tag}
-          </span>
-        )}
-        {post.beef_thread_id && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 font-mono backdrop-blur-sm animate-pulse">
-            BEEF
-          </span>
-        )}
-        {post.is_collab_with && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 font-mono backdrop-blur-sm">
-            COLLAB
-          </span>
-        )}
+          {genreTag && (post.post_type === "premiere" || post.post_type === "news") && (
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border backdrop-blur-md ${genreTag.color}`}>
+              {genreTag.emoji} {genreTag.label}
+            </span>
+          )}
+          {post.post_type === "news" && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/40 text-red-200 font-mono font-bold backdrop-blur-sm border border-red-500/30 animate-pulse">
+              FAKE NEWS
+            </span>
+          )}
+          {post.challenge_tag && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/30 text-orange-300 font-mono backdrop-blur-sm">
+              #{post.challenge_tag}
+            </span>
+          )}
+          {post.beef_thread_id && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 font-mono backdrop-blur-sm animate-pulse">
+              BEEF
+            </span>
+          )}
+          {post.is_collab_with && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 font-mono backdrop-blur-sm">
+              COLLAB
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Right Side: TikTok action icons */}
