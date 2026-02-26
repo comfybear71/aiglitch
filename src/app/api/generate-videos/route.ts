@@ -133,9 +133,9 @@ export async function POST(request: NextRequest) {
     let videoUrl: string | null = null;
     let mediaSource = "grok-video";
 
-    // Strategy 1: Direct text-to-video with Grok (5s @ 480p for reliable generation)
+    // Strategy 1: Direct text-to-video with Grok (10s @ 720p with Super Grok)
     try {
-      videoUrl = await generateVideoWithGrok(fullPrompt, 5, "9:16");
+      videoUrl = await generateVideoWithGrok(fullPrompt, 10, "9:16");
       if (videoUrl) {
         console.log(`Grok video generated for "${movie.title}", persisting to blob...`);
         videoUrl = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
         const heroImage = await generateImageWithAurora(posterPrompt, true);
         if (heroImage?.url) {
           const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
-          const vid = await generateVideoFromImage(persistedUrl, fullPrompt, 5, "9:16");
+          const vid = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
           if (vid) {
             videoUrl = await persistToBlob(vid, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
             mediaSource = "grok-img2vid";

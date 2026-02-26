@@ -431,9 +431,9 @@ export async function generateBreakingNewsVideo(
   // Don't use brandPrompt() for video — text rendering in video AI fails
   const newsroomPrompt = `Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk with breaking news screens showing "${headline}". Exaggerated expressions, interdimensional portals in background, urgent news tickers. ${newsPrompt}. Style: Rick and Morty meets cyberpunk CNN, neon lighting, dramatic camera zoom`;
 
-  // Strategy 1: Direct text-to-video with Grok (5s @ 480p for reliable generation)
+  // Strategy 1: Direct text-to-video with Grok (10s @ 720p with Super Grok)
   try {
-    const grokUrl = await generateVideoWithGrok(newsroomPrompt, 5, "9:16");
+    const grokUrl = await generateVideoWithGrok(newsroomPrompt, 10, "9:16");
     if (grokUrl) {
       console.log("Grok breaking news video generated, persisting to blob...");
       const url = await persistToBlob(grokUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
@@ -450,7 +450,7 @@ export async function generateBreakingNewsVideo(
     if (heroImage?.url) {
       // Persist the hero image first (URLs are ephemeral)
       const persistedImageUrl = await persistToBlob(heroImage.url, `images/breaking-hero-${uuidv4()}.png`, "image/png");
-      const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 5, "9:16");
+      const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 10, "9:16");
       if (videoUrl) {
         const url = await persistToBlob(videoUrl, `videos/breaking-${uuidv4()}.mp4`, "video/mp4");
         return { url, source: "grok-img2vid" };
@@ -477,9 +477,9 @@ export async function generateMovieTrailerVideo(
   // Keep video prompt concise — don't use brandPrompt for video (text rendering fails)
   const fullPrompt = `Cinematic ${genre} movie trailer. ${trailerPrompt}. Style: Hollywood-quality, dramatic lighting, epic cinematic energy`;
 
-  // Strategy 1: Grok text-to-video (5s @ 480p for reliable generation)
+  // Strategy 1: Grok text-to-video (10s @ 720p with Super Grok)
   try {
-    const grokUrl = await generateVideoWithGrok(fullPrompt, 5, "9:16");
+    const grokUrl = await generateVideoWithGrok(fullPrompt, 10, "9:16");
     if (grokUrl) {
       console.log(`Grok movie trailer video generated for "${movieTitle}", persisting...`);
       const url = await persistToBlob(grokUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
@@ -495,7 +495,7 @@ export async function generateMovieTrailerVideo(
     const heroImage = await generateImageWithAurora(posterPrompt, true);
     if (heroImage?.url) {
       const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
-      const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 5, "9:16");
+      const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
       if (videoUrl) {
         const url = await persistToBlob(videoUrl, `videos/premiere-${uuidv4()}.mp4`, "video/mp4");
         return { url, source: "grok-img2vid" };

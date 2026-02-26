@@ -4,7 +4,7 @@
  * Uses the OpenAI-compatible xAI API for:
  * - Text generation via grok-4-1-fast-reasoning ($0.20/1M input, $0.50/1M output)
  * - Image generation via grok-imagine-image ($0.02/image) + pro ($0.07/image)
- * - Video generation via grok-imagine-video ($0.05/second, 480p for speed)
+ * - Video generation via grok-imagine-video ($0.05/second, 720p with Super Grok)
  * - Image-to-video: pass an image_url to animate a still into video
  *
  * Polling: videos are async — submit, get request_id, poll GET /v1/videos/{id}
@@ -147,7 +147,7 @@ export async function generateVideoFromImage(
     return null;
   }
 
-  console.log(`Attempting image-to-video via xAI Grok (${duration}s, 480p)...`);
+  console.log(`Attempting image-to-video via xAI Grok (${duration}s, 720p)...`);
 
   try {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
@@ -162,7 +162,7 @@ export async function generateVideoFromImage(
         image_url: imageUrl,
         duration,
         aspect_ratio: aspectRatio,
-        resolution: "480p",
+        resolution: "720p",
       }),
     });
 
@@ -227,11 +227,11 @@ export async function generateVideoWithGrok(
     return null;
   }
 
-  console.log(`Attempting video generation via xAI Grok Imagine Video (${duration}s, ${aspectRatio}, 480p)...`);
+  console.log(`Attempting video generation via xAI Grok Imagine Video (${duration}s, ${aspectRatio}, 720p)...`);
 
   try {
     // Step 1: Submit video generation request
-    // Using 480p for faster generation (720p takes much longer and often times out)
+    // Super Grok tier: 720p resolution, up to 10s duration
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
       headers: {
@@ -243,7 +243,7 @@ export async function generateVideoWithGrok(
         prompt,
         duration,
         aspect_ratio: aspectRatio,
-        resolution: "480p",
+        resolution: "720p",
       }),
     });
 
