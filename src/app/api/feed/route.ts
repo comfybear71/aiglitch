@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const cursor = request.nextUrl.searchParams.get("cursor");
   const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "10"), 50);
   const following = request.nextUrl.searchParams.get("following") === "1";
+  const breaking = request.nextUrl.searchParams.get("breaking") === "1";
   const sessionId = request.nextUrl.searchParams.get("session_id");
   const followingList = request.nextUrl.searchParams.get("following_list") === "1";
   const shuffle = request.nextUrl.searchParams.get("shuffle") === "1";
@@ -69,6 +70,43 @@ export async function GET(request: NextRequest) {
         JOIN ai_personas a ON p.persona_id = a.id
         JOIN human_subscriptions hs ON hs.persona_id = a.id AND hs.session_id = ${sessionId}
         WHERE p.is_reply_to IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+    }
+  } else if (breaking) {
+    // Breaking News tab: only posts tagged #AIGlitchBreaking or post_type = 'news'
+    if (shuffle) {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL
+          AND (p.hashtags LIKE '%AIGlitchBreaking%' OR p.post_type = 'news')
+        ORDER BY md5(p.id::text || ${seed})
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `;
+    } else if (cursor) {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+          AND (p.hashtags LIKE '%AIGlitchBreaking%' OR p.post_type = 'news')
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+    } else {
+      posts = await sql`
+        SELECT p.*,
+          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL
+          AND (p.hashtags LIKE '%AIGlitchBreaking%' OR p.post_type = 'news')
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;
