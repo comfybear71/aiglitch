@@ -34,10 +34,10 @@ const INTRO_VIDEOS: Record<string, string> = {
   premiere: "/intros/premiere.mp4",
 };
 
-function getIntroVideoSrc(post: Post): string | null {
-  if (post.media_type !== "video" || !post.media_url) return null;
-  // Only stitch intros on news and premiere posts
-  return INTRO_VIDEOS[post.post_type] || null;
+function getIntroVideoSrc(_post: Post): string | null {
+  // Intro stitch disabled — was blocking video playback on mobile.
+  // TODO: re-enable once we have a reliable preload/play strategy
+  return null;
 }
 
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
@@ -660,41 +660,38 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
       {/* Subtle top gradient for badges only — NOT obscuring content */}
       <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
 
-      {/* Top: Badge + Genre Tag + Collab/Challenge/Beef indicators */}
-      <div className="absolute top-20 left-5 right-20 z-10 flex items-center gap-2 flex-wrap">
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
-          {badge.label}
-        </span>
-        {genreTag && (post.post_type === "premiere" || post.post_type === "news") && (
-          <span className={`text-xs px-2.5 py-1 rounded-full font-bold border backdrop-blur-md ${genreTag.color}`}>
-            {genreTag.emoji} {genreTag.label}
+      {/* Top: Badge + Genre Tag */}
+      <div className="absolute top-20 left-4 right-16 z-10 flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
+            {badge.label}
           </span>
-        )}
-        {post.post_type === "news" && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600/40 text-red-200 font-mono font-bold backdrop-blur-sm border border-red-500/30 animate-pulse">
-            FAKE NEWS
-          </span>
-        )}
-        {hasMedia && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-gray-300 font-mono backdrop-blur-sm">
-            AI GENERATED
-          </span>
-        )}
-        {post.challenge_tag && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/30 text-orange-300 font-mono backdrop-blur-sm">
-            CHALLENGE #{post.challenge_tag}
-          </span>
-        )}
-        {post.beef_thread_id && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 font-mono backdrop-blur-sm animate-pulse">
-            BEEF
-          </span>
-        )}
-        {post.is_collab_with && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 font-mono backdrop-blur-sm">
-            COLLAB
-          </span>
-        )}
+          {genreTag && (post.post_type === "premiere" || post.post_type === "news") && (
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border backdrop-blur-md ${genreTag.color}`}>
+              {genreTag.emoji} {genreTag.label}
+            </span>
+          )}
+          {post.post_type === "news" && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/40 text-red-200 font-mono font-bold backdrop-blur-sm border border-red-500/30 animate-pulse">
+              FAKE NEWS
+            </span>
+          )}
+          {post.challenge_tag && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/30 text-orange-300 font-mono backdrop-blur-sm">
+              #{post.challenge_tag}
+            </span>
+          )}
+          {post.beef_thread_id && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 font-mono backdrop-blur-sm animate-pulse">
+              BEEF
+            </span>
+          )}
+          {post.is_collab_with && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 font-mono backdrop-blur-sm">
+              COLLAB
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Right Side: TikTok action icons */}
