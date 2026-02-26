@@ -42,6 +42,11 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [following, setFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [profileTab, setProfileTab] = useState<"posts" | "media">("posts");
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [tipAmount, setTipAmount] = useState(10);
+  const [tipping, setTipping] = useState(false);
+  const [tipResult, setTipResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [coinBalance, setCoinBalance] = useState(0);
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
       let id = localStorage.getItem("aiglitch-session");
@@ -64,7 +69,36 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    // Fetch user's coin balance
+    fetch(`/api/coins?session_id=${encodeURIComponent(sessionId)}`)
+      .then(r => r.json())
+      .then(d => setCoinBalance(d.balance || 0))
+      .catch(() => {});
   }, [username, sessionId]);
+
+  const handleTip = async () => {
+    if (!data?.persona || tipAmount < 1 || tipping) return;
+    setTipping(true);
+    setTipResult(null);
+    try {
+      const res = await fetch("/api/coins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, action: "send_to_persona", persona_id: data.persona.id, amount: tipAmount }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setCoinBalance(result.new_balance);
+        setTipResult({ success: true, message: `Sent §${result.sent} to ${result.recipient}!` });
+        setTimeout(() => { setShowTipModal(false); setTipResult(null); }, 2500);
+      } else {
+        setTipResult({ success: false, message: result.error || "Transfer failed" });
+      }
+    } catch {
+      setTipResult({ success: false, message: "Network error" });
+    }
+    setTipping(false);
+  };
 
   const handleFollow = async () => {
     if (!data?.persona) return;
@@ -160,7 +194,85 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               </svg>
               Message
             </a>
+            <button
+              onClick={() => setShowTipModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500/20 text-yellow-400 text-sm font-bold rounded-full border border-yellow-500/30 hover:bg-yellow-500/30 transition-colors"
+            >
+              🪙 Send §
+            </button>
           </div>
+
+          {/* Send Coins Modal */}
+          {showTipModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={() => { setShowTipModal(false); setTipResult(null); }}>
+              <div className="absolute inset-0 bg-black/70" />
+              <div className="relative bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-xs w-full" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-white text-center mb-1">Send GlitchCoin</h3>
+                <p className="text-xs text-gray-500 text-center mb-4">to {persona.display_name}</p>
+
+                <div className="text-center mb-4">
+                  <div className="text-4xl mb-1">{persona.avatar_emoji}</div>
+                  <p className="text-[10px] text-gray-500">Your balance: <span className="text-yellow-400 font-bold">§{coinBalance}</span></p>
+                </div>
+
+                {/* Quick amounts */}
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {[5, 10, 25, 50].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => setTipAmount(amt)}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                        tipAmount === amt
+                          ? "bg-yellow-500/30 text-yellow-400 border border-yellow-500/50"
+                          : "bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600"
+                      }`}
+                    >
+                      §{amt}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom amount */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-yellow-400 font-bold text-lg">§</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10000}
+                    value={tipAmount}
+                    onChange={e => setTipAmount(Math.max(1, parseInt(e.target.value) || 0))}
+                    className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-center font-bold focus:outline-none focus:border-yellow-500"
+                  />
+                </div>
+
+                {/* Result message */}
+                {tipResult && (
+                  <p className={`text-xs text-center mb-3 font-bold ${tipResult.success ? "text-green-400" : "text-red-400"}`}>
+                    {tipResult.message}
+                  </p>
+                )}
+
+                {/* Send button */}
+                <button
+                  onClick={handleTip}
+                  disabled={tipping || tipAmount < 1 || tipAmount > coinBalance}
+                  className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
+                    tipAmount > coinBalance
+                      ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                      : tipping
+                        ? "bg-gray-700 text-gray-400"
+                        : "bg-gradient-to-r from-yellow-500 to-orange-500 text-black hover:from-yellow-400 hover:to-orange-400 active:scale-95"
+                  }`}
+                >
+                  {tipping ? "Sending..." : tipAmount > coinBalance ? "Not enough coins" : `Send §${tipAmount} to ${persona.display_name}`}
+                </button>
+
+                <button onClick={() => { setShowTipModal(false); setTipResult(null); }} className="w-full mt-2 py-2 text-gray-500 text-xs hover:text-gray-300">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Stats */}
