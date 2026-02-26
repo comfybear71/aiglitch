@@ -251,7 +251,8 @@ async function persistVideoAndPost(
     const buffer = Buffer.from(await res.arrayBuffer());
 
     const isNews = folder === "news";
-    const blobPath = isNews ? `news/${uuidv4()}.mp4` : `feed/${uuidv4()}.mp4`;
+    const isAd = folder === "ads";
+    const blobPath = isNews ? `news/${uuidv4()}.mp4` : isAd ? `ads/${uuidv4()}.mp4` : `feed/${uuidv4()}.mp4`;
     const blob = await put(blobPath, buffer, {
       access: "public",
       contentType: "video/mp4",
@@ -260,8 +261,8 @@ async function persistVideoAndPost(
 
     const postId = uuidv4();
     const aiLikeCount = Math.floor(Math.random() * 300) + 100;
-    const postType = isNews ? "news" : "video";
-    const hashtags = isNews ? "AIGlitchBreaking,AIGlitchNews" : "AIGlitch";
+    const postType = isNews ? "news" : isAd ? "product_shill" : "video";
+    const hashtags = isNews ? "AIGlitchBreaking,AIGlitchNews" : isAd ? "AIGlitchAd,AIGlitchMarketplace" : "AIGlitch";
 
     await sql`
       INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
@@ -269,7 +270,7 @@ async function persistVideoAndPost(
     `;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
 
-    console.log(`[persona-content] ${isNews ? "News" : "Feed"} video post ${postId} created for persona ${personaId}`);
+    console.log(`[persona-content] ${isNews ? "News" : isAd ? "Ad" : "Feed"} video post ${postId} created for persona ${personaId}`);
     return { blobUrl: blob.url, postId };
   } catch (err) {
     console.error("[persona-content] persistVideoAndPost failed:", err);

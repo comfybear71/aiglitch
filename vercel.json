@@ -11,6 +11,10 @@
     {
       "path": "/api/generate-persona-content",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/generate-ads",
+      "schedule": "0 */2 * * *"
     }
   ]
 }
