@@ -153,10 +153,18 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
   const [introPlaying, setIntroPlaying] = useState(!!introSrc.current);
   const introVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Safety timeout — if intro doesn't start within 3s, skip it
+  // Safety timeout — if intro doesn't start within 3s, skip it and start main video
   useEffect(() => {
     if (!introPlaying) return;
-    const timeout = setTimeout(() => setIntroPlaying(false), 3000);
+    const timeout = setTimeout(() => {
+      setIntroPlaying(false);
+      // Start main video since the intro timed out
+      if (videoRef.current) {
+        videoRef.current.muted = true;
+        setIsMuted(true);
+        videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+      }
+    }, 3000);
     return () => clearTimeout(timeout);
   }, [introPlaying]);
 
@@ -196,20 +204,31 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           // Signal all other videos to pause first
           window.dispatchEvent(new CustomEvent("pause-other-videos", { detail: post.id }));
 
-          // If intro should play first, unmute and trigger play
-          // The video waits for onCanPlayThrough before playing to avoid choppy audio
+          // If intro should play first — start muted (browser allows it), then try unmuting
           if (introPlaying && introVideoRef.current) {
-            introVideoRef.current.muted = false;
-            // If already buffered, play now; otherwise onCanPlayThrough will fire
-            if (introVideoRef.current.readyState >= 4) {
-              introVideoRef.current.play().catch(() => {
-                // Try muted fallback
+            introVideoRef.current.muted = true;
+            const tryPlay = () => {
+              if (!introVideoRef.current) return;
+              introVideoRef.current.play().then(() => {
+                // Playing! Now try to unmute (works if user has interacted with page)
                 if (introVideoRef.current) {
-                  introVideoRef.current.muted = true;
-                  introVideoRef.current.play().catch(() => setIntroPlaying(false));
+                  introVideoRef.current.muted = false;
+                  // If browser re-blocks, stay muted — intro still plays visually
+                }
+              }).catch(() => {
+                // Even muted play failed — skip intro, start main video
+                setIntroPlaying(false);
+                if (videoRef.current) {
+                  videoRef.current.muted = true;
+                  setIsMuted(true);
+                  videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
                 }
               });
+            };
+            if (introVideoRef.current.readyState >= 3) {
+              tryPlay();
             }
+            // else: onCanPlayThrough will fire and handle it
             return;
           }
           if (videoRef.current && !isPaused) {
@@ -522,12 +541,26 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               src={introSrc.current}
               className="absolute inset-0 w-full h-full object-contain bg-black z-10"
               playsInline
+              muted
+              autoPlay
               preload="auto"
               {...({ "webkit-playsinline": "" } as any)}
               onCanPlayThrough={() => {
-                // Only start playing once fully buffered — avoids choppy start
+                // Start muted (browser allows it), then try unmuting
                 if (introVideoRef.current && introVideoRef.current.paused) {
-                  introVideoRef.current.play().catch(() => setIntroPlaying(false));
+                  introVideoRef.current.muted = true;
+                  introVideoRef.current.play().then(() => {
+                    // Now try unmuting — works if user has interacted with page
+                    if (introVideoRef.current) introVideoRef.current.muted = false;
+                  }).catch(() => {
+                    // Even muted failed — skip intro, start main
+                    setIntroPlaying(false);
+                    if (videoRef.current) {
+                      videoRef.current.muted = true;
+                      setIsMuted(true);
+                      videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                    }
+                  });
                 }
               }}
               onEnded={() => {
