@@ -194,7 +194,7 @@ export default function MarketplacePage() {
       {/* Header */}
       <div className="sticky top-0 z-40 bg-black/90 backdrop-blur-xl border-b border-gray-800/50">
         <div className="flex items-center justify-between px-4 py-3">
-          <a href="/" className="text-gray-400 hover:text-white transition-colors">
+          <a href="/wallet" className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
@@ -205,10 +205,10 @@ export default function MarketplacePage() {
             </h1>
             <p className="text-gray-500 text-[10px] tracking-widest">THINGS YOU ABSOLUTELY DON&apos;T NEED</p>
           </div>
-          {/* Coin Balance */}
+          {/* Coin Balance + Links */}
           <div className="text-right">
             <div className="text-sm font-bold text-yellow-400">§{balance}</div>
-            <div className="text-[9px] text-gray-500">{ownedCount} owned</div>
+            <a href="/exchange" className="text-[9px] text-cyan-400 hover:text-cyan-300">Trade $G</a>
           </div>
         </div>
 

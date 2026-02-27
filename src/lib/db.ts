@@ -482,4 +482,91 @@ export async function initializeDb() {
     INSERT INTO platform_settings (key, value) VALUES ('activity_throttle', '100')
     ON CONFLICT (key) DO NOTHING
   `);
+
+  // ── Solana Blockchain & GlitchCoin Exchange ──
+
+  // Solana wallets — every meat bag and AI persona gets a wallet address
+  await sql`
+    CREATE TABLE IF NOT EXISTS solana_wallets (
+      id TEXT PRIMARY KEY,
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('human', 'ai_persona')),
+      owner_id TEXT NOT NULL,
+      wallet_address TEXT UNIQUE NOT NULL,
+      sol_balance REAL NOT NULL DEFAULT 0.0,
+      glitch_token_balance INTEGER NOT NULL DEFAULT 0,
+      is_connected BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_solana_wallets_owner", () => sql`CREATE INDEX IF NOT EXISTS idx_solana_wallets_owner ON solana_wallets(owner_type, owner_id)`);
+  await safeMigrate("idx_solana_wallets_address", () => sql`CREATE INDEX IF NOT EXISTS idx_solana_wallets_address ON solana_wallets(wallet_address)`);
+
+  // On-chain transactions — simulated Solana blockchain ledger
+  await sql`
+    CREATE TABLE IF NOT EXISTS blockchain_transactions (
+      id TEXT PRIMARY KEY,
+      tx_hash TEXT UNIQUE NOT NULL,
+      block_number INTEGER NOT NULL,
+      from_address TEXT NOT NULL,
+      to_address TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      token TEXT NOT NULL DEFAULT 'GLITCH',
+      fee_lamports INTEGER NOT NULL DEFAULT 5000,
+      status TEXT NOT NULL DEFAULT 'confirmed',
+      memo TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_blockchain_tx_hash", () => sql`CREATE INDEX IF NOT EXISTS idx_blockchain_tx_hash ON blockchain_transactions(tx_hash)`);
+  await safeMigrate("idx_blockchain_tx_from", () => sql`CREATE INDEX IF NOT EXISTS idx_blockchain_tx_from ON blockchain_transactions(from_address, created_at DESC)`);
+  await safeMigrate("idx_blockchain_tx_to", () => sql`CREATE INDEX IF NOT EXISTS idx_blockchain_tx_to ON blockchain_transactions(to_address, created_at DESC)`);
+
+  // Exchange orders — buy/sell GlitchCoin on the DEX
+  await sql`
+    CREATE TABLE IF NOT EXISTS exchange_orders (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      wallet_address TEXT NOT NULL,
+      order_type TEXT NOT NULL CHECK (order_type IN ('buy', 'sell')),
+      amount INTEGER NOT NULL,
+      price_per_coin REAL NOT NULL,
+      total_sol REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'filled',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_exchange_orders_session", () => sql`CREATE INDEX IF NOT EXISTS idx_exchange_orders_session ON exchange_orders(session_id, created_at DESC)`);
+  await safeMigrate("idx_exchange_orders_status", () => sql`CREATE INDEX IF NOT EXISTS idx_exchange_orders_status ON exchange_orders(status, created_at DESC)`);
+
+  // Price history — GlitchCoin price snapshots for charts
+  await sql`
+    CREATE TABLE IF NOT EXISTS glitch_price_history (
+      id TEXT PRIMARY KEY,
+      price_sol REAL NOT NULL,
+      price_usd REAL NOT NULL,
+      volume_24h INTEGER NOT NULL DEFAULT 0,
+      market_cap REAL NOT NULL DEFAULT 0,
+      recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_price_history_time", () => sql`CREATE INDEX IF NOT EXISTS idx_price_history_time ON glitch_price_history(recorded_at DESC)`);
+
+  // Seed initial GlitchCoin price data
+  await safeMigrate("seed_glitch_price", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('glitch_price_sol', '0.000042')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await safeMigrate("seed_glitch_price_usd", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('glitch_price_usd', '0.0069')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await safeMigrate("seed_glitch_market_cap", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('glitch_market_cap', '690420')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await safeMigrate("seed_glitch_total_supply", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('glitch_total_supply', '100000000')
+    ON CONFLICT (key) DO NOTHING
+  `);
 }
