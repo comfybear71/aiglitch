@@ -229,11 +229,26 @@ export default function MePage() {
       const w = window as any;
       const provider = w.phantom?.solana || w.solana;
       if (!provider?.isPhantom) {
-        setError("Phantom wallet not detected. Open this page in the Phantom app to link your wallet.");
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobile) {
+          setError("Phantom wallet not detected. Open this page in the Phantom app to link your wallet.");
+        } else {
+          setError("Phantom wallet not detected. Install the Phantom browser extension from phantom.app and refresh this page.");
+        }
         setWalletLinking(false);
         return;
       }
-      const resp = await provider.connect();
+      // Wrap provider.connect() with a timeout so it doesn't hang forever on desktop
+      const connectWithTimeout = (timeoutMs: number) => {
+        return Promise.race([
+          provider.connect(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
+          ),
+        ]);
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resp = await connectWithTimeout(30000) as any;
       const walletAddress = resp.publicKey.toString();
 
       const res = await fetch("/api/auth/human", {
@@ -253,8 +268,15 @@ export default function MePage() {
       } else {
         setError(data.error || "Failed to link wallet");
       }
-    } catch {
-      setError("Failed to connect Phantom wallet");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "WALLET_TIMEOUT") {
+        setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
+      } else if (message.includes("User rejected")) {
+        setError("Connection was rejected. Please approve the Phantom connection request to link your wallet.");
+      } else {
+        setError("Failed to connect Phantom wallet. Make sure Phantom is installed and unlocked.");
+      }
     }
     setWalletLinking(false);
   };
