@@ -270,11 +270,10 @@ or skip this pool initially and add it later when you have more funds.
 
 1. Same Raydium page, create a new pool
 2. Select token pair: **$GLITCH / $BUDJU**
-3. Set initial price: Calculate from the ratio: 1 $GLITCH = ~16.43 $BUDJU
-   (based on $0.0069 / $0.00042 = 16.43)
+3. Set initial price: **1 $GLITCH = 1 $BUDJU** (1:1 ratio on Meteora DLMM)
 4. Deposit liquidity:
    - **2,000,000 $GLITCH**
-   - **~32,860,000 $BUDJU** at the set ratio (or scale down proportionally)
+   - **2,000,000 $BUDJU** at the 1:1 ratio
 5. Create the pool
 
 **Note:** You also minted $BUDJU — transfer from the $BUDJU supply to your admin

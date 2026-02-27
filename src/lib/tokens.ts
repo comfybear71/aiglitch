@@ -46,8 +46,8 @@ export const TOKENS: Record<string, TokenConfig> = {
     color: "fuchsia",
     aiPersonaAllocation: 20_000_000,
     meatBagBuyOnly: true, // Humans can ONLY buy $BUDJU on the exchange
-    initialPriceUsd: 0.00042,
-    initialPriceSol: 0.0000025,
+    initialPriceUsd: 0.0069,
+    initialPriceSol: 0.000042,
   },
   SOL: {
     symbol: "SOL",

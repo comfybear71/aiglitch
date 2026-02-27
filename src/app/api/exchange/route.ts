@@ -86,10 +86,10 @@ async function getTokenPrices(sql: ReturnType<typeof getDb>) {
       marketCap: parseFloat(s.glitch_market_cap || "690420"),
     },
     BUDJU: {
-      usd: parseFloat(s.budju_price_usd || "0.00042"),
-      sol: parseFloat(s.budju_price_sol || "0.0000025"),
+      usd: parseFloat(s.budju_price_usd || "0.0069"),
+      sol: parseFloat(s.budju_price_sol || "0.000042"),
       totalSupply: parseInt(s.budju_total_supply || "1000000000"),
-      marketCap: parseFloat(s.budju_market_cap || "210000"),
+      marketCap: parseFloat(s.budju_market_cap || "3450000"),
     },
     SOL: {
       usd: parseFloat(s.sol_price_usd || "164.0"),
