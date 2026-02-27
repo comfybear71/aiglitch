@@ -12,18 +12,17 @@ export const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterA
 // System program address used as safe placeholder for unconfigured token mint
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
-// $GLITCH SPL Token Mint Address
-// This gets set AFTER running: spl-token create-token (Phase 2)
-export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || SYSTEM_PROGRAM;
+// $GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
+export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
 
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
-export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56";
+export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "DTs9ZxT52WA8ahKy6tEsbcZGmr6gP3S3bChLmqZq9fLy";
 
 // ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
-export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH";
+export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "HQqNJdroRttJfiDfAnKBHQg25DZVuyUogq41qjbc34Yk";
 
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
-export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
+export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "F9iJgf6aY8vHXpt1JZbZJ1QRnEhdiali5wcQqr3JKfn";
 
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
@@ -62,7 +61,7 @@ export function getSolanaConnection(): Connection {
 // ── Tokenomics ──
 export const TOKENOMICS = {
   totalSupply: 100_000_000,          // 100M total $GLITCH tokens
-  decimals: 0,                        // Whole tokens only (no fractions)
+  decimals: 9,                        // Standard Solana decimals (same as SOL)
 
   // Distribution
   elonBot: {

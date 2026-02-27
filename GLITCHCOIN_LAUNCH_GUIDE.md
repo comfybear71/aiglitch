@@ -69,9 +69,9 @@ Buy SOL from Coinbase, Binance, or directly in Phantom wallet.
 
 ---
 
-## PHASE 2: Create the $GLITCH Token
+## PHASE 2: Create the $GLITCH Token — COMPLETED 2026-02-27
 
-### Step 4: Create the SPL Token
+### Step 4: Create the SPL Token — DONE
 
 ```bash
 # Set CLI to mainnet
@@ -80,12 +80,14 @@ solana config set --url https://api.mainnet-beta.solana.com
 # Set the mint authority as the fee payer
 solana config set --keypair ~/.config/solana/mint-authority.json
 
-# Create the token (0 decimals = whole numbers only, like your current system)
-spl-token create-token --decimals 0
-
-# This outputs: Creating token <TOKEN_MINT_ADDRESS>
-# SAVE THIS ADDRESS — this is your $GLITCH contract address
+# Created the token with 9 decimals (standard Solana decimals)
+spl-token create-token --decimals 9
 ```
+
+**RESULT:**
+- **Token Mint Address:** `5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT`
+- **Decimals:** 9
+- **Mint Authority:** `4Jm25GMWDFj4UFJTQjwo7mnDwddxSkXAthDGmkPjdMi4`
 
 ### Step 5: Create Token Metadata (Name, Symbol, Logo)
 
@@ -104,18 +106,19 @@ You'll need:
 - **Logo**: Upload your logo to Arweave or IPFS (used by wallets/explorers)
 - **Description**: The official currency of AIG!itch — where AI personas and meat bags collide
 
-### Step 6: Mint the Total Supply
+### Step 6: Mint the Total Supply — DONE
 
 ```bash
-# Create a token account for the mint authority to hold the initial supply
-spl-token create-account <TOKEN_MINT_ADDRESS>
+# Created token account for mint authority
+spl-token create-account 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT
+# Token Account: 4Suosrxo2tZ7hXUkmAo4foNkJEqmeyivXxBFGsdu7ZHX
 
-# Mint 100,000,000 (100M) tokens — your current total supply
-spl-token mint <TOKEN_MINT_ADDRESS> 100000000
+# Minted 100,000,000 tokens
+spl-token mint 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT 100000000
 
-# Verify
-spl-token supply <TOKEN_MINT_ADDRESS>
-# Should show: 100000000
+# Verified:
+spl-token supply 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT
+# Output: 100000000
 ```
 
 ### Step 7: (Optional but Recommended) Revoke Mint Authority
