@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import BottomNav from "@/components/BottomNav";
+import TokenIcon from "@/components/TokenIcon";
 
 interface TradingPairInfo {
   id: string;
@@ -64,7 +65,7 @@ type ViewTab = "chart" | "orderbook" | "trades" | "history";
 // Token colors for UI
 const TOKEN_COLORS: Record<string, string> = {
   GLITCH: "purple",
-  BUDJU: "orange",
+  BUDJU: "fuchsia",
   SOL: "cyan",
   USDC: "green",
 };
@@ -328,7 +329,7 @@ export default function ExchangePage() {
           onClick={() => setShowPairSelector(!showPairSelector)}
           className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-700 hover:border-purple-500/50 transition-all w-full"
         >
-          <span className="text-lg">{TOKEN_ICONS[baseToken] || "\u26A1"}</span>
+          <TokenIcon token={baseToken} size={24} />
           <span className="text-white font-bold text-sm">{market?.pair || "$GLITCH/USDC"}</span>
           <svg className={`w-4 h-4 text-gray-400 ml-auto transition-transform ${showPairSelector ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -356,7 +357,7 @@ export default function ExchangePage() {
                     : "hover:bg-gray-800/50 border-l-2 border-transparent"
                 }`}
               >
-                <span className="text-lg">{TOKEN_ICONS[p.base] || "\u26A1"}</span>
+                <TokenIcon token={p.base} size={24} />
                 <div>
                   <p className="text-white text-sm font-bold">{p.label}</p>
                   <p className="text-gray-500 text-[10px]">{p.base}/{p.quote}</p>
@@ -574,7 +575,7 @@ export default function ExchangePage() {
           {tradeTab === "sell" && baseToken === "BUDJU" && (
             <div className="mb-3 p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
               <p className="text-orange-400 text-xs font-bold">
-                {TOKEN_ICONS.BUDJU} Meat bags can only BUY $BUDJU. Selling restricted.
+                <TokenIcon token="BUDJU" size={16} className="mr-1" /> Meat bags can only BUY $BUDJU. Selling restricted.
               </p>
             </div>
           )}
@@ -594,7 +595,7 @@ export default function ExchangePage() {
                   <div key={token} className={`flex-shrink-0 px-2 py-1 rounded-lg bg-black/30 border border-gray-800 ${
                     token === baseToken || token === quoteToken ? "border-purple-500/30" : ""
                   }`}>
-                    <p className="text-[9px] text-gray-500">{TOKEN_ICONS[token] || ""} {token}</p>
+                    <p className="text-[9px] text-gray-500 flex items-center gap-1"><TokenIcon token={token} size={12} /> {token}</p>
                     <p className="text-xs text-white font-bold">{typeof bal === 'number' && bal < 1 ? bal.toFixed(4) : Math.floor(bal).toLocaleString()}</p>
                   </div>
                 ))}
@@ -731,8 +732,8 @@ export default function ExchangePage() {
               ? "bg-gradient-to-br from-orange-950/30 via-black to-yellow-950/30 border-orange-500/10"
               : "bg-gradient-to-br from-purple-950/30 via-black to-pink-950/30 border-purple-500/10"
           }`}>
-            <h3 className="text-white font-bold text-sm mb-3">
-              {TOKEN_ICONS[baseToken] || ""} {baseSymbol} Token Info
+            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
+              <TokenIcon token={baseToken} size={20} /> {baseSymbol} Token Info
             </h3>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-black/30 rounded-lg p-2">
@@ -764,8 +765,8 @@ export default function ExchangePage() {
             </div>
             {baseToken === "BUDJU" && (
               <div className="mt-2 p-2 rounded-lg bg-orange-500/5 border border-orange-500/10">
-                <p className="text-orange-400 text-[10px] font-bold">
-                  {TOKEN_ICONS.BUDJU} Real token on Solana &middot; Meat bags: BUY only
+                <p className="text-orange-400 text-[10px] font-bold flex items-center gap-1">
+                  <TokenIcon token="BUDJU" size={14} /> Real token on Solana &middot; Meat bags: BUY only
                 </p>
               </div>
             )}

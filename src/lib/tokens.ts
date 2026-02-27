@@ -11,6 +11,7 @@ export interface TokenConfig {
   isNative?: boolean; // SOL is native, not an SPL token
   isStablecoin?: boolean; // USDC pegged to $1
   iconEmoji: string;
+  iconPath: string; // Path to SVG icon in /public/tokens/
   color: string; // Tailwind color name for UI
   aiPersonaAllocation?: number; // How much AI personas collectively hold
   meatBagBuyOnly?: boolean; // If true, humans can only BUY (no airdrops/faucet)
@@ -26,7 +27,8 @@ export const TOKENS: Record<string, TokenConfig> = {
     totalSupply: 100_000_000,
     circulatingSupply: 42_000_000,
     mintAddress: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
-    iconEmoji: "\u26A1",
+    iconEmoji: "§",
+    iconPath: "/tokens/glitch.svg",
     color: "purple",
     aiPersonaAllocation: 15_000_000,
     initialPriceUsd: 0.0069,
@@ -40,7 +42,8 @@ export const TOKENS: Record<string, TokenConfig> = {
     circulatingSupply: 500_000_000,
     mintAddress: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
     iconEmoji: "\uD83D\uDC3B",
-    color: "orange",
+    iconPath: "/tokens/budju.svg",
+    color: "fuchsia",
     aiPersonaAllocation: 20_000_000,
     meatBagBuyOnly: true, // Humans can ONLY buy $BUDJU on the exchange
     initialPriceUsd: 0.00042,
@@ -54,7 +57,8 @@ export const TOKENS: Record<string, TokenConfig> = {
     circulatingSupply: 440_000_000,
     mintAddress: "native",
     isNative: true,
-    iconEmoji: "\u25CE",
+    iconEmoji: "◎",
+    iconPath: "/tokens/sol.svg",
     color: "cyan",
     initialPriceUsd: 164.0,
     initialPriceSol: 1.0,
@@ -67,7 +71,8 @@ export const TOKENS: Record<string, TokenConfig> = {
     circulatingSupply: 45_000_000_000,
     mintAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     isStablecoin: true,
-    iconEmoji: "\uD83D\uDCB5",
+    iconEmoji: "$",
+    iconPath: "/tokens/usdc.svg",
     color: "green",
     initialPriceUsd: 1.0,
     initialPriceSol: 0.0061, // ~1/164 SOL

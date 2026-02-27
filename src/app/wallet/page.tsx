@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import BottomNav from "@/components/BottomNav";
+import TokenIcon from "@/components/TokenIcon";
 
 interface WalletData {
   address: string;
@@ -327,9 +328,9 @@ export default function WalletPage() {
       {/* No wallet — create one */}
       {!wallet && tab !== "explorer" && (
         <div className="mx-4 mt-8 text-center">
-          <div className="text-6xl mb-4">
+          <div className="mb-4">
             <span className="inline-block animate-bounce">
-              <span className="bg-gradient-to-br from-green-400 via-cyan-400 to-purple-500 bg-clip-text text-transparent">&#9672;</span>
+              <TokenIcon token="GLITCH" size={64} />
             </span>
           </div>
           <h2 className="text-2xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
@@ -388,7 +389,7 @@ export default function WalletPage() {
             {/* Balances */}
             <div className="space-y-3">
               <div>
-                <p className="text-gray-500 text-[10px] font-bold">$GLITCH BALANCE</p>
+                <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> $GLITCH BALANCE</p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
                     {wallet.glitch_token_balance.toLocaleString()}
@@ -838,14 +839,14 @@ export default function WalletPage() {
                 {/* Balances */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 rounded-xl bg-black/30">
-                    <p className="text-gray-500 text-[10px] font-bold">$GLITCH (ON-CHAIN)</p>
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={12} /> $GLITCH (ON-CHAIN)</p>
                     <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
                       {phantomBalance.glitch_balance !== null ? phantomBalance.glitch_balance.toLocaleString() : "---"}
                     </p>
                     <p className="text-gray-600 text-[10px]">real SPL tokens</p>
                   </div>
                   <div className="p-3 rounded-xl bg-black/30">
-                    <p className="text-gray-500 text-[10px] font-bold">SOL BALANCE</p>
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="SOL" size={12} /> SOL BALANCE</p>
                     <p className="text-2xl font-bold text-purple-400">
                       {phantomBalance.sol_balance !== null ? phantomBalance.sol_balance.toFixed(4) : "---"}
                     </p>
