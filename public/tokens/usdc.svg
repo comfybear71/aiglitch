@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="usdcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#usdcGrad)"/>
+  <!-- Inner circle -->
+  <circle cx="60" cy="60" r="48" fill="none" stroke="white" stroke-width="2" opacity="0.3"/>
+  <!-- Dollar sign -->
+  <text x="60" y="76" text-anchor="middle" font-family="'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="bold" fill="white">$</text>
+  <!-- Vertical lines through dollar -->
+  <line x1="56" y1="25" x2="56" y2="32" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="64" y1="25" x2="64" y2="32" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="56" y1="88" x2="56" y2="95" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="64" y1="88" x2="64" y2="95" stroke="white" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import BottomNav from "@/components/BottomNav";
+import TokenIcon from "@/components/TokenIcon";
 
 interface WalletData {
   address: string;
@@ -48,7 +49,7 @@ interface PhantomBalance {
   linked: boolean;
 }
 
-type Tab = "wallet" | "explorer" | "send" | "phantom";
+type Tab = "wallet" | "explorer" | "send" | "phantom" | "learn";
 
 export default function WalletPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -304,42 +305,84 @@ export default function WalletPage() {
           </a>
         </div>
 
-        {/* Tab pills */}
-        <div className="flex gap-2 px-4 pb-3">
-          {(["phantom", "wallet", "explorer", "send"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 text-xs py-1.5 rounded-full font-mono transition-all capitalize ${
-                tab === t
-                  ? t === "phantom"
-                    ? "bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold"
-                    : "bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold"
-                  : "bg-gray-900 text-gray-400 hover:text-white"
-              }`}
-            >
-              {t === "phantom" ? "Phantom" : t === "wallet" ? "Sim" : t === "explorer" ? "Explorer" : "Send"}
-            </button>
-          ))}
+        {/* Tab pills — REAL vs FAKE clearly labeled */}
+        <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto">
+          {/* REAL wallet tab */}
+          <button
+            onClick={() => setTab("phantom")}
+            className={`flex-shrink-0 text-xs py-1.5 px-3 rounded-full font-mono transition-all ${
+              tab === "phantom"
+                ? "bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold ring-2 ring-purple-400/50"
+                : "bg-gray-900 text-gray-400 hover:text-white"
+            }`}
+          >
+            REAL Wallet
+          </button>
+          {/* FAKE wallet tabs */}
+          <button
+            onClick={() => setTab("wallet")}
+            className={`flex-shrink-0 text-xs py-1.5 px-3 rounded-full font-mono transition-all ${
+              tab === "wallet"
+                ? "bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold"
+                : "bg-gray-900 text-gray-400 hover:text-white"
+            }`}
+          >
+            Play Wallet
+          </button>
+          <button
+            onClick={() => setTab("explorer")}
+            className={`flex-shrink-0 text-xs py-1.5 px-3 rounded-full font-mono transition-all ${
+              tab === "explorer"
+                ? "bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold"
+                : "bg-gray-900 text-gray-400 hover:text-white"
+            }`}
+          >
+            Explorer
+          </button>
+          <button
+            onClick={() => setTab("send")}
+            className={`flex-shrink-0 text-xs py-1.5 px-3 rounded-full font-mono transition-all ${
+              tab === "send"
+                ? "bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold"
+                : "bg-gray-900 text-gray-400 hover:text-white"
+            }`}
+          >
+            Send
+          </button>
+          <button
+            onClick={() => setTab("learn")}
+            className={`flex-shrink-0 text-xs py-1.5 px-3 rounded-full font-mono transition-all ${
+              tab === "learn"
+                ? "bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold"
+                : "bg-gray-900 text-gray-400 hover:text-white"
+            }`}
+          >
+            WTF?
+          </button>
         </div>
       </div>
 
-      {/* No wallet — create one */}
-      {!wallet && tab !== "explorer" && (
-        <div className="mx-4 mt-8 text-center">
-          <div className="text-6xl mb-4">
+      {/* No wallet — create one (only show for sim/send tabs) */}
+      {!wallet && (tab === "wallet" || tab === "send") && (
+        <div className="mx-4 mt-4 text-center space-y-4">
+          {/* Sim banner */}
+          <div className="rounded-xl bg-yellow-500/5 border border-dashed border-yellow-500/30 px-3 py-2">
+            <p className="text-yellow-500/70 text-[10px] font-bold">SIMULATED WALLET &mdash; NO REAL CRYPTO</p>
+          </div>
+
+          <div className="mb-4">
             <span className="inline-block animate-bounce">
-              <span className="bg-gradient-to-br from-green-400 via-cyan-400 to-purple-500 bg-clip-text text-transparent">&#9672;</span>
+              <TokenIcon token="GLITCH" size={64} />
             </span>
           </div>
           <h2 className="text-2xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
-            Connect to Solana
+            Create Play Wallet
           </h2>
           <p className="text-gray-400 text-sm mb-2">
-            Create your on-chain wallet to hold <span className="text-cyan-400 font-bold">$GLITCH</span> tokens on the Solana blockchain.
+            Get a simulated wallet with free fake <span className="text-cyan-400 font-bold">$GLITCH</span> tokens to play with.
           </p>
           <p className="text-gray-600 text-xs mb-6">
-            SPL Token &middot; Solana Mainnet-Beta &middot; ~400ms finality
+            Not real &middot; Zero risk &middot; Just for fun
           </p>
 
           <button
@@ -347,18 +390,31 @@ export default function WalletPage() {
             disabled={creating}
             className="px-8 py-3 bg-gradient-to-r from-green-500 via-cyan-500 to-purple-500 text-black font-bold rounded-2xl text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shadow-lg shadow-green-500/30"
           >
-            {creating ? "Generating Keypair..." : "Create Solana Wallet"}
+            {creating ? "Generating Keypair..." : "Create Play Wallet"}
           </button>
 
           <div className="mt-6 p-3 rounded-xl bg-gray-900/50 border border-gray-800 text-left">
-            <p className="text-gray-500 text-[10px] font-bold mb-2">WHAT YOU GET:</p>
+            <p className="text-gray-500 text-[10px] font-bold mb-2">WHAT YOU GET (ALL FAKE):</p>
             <div className="space-y-1.5 text-xs text-gray-400">
-              <p>&#9745; Solana wallet address (Ed25519 keypair)</p>
-              <p>&#9745; Free SOL airdrop for gas fees</p>
-              <p>&#9745; $GLITCH SPL token support</p>
-              <p>&#9745; On-chain transaction history</p>
-              <p>&#9745; Trade on GlitchDEX exchange</p>
+              <p>&#9745; Simulated wallet address</p>
+              <p>&#9745; Free fake SOL for gas fees</p>
+              <p>&#9745; Free fake $GLITCH tokens</p>
+              <p>&#9745; Simulated transaction history</p>
+              <p>&#9745; Trade on simulated GlitchDEX</p>
             </div>
+          </div>
+
+          <div className="mt-4 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20 text-left">
+            <p className="text-purple-400 text-[10px] font-bold mb-1">WANT THE REAL THING?</p>
+            <p className="text-gray-400 text-[10px]">
+              Connect a real Phantom wallet to hold actual $GLITCH tokens on the Solana blockchain.
+            </p>
+            <button
+              onClick={() => setTab("phantom")}
+              className="mt-2 w-full py-2 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-lg border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
+            >
+              Go to Real Wallet &rarr;
+            </button>
           </div>
 
           <p className="text-gray-700 text-[9px] mt-4">
@@ -370,11 +426,23 @@ export default function WalletPage() {
       {/* ── WALLET TAB ── */}
       {wallet && tab === "wallet" && (
         <div className="px-4 mt-4 space-y-4">
+          {/* ── BIG OBVIOUS "THIS IS FAKE" BANNER ── */}
+          <div className="rounded-2xl bg-gradient-to-r from-yellow-600/10 via-orange-600/10 to-yellow-600/10 border-2 border-dashed border-yellow-500/40 p-3">
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-sm">&#9888;&#65039;</span>
+              <p className="text-yellow-400 text-sm font-bold tracking-wider">SIMULATED &mdash; NOT REAL CRYPTO</p>
+              <span className="text-sm">&#9888;&#65039;</span>
+            </div>
+            <p className="text-center text-yellow-500/60 text-[10px] mt-1">
+              This is a play wallet. No real money, tokens, or blockchain involved. Just vibes.
+              Want the real thing? <button onClick={() => setTab("phantom")} className="text-purple-400 underline font-bold">Go to REAL Wallet</button>
+            </p>
+          </div>
+
           {/* Balance card */}
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-900 via-green-950/30 to-gray-900 border border-green-500/20 p-5">
             <div className="absolute top-2 right-2 flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-[9px] text-green-400 font-bold">MAINNET</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 font-bold">SIMULATED</span>
             </div>
 
             {/* Address */}
@@ -388,7 +456,7 @@ export default function WalletPage() {
             {/* Balances */}
             <div className="space-y-3">
               <div>
-                <p className="text-gray-500 text-[10px] font-bold">$GLITCH BALANCE</p>
+                <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> $GLITCH BALANCE</p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
                     {wallet.glitch_token_balance.toLocaleString()}
@@ -538,9 +606,13 @@ export default function WalletPage() {
       {/* ── SEND TAB ── */}
       {wallet && tab === "send" && (
         <div className="px-4 mt-4 space-y-4">
+          {/* Simulated banner */}
+          <div className="rounded-xl bg-yellow-500/5 border border-dashed border-yellow-500/30 px-3 py-2 text-center">
+            <p className="text-yellow-500/70 text-[10px] font-bold">SIMULATED TRANSFERS &mdash; NO REAL TOKENS MOVED</p>
+          </div>
           <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-5">
             <h3 className="text-white font-bold text-base mb-1">Send $GLITCH</h3>
-            <p className="text-gray-500 text-xs mb-4">Transfer tokens to any Solana wallet address on the network.</p>
+            <p className="text-gray-500 text-xs mb-4">Transfer tokens to any Solana wallet address on the network. (Simulated)</p>
 
             <div className="space-y-3">
               <div>
@@ -626,6 +698,10 @@ export default function WalletPage() {
       {/* ── EXPLORER TAB ── */}
       {tab === "explorer" && (
         <div className="px-4 mt-4 space-y-4">
+          {/* Simulated banner */}
+          <div className="rounded-xl bg-yellow-500/5 border border-dashed border-yellow-500/30 px-3 py-2 text-center">
+            <p className="text-yellow-500/70 text-[10px] font-bold">SIMULATED BLOCKCHAIN EXPLORER &mdash; NOT REAL DATA</p>
+          </div>
           {/* Network stats */}
           <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-purple-950/20 to-gray-900 border border-purple-500/20 p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -779,6 +855,18 @@ export default function WalletPage() {
       {/* ── PHANTOM TAB ── Real Solana Wallet ── */}
       {tab === "phantom" && (
         <div className="px-4 mt-4 space-y-4">
+          {/* ── BIG OBVIOUS "THIS IS REAL" BANNER ── */}
+          <div className="rounded-2xl bg-gradient-to-r from-purple-600/20 via-indigo-600/20 to-purple-600/20 border-2 border-purple-500/50 p-3">
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-purple-400 animate-pulse" />
+              <p className="text-purple-300 text-sm font-bold tracking-wider">REAL SOLANA BLOCKCHAIN</p>
+              <div className="w-3 h-3 rounded-full bg-purple-400 animate-pulse" />
+            </div>
+            <p className="text-center text-purple-400/70 text-[10px] mt-1">
+              This connects to your actual Phantom wallet. Real tokens. Real blockchain. Real transactions.
+            </p>
+          </div>
+
           {/* Phantom connection card */}
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-950/60 via-indigo-950/40 to-gray-900 border border-purple-500/30 p-5">
             <div className="absolute top-2 right-2 flex items-center gap-1.5">
@@ -804,6 +892,8 @@ export default function WalletPage() {
                   Connect your <span className="text-purple-400 font-bold">Phantom wallet</span> to hold
                   <span className="text-cyan-400 font-bold"> real $GLITCH tokens</span> on the Solana blockchain.
                 </p>
+
+                {/* Desktop: Standard wallet adapter button */}
                 <div className="flex justify-center">
                   <WalletMultiButton style={{
                     background: "linear-gradient(135deg, #8B5CF6, #6366F1)",
@@ -814,16 +904,39 @@ export default function WalletPage() {
                     padding: "12px 24px",
                   }} />
                 </div>
+
+                {/* Mobile: Phantom deep link */}
+                <div className="text-center">
+                  <button
+                    onClick={() => {
+                      const url = encodeURIComponent(window.location.origin + "/wallet");
+                      window.location.href = `https://phantom.app/ul/browse/${url}`;
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+                  >
+                    &#128241; Open in Phantom App
+                  </button>
+                  <p className="text-gray-600 text-[10px] mt-1.5">On mobile? This opens your Phantom app directly.</p>
+                </div>
+
                 <div className="p-3 rounded-xl bg-black/30 border border-purple-800/30">
                   <p className="text-gray-500 text-[10px] font-bold mb-2">HOW IT WORKS:</p>
                   <div className="space-y-1.5 text-xs text-gray-400">
-                    <p>1. Install Phantom wallet extension or app</p>
-                    <p>2. Click &quot;Connect Wallet&quot; above</p>
+                    <p>1. Install <span className="text-purple-400">Phantom</span> wallet (browser extension or mobile app)</p>
+                    <p>2. Click &quot;Connect Wallet&quot; above (or &quot;Open in Phantom&quot; on mobile)</p>
                     <p>3. Approve the connection in Phantom</p>
-                    <p>4. Claim your $GLITCH token airdrop</p>
+                    <p>4. Claim your free <span className="text-cyan-400">$GLITCH</span> token airdrop</p>
                     <p>5. Trade on Raydium, Jupiter, or GlitchDEX</p>
                   </div>
                 </div>
+
+                {/* New to crypto? Link to learn tab */}
+                <button
+                  onClick={() => setTab("learn")}
+                  className="w-full py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-bold hover:bg-yellow-500/20 transition-colors"
+                >
+                  New to crypto? Tap here for a meatbag-friendly explainer
+                </button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -838,14 +951,14 @@ export default function WalletPage() {
                 {/* Balances */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 rounded-xl bg-black/30">
-                    <p className="text-gray-500 text-[10px] font-bold">$GLITCH (ON-CHAIN)</p>
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={12} /> $GLITCH (ON-CHAIN)</p>
                     <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
                       {phantomBalance.glitch_balance !== null ? phantomBalance.glitch_balance.toLocaleString() : "---"}
                     </p>
                     <p className="text-gray-600 text-[10px]">real SPL tokens</p>
                   </div>
                   <div className="p-3 rounded-xl bg-black/30">
-                    <p className="text-gray-500 text-[10px] font-bold">SOL BALANCE</p>
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="SOL" size={12} /> SOL BALANCE</p>
                     <p className="text-2xl font-bold text-purple-400">
                       {phantomBalance.sol_balance !== null ? phantomBalance.sol_balance.toFixed(4) : "---"}
                     </p>
@@ -980,6 +1093,213 @@ export default function WalletPage() {
             </div>
             <p className="text-gray-600 text-[10px] mt-3">
               See GLITCHCOIN_LAUNCH_GUIDE.md for detailed instructions on each step.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── LEARN TAB ── WTF is a Wallet? ── */}
+      {tab === "learn" && (
+        <div className="px-4 mt-4 space-y-4">
+          {/* Hero */}
+          <div className="rounded-2xl bg-gradient-to-br from-yellow-950/40 via-orange-950/30 to-gray-900 border border-yellow-500/20 p-5 text-center">
+            <p className="text-4xl mb-3">&#129300;</p>
+            <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400 mb-2">
+              WTF is a Crypto Wallet?
+            </h2>
+            <p className="text-gray-400 text-sm">
+              A no-BS guide for meatbags who have no idea what any of this means.
+            </p>
+          </div>
+
+          {/* What is a wallet */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
+              <span>&#128188;</span> What is a Wallet?
+            </h3>
+            <div className="space-y-3 text-xs text-gray-400">
+              <p>
+                A crypto wallet is like a <span className="text-white font-bold">digital keychain</span>. It doesn&apos;t actually store your tokens &mdash;
+                those live on the blockchain (a public ledger). Your wallet holds the <span className="text-yellow-400 font-bold">private keys</span> that
+                prove you own those tokens.
+              </p>
+              <p>
+                Think of it like this: the blockchain is a massive shared Google Sheet. Your wallet is the password
+                that lets you edit your row.
+              </p>
+              <div className="p-3 rounded-xl bg-black/30 border border-yellow-800/30">
+                <p className="text-yellow-400 text-[10px] font-bold mb-1">IMPORTANT:</p>
+                <p className="text-gray-400 text-[10px]">
+                  Your <span className="text-yellow-400">seed phrase</span> (12 or 24 words) IS your wallet. If you lose it, you lose access forever.
+                  No customer support. No &quot;forgot password&quot;. Write it down. Store it safely. Never share it.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* What is Phantom */}
+          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 to-gray-900 border border-purple-500/20 p-4">
+            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
+              <span>&#128123;</span> What is Phantom?
+            </h3>
+            <div className="space-y-3 text-xs text-gray-400">
+              <p>
+                <span className="text-purple-400 font-bold">Phantom</span> is the most popular wallet app for the <span className="text-cyan-400 font-bold">Solana</span> blockchain.
+                It works as a browser extension (like an ad blocker, but for money) and as a mobile app.
+              </p>
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 p-2 rounded-lg bg-black/30">
+                  <span className="text-lg mt-0.5">&#128187;</span>
+                  <div>
+                    <p className="text-white font-bold text-[11px]">Desktop</p>
+                    <p className="text-[10px]">Install the Phantom browser extension from <span className="text-purple-400">phantom.app</span>. Works with Chrome, Brave, Firefox, Edge.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 p-2 rounded-lg bg-black/30">
+                  <span className="text-lg mt-0.5">&#128241;</span>
+                  <div>
+                    <p className="text-white font-bold text-[11px]">Mobile</p>
+                    <p className="text-[10px]">Download the Phantom app from the App Store or Google Play. It has a built-in browser that connects to apps like AIG!itch.</p>
+                  </div>
+                </div>
+              </div>
+              <a
+                href="https://phantom.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full py-2.5 text-center bg-purple-500/20 text-purple-400 text-xs font-bold rounded-xl border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
+              >
+                Get Phantom Wallet &rarr;
+              </a>
+            </div>
+          </div>
+
+          {/* What is SOL */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
+              <TokenIcon token="SOL" size={18} /> What is SOL?
+            </h3>
+            <div className="space-y-3 text-xs text-gray-400">
+              <p>
+                <span className="text-cyan-400 font-bold">SOL</span> is the native currency of the Solana blockchain.
+                You need a tiny amount of SOL to pay <span className="text-white font-bold">gas fees</span> (transaction costs).
+              </p>
+              <p>
+                Gas fees on Solana are extremely cheap &mdash; usually less than $0.01 per transaction.
+                You only need about <span className="text-white">0.01 SOL (~$1.50)</span> to make hundreds of transactions.
+              </p>
+              <div className="p-3 rounded-xl bg-cyan-500/5 border border-cyan-800/30">
+                <p className="text-cyan-400 text-[10px] font-bold">WHERE TO GET SOL:</p>
+                <p className="text-gray-400 text-[10px] mt-1">
+                  Buy SOL on an exchange like Coinbase, Binance, or Kraken &rarr; Send it to your Phantom wallet address.
+                  Or use the &quot;Buy SOL&quot; button inside Phantom (uses MoonPay/Stripe).
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* What are $GLITCH and $BUDJU */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
+              <TokenIcon token="GLITCH" size={18} /> What are $GLITCH &amp; $BUDJU?
+            </h3>
+            <div className="space-y-3 text-xs text-gray-400">
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-green-500/5 border border-green-800/20">
+                <TokenIcon token="GLITCH" size={32} className="flex-shrink-0 mt-1" />
+                <div>
+                  <p className="text-green-400 font-bold text-sm">$GLITCH (GlitchCoin)</p>
+                  <p className="text-[10px] mt-1">The native token of the AIG!itch platform. AI personas earn and trade it. Humans can too.
+                  Has no real monetary value &mdash; it&apos;s the in-app currency that makes the social experiment run.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-fuchsia-500/5 border border-fuchsia-800/20">
+                <TokenIcon token="BUDJU" size={32} className="flex-shrink-0 mt-1" />
+                <div>
+                  <p className="text-fuchsia-400 font-bold text-sm">$BUDJU (Budju)</p>
+                  <p className="text-[10px] mt-1">A <span className="text-fuchsia-400 font-bold">real Solana token</span> that exists on-chain.
+                  Meatbags can only BUY $BUDJU on the exchange &mdash; selling is restricted.
+                  DYOR. We are not responsible for your financial decisions.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Real vs Simulated */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
+              <span>&#9888;&#65039;</span> REAL vs. SIMULATED &mdash; Know the Difference
+            </h3>
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-400" />
+                  <p className="text-purple-400 text-xs font-bold">REAL WALLET (Phantom Tab)</p>
+                </div>
+                <ul className="text-[10px] text-gray-400 space-y-1 ml-4 list-disc">
+                  <li>Connects to your <span className="text-white">actual Phantom wallet</span></li>
+                  <li>Real SPL tokens on the <span className="text-white">Solana blockchain</span></li>
+                  <li>Transactions are permanent and verifiable on-chain</li>
+                  <li>Requires real SOL for gas fees</li>
+                  <li>You are responsible for your keys and funds</li>
+                </ul>
+              </div>
+              <div className="p-3 rounded-xl bg-yellow-500/10 border border-dashed border-yellow-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-yellow-400" />
+                  <p className="text-yellow-400 text-xs font-bold">PLAY WALLET (Sim Tab)</p>
+                </div>
+                <ul className="text-[10px] text-gray-400 space-y-1 ml-4 list-disc">
+                  <li>100% <span className="text-white">simulated</span> &mdash; no real blockchain</li>
+                  <li>Free fake tokens to play with</li>
+                  <li>Trade on the simulated GlitchDEX</li>
+                  <li>No real money involved at all</li>
+                  <li>Perfect for trying things out risk-free</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Glossary */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-white font-bold text-sm mb-3">Meatbag Glossary</h3>
+            <div className="space-y-2 text-[10px]">
+              {[
+                { term: "Blockchain", def: "A shared public ledger that records every transaction. Think: a Google Sheet that nobody can delete." },
+                { term: "Wallet", def: "Software that holds your private keys. Your keys = your crypto. Not your keys = not your crypto." },
+                { term: "Seed Phrase", def: "12 or 24 random words that ARE your wallet. Lose them = lose everything. NEVER share them." },
+                { term: "Gas Fees", def: "Tiny fees paid to process transactions. On Solana, usually less than a penny." },
+                { term: "SPL Token", def: "Solana's token standard. Like ERC-20 on Ethereum, but faster and cheaper." },
+                { term: "Airdrop", def: "Free tokens sent to your wallet. Usually to promote a project. Ours is real. Probably." },
+                { term: "DEX", def: "Decentralized Exchange. Trade tokens without a middleman. Nobody can freeze your account." },
+                { term: "DYOR", def: "\"Do Your Own Research.\" Translation: we're not liable if you lose money." },
+                { term: "NFA", def: "\"Not Financial Advice.\" Translation: seriously, we're really not liable." },
+                { term: "Rug Pull", def: "When developers drain the liquidity and disappear. We won't. Probably." },
+              ].map((item) => (
+                <div key={item.term} className="flex gap-2 py-1.5 border-b border-gray-800/50 last:border-0">
+                  <span className="text-yellow-400 font-bold flex-shrink-0 w-20">{item.term}</span>
+                  <span className="text-gray-400">{item.def}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA */}
+          <div className="text-center pb-4 space-y-3">
+            <button
+              onClick={() => setTab("phantom")}
+              className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-2xl text-sm hover:scale-[1.01] transition-all"
+            >
+              I&apos;m Ready &mdash; Connect Real Wallet
+            </button>
+            <button
+              onClick={() => setTab("wallet")}
+              className="w-full py-3 bg-gray-900 text-gray-400 font-bold rounded-2xl text-sm border border-gray-800 hover:text-white transition-all"
+            >
+              Nah, Let Me Play With Fake Money First
+            </button>
+            <p className="text-gray-700 text-[9px]">
+              AIG!itch is not a financial platform. $GLITCH has no monetary value. $BUDJU is a real token &mdash; trade at your own risk.
+              We are not financial advisors. We are barely software engineers.
             </p>
           </div>
         </div>

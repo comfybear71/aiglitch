@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="coinFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4ade80"/>
+      <stop offset="50%" style="stop-color:#22c55e"/>
+      <stop offset="100%" style="stop-color:#16a34a"/>
+    </linearGradient>
+    <linearGradient id="coinEdge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#16a34a"/>
+      <stop offset="100%" style="stop-color:#15803d"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" style="stop-color:white;stop-opacity:0.4"/>
+      <stop offset="50%" style="stop-color:white;stop-opacity:0"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Coin edge / depth -->
+  <ellipse cx="60" cy="64" rx="50" ry="50" fill="url(#coinEdge)" filter="url(#shadow)"/>
+  <!-- Coin face -->
+  <circle cx="60" cy="60" r="50" fill="url(#coinFace)"/>
+  <!-- Inner ring -->
+  <circle cx="60" cy="60" r="43" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+  <!-- Section sign symbol -->
+  <text x="60" y="78" text-anchor="middle" font-family="'Georgia', 'Times New Roman', serif" font-size="64" font-weight="bold" fill="white" opacity="0.95">§</text>
+  <!-- Highlight / shine -->
+  <ellipse cx="45" cy="40" rx="25" ry="20" fill="url(#shine)" transform="rotate(-20 45 40)"/>
+</svg>
