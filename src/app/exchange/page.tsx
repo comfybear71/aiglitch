@@ -92,18 +92,12 @@ export default function ExchangePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [market, setMarket] = useState<MarketData | null>(null);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
-  const [balances, setBalances] = useState<Record<string, number>>({});
   const [viewTab, setViewTab] = useState<ViewTab>("chart");
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [orderHistory, setOrderHistory] = useState<TradeOrder[]>([]);
   const [selectedPair, setSelectedPair] = useState("GLITCH_USDC");
   const [showPairSelector, setShowPairSelector] = useState(false);
   const chartRef = useRef<HTMLCanvasElement>(null);
-
-  // GlitchDEX buy/sell state
-  const [dexSide, setDexSide] = useState<"buy" | "sell">("buy");
-  const [dexAmount, setDexAmount] = useState("");
-  const [dexSubmitting, setDexSubmitting] = useState(false);
 
   // Phantom on-chain balances
   const [phantomBalances, setPhantomBalances] = useState<Record<string, number>>({});
@@ -139,15 +133,6 @@ export default function ExchangePage() {
     } catch { /* ignore */ }
   }, []);
 
-  const fetchBalances = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      const res = await fetch(`/api/exchange?action=balances&session_id=${encodeURIComponent(sessionId)}`);
-      const data = await res.json();
-      if (data.balances) setBalances(data.balances);
-    } catch { /* ignore */ }
-  }, [sessionId]);
-
   const fetchHistory = useCallback(async () => {
     if (!sessionId) return;
     try {
@@ -175,11 +160,10 @@ export default function ExchangePage() {
   useEffect(() => {
     fetchMarket();
     fetchPriceHistory();
-    fetchBalances();
     fetchHistory();
     const interval = setInterval(fetchMarket, 10000);
     return () => clearInterval(interval);
-  }, [fetchMarket, fetchPriceHistory, fetchBalances, fetchHistory]);
+  }, [fetchMarket, fetchPriceHistory, fetchHistory]);
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -366,43 +350,6 @@ export default function ExchangePage() {
     setSwapQuote(null);
   };
 
-  // ── GlitchDEX Buy/Sell ──
-  const executeDexTrade = async () => {
-    if (!sessionId || !dexAmount || dexSubmitting) return;
-    const amt = parseInt(dexAmount);
-    if (isNaN(amt) || amt < 1) {
-      showToast("error", "Enter a valid amount (min 1)");
-      return;
-    }
-    setDexSubmitting(true);
-    try {
-      const res = await fetch("/api/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          action: dexSide,
-          pair: selectedPair,
-          amount: amt,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast("error", data.error || "Trade failed");
-      } else {
-        showToast("success", `${dexSide === "buy" ? "Bought" : "Sold"} ${amt.toLocaleString()} ${data.base_token || "GLITCH"} for ${Number(data.quote_amount).toFixed(6)} ${data.quote_token || "SOL"}`);
-        setDexAmount("");
-        if (data.balances) setBalances(data.balances);
-        fetchHistory();
-        fetchMarket();
-      }
-    } catch {
-      showToast("error", "Network error");
-    } finally {
-      setDexSubmitting(false);
-    }
-  };
-
   const outputDecimals = TOKEN_DECIMALS[swapOutputToken] || 9;
   const swapOutputAmount = swapQuote ? (parseInt(swapQuote.outAmount) / Math.pow(10, outputDecimals)) : 0;
 
@@ -410,8 +357,8 @@ export default function ExchangePage() {
   const quoteToken = market?.quote_token || "USDC";
   const baseSymbol = baseToken === "GLITCH" ? "$GLITCH" : baseToken === "BUDJU" ? "$BUDJU" : baseToken;
   const quoteSymbol = quoteToken === "GLITCH" ? "$GLITCH" : quoteToken === "BUDJU" ? "$BUDJU" : quoteToken;
-  // Use Phantom balances when connected, otherwise use simulated
-  const displayBalances = connected && Object.keys(phantomBalances).length > 0 ? phantomBalances : balances;
+  // Only show real on-chain balances from Phantom
+  const displayBalances = connected && Object.keys(phantomBalances).length > 0 ? phantomBalances : {} as Record<string, number>;
 
   const formatBalance = (val: number, token: string): string => {
     if (token === "SOL") return val.toFixed(4);
@@ -448,21 +395,23 @@ export default function ExchangePage() {
           </a>
           <div className="text-center">
             <h1 className="text-lg font-bold">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-red-400">GlitchDEX</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-red-400">Exchange</span>
             </h1>
-            <p className="text-gray-500 text-[10px] tracking-widest">MULTI-TOKEN EXCHANGE</p>
+            <p className="text-gray-500 text-[10px] tracking-widest">POWERED BY JUPITER</p>
           </div>
-          {Object.keys(displayBalances).length > 0 && (
+          {connected && Object.keys(displayBalances).length > 0 ? (
             <div className="text-right">
               <p className="text-xs text-cyan-400 font-bold">{(displayBalances.GLITCH || 0).toLocaleString()} $G</p>
               <p className="text-[9px] text-gray-500">{(displayBalances.SOL || 0).toFixed(2)} SOL</p>
             </div>
+          ) : (
+            <div className="w-6" />
           )}
         </div>
       </div>
 
-      {/* ── Prominent Balance Bar ── */}
-      {Object.keys(displayBalances).length > 0 && (
+      {/* ── On-Chain Balance Bar ── */}
+      {connected && Object.keys(displayBalances).length > 0 ? (
         <div className="px-4 pt-3 pb-2">
           <div className="grid grid-cols-4 gap-2">
             {["GLITCH", "SOL", "BUDJU", "USDC"].map((token) => {
@@ -476,7 +425,13 @@ export default function ExchangePage() {
             })}
           </div>
         </div>
-      )}
+      ) : !connected ? (
+        <div className="px-4 pt-3 pb-2">
+          <div className="rounded-xl bg-gray-900/80 border border-gray-800 px-4 py-3 text-center">
+            <p className="text-gray-500 text-xs">Connect Phantom wallet to see your on-chain balances</p>
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Pair Selector ── */}
       <div className="px-4 pt-1 pb-1">
@@ -694,120 +649,8 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── GlitchDEX Buy/Sell Panel ── */}
-      {sessionId && (
-        <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-gray-900 to-gray-950 border border-cyan-500/20 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-bold text-sm">GlitchDEX</span>
-                <span className="text-[9px] text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded">INSTANT</span>
-              </div>
-              <span className="text-gray-600 text-[10px]">{market?.pair || "$GLITCH/USDC"}</span>
-            </div>
-
-            {/* Buy/Sell toggle */}
-            <div className="flex gap-1 bg-black/50 rounded-xl p-1">
-              <button
-                onClick={() => setDexSide("buy")}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                  dexSide === "buy"
-                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                    : "text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                BUY
-              </button>
-              <button
-                onClick={() => setDexSide("sell")}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                  dexSide === "sell"
-                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                    : "text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                SELL
-              </button>
-            </div>
-
-            {/* Amount input */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 text-[10px] font-bold">
-                  AMOUNT ({baseSymbol})
-                </span>
-                <span className="text-[10px] text-gray-500">
-                  Bal: {formatBalance(balances[baseToken] ?? 0, baseToken)} {baseSymbol}
-                </span>
-              </div>
-              <input
-                type="number"
-                value={dexAmount}
-                onChange={(e) => setDexAmount(e.target.value)}
-                placeholder="0"
-                min="1"
-                className="w-full px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-cyan-500 focus:outline-none text-right"
-              />
-              <div className="flex gap-1.5 justify-end">
-                {[1000, 10000, 100000].map(amt => (
-                  <button
-                    key={amt}
-                    onClick={() => setDexAmount(amt.toString())}
-                    className="text-[10px] px-2 py-0.5 bg-gray-800 text-cyan-400 rounded-lg hover:bg-gray-700 hover:text-white transition-colors font-bold"
-                  >
-                    {amt >= 1000 ? `${amt / 1000}K` : amt}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Estimated cost/proceeds */}
-            {dexAmount && parseInt(dexAmount) > 0 && market && (
-              <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{dexSide === "buy" ? "Cost" : "Receive"}</span>
-                  <span className="text-white">
-                    ~{(parseInt(dexAmount) * market.price).toFixed(4)} {quoteSymbol}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Rate</span>
-                  <span className="text-white">1 {baseSymbol} = {market.price.toFixed(6)} {quoteSymbol}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Fee</span>
-                  <span className="text-gray-400">0.000005 SOL (5000 lamports)</span>
-                </div>
-              </div>
-            )}
-
-            {/* Trade button */}
-            <button
-              onClick={executeDexTrade}
-              disabled={dexSubmitting || !dexAmount || parseInt(dexAmount) < 1}
-              className={`w-full py-3 font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 ${
-                dexSide === "buy"
-                  ? "bg-gradient-to-r from-green-600 to-emerald-600 text-white"
-                  : "bg-gradient-to-r from-red-600 to-orange-600 text-white"
-              }`}
-            >
-              {dexSubmitting
-                ? "Processing..."
-                : dexAmount && parseInt(dexAmount) > 0
-                  ? `${dexSide === "buy" ? "Buy" : "Sell"} ${parseInt(dexAmount).toLocaleString()} ${baseSymbol}`
-                  : "Enter an amount"
-              }
-            </button>
-
-            <p className="text-gray-600 text-[9px] text-center">
-              Instant swap on GlitchDEX. Uses your platform balance.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── IN-APP SWAP WITH PHANTOM ── */}
-      {connected && publicKey && (
+      {/* ── SWAP WITH PHANTOM (Jupiter) ── */}
+      {connected && publicKey ? (
         <div className="px-4 mb-4">
           <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -927,20 +770,24 @@ export default function ExchangePage() {
             </button>
 
             <p className="text-gray-600 text-[9px] text-center">
-              Powered by Jupiter. Swaps via your Phantom wallet on Solana.
+              Powered by Jupiter. Real on-chain swaps via your Phantom wallet on Solana.
             </p>
           </div>
         </div>
-      )}
-
-      {/* ── Connect Wallet CTA (when Phantom not connected) ── */}
-      {!connected && (
+      ) : (
         <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-6 text-center">
-            <p className="text-gray-400 text-sm mb-3">Connect Phantom to swap on-chain</p>
-            <a href="/wallet" className="inline-block px-6 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
-              Go to Wallet
+          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-6 text-center space-y-4">
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-400" />
+              <h3 className="text-white font-bold text-sm">Wallet Not Connected</h3>
+            </div>
+            <p className="text-gray-400 text-sm">Connect your Phantom wallet to swap tokens on-chain via Jupiter</p>
+            <a href="/wallet" className="inline-block px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
+              Connect Wallet
             </a>
+            <p className="text-gray-600 text-[9px]">
+              All swaps are real on-chain transactions powered by Jupiter on Solana.
+            </p>
           </div>
         </div>
       )}
