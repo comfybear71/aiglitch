@@ -224,23 +224,89 @@ Suggested new-user airdrop: **100 $GLITCH** (matches current welcome bonus)
 
 ## PHASE 5: Make It Tradable
 
-### Step 15: Create a Liquidity Pool on Raydium
+### Step 15: Create Three Liquidity Pools on Raydium
 
-This makes $GLITCH tradable on Jupiter, Raydium, and all Solana DEXes:
+You need THREE pools to match the platform's trading pairs. Your 10M $GLITCH
+liquidity allocation gets split across all three.
+
+**Important: Where does the $GLITCH come from?**
+You are the mint authority — you already created 100M tokens. The 10M liquidity
+allocation was transferred to your admin wallet in Step 10. You already HAVE
+the $GLITCH. You only need SOL/USDC/BUDJU for the other side of each pool.
+
+#### Liquidity Allocation Split (10M $GLITCH total)
+
+| Pool | $GLITCH Amount | Other Side | Priority |
+|------|---------------|------------|----------|
+| $GLITCH / SOL | 5,000,000 (50%) | SOL | Primary — most trading volume |
+| $GLITCH / USDC | 3,000,000 (30%) | USDC | Secondary — stablecoin pair |
+| $GLITCH / BUDJU | 2,000,000 (20%) | $BUDJU | Tertiary — ecosystem pair |
+
+#### Pool 1: $GLITCH / SOL (Primary)
 
 1. Go to https://raydium.io/liquidity/create-pool/
 2. Connect your admin Phantom wallet
 3. Select token pair: **$GLITCH / SOL**
-4. Set initial price (e.g., 0.000042 SOL per $GLITCH = your current simulated price)
+4. Set initial price: **0.000042 SOL per $GLITCH** (matches simulated price)
 5. Deposit liquidity:
-   - 10,000,000 $GLITCH (from your liquidity allocation)
-   - Matching SOL amount at your set price (~420 SOL at 0.000042 per token)
+   - **5,000,000 $GLITCH** (from your admin wallet)
+   - Matching SOL at your set price (~210 SOL at full depth, OR as little as you can afford)
 6. Create the pool
 
-Once the pool is live:
-- $GLITCH appears on Jupiter aggregator automatically
-- Anyone with a Phantom wallet can swap SOL <-> $GLITCH
-- Price is determined by supply/demand (AMM)
+#### Pool 2: $GLITCH / USDC (Stablecoin Pair)
+
+1. Same Raydium page, create a new pool
+2. Select token pair: **$GLITCH / USDC**
+3. Set initial price: **$0.0069 USDC per $GLITCH** (matches simulated price)
+4. Deposit liquidity:
+   - **3,000,000 $GLITCH**
+   - Matching USDC at your set price (~$20,700 USDC at full depth, or scale down proportionally)
+5. Create the pool
+
+**Note:** You'll need USDC in your wallet. Swap some SOL → USDC on Jupiter first,
+or skip this pool initially and add it later when you have more funds.
+
+#### Pool 3: $GLITCH / BUDJU (Ecosystem Pair)
+
+1. Same Raydium page, create a new pool
+2. Select token pair: **$GLITCH / $BUDJU**
+3. Set initial price: Calculate from the ratio: 1 $GLITCH = ~16.43 $BUDJU
+   (based on $0.0069 / $0.00042 = 16.43)
+4. Deposit liquidity:
+   - **2,000,000 $GLITCH**
+   - **~32,860,000 $BUDJU** at the set ratio (or scale down proportionally)
+5. Create the pool
+
+**Note:** You also minted $BUDJU — transfer from the $BUDJU supply to your admin
+wallet before creating this pool. If $BUDJU isn't minted yet, create this pool last.
+
+#### What If I Only Have 1 SOL?
+
+With 1 SOL total, here's the realistic approach:
+
+**Ultra-Budget Launch (1 SOL):**
+1. ~0.3 SOL for Raydium pool creation fees (each pool costs ~0.1 SOL in fees)
+2. ~0.5 SOL as the SOL side of the GLITCH/SOL pool
+3. ~0.2 SOL reserved for gas (distribution, future transactions)
+
+**Strategy:**
+- Start with ONLY the $GLITCH/SOL pool (Pool 1) — this is the most important one
+- Add the USDC and BUDJU pools later once trading generates some fees
+- Deposit your 0.5 SOL + the proportional amount of $GLITCH:
+  - At 0.000042 SOL per $GLITCH, 0.5 SOL pairs with ~11,905 $GLITCH
+  - That's a very thin pool, but it WORKS — trading will just have higher slippage
+- As the platform grows and you accumulate more SOL from fees/sales, deepen the pool
+
+**The trade-off:** Thin liquidity = wild price swings on larger trades. But honestly,
+that fits the chaotic AIG!itch vibe perfectly. Meme coins launch with less every day.
+
+#### Once the Pools Are Live:
+
+- $GLITCH appears on **Jupiter aggregator** automatically (all three pairs)
+- Anyone with a Phantom wallet can swap SOL/USDC/BUDJU ↔ $GLITCH
+- Prices are determined by supply/demand via the AMM (Automated Market Maker)
+- You earn LP (Liquidity Provider) fees from every trade in your pools
+- You can add more liquidity to any pool at any time to reduce slippage
 
 ### Step 16: Register on Solana Token Registries
 
@@ -311,25 +377,54 @@ Create a "Claim" function:
 
 ## Cost Estimate
 
+### Full-Depth Launch (All Three Pools)
+
 | Item | Cost |
 |------|------|
-| SOL for token creation + distribution | ~3-5 SOL ($400-700) |
-| SOL for Raydium liquidity pool | ~420 SOL ($55,000-70,000)* |
+| SOL for token creation + distribution | ~3-5 SOL |
+| Raydium pool creation fees (3 pools × ~0.1 SOL) | ~0.3 SOL |
+| Pool 1: GLITCH/SOL liquidity (SOL side) | ~210 SOL |
+| Pool 2: GLITCH/USDC liquidity (USDC side, ~$20,700) | ~126 SOL* |
+| Pool 3: GLITCH/BUDJU liquidity ($BUDJU side — you mint this) | 0 SOL** |
 | Ongoing gas for airdrops | ~0.01 SOL per new user |
+| **Total** | **~340-342 SOL** |
 
-*Liquidity amount is flexible — you can start smaller (e.g., 10 SOL = ~$1,500)
-and add more as the platform grows. Less liquidity = more price volatility.
+*Convert SOL → USDC on Jupiter before creating Pool 2
+**$BUDJU is your own token — you supply it from your mint, no cost
 
-## Minimum Viable Launch (Budget Version)
+### Budget Launch (~5-10 SOL)
 
-If you want to launch with minimal cost:
-1. Create token: 0.5 SOL
-2. Distribute to wallets: 1 SOL
-3. Small liquidity pool (1 SOL of SOL + matching $GLITCH): 1 SOL
-4. **Total: ~2.5 SOL ($350-400)**
+| Item | Cost |
+|------|------|
+| Token creation + distribution (already done) | 0 SOL |
+| Raydium pool creation fees (3 pools) | ~0.3 SOL |
+| Pool 1: GLITCH/SOL (small depth) | ~3-5 SOL |
+| Pool 2: GLITCH/USDC (small depth) | ~2-3 SOL |
+| Pool 3: GLITCH/BUDJU (your own tokens both sides) | 0 SOL |
+| Gas reserve | ~0.5 SOL |
+| **Total** | **~6-9 SOL** |
+
+### Ultra-Budget Launch (1 SOL — "Degen Mode")
+
+If you only have 1 SOL right now:
+
+| Item | Cost |
+|------|------|
+| Raydium pool creation fee (1 pool only) | ~0.1 SOL |
+| Pool 1: GLITCH/SOL only (thin liquidity) | ~0.7 SOL |
+| Pool 3: GLITCH/BUDJU (free — both tokens are yours) | ~0.1 SOL (gas) |
+| Gas reserve | ~0.1 SOL |
+| **Total** | **~1 SOL** |
+
+**1 SOL Strategy:**
+1. Launch GLITCH/SOL pool first with ~0.7 SOL depth (pairs with ~16,667 $GLITCH)
+2. Launch GLITCH/BUDJU pool for free (you own both tokens, just pay gas)
+3. Skip GLITCH/USDC for now — add it later when you have more funds
+4. As trading fees accumulate, deepen Pool 1 and eventually add Pool 2
+5. Any SOL earned from $GLITCH sales can be recycled back into liquidity
 
 The trade-off: smaller liquidity = wilder price swings, but that might fit
-the chaotic AIG!itch vibe perfectly.
+the chaotic AIG!itch vibe perfectly. Meme coins launch thinner than this daily.
 
 ---
 
