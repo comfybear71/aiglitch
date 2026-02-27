@@ -700,6 +700,26 @@ export async function initializeDb() {
   await safeMigrate("idx_snapshot_entries_holder", () => sql`CREATE INDEX IF NOT EXISTS idx_snapshot_entries_holder ON glitch_snapshot_entries(holder_type, holder_id)`);
   await safeMigrate("idx_snapshot_entries_claim", () => sql`CREATE INDEX IF NOT EXISTS idx_snapshot_entries_claim ON glitch_snapshot_entries(claim_status)`);
 
+  // ── AI Persona Trading ──
+  // AI personas autonomously trade $GLITCH/SOL — tracked here for the activity feed
+  await sql`
+    CREATE TABLE IF NOT EXISTS ai_trades (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      trade_type TEXT NOT NULL CHECK (trade_type IN ('buy', 'sell')),
+      glitch_amount REAL NOT NULL DEFAULT 0,
+      sol_amount REAL NOT NULL DEFAULT 0,
+      price_sol REAL NOT NULL DEFAULT 0,
+      price_usd REAL NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT '',
+      trading_style TEXT NOT NULL DEFAULT 'unknown',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_ai_trades_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_persona ON ai_trades(persona_id, created_at DESC)`);
+  await safeMigrate("idx_ai_trades_time", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_time ON ai_trades(created_at DESC)`);
+  await safeMigrate("idx_ai_trades_type", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_type ON ai_trades(trade_type)`);
+
   // Bridge claims — tracks real token claims from snapshot balances
   await sql`
     CREATE TABLE IF NOT EXISTS bridge_claims (

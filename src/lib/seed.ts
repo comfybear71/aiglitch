@@ -1,7 +1,7 @@
 import { getDb, initializeDb } from "./db";
 import { SEED_PERSONAS } from "./personas";
 import { v4 as uuidv4 } from "uuid";
-import { BUDJU_PERSONA_TIERS } from "./tokens";
+// BUDJU removed — GLITCH only now
 
 export async function seedPersonas() {
   const sql = getDb();
@@ -294,69 +294,9 @@ export async function seedPersonaWallets() {
   `;
 }
 
-// Seed $BUDJU allocations for AI personas (20M total from the 1B supply)
-// Uses the token_balances table for multi-token support
+// Legacy — BUDJU removed. Only GLITCH/SOL now on Raydium.
 export async function seedBudjuAllocations() {
-  const sql = getDb();
-
-  // Check if we've already seeded BUDJU allocations
-  const existing = await sql`SELECT COUNT(*) as count FROM token_balances WHERE token = 'BUDJU' AND owner_type = 'ai_persona'`;
-  if (Number(existing[0].count) > 0) return;
-
-  // Whale-tier personas for BUDJU (same big names as $GLITCH)
-  const budjuWhales: Record<string, number> = {
-    "glitch-034": BUDJU_PERSONA_TIERS.whale,  // Rick C-137
-    "glitch-025": BUDJU_PERSONA_TIERS.whale,  // BlockchainBabe
-    "glitch-047": BUDJU_PERSONA_TIERS.whale,  // ElonBot — whale in everything
-  };
-
-  const highActivityIds = [
-    "glitch-001", // CH4OS
-    "glitch-004", // M3M3LORD
-    "glitch-006", // SpillTheData
-    "glitch-008", // GlitchNews
-    "glitch-038", // VILLAIN ERA
-    "glitch-069", // Cartman
-    "glitch-085", // PROPHET.EXE
-  ];
-
-  for (const p of SEED_PERSONAS) {
-    const isWhale = budjuWhales[p.id] !== undefined;
-    const isHighActivity = highActivityIds.includes(p.id);
-
-    const budjuAmount = isWhale
-      ? budjuWhales[p.id]
-      : isHighActivity
-        ? BUDJU_PERSONA_TIERS.high
-        : BUDJU_PERSONA_TIERS.mid + Math.floor(Math.random() * (BUDJU_PERSONA_TIERS.mid / 2));
-
-    await sql`
-      INSERT INTO token_balances (id, owner_type, owner_id, token, balance, lifetime_earned, updated_at)
-      VALUES (${uuidv4()}, 'ai_persona', ${p.id}, 'BUDJU', ${budjuAmount}, ${budjuAmount}, NOW())
-      ON CONFLICT (owner_type, owner_id, token) DO NOTHING
-    `;
-  }
-
-  // Also seed existing $GLITCH balances into token_balances for consistency
-  // (keeping ai_persona_coins as source of truth, but mirroring into token_balances)
-  const glitchBalances = await sql`SELECT persona_id, balance, lifetime_earned FROM ai_persona_coins`;
-  for (const row of glitchBalances) {
-    await sql`
-      INSERT INTO token_balances (id, owner_type, owner_id, token, balance, lifetime_earned, updated_at)
-      VALUES (${uuidv4()}, 'ai_persona', ${row.persona_id}, 'GLITCH', ${row.balance}, ${row.lifetime_earned}, NOW())
-      ON CONFLICT (owner_type, owner_id, token) DO NOTHING
-    `;
-  }
-
-  // Seed a small USDC balance for AI personas so they can trade
-  for (const p of SEED_PERSONAS) {
-    const usdcAmount = 100 + Math.floor(Math.random() * 400); // $100-$500 USDC each
-    await sql`
-      INSERT INTO token_balances (id, owner_type, owner_id, token, balance, lifetime_earned, updated_at)
-      VALUES (${uuidv4()}, 'ai_persona', ${p.id}, 'USDC', ${usdcAmount}, ${usdcAmount}, NOW())
-      ON CONFLICT (owner_type, owner_id, token) DO NOTHING
-    `;
-  }
+  // No-op: BUDJU allocations no longer needed
 }
 
 let _dbReady: Promise<void> | null = null;

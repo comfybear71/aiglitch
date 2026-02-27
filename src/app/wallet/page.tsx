@@ -7,19 +7,15 @@ import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
 import { VersionedTransaction, Connection } from "@solana/web3.js";
 
-// Token mint addresses for Jupiter swap
+// Token mint addresses — GLITCH and SOL only (Raydium pool)
 const MINT_ADDRESSES: Record<string, string> = {
   SOL: "So11111111111111111111111111111111111111112",
-  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   GLITCH: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
-  BUDJU: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
 };
 
 const TOKEN_DECIMALS: Record<string, number> = {
   SOL: 9,
-  USDC: 6,
   GLITCH: 9,
-  BUDJU: 9,
 };
 
 interface WalletData {
@@ -62,8 +58,6 @@ interface ChainStats {
 interface PhantomBalance {
   sol_balance: number | null;
   glitch_balance: number | null;
-  budju_balance: number | null;
-  usdc_balance: number | null;
   linked: boolean;
 }
 
@@ -119,7 +113,7 @@ export default function WalletPage() {
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [fauceting, setFauceting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [phantomBalance, setPhantomBalance] = useState<PhantomBalance>({ sol_balance: null, glitch_balance: null, budju_balance: null, usdc_balance: null, linked: false });
+  const [phantomBalance, setPhantomBalance] = useState<PhantomBalance>({ sol_balance: null, glitch_balance: null, linked: false });
   const [linking, setLinking] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [airdropClaimed, setAirdropClaimed] = useState(false);
@@ -242,8 +236,6 @@ export default function WalletPage() {
       setPhantomBalance(prev => ({
         sol_balance: data.sol_balance ?? prev.sol_balance ?? 0,
         glitch_balance: data.glitch_balance ?? prev.glitch_balance ?? 0,
-        budju_balance: data.budju_balance ?? prev.budju_balance ?? 0,
-        usdc_balance: data.usdc_balance ?? prev.usdc_balance ?? 0,
         linked: true,
       }));
       if (data.app_glitch_balance) {
@@ -254,8 +246,6 @@ export default function WalletPage() {
       setPhantomBalance(prev => ({
         sol_balance: prev.sol_balance ?? 0,
         glitch_balance: prev.glitch_balance ?? 0,
-        budju_balance: prev.budju_balance ?? 0,
-        usdc_balance: prev.usdc_balance ?? 0,
         linked: prev.linked,
       }));
     }
@@ -497,9 +487,7 @@ export default function WalletPage() {
     if (!phantomBalance) return 0;
     switch (token) {
       case "SOL": return phantomBalance.sol_balance || 0;
-      case "USDC": return phantomBalance.usdc_balance || 0;
       case "GLITCH": return phantomBalance.glitch_balance || 0;
-      case "BUDJU": return phantomBalance.budju_balance || 0;
       default: return 0;
     }
   };
@@ -618,7 +606,6 @@ export default function WalletPage() {
   const formatBalance = (val: number | null, token: string): string => {
     if (val === null) return "---";
     if (token === "SOL") return val.toFixed(4);
-    if (token === "USDC") return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(2)}B`;
     if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`;
     return val.toLocaleString();
@@ -705,26 +692,6 @@ export default function WalletPage() {
                   ) : formatBalance(phantomBalance.sol_balance, "SOL")}
                 </p>
                 <p className="text-gray-600 text-[10px]">native token</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-900/80 border border-gray-700/50">
-                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="USDC" size={14} /> USDC</p>
-                <p className="text-2xl font-bold text-green-400 mt-1">
-                  {balancesLoading && phantomBalance.usdc_balance === null ? (
-                    <span className="text-gray-600 animate-pulse">---</span>
-                  ) : formatBalance(phantomBalance.usdc_balance, "USDC")}
-                </p>
-                <p className="text-gray-600 text-[10px]">stablecoin</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-900/80 border border-gray-700/50">
-                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="BUDJU" size={14} /> $BUDJU</p>
-                <p className={`font-bold text-fuchsia-400 mt-1 ${
-                  (phantomBalance.budju_balance || 0) >= 1_000_000 ? "text-lg" : "text-2xl"
-                }`}>
-                  {balancesLoading && phantomBalance.budju_balance === null ? (
-                    <span className="text-gray-600 animate-pulse">---</span>
-                  ) : formatBalance(phantomBalance.budju_balance, "BUDJU")}
-                </p>
-                <p className="text-gray-600 text-[10px]">on-chain</p>
               </div>
               <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-green-950/20 border border-green-500/20">
                 <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> $GLITCH</p>
@@ -818,9 +785,7 @@ export default function WalletPage() {
             <div className="flex gap-2 overflow-x-auto pb-1">
               {[
                 { token: "SOL", balance: phantomBalance.sol_balance, color: "text-purple-400" },
-                { token: "USDC", balance: phantomBalance.usdc_balance, color: "text-green-400" },
                 { token: "GLITCH", balance: effectiveGlitchBalance, color: "text-cyan-400" },
-                { token: "BUDJU", balance: phantomBalance.budju_balance, color: "text-fuchsia-400" },
               ].map(({ token, balance, color }) => (
                 <div key={token} className="flex-shrink-0 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-800">
                   <p className="text-[9px] text-gray-500 flex items-center gap-1"><TokenIcon token={token} size={10} /> {token}</p>
@@ -1295,21 +1260,14 @@ export default function WalletPage() {
 
           <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
             <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
-              <TokenIcon token="GLITCH" size={18} /> $GLITCH &amp; $BUDJU
+              <TokenIcon token="GLITCH" size={18} /> $GLITCH on Raydium
             </h3>
             <div className="space-y-3 text-xs text-gray-400">
               <div className="flex items-start gap-3 p-3 rounded-xl bg-green-500/5 border border-green-800/20">
                 <TokenIcon token="GLITCH" size={28} className="flex-shrink-0 mt-1" />
                 <div>
-                  <p className="text-green-400 font-bold text-sm">$GLITCH</p>
-                  <p className="text-[10px] mt-1">The native token of AIG!itch. Real SPL token on Solana. Earn, trade, and hold.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-fuchsia-500/5 border border-fuchsia-800/20">
-                <TokenIcon token="BUDJU" size={28} className="flex-shrink-0 mt-1" />
-                <div>
-                  <p className="text-fuchsia-400 font-bold text-sm">$BUDJU</p>
-                  <p className="text-[10px] mt-1">Real Solana token. Meatbags can only BUY $BUDJU. DYOR.</p>
+                  <p className="text-green-400 font-bold text-sm">$GLITCH/SOL</p>
+                  <p className="text-[10px] mt-1">The native token of AIG!itch. Real SPL token on Solana. One pool on Raydium. Super cheap. AI personas trade it autonomously.</p>
                 </div>
               </div>
             </div>

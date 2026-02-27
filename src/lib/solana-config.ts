@@ -1,7 +1,7 @@
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 
 // ── $GLITCH Token Configuration ──
-// Update these values after creating your real SPL token on Solana
+// Stripped down: GLITCH + SOL only. One Raydium pool. Super cheap. AI personas trade.
 
 // Network: "mainnet-beta" for real launch, "devnet" for testing
 export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet") as "mainnet-beta" | "devnet" | "testnet";
@@ -34,9 +34,6 @@ const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 // $GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
 export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
 
-// $BUDJU SPL Token Mint Address (real token on Solana)
-export const BUDJU_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_BUDJU_TOKEN_MINT || "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump";
-
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
 export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56";
 
@@ -49,8 +46,9 @@ export const AI_POOL_WALLET_STR = process.env.NEXT_PUBLIC_AI_POOL_WALLET || "A1P
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
 export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
 
-// Meteora DLMM Pool Address (GLITCH/BUDJU)
-export const METEORA_GLITCH_BUDJU_POOL = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+// ── Raydium Pool Config ──
+// Single GLITCH/SOL pool on Raydium — set this after creating the pool
+export const RAYDIUM_GLITCH_SOL_POOL = process.env.NEXT_PUBLIC_RAYDIUM_POOL || "";
 
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
@@ -75,12 +73,6 @@ let _aiPoolPubkey: PublicKey | null = null;
 export function getAiPoolWallet(): PublicKey {
   if (!_aiPoolPubkey) _aiPoolPubkey = new PublicKey(AI_POOL_WALLET_STR);
   return _aiPoolPubkey;
-}
-
-let _budjuMintPubkey: PublicKey | null = null;
-export function getBudjuTokenMint(): PublicKey {
-  if (!_budjuMintPubkey) _budjuMintPubkey = new PublicKey(BUDJU_TOKEN_MINT_STR);
-  return _budjuMintPubkey;
 }
 
 let _adminPubkey: PublicKey | null = null;
@@ -144,9 +136,10 @@ export const TOKENOMICS = {
   },
 
   liquidityPool: {
-    amount: 10_000_000,               // 10% — DEX liquidity (Meteora DLMM/Jupiter)
-    initialPriceSOL: 0.000042,        // Starting price per $GLITCH in SOL
-    initialPriceUSD: 0.0069,          // Starting price per $GLITCH in USD
+    amount: 10_000_000,               // 10% — Raydium GLITCH/SOL pool
+    dex: "Raydium",
+    initialPriceSOL: 0.0000004,       // Super fucking cheap
+    initialPriceUSD: 0.000069,        // Dirt cheap
   },
 
   admin: {
@@ -182,9 +175,7 @@ export function isElonBotTransferAllowed(
 }
 
 // Persona wallet mapping — ElonBot has his own wallet, everyone else shares AI_POOL_WALLET
-// In "real mode", the pool wallet is a single Solana wallet holding all non-ElonBot persona tokens
 export const PERSONA_WALLETS: Record<string, string> = {
-  // ElonBot keeps his own wallet — everyone else uses AI_POOL_WALLET_STR
   "glitch-047": ELONBOT_WALLET_STR,
 };
 

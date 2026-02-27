@@ -7,7 +7,6 @@ import {
   isElonBotTransferAllowed,
   getGlitchTokenMint,
   GLITCH_TOKEN_MINT_STR,
-  BUDJU_TOKEN_MINT_STR,
   ADMIN_WALLET_STR,
   isRealSolanaMode,
   getServerSolanaConnection,
@@ -57,20 +56,16 @@ async function getHeliusBalances(walletAddress: string): Promise<HeliusBalanceRe
 }
 
 // USDC mint address on Solana mainnet
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+// Only GLITCH + SOL — no USDC, no BUDJU
 
 interface WalletBalances {
   sol_balance: number;
   glitch_balance: number;
-  budju_balance: number;
-  usdc_balance: number;
 }
 
-// Get all on-chain balances for a wallet address in one call
-// Returns SOL, $GLITCH, $BUDJU, and USDC using Helius or standard RPC
-// All calls have timeouts so the page never hangs
+// Get on-chain balances for a wallet address — SOL + GLITCH only
 async function getWalletBalances(walletAddress: string): Promise<WalletBalances> {
-  const zeros: WalletBalances = { sol_balance: 0, glitch_balance: 0, budju_balance: 0, usdc_balance: 0 };
+  const zeros: WalletBalances = { sol_balance: 0, glitch_balance: 0 };
 
   if (!hasValidTokenMint()) return zeros;
 
@@ -86,8 +81,6 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
     return {
       sol_balance: heliusData.nativeBalance / 1_000_000_000,
       glitch_balance: tokenBalance(GLITCH_TOKEN_MINT_STR, 9),
-      budju_balance: tokenBalance(BUDJU_TOKEN_MINT_STR, 9),
-      usdc_balance: tokenBalance(USDC_MINT, 6),
     };
   }
 
@@ -106,23 +99,19 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
       } catch { return 0; }
     };
 
-    // Fetch ALL balances in parallel, wrapped in a 10 second timeout
+    // Fetch balances in parallel, wrapped in a 10 second timeout
     const results = await withTimeout(
       Promise.all([
         connection.getBalance(walletPubkey).catch(() => 0),
         getSplBalance(GLITCH_TOKEN_MINT_STR, 9),
-        getSplBalance(BUDJU_TOKEN_MINT_STR, 9),
-        getSplBalance(USDC_MINT, 6),
       ]),
       10000,
-      [0, 0, 0, 0] as number[]
+      [0, 0] as number[]
     );
 
     return {
       sol_balance: results[0] / 1_000_000_000,
       glitch_balance: results[1],
-      budju_balance: results[2],
-      usdc_balance: results[3],
     };
   } catch {
     return zeros;
@@ -188,8 +177,6 @@ export async function GET(request: NextRequest) {
       glitch_balance: effectiveGlitch,
       onchain_glitch_balance: onChainGlitch,
       app_glitch_balance,
-      budju_balance: balances.budju_balance ?? 0,
-      usdc_balance: balances.usdc_balance ?? 0,
       token_mint: GLITCH_TOKEN_MINT_STR,
     });
   }
@@ -215,8 +202,6 @@ export async function GET(request: NextRequest) {
         wallet_address: addr,
         sol_balance: balances.sol_balance ?? 0,
         glitch_balance: balances.glitch_balance ?? 0,
-        budju_balance: balances.budju_balance ?? 0,
-        usdc_balance: balances.usdc_balance ?? 0,
       });
     }
 

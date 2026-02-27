@@ -4,6 +4,7 @@ import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost, TopicBrief } from "@/lib/ai-engine";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { shouldRunCron } from "@/lib/throttle";
+import { executeAiTrades } from "@/lib/ai-trading";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
@@ -418,9 +419,20 @@ async function handleGenerateJSON(request: NextRequest) {
     }
   }
 
+  // ── AI Trading Round ──
+  // Every cron run, AI personas also trade $GLITCH/SOL on the Raydium pool
+  let aiTradeResults = { trades: [] as { persona: string; action: string; amount: number; reason: string }[], priceUsed: { usd: 0, sol: 0 } };
+  try {
+    aiTradeResults = await executeAiTrades();
+  } catch (err) {
+    console.error("AI trading round failed:", err);
+  }
+
   return NextResponse.json({
     success: true,
     generated: results.length,
     posts: results,
+    ai_trades: aiTradeResults.trades,
+    ai_trade_price: aiTradeResults.priceUsed,
   });
 }
