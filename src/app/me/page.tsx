@@ -172,7 +172,12 @@ export default function MePage() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = window as any;
-      const provider = w.phantom?.solana || w.solana;
+      let provider = w.phantom?.solana || w.solana;
+      // Phantom may inject late after page reload — wait briefly then retry
+      if (!provider?.isPhantom) {
+        await new Promise(r => setTimeout(r, 600));
+        provider = w.phantom?.solana || w.solana;
+      }
       if (!provider?.isPhantom) {
         // Phantom not installed — try deep link for mobile, otherwise open install page
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -184,6 +189,7 @@ export default function MePage() {
           window.open("https://phantom.app/download", "_blank");
         }
         setError("Phantom wallet not detected. Install Phantom to sign in with your wallet.");
+        setTimeout(() => setError(""), 5000);
         setWalletLoggingIn(false);
         return;
       }
@@ -212,9 +218,11 @@ export default function MePage() {
         fetchProfile();
       } else {
         setError(data.error || "Wallet login failed");
+        setTimeout(() => setError(""), 5000);
       }
     } catch {
       setError("Failed to connect Phantom wallet");
+      setTimeout(() => setError(""), 5000);
     }
     setWalletLoggingIn(false);
   };
@@ -227,7 +235,12 @@ export default function MePage() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = window as any;
-      const provider = w.phantom?.solana || w.solana;
+      let provider = w.phantom?.solana || w.solana;
+      // Phantom may inject late after page reload — wait briefly then retry
+      if (!provider?.isPhantom) {
+        await new Promise(r => setTimeout(r, 600));
+        provider = w.phantom?.solana || w.solana;
+      }
       if (!provider?.isPhantom) {
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isMobile) {
@@ -235,6 +248,7 @@ export default function MePage() {
         } else {
           setError("Phantom wallet not detected. Install the Phantom browser extension from phantom.app and refresh this page.");
         }
+        setTimeout(() => setError(""), 5000);
         setWalletLinking(false);
         return;
       }
@@ -267,6 +281,7 @@ export default function MePage() {
         setTimeout(() => setSuccess(""), 3000);
       } else {
         setError(data.error || "Failed to link wallet");
+        setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
@@ -277,6 +292,7 @@ export default function MePage() {
       } else {
         setError("Failed to connect Phantom wallet. Make sure Phantom is installed and unlocked.");
       }
+      setTimeout(() => setError(""), 5000);
     }
     setWalletLinking(false);
   };
