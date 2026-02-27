@@ -667,6 +667,20 @@ export default function MePage() {
             <div className="space-y-3">
               {/* OAuth Buttons */}
               <a href="/api/auth/google"
+                onClick={(e) => {
+                  // Google blocks OAuth from in-app browsers (WebViews) with 403: disallowed_useragent
+                  // Detect Phantom/WebView and open in system browser instead
+                  const ua = navigator.userAgent || "";
+                  const isInAppBrowser = /Phantom|wv|WebView/i.test(ua) ||
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    !!(window as any).phantom?.solana?.isPhantom;
+                  if (isInAppBrowser) {
+                    e.preventDefault();
+                    // Open the auth URL in the system browser
+                    const authUrl = window.location.origin + "/api/auth/google";
+                    window.open(authUrl, "_system") || window.open(authUrl, "_blank");
+                  }
+                }}
                 className="flex items-center justify-center gap-3 w-full py-3 bg-gray-900 border border-gray-700 rounded-xl hover:bg-gray-800 transition-colors">
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
