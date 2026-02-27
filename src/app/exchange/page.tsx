@@ -477,7 +477,7 @@ export default function ExchangePage() {
       {Object.keys(displayBalances).length > 0 && (
         <div className="px-4 pt-3 pb-2">
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {Object.entries(displayBalances).filter(([, v]) => v > 0 || connected).map(([token, bal]) => (
+            {Object.entries(displayBalances).map(([token, bal]) => (
               <div key={token} className="flex-shrink-0 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-800">
                 <p className="text-[9px] text-gray-500 flex items-center gap-1"><TokenIcon token={token} size={10} /> {token}</p>
                 <p className="text-xs text-white font-bold">{formatBalance(bal || 0, token)}</p>
