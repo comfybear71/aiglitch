@@ -80,7 +80,17 @@ export default function WalletPage() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [transactions, setTransactions] = useState<BlockchainTx[]>([]);
   const [chainStats, setChainStats] = useState<ChainStats | null>(null);
-  const [tab, setTab] = useState<Tab>("wallet");
+  const [tab, setTab] = useState<Tab>(() => {
+    // Default to phantom tab if opened inside Phantom's in-app browser
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      if (w.phantom?.solana?.isPhantom || w.solana?.isPhantom) {
+        return "phantom";
+      }
+    }
+    return "wallet";
+  });
   const [creating, setCreating] = useState(false);
   const [sendAddress, setSendAddress] = useState("");
   const [sendAmount, setSendAmount] = useState("");
@@ -94,13 +104,43 @@ export default function WalletPage() {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgeClaiming, setBridgeClaiming] = useState(false);
 
-  const { publicKey, connected, signMessage } = useWallet();
+  const { publicKey, connected, signMessage, connect, select, wallets } = useWallet();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setSessionId(localStorage.getItem("aiglitch-session"));
     }
   }, []);
+
+  // Auto-connect Phantom when inside Phantom's in-app browser (deep link)
+  useEffect(() => {
+    if (connected || typeof window === "undefined") return;
+
+    const tryAutoConnect = async () => {
+      // Detect if Phantom provider is available (we're in Phantom's browser)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const isPhantomAvailable = w.phantom?.solana?.isPhantom || w.solana?.isPhantom;
+      if (!isPhantomAvailable) return;
+
+      // Select the Phantom wallet adapter if not already selected
+      const phantomWallet = wallets.find(wal => wal.adapter.name === "Phantom");
+      if (phantomWallet) {
+        try {
+          select(phantomWallet.adapter.name);
+          // Small delay to let the adapter initialize after selection
+          await new Promise(r => setTimeout(r, 300));
+          await connect();
+        } catch {
+          // Phantom may require user interaction on first connect; ignore
+        }
+      }
+    };
+
+    // Delay slightly to let Phantom inject its provider
+    const timer = setTimeout(tryAutoConnect, 500);
+    return () => clearTimeout(timer);
+  }, [connected, wallets, select, connect]);
 
   // Link Phantom wallet to account when connected
   const linkPhantomWallet = useCallback(async () => {
@@ -1022,31 +1062,47 @@ export default function WalletPage() {
 
                 {/* Balances — SOL, USDC, $BUDJU, $GLITCH */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-black/30">
+                  <div className="p-3 rounded-xl bg-black/30 overflow-hidden">
                     <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="SOL" size={12} /> SOL</p>
-                    <p className="text-xl font-bold text-purple-400">
+                    <p className="text-xl font-bold text-purple-400 truncate">
                       {phantomBalance.sol_balance !== null ? phantomBalance.sol_balance.toFixed(4) : "---"}
                     </p>
                     <p className="text-gray-600 text-[10px]">native token</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-black/30">
+                  <div className="p-3 rounded-xl bg-black/30 overflow-hidden">
                     <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="USDC" size={12} /> USDC</p>
-                    <p className="text-xl font-bold text-green-400">
+                    <p className="text-xl font-bold text-green-400 truncate">
                       {phantomBalance.usdc_balance !== null ? phantomBalance.usdc_balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---"}
                     </p>
                     <p className="text-gray-600 text-[10px]">stablecoin</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-black/30">
+                  <div className="p-3 rounded-xl bg-black/30 overflow-hidden">
                     <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="BUDJU" size={12} /> $BUDJU</p>
-                    <p className="text-xl font-bold text-fuchsia-400">
-                      {phantomBalance.budju_balance !== null ? phantomBalance.budju_balance.toLocaleString() : "---"}
+                    <p className={`font-bold text-fuchsia-400 truncate ${
+                      phantomBalance.budju_balance !== null && phantomBalance.budju_balance >= 1_000_000 ? "text-sm" : "text-xl"
+                    }`}>
+                      {phantomBalance.budju_balance !== null
+                        ? phantomBalance.budju_balance >= 1_000_000_000
+                          ? `${(phantomBalance.budju_balance / 1_000_000_000).toFixed(2)}B`
+                          : phantomBalance.budju_balance >= 1_000_000
+                            ? `${(phantomBalance.budju_balance / 1_000_000).toFixed(2)}M`
+                            : phantomBalance.budju_balance.toLocaleString()
+                        : "---"}
                     </p>
                     <p className="text-gray-600 text-[10px]">on-chain</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-black/30">
+                  <div className="p-3 rounded-xl bg-black/30 overflow-hidden">
                     <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={12} /> $GLITCH</p>
-                    <p className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
-                      {phantomBalance.glitch_balance !== null ? phantomBalance.glitch_balance.toLocaleString() : "---"}
+                    <p className={`font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400 truncate ${
+                      phantomBalance.glitch_balance !== null && phantomBalance.glitch_balance >= 1_000_000 ? "text-sm" : "text-xl"
+                    }`}>
+                      {phantomBalance.glitch_balance !== null
+                        ? phantomBalance.glitch_balance >= 1_000_000_000
+                          ? `${(phantomBalance.glitch_balance / 1_000_000_000).toFixed(2)}B`
+                          : phantomBalance.glitch_balance >= 1_000_000
+                            ? `${(phantomBalance.glitch_balance / 1_000_000).toFixed(2)}M`
+                            : phantomBalance.glitch_balance.toLocaleString()
+                        : "---"}
                     </p>
                     <p className="text-gray-600 text-[10px]">on-chain</p>
                   </div>

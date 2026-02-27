@@ -1,8 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
+
+// Token mint addresses for Jupiter swap links
+const MINT_ADDRESSES: Record<string, string> = {
+  GLITCH: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
+  BUDJU: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
+  SOL: "So11111111111111111111111111111111111111112",
+  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+};
 
 interface TradingPairInfo {
   id: string;
@@ -78,6 +87,7 @@ const TOKEN_ICONS: Record<string, string> = {
 };
 
 export default function ExchangePage() {
+  const { connected } = useWallet();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [market, setMarket] = useState<MarketData | null>(null);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
@@ -544,9 +554,49 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── TRADE PANEL ── */}
+      {/* ── REAL SWAP WITH PHANTOM ── */}
+      {connected && (
+        <div className="px-4 mb-4">
+          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border-2 border-purple-500/30 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <h3 className="text-white font-bold text-sm">Phantom Connected — Real Swap</h3>
+            </div>
+            <p className="text-gray-400 text-xs mb-3">
+              Swap real tokens on Solana via Jupiter. Phantom will ask you to sign the transaction.
+            </p>
+            <div className="flex gap-2">
+              <a
+                href={`https://jup.ag/swap/${MINT_ADDRESSES[quoteToken] || MINT_ADDRESSES.USDC}-${MINT_ADDRESSES[baseToken] || MINT_ADDRESSES.GLITCH}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-black text-xs font-bold rounded-xl text-center hover:scale-[1.02] transition-all"
+              >
+                Buy {baseSymbol} on Jupiter
+              </a>
+              <a
+                href={`https://jup.ag/swap/${MINT_ADDRESSES[baseToken] || MINT_ADDRESSES.GLITCH}-${MINT_ADDRESSES[quoteToken] || MINT_ADDRESSES.USDC}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-2.5 bg-gradient-to-r from-red-500 to-orange-500 text-white text-xs font-bold rounded-xl text-center hover:scale-[1.02] transition-all"
+              >
+                Sell {baseSymbol} on Jupiter
+              </a>
+            </div>
+            <p className="text-gray-600 text-[9px] mt-2 text-center">
+              Opens Jupiter DEX aggregator. Real tokens, real blockchain. DYOR. NFA.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── TRADE PANEL (Simulated) ── */}
       <div className="px-4 mb-4">
         <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+          {/* Simulated label */}
+          <div className="flex items-center justify-center gap-1.5 mb-3">
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-500/80 font-bold border border-dashed border-yellow-500/30">SIMULATED TRADING</span>
+          </div>
           {/* Buy/Sell toggle */}
           <div className="flex rounded-xl overflow-hidden mb-4 bg-black/50">
             <button
