@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Get real on-chain balance for a connected Phantom wallet
-  // Uses Helius enhanced API if HELIUS_API_KEY is set, falls back to standard RPC
+  // Also returns the app $GLITCH balance (from DB) so UI can show the higher value
   if (action === "balance" && walletAddress) {
     // Only require a valid token mint (not full "real mode") to query balances
     if (!hasValidTokenMint()) {
@@ -156,12 +156,27 @@ export async function GET(request: NextRequest) {
 
     const balances = await getWalletBalances(walletAddress);
 
+    // Also fetch the user's app $GLITCH balance from DB (earned through platform activity)
+    let app_glitch_balance = 0;
+    const sessionId = request.nextUrl.searchParams.get("session_id");
+    if (sessionId) {
+      const sql = getDb();
+      const coins = await sql`SELECT balance FROM glitch_coins WHERE session_id = ${sessionId}`;
+      if (coins.length > 0) app_glitch_balance = Number(coins[0].balance);
+    }
+
+    // Show the higher of on-chain or app balance for $GLITCH
+    const onChainGlitch = balances.glitch_balance || 0;
+    const effectiveGlitch = Math.max(onChainGlitch, app_glitch_balance);
+
     return NextResponse.json({
       real_mode: true,
       helius_enabled: !!HELIUS_API_KEY,
       wallet_address: walletAddress,
       sol_balance: balances.sol_balance,
-      glitch_balance: balances.glitch_balance,
+      glitch_balance: effectiveGlitch,
+      onchain_glitch_balance: onChainGlitch,
+      app_glitch_balance,
       budju_balance: balances.budju_balance,
       usdc_balance: balances.usdc_balance,
       token_mint: GLITCH_TOKEN_MINT_STR,

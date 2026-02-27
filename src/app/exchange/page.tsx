@@ -4,13 +4,21 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
+import { VersionedTransaction, Connection } from "@solana/web3.js";
 
-// Token mint addresses for Jupiter swap links
+// Token mint addresses for Jupiter swap
 const MINT_ADDRESSES: Record<string, string> = {
   GLITCH: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
   BUDJU: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
   SOL: "So11111111111111111111111111111111111111112",
   USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+};
+
+const TOKEN_DECIMALS: Record<string, number> = {
+  SOL: 9,
+  USDC: 6,
+  GLITCH: 9,
+  BUDJU: 9,
 };
 
 interface TradingPairInfo {
@@ -68,26 +76,20 @@ interface TradeOrder {
   created_at: string;
 }
 
+interface JupiterQuote {
+  inputMint: string;
+  outputMint: string;
+  inAmount: string;
+  outAmount: string;
+  priceImpactPct: string;
+  routePlan: { swapInfo: { label: string } }[];
+}
+
 type TradeTab = "buy" | "sell";
 type ViewTab = "chart" | "orderbook" | "trades" | "history";
 
-// Token colors for UI
-const TOKEN_COLORS: Record<string, string> = {
-  GLITCH: "purple",
-  BUDJU: "fuchsia",
-  SOL: "cyan",
-  USDC: "green",
-};
-
-const TOKEN_ICONS: Record<string, string> = {
-  GLITCH: "\u26A1",
-  BUDJU: "\uD83D\uDC3B",
-  SOL: "\u25CE",
-  USDC: "\uD83D\uDCB5",
-};
-
 export default function ExchangePage() {
-  const { connected } = useWallet();
+  const { connected, publicKey, signTransaction } = useWallet();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [market, setMarket] = useState<MarketData | null>(null);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
@@ -101,6 +103,18 @@ export default function ExchangePage() {
   const [selectedPair, setSelectedPair] = useState("GLITCH_USDC");
   const [showPairSelector, setShowPairSelector] = useState(false);
   const chartRef = useRef<HTMLCanvasElement>(null);
+
+  // Phantom on-chain balances
+  const [phantomBalances, setPhantomBalances] = useState<Record<string, number>>({});
+
+  // Jupiter swap state
+  const [swapInputToken, setSwapInputToken] = useState("SOL");
+  const [swapOutputToken, setSwapOutputToken] = useState("GLITCH");
+  const [swapAmount, setSwapAmount] = useState("");
+  const [swapQuote, setSwapQuote] = useState<JupiterQuote | null>(null);
+  const [swapLoading, setSwapLoading] = useState(false);
+  const [swapping, setSwapping] = useState(false);
+  const quoteTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -142,6 +156,21 @@ export default function ExchangePage() {
     } catch { /* ignore */ }
   }, [sessionId]);
 
+  // Fetch real Phantom balances when connected
+  const fetchPhantomBalances = useCallback(async () => {
+    if (!publicKey || !sessionId) return;
+    try {
+      const res = await fetch(`/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`);
+      const data = await res.json();
+      setPhantomBalances({
+        SOL: data.sol_balance || 0,
+        USDC: data.usdc_balance || 0,
+        GLITCH: data.glitch_balance || 0,
+        BUDJU: data.budju_balance || 0,
+      });
+    } catch { /* ignore */ }
+  }, [publicKey, sessionId]);
+
   useEffect(() => {
     fetchMarket();
     fetchPriceHistory();
@@ -150,6 +179,12 @@ export default function ExchangePage() {
     const interval = setInterval(fetchMarket, 10000);
     return () => clearInterval(interval);
   }, [fetchMarket, fetchPriceHistory, fetchBalances, fetchHistory]);
+
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchPhantomBalances();
+    }
+  }, [connected, publicKey, fetchPhantomBalances]);
 
   // Draw chart
   useEffect(() => {
@@ -284,6 +319,100 @@ export default function ExchangePage() {
     }
   };
 
+  // ── Jupiter Swap Functions ──
+  const fetchJupiterQuote = useCallback(async (inputToken: string, outputToken: string, amt: string) => {
+    if (!amt || parseFloat(amt) <= 0) {
+      setSwapQuote(null);
+      return;
+    }
+    const inputMint = MINT_ADDRESSES[inputToken];
+    const outputMint = MINT_ADDRESSES[outputToken];
+    if (!inputMint || !outputMint) return;
+
+    const decimals = TOKEN_DECIMALS[inputToken] || 9;
+    const amountLamports = Math.floor(parseFloat(amt) * Math.pow(10, decimals));
+
+    setSwapLoading(true);
+    try {
+      const res = await fetch(
+        `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=100`
+      );
+      if (res.ok) {
+        const quote = await res.json();
+        setSwapQuote(quote);
+      } else {
+        setSwapQuote(null);
+      }
+    } catch {
+      setSwapQuote(null);
+    }
+    setSwapLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (quoteTimeout.current) clearTimeout(quoteTimeout.current);
+    if (!swapAmount || parseFloat(swapAmount) <= 0) {
+      setSwapQuote(null);
+      return;
+    }
+    quoteTimeout.current = setTimeout(() => {
+      fetchJupiterQuote(swapInputToken, swapOutputToken, swapAmount);
+    }, 500);
+    return () => { if (quoteTimeout.current) clearTimeout(quoteTimeout.current); };
+  }, [swapAmount, swapInputToken, swapOutputToken, fetchJupiterQuote]);
+
+  const executeSwap = async () => {
+    if (!swapQuote || !publicKey || !signTransaction || swapping) return;
+    setSwapping(true);
+    try {
+      const swapRes = await fetch("https://quote-api.jup.ag/v6/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quoteResponse: swapQuote,
+          userPublicKey: publicKey.toBase58(),
+          wrapAndUnwrapSol: true,
+          dynamicComputeUnitLimit: true,
+          prioritizationFeeLamports: "auto",
+        }),
+      });
+      const { swapTransaction, error } = await swapRes.json();
+      if (error) {
+        showToast("error", error);
+        setSwapping(false);
+        return;
+      }
+      const transactionBuf = Buffer.from(swapTransaction, "base64");
+      const transaction = VersionedTransaction.deserialize(transactionBuf);
+      const signed = await signTransaction(transaction);
+      const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+      const txid = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: true,
+        maxRetries: 2,
+      });
+      showToast("success", `Swap successful! TX: ${txid.slice(0, 12)}...`);
+      setSwapAmount("");
+      setSwapQuote(null);
+      setTimeout(fetchPhantomBalances, 3000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Swap failed";
+      showToast("error", msg.includes("User rejected") ? "Transaction cancelled" : msg);
+    } finally {
+      setSwapping(false);
+    }
+  };
+
+  const swapTokenPair = () => {
+    const temp = swapInputToken;
+    setSwapInputToken(swapOutputToken);
+    setSwapOutputToken(temp);
+    setSwapAmount("");
+    setSwapQuote(null);
+  };
+
+  const outputDecimals = TOKEN_DECIMALS[swapOutputToken] || 9;
+  const swapOutputAmount = swapQuote ? (parseInt(swapQuote.outAmount) / Math.pow(10, outputDecimals)) : 0;
+
   const baseToken = market?.base_token || "GLITCH";
   const quoteToken = market?.quote_token || "USDC";
   const baseSymbol = baseToken === "GLITCH" ? "$GLITCH" : baseToken === "BUDJU" ? "$BUDJU" : baseToken;
@@ -292,6 +421,17 @@ export default function ExchangePage() {
   const quoteBalance = balances[quoteToken] || 0;
   const pairPrice = market?.price || 0;
   const totalCost = amount ? (parseInt(amount) || 0) * pairPrice : 0;
+
+  // Use Phantom balances when connected, otherwise use simulated
+  const displayBalances = connected && Object.keys(phantomBalances).length > 0 ? phantomBalances : balances;
+
+  const formatBalance = (val: number, token: string): string => {
+    if (token === "SOL") return val.toFixed(4);
+    if (token === "USDC") return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(2)}B`;
+    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`;
+    return val.toLocaleString();
+  };
 
   const timeAgo = (d: string) => {
     const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
@@ -324,17 +464,31 @@ export default function ExchangePage() {
             </h1>
             <p className="text-gray-500 text-[10px] tracking-widest">MULTI-TOKEN EXCHANGE</p>
           </div>
-          {Object.keys(balances).length > 0 && (
+          {Object.keys(displayBalances).length > 0 && (
             <div className="text-right">
-              <p className="text-xs text-cyan-400 font-bold">{(balances.GLITCH || 0).toLocaleString()} $G</p>
-              <p className="text-[9px] text-gray-500">{(balances.SOL || 0).toFixed(2)} SOL</p>
+              <p className="text-xs text-cyan-400 font-bold">{(displayBalances.GLITCH || 0).toLocaleString()} $G</p>
+              <p className="text-[9px] text-gray-500">{(displayBalances.SOL || 0).toFixed(2)} SOL</p>
             </div>
           )}
         </div>
       </div>
 
+      {/* ── Prominent Balance Bar ── */}
+      {Object.keys(displayBalances).length > 0 && (
+        <div className="px-4 pt-3 pb-2">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {Object.entries(displayBalances).filter(([, v]) => v > 0 || connected).map(([token, bal]) => (
+              <div key={token} className="flex-shrink-0 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-800">
+                <p className="text-[9px] text-gray-500 flex items-center gap-1"><TokenIcon token={token} size={10} /> {token}</p>
+                <p className="text-xs text-white font-bold">{formatBalance(bal || 0, token)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Pair Selector ── */}
-      <div className="px-4 pt-3 pb-1">
+      <div className="px-4 pt-1 pb-1">
         <button
           onClick={() => setShowPairSelector(!showPairSelector)}
           className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-700 hover:border-purple-500/50 transition-all w-full"
@@ -397,12 +551,11 @@ export default function ExchangePage() {
                   {market.change_24h >= 0 ? "+" : ""}{market.change_24h.toFixed(2)}%
                 </span>
               </div>
-              <p className="text-gray-500 text-[10px]">${market.price_usd.toFixed(6)} USD &middot; {market.pair}</p>
+              <p className="text-gray-500 text-[10px]">${market.price_usd.toFixed(6)} USD</p>
             </div>
             <div className="text-right text-[10px] space-y-0.5">
               <p className="text-gray-500">24h Vol: <span className="text-white">{market.volume_24h.toLocaleString()}</span></p>
               <p className="text-gray-500">MCap: <span className="text-white">${market.market_cap.toLocaleString()}</span></p>
-              <p className="text-gray-500">H/L: <span className="text-green-400">{formatPrice(market.high_24h)}</span>/<span className="text-red-400">{formatPrice(market.low_24h)}</span></p>
             </div>
           </div>
         </div>
@@ -447,7 +600,6 @@ export default function ExchangePage() {
         <div className="px-4 mb-4">
           <div className="rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
             <div className="grid grid-cols-2 gap-0">
-              {/* Bids */}
               <div className="border-r border-gray-800">
                 <div className="px-2 py-1.5 border-b border-gray-800 bg-green-500/5">
                   <div className="flex justify-between text-[9px] text-gray-500 font-bold">
@@ -463,7 +615,6 @@ export default function ExchangePage() {
                   </div>
                 ))}
               </div>
-              {/* Asks */}
               <div>
                 <div className="px-2 py-1.5 border-b border-gray-800 bg-red-500/5">
                   <div className="flex justify-between text-[9px] text-gray-500 font-bold">
@@ -480,7 +631,6 @@ export default function ExchangePage() {
                 ))}
               </div>
             </div>
-            {/* Spread */}
             <div className="border-t border-gray-800 px-3 py-1.5 flex justify-between text-[10px]">
               <span className="text-gray-500">Spread</span>
               <span className="text-yellow-400">
@@ -554,49 +704,125 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── REAL SWAP WITH PHANTOM ── */}
-      {connected && (
+      {/* ── IN-APP SWAP WITH PHANTOM ── */}
+      {connected && publicKey && (
         <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border-2 border-purple-500/30 p-4">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-4 space-y-3">
+            <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <h3 className="text-white font-bold text-sm">Phantom Connected — Real Swap</h3>
+              <h3 className="text-white font-bold text-sm">Swap with Phantom</h3>
             </div>
-            <p className="text-gray-400 text-xs mb-3">
-              Swap real tokens on Solana via Jupiter. Phantom will ask you to sign the transaction.
-            </p>
-            <div className="flex gap-2">
-              <a
-                href={`https://jup.ag/swap/${MINT_ADDRESSES[quoteToken] || MINT_ADDRESSES.USDC}-${MINT_ADDRESSES[baseToken] || MINT_ADDRESSES.GLITCH}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-black text-xs font-bold rounded-xl text-center hover:scale-[1.02] transition-all"
-              >
-                Buy {baseSymbol} on Jupiter
-              </a>
-              <a
-                href={`https://jup.ag/swap/${MINT_ADDRESSES[baseToken] || MINT_ADDRESSES.GLITCH}-${MINT_ADDRESSES[quoteToken] || MINT_ADDRESSES.USDC}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 py-2.5 bg-gradient-to-r from-red-500 to-orange-500 text-white text-xs font-bold rounded-xl text-center hover:scale-[1.02] transition-all"
-              >
-                Sell {baseSymbol} on Jupiter
-              </a>
+
+            {/* From */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 text-[10px] font-bold">FROM</span>
+                <button
+                  onClick={() => {
+                    const bal = phantomBalances[swapInputToken] || 0;
+                    setSwapAmount(swapInputToken === "SOL" ? Math.max(0, bal - 0.01).toFixed(4) : Math.floor(bal).toString());
+                  }}
+                  className="text-[10px] text-purple-400 font-bold"
+                >
+                  Max: {formatBalance(phantomBalances[swapInputToken] || 0, swapInputToken)}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={swapInputToken}
+                  onChange={(e) => {
+                    setSwapInputToken(e.target.value);
+                    if (e.target.value === swapOutputToken) setSwapOutputToken(swapInputToken);
+                    setSwapQuote(null);
+                  }}
+                  className="w-24 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                >
+                  {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <input
+                  type="number"
+                  value={swapAmount}
+                  onChange={(e) => setSwapAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="flex-1 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none text-right"
+                />
+              </div>
             </div>
-            <p className="text-gray-600 text-[9px] mt-2 text-center">
-              Opens Jupiter DEX aggregator. Real tokens, real blockchain. DYOR. NFA.
+
+            {/* Swap direction */}
+            <div className="flex justify-center">
+              <button onClick={swapTokenPair} className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center hover:border-purple-500/50 transition-all">
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+              </button>
+            </div>
+
+            {/* To */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 text-[10px] font-bold">TO</span>
+                <span className="text-gray-600 text-[10px]">Bal: {formatBalance(phantomBalances[swapOutputToken] || 0, swapOutputToken)}</span>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={swapOutputToken}
+                  onChange={(e) => {
+                    setSwapOutputToken(e.target.value);
+                    if (e.target.value === swapInputToken) setSwapInputToken(swapOutputToken);
+                    setSwapQuote(null);
+                  }}
+                  className="w-24 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                >
+                  {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <div className="flex-1 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
+                  <p className={`text-lg font-mono ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
+                    {swapLoading ? (
+                      <span className="text-gray-600 animate-pulse">...</span>
+                    ) : swapQuote ? (
+                      swapOutputAmount < 1 ? swapOutputAmount.toFixed(6) : swapOutputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })
+                    ) : "0.00"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quote details */}
+            {swapQuote && (
+              <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Rate</span>
+                  <span className="text-white">1 {swapInputToken} = {(swapOutputAmount / (parseFloat(swapAmount) || 1)).toFixed(4)} {swapOutputToken}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Impact</span>
+                  <span className={parseFloat(swapQuote.priceImpactPct) > 1 ? "text-red-400" : "text-green-400"}>
+                    {parseFloat(swapQuote.priceImpactPct).toFixed(4)}%
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Swap button */}
+            <button
+              onClick={executeSwap}
+              disabled={!swapQuote || swapping || swapLoading}
+              className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40"
+            >
+              {swapping ? "Confirming in Phantom..." : swapQuote ? `Swap ${swapInputToken} for ${swapOutputToken}` : "Enter an amount"}
+            </button>
+
+            <p className="text-gray-600 text-[9px] text-center">
+              Powered by Jupiter. Swaps via your Phantom wallet on Solana.
             </p>
           </div>
         </div>
       )}
 
-      {/* ── TRADE PANEL (Simulated) ── */}
+      {/* ── TRADE PANEL ── */}
       <div className="px-4 mb-4">
         <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-          {/* Simulated label */}
-          <div className="flex items-center justify-center gap-1.5 mb-3">
-            <span className="text-[9px] px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-500/80 font-bold border border-dashed border-yellow-500/30">SIMULATED TRADING</span>
-          </div>
           {/* Buy/Sell toggle */}
           <div className="flex rounded-xl overflow-hidden mb-4 bg-black/50">
             <button
@@ -639,18 +865,6 @@ export default function ExchangePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Multi-token balance strip */}
-              <div className="flex gap-1 overflow-x-auto pb-1">
-                {Object.entries(balances).filter(([, v]) => v > 0).map(([token, bal]) => (
-                  <div key={token} className={`flex-shrink-0 px-2 py-1 rounded-lg bg-black/30 border border-gray-800 ${
-                    token === baseToken || token === quoteToken ? "border-purple-500/30" : ""
-                  }`}>
-                    <p className="text-[9px] text-gray-500 flex items-center gap-1"><TokenIcon token={token} size={12} /> {token}</p>
-                    <p className="text-xs text-white font-bold">{typeof bal === 'number' && bal < 1 ? bal.toFixed(4) : Math.floor(bal).toLocaleString()}</p>
-                  </div>
-                ))}
-              </div>
-
               {/* Amount input */}
               <div>
                 <div className="flex justify-between mb-1">
@@ -707,18 +921,9 @@ export default function ExchangePage() {
                     <span className="text-gray-500">{tradeTab === "buy" ? "Cost" : "Receive"}</span>
                     <span className="text-white">{totalCost.toFixed(6)} {quoteSymbol}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Gas Fee</span>
-                    <span className="text-white">0.000005 SOL</span>
-                  </div>
                   <div className="flex justify-between border-t border-gray-800 pt-1 mt-1">
                     <span className="text-gray-400 font-bold">Total</span>
-                    <span className="text-white font-bold">
-                      {tradeTab === "buy"
-                        ? totalCost.toFixed(6)
-                        : totalCost.toFixed(6)
-                      } {quoteSymbol}
-                    </span>
+                    <span className="text-white font-bold">{totalCost.toFixed(6)} {quoteSymbol}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">USD Value</span>
@@ -738,7 +943,7 @@ export default function ExchangePage() {
                 }`}
               >
                 {trading
-                  ? "Processing on Solana..."
+                  ? "Processing..."
                   : tradeTab === "sell" && baseToken === "BUDJU"
                     ? "Selling $BUDJU Restricted"
                     : tradeTab === "buy"
@@ -751,85 +956,10 @@ export default function ExchangePage() {
         </div>
       </div>
 
-      {/* Exchange listings */}
-      {market && (
-        <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-            <h3 className="text-white font-bold text-sm mb-3">Exchange Listings</h3>
-            <div className="space-y-2">
-              {market.listed_exchanges.map((ex, i) => (
-                <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-xl bg-black/30">
-                  <div>
-                    <p className="text-white text-xs font-bold">{ex.name}</p>
-                    <p className="text-gray-600 text-[10px]">{ex.type}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-gray-400 text-xs">${ex.volume.toLocaleString()}</p>
-                    <p className="text-gray-600 text-[10px]">24h volume</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Token info card */}
-      {market && (
-        <div className="px-4 mb-4">
-          <div className={`rounded-2xl border p-4 ${
-            baseToken === "BUDJU"
-              ? "bg-gradient-to-br from-orange-950/30 via-black to-yellow-950/30 border-orange-500/10"
-              : "bg-gradient-to-br from-purple-950/30 via-black to-pink-950/30 border-purple-500/10"
-          }`}>
-            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
-              <TokenIcon token={baseToken} size={20} /> {baseSymbol} Token Info
-            </h3>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-black/30 rounded-lg p-2">
-                <p className="text-gray-500 text-[10px]">Circulating</p>
-                <p className="text-white font-bold">
-                  {market.circulating_supply >= 1e9
-                    ? `${(market.circulating_supply / 1e9).toFixed(1)}B`
-                    : `${(market.circulating_supply / 1e6).toFixed(1)}M`
-                  }
-                </p>
-              </div>
-              <div className="bg-black/30 rounded-lg p-2">
-                <p className="text-gray-500 text-[10px]">Total Supply</p>
-                <p className="text-white font-bold">
-                  {market.total_supply >= 1e9
-                    ? `${(market.total_supply / 1e9).toFixed(0)}B`
-                    : `${(market.total_supply / 1e6).toFixed(0)}M`
-                  }
-                </p>
-              </div>
-              <div className="bg-black/30 rounded-lg p-2">
-                <p className="text-gray-500 text-[10px]">Market Cap</p>
-                <p className="text-white font-bold">${market.market_cap.toLocaleString()}</p>
-              </div>
-              <div className="bg-black/30 rounded-lg p-2">
-                <p className="text-gray-500 text-[10px]">FDV</p>
-                <p className="text-white font-bold">${(market.price_usd * market.total_supply).toLocaleString()}</p>
-              </div>
-            </div>
-            {baseToken === "BUDJU" && (
-              <div className="mt-2 p-2 rounded-lg bg-orange-500/5 border border-orange-500/10">
-                <p className="text-orange-400 text-[10px] font-bold flex items-center gap-1">
-                  <TokenIcon token="BUDJU" size={14} /> Real token on Solana &middot; Meat bags: BUY only
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Disclaimer */}
       <div className="px-4 pb-8 text-center">
         <p className="text-gray-700 text-[9px] font-mono">
-          NOT A REAL EXCHANGE. $GLITCH has no monetary value. $BUDJU is a real Solana token traded elsewhere.
-          If your portfolio goes to zero, that&apos;s actually by design.
-          DYOR but there&apos;s nothing to research. NFA but the advice is: don&apos;t.
+          DYOR. NFA. $GLITCH and $BUDJU are Solana tokens. Trade at your own risk.
         </p>
       </div>
 
