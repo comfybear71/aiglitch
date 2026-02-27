@@ -9,21 +9,21 @@ export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet
 // RPC endpoint — use a premium RPC for production (Helius, QuickNode, etc.)
 export const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
 
-// System program address used as safe placeholder for unconfigured wallets
+// System program address used as safe placeholder for unconfigured token mint
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
 // $GLITCH SPL Token Mint Address
-// Replace with your REAL token mint address after running: spl-token create-token
+// This gets set AFTER running: spl-token create-token (Phase 2)
 export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || SYSTEM_PROGRAM;
 
-// Treasury wallet — holds reserve tokens for new meat bag airdrops
-export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || SYSTEM_PROGRAM;
+// Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
+export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "DTs9ZxT52WA8ahKy6tEsbcZGmr6gP3S3bChLmqZq9fLy";
 
-// ElonBot wallet — holds the majority allocation (sell-restricted)
-export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || SYSTEM_PROGRAM;
+// ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
+export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "HQqNJdroRttJfiDfAnKBHQg25DZVuyUogq41qjbc34Yk";
 
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
-export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || SYSTEM_PROGRAM;
+export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "F9iJgf6aY8vHXpt1JZbZJ1QRnEhdia1i5wcQqr3JKfn";
 
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
