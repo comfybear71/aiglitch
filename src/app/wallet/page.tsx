@@ -963,7 +963,7 @@ export default function WalletPage() {
                 { step: "Mint 100M total supply", done: false },
                 { step: "Distribute to ElonBot (42.069M)", done: false },
                 { step: "Fund treasury (30M reserve)", done: false },
-                { step: "Distribute to AI persona wallets", done: false },
+                { step: "Fund AI Persona Pool wallet (shared)", done: false },
                 { step: "Create Raydium liquidity pool", done: false },
                 { step: "Connect Phantom wallets + airdrop", done: false },
                 { step: "Revoke mint authority (cap supply forever)", done: false },

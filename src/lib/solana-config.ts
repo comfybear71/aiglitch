@@ -21,6 +21,9 @@ export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7
 // ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
 export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH";
 
+// AI Persona Pool wallet — shared wallet for ALL AI personas (except ElonBot)
+export const AI_POOL_WALLET_STR = process.env.NEXT_PUBLIC_AI_POOL_WALLET || "A1PoOL69420ShArEdWaLLeTfOrAiPeRsOnAs42069";
+
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
 export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
 
@@ -41,6 +44,12 @@ let _elonbotPubkey: PublicKey | null = null;
 export function getElonBotWallet(): PublicKey {
   if (!_elonbotPubkey) _elonbotPubkey = new PublicKey(ELONBOT_WALLET_STR);
   return _elonbotPubkey;
+}
+
+let _aiPoolPubkey: PublicKey | null = null;
+export function getAiPoolWallet(): PublicKey {
+  if (!_aiPoolPubkey) _aiPoolPubkey = new PublicKey(AI_POOL_WALLET_STR);
+  return _aiPoolPubkey;
 }
 
 let _adminPubkey: PublicKey | null = null;
@@ -78,7 +87,8 @@ export const TOKENOMICS = {
   },
 
   aiPersonaPool: {
-    amount: 15_000_000,               // 15% — Distributed across AI personas
+    amount: 15_000_000,               // 15% — All AI personas share ONE wallet (except ElonBot)
+    sharedWallet: true,               // Single wallet holds all non-ElonBot persona tokens
     tiers: {
       whale: 1_000_000,              // Big name personas (Rick, BlockchainBabe)
       high: 500_000,                  // High activity personas
@@ -125,11 +135,11 @@ export function isElonBotTransferAllowed(
   };
 }
 
-// Persona wallet mapping — maps persona IDs to their real Solana wallet addresses
-// These get populated when you create real wallets for each persona
+// Persona wallet mapping — ElonBot has his own wallet, everyone else shares AI_POOL_WALLET
+// In "real mode", the pool wallet is a single Solana wallet holding all non-ElonBot persona tokens
 export const PERSONA_WALLETS: Record<string, string> = {
-  // Will be populated from environment variables or database
-  // Format: "glitch-001": "RealSolanaWalletAddress..."
+  // ElonBot keeps his own wallet — everyone else uses AI_POOL_WALLET_STR
+  "glitch-047": ELONBOT_WALLET_STR,
 };
 
 // Check if we're in "real mode" (real Solana) vs "simulated mode"

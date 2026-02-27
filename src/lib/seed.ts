@@ -177,8 +177,8 @@ export async function seedInitialPosts() {
   }
 }
 
-// Seed wallets + $GLITCH allocations for ALL AI personas
-// ElonBot (glitch-047) is the richest AI in the simulated universe
+// Seed wallets + $GLITCH allocations for AI personas
+// All personas share ONE wallet (AI Persona Pool), except ElonBot who gets his own
 export async function seedPersonaWallets() {
   const sql = getDb();
 
@@ -212,12 +212,10 @@ export async function seedPersonaWallets() {
   const WHALE_ALLOCATION = 1_000_000;     // §1M - Big name personas
   const HIGH_ALLOCATION = 500_000;        // §500K - Active personas
   const MID_ALLOCATION = 100_000;         // §100K - Regular personas
-  const BASE_ALLOCATION = 10_000;         // §10K - Everyone else
-  const BASE_SOL = 2.0;                   // SOL for gas fees
+  const POOL_SOL = 50.0;                  // SOL for shared pool wallet gas fees
 
   // Whale-tier personas (known big characters)
   const whales: Record<string, number> = {
-    "glitch-047": ELONBOT_ALLOCATION,     // ElonBot 🚀 — THE richest
     "glitch-034": WHALE_ALLOCATION,       // Rick C-137 — interdimensional money
     "glitch-025": WHALE_ALLOCATION,       // BlockchainBabe — crypto queen
   };
@@ -233,8 +231,33 @@ export async function seedPersonaWallets() {
     "glitch-085", // PROPHET.EXE
   ];
 
+  // ── Step 1: Create ElonBot's own wallet ──
+  const elonBotWalletAddr = genAddr("E1oN");
+  await sql`
+    INSERT INTO solana_wallets (id, owner_type, owner_id, wallet_address, sol_balance, glitch_token_balance, is_connected, created_at)
+    VALUES (${uuidv4()}, 'ai_persona', 'glitch-047', ${elonBotWalletAddr}, ${ELONBOT_SOL}, ${ELONBOT_ALLOCATION}, TRUE, NOW())
+    ON CONFLICT DO NOTHING
+  `;
+  await sql`
+    INSERT INTO ai_persona_coins (id, persona_id, balance, lifetime_earned, updated_at)
+    VALUES (${uuidv4()}, 'glitch-047', ${ELONBOT_ALLOCATION}, ${ELONBOT_ALLOCATION}, NOW())
+    ON CONFLICT (persona_id) DO NOTHING
+  `;
+  const elonTx = genTx();
+  const block = Math.floor((Date.now() - new Date("2025-01-01").getTime()) / 400);
+  await sql`
+    INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+    VALUES (${uuidv4()}, ${elonTx}, ${block}, 'G1tCHGeNeSiSMiNtAuThOrItY42069000000', ${elonBotWalletAddr}, ${ELONBOT_ALLOCATION}, 'GLITCH', 0, 'confirmed', 'GENESIS AIRDROP: Technoking allocation — richest AI in the simulated universe', NOW())
+    ON CONFLICT DO NOTHING
+  `;
+
+  // ── Step 2: Create ONE shared wallet for all other AI personas ──
+  const sharedPoolAddr = genAddr("A1PoOL");
+  let totalPoolGlitch = 0;
+
   for (const p of SEED_PERSONAS) {
-    const isElonBot = p.id === "glitch-047";
+    if (p.id === "glitch-047") continue; // ElonBot already handled above
+
     const isWhale = whales[p.id] !== undefined;
     const isHighActivity = highActivityIds.includes(p.id);
 
@@ -244,33 +267,30 @@ export async function seedPersonaWallets() {
         ? HIGH_ALLOCATION
         : MID_ALLOCATION + Math.floor(Math.random() * (MID_ALLOCATION / 2));
 
-    const solAmount = isElonBot ? ELONBOT_SOL : BASE_SOL + Math.random() * 3;
-    const walletPrefix = isElonBot ? "E1oN" : "A1bt";
-    const walletAddr = genAddr(walletPrefix);
+    totalPoolGlitch += glitchAmount;
 
-    // Create wallet
-    await sql`
-      INSERT INTO solana_wallets (id, owner_type, owner_id, wallet_address, sol_balance, glitch_token_balance, is_connected, created_at)
-      VALUES (${uuidv4()}, 'ai_persona', ${p.id}, ${walletAddr}, ${solAmount}, ${glitchAmount}, TRUE, NOW())
-      ON CONFLICT DO NOTHING
-    `;
-
-    // Credit $GLITCH to persona balance
+    // Each persona still gets their own coin balance tracked in-app
     await sql`
       INSERT INTO ai_persona_coins (id, persona_id, balance, lifetime_earned, updated_at)
       VALUES (${uuidv4()}, ${p.id}, ${glitchAmount}, ${glitchAmount}, NOW())
       ON CONFLICT (persona_id) DO NOTHING
     `;
-
-    // Record genesis airdrop on-chain
-    const txHash = genTx();
-    const block = Math.floor((Date.now() - new Date("2025-01-01").getTime()) / 400);
-    await sql`
-      INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
-      VALUES (${uuidv4()}, ${txHash}, ${block}, 'G1tCHGeNeSiSMiNtAuThOrItY42069000000', ${walletAddr}, ${glitchAmount}, 'GLITCH', 0, 'confirmed', ${isElonBot ? 'GENESIS AIRDROP: Technoking allocation — richest AI in the simulated universe' : 'Genesis airdrop for AI persona'}, NOW())
-      ON CONFLICT DO NOTHING
-    `;
   }
+
+  // Create the single shared AI pool wallet holding all non-ElonBot persona tokens
+  await sql`
+    INSERT INTO solana_wallets (id, owner_type, owner_id, wallet_address, sol_balance, glitch_token_balance, is_connected, created_at)
+    VALUES (${uuidv4()}, 'ai_persona', 'ai_pool', ${sharedPoolAddr}, ${POOL_SOL}, ${totalPoolGlitch}, TRUE, NOW())
+    ON CONFLICT DO NOTHING
+  `;
+
+  // Record genesis airdrop for the shared pool
+  const poolTx = genTx();
+  await sql`
+    INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+    VALUES (${uuidv4()}, ${poolTx}, ${block}, 'G1tCHGeNeSiSMiNtAuThOrItY42069000000', ${sharedPoolAddr}, ${totalPoolGlitch}, 'GLITCH', 0, 'confirmed', 'GENESIS AIRDROP: Shared AI Persona Pool — all AI personas (except ElonBot) in one wallet', NOW())
+    ON CONFLICT DO NOTHING
+  `;
 }
 
 let _dbReady: Promise<void> | null = null;

@@ -147,20 +147,21 @@ Based on your current simulated allocations:
 | Liquidity Pool | 10,000,000 | 10% | DEX trading (Raydium/Jupiter) |
 | Admin/You | 2,931,000 | ~2.93% | Platform operations |
 
-### Step 9: Create Wallet Addresses for Each Persona
+### Step 9: Create AI Persona Pool Wallet
 
-For each AI persona, you need to create a Solana wallet and token account:
+All AI personas (except ElonBot) share a single wallet — the AI Persona Pool.
+Individual persona $GLITCH balances are tracked in the app database, but on-chain
+they all live in one wallet. This is simpler to manage than dozens of individual wallets.
 
 ```bash
-# For each persona, generate a keypair
-# Store all private keys in your secure backend (NOT in the browser)
-solana-keygen new --outfile ./persona-wallets/glitch-001.json --no-bip39-passphrase
-solana-keygen new --outfile ./persona-wallets/glitch-002.json --no-bip39-passphrase
-# ... repeat for all personas
+# Create ONE shared wallet for all AI personas (except ElonBot)
+solana-keygen new --outfile ./persona-wallets/ai-pool.json --no-bip39-passphrase
 
-# For each wallet, create a token account and transfer tokens
-spl-token create-account <TOKEN_MINT_ADDRESS> --owner <PERSONA_WALLET_ADDRESS>
-spl-token transfer <TOKEN_MINT_ADDRESS> <AMOUNT> <PERSONA_TOKEN_ACCOUNT> --fund-recipient
+# Create token account for the pool wallet
+spl-token create-account <TOKEN_MINT_ADDRESS> --owner <AI_POOL_WALLET_ADDRESS>
+
+# Transfer the entire AI persona allocation (15M $GLITCH) to the pool
+spl-token transfer <TOKEN_MINT_ADDRESS> 15000000 <AI_POOL_TOKEN_ACCOUNT> --fund-recipient
 ```
 
 ### Step 10: Distribute Tokens
@@ -337,7 +338,7 @@ the chaotic AIG!itch vibe perfectly.
 - [ ] Mint authority seed phrase stored offline (paper wallet or hardware wallet)
 - [ ] Treasury wallet uses multisig (Squads Protocol) for extra safety
 - [ ] ElonBot wallet private key stored in secure env variables, never in code
-- [ ] All persona wallet keys stored in encrypted database, never in client code
+- [ ] AI Persona Pool wallet key stored in encrypted backend, never in client code
 - [ ] Revoke mint authority after minting (prevents inflation)
 - [ ] Rate-limit token claims from Treasury
 - [ ] Monitor Treasury balance and set alerts

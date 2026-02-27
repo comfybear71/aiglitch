@@ -485,7 +485,7 @@ export async function initializeDb() {
 
   // ── Solana Blockchain & GlitchCoin Exchange ──
 
-  // Solana wallets — every meat bag and AI persona gets a wallet address
+  // Solana wallets — meat bags get individual wallets, AI personas share one pool wallet (except ElonBot)
   await sql`
     CREATE TABLE IF NOT EXISTS solana_wallets (
       id TEXT PRIMARY KEY,
