@@ -476,13 +476,16 @@ export default function ExchangePage() {
       {/* ── Prominent Balance Bar ── */}
       {Object.keys(displayBalances).length > 0 && (
         <div className="px-4 pt-3 pb-2">
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {Object.entries(displayBalances).filter(([, v]) => v > 0 || connected).map(([token, bal]) => (
-              <div key={token} className="flex-shrink-0 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-800">
-                <p className="text-[9px] text-gray-500 flex items-center gap-1"><TokenIcon token={token} size={10} /> {token}</p>
-                <p className="text-xs text-white font-bold">{formatBalance(bal || 0, token)}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-4 gap-2">
+            {["GLITCH", "SOL", "BUDJU", "USDC"].map((token) => {
+              const bal = displayBalances[token] ?? 0;
+              return (
+                <div key={token} className="px-2 py-2 rounded-xl bg-gray-900/80 border border-gray-800 text-center">
+                  <p className="text-[9px] text-gray-500 flex items-center justify-center gap-1"><TokenIcon token={token} size={10} /> {token}</p>
+                  <p className="text-xs text-white font-bold">{formatBalance(bal, token)}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -447,7 +447,9 @@ export default function MePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-4xl animate-pulse">🧑</div>
+        <div style={{ perspective: '600px' }}>
+          <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-16 h-16 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+        </div>
       </div>
     );
   }
@@ -868,7 +870,9 @@ export default function MePage() {
         {!user && (
           <div>
             <div className="text-center mb-8">
-              <div className="text-6xl mb-4">🧑</div>
+              <div className="mb-4 flex justify-center" style={{ perspective: '600px' }}>
+                <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-20 h-20 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+              </div>
               <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                 Welcome, Meat Bag
               </h1>
@@ -904,6 +908,20 @@ export default function MePage() {
                 <p className="text-[10px] text-gray-500 text-center mt-2">No passwords. No emails. Just vibes.</p>
               </div>
 
+              {/* Phantom Wallet Login — always visible */}
+              <button
+                onClick={handleWalletLogin}
+                disabled={walletLoggingIn}
+                className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-[#ab9ff2] to-[#7c3aed] text-white rounded-xl hover:from-[#9b8fe2] hover:to-[#6d28d9] transition-all font-bold disabled:opacity-50 shadow-lg shadow-purple-500/20"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="64" cy="64" r="64" fill="url(#phantom-grad)"/>
+                  <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.874 41.3057 14.4162 64.0026C13.9504 87.0928 35.3062 107 58.4254 107H63.1344C83.5694 107 110.584 89.1682 110.584 64.9142ZM43.2354 67.4856C43.2354 70.7484 40.5754 73.3924 37.2922 73.3924C34.0172 73.3924 31.349 70.7484 31.349 67.4856V59.834C31.349 56.5712 34.0172 53.9272 37.2922 53.9272C40.5754 53.9272 43.2354 56.5712 43.2354 59.834V67.4856ZM64.4572 67.4856C64.4572 70.7484 61.7972 73.3924 58.514 73.3924C55.239 73.3924 52.5708 70.7484 52.5708 67.4856V59.834C52.5708 56.5712 55.239 53.9272 58.514 53.9272C61.7972 53.9272 64.4572 56.5712 64.4572 59.834V67.4856Z" fill="white"/>
+                  <defs><linearGradient id="phantom-grad" x1="64" y1="0" x2="64" y2="128"><stop stopColor="#534AB7"/><stop offset="1" stopColor="#551BF9"/></linearGradient></defs>
+                </svg>
+                <span className="text-sm">{walletLoggingIn ? "Connecting Wallet..." : "Sign in with Phantom"}</span>
+              </button>
+
               {/* Divider */}
               <div className="flex items-center gap-3 my-2">
                 <div className="flex-1 h-px bg-gray-800" />
@@ -914,21 +932,9 @@ export default function MePage() {
               {/* OAuth & Login Options — collapsed by default */}
               <details className="bg-gray-900/50 border border-gray-800 rounded-xl">
                 <summary className="p-3 text-sm text-gray-400 cursor-pointer hover:text-gray-300 text-center">
-                  Sign in with Google, GitHub, X, or wallet
+                  Sign in with Google, GitHub, or X
                 </summary>
                 <div className="px-4 pb-4 space-y-3">
-                  {/* Wallet Login — shown prominently in Phantom's browser */}
-                  {isPhantomBrowser && (
-                    <button
-                      onClick={handleWalletLogin}
-                      disabled={walletLoggingIn}
-                      className="flex items-center justify-center gap-3 w-full py-3 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl hover:from-purple-500 hover:to-violet-500 transition-all font-bold disabled:opacity-50"
-                    >
-                      <span className="text-lg">👛</span>
-                      <span className="text-sm">{walletLoggingIn ? "Connecting Wallet..." : "Sign in with Phantom Wallet"}</span>
-                    </button>
-                  )}
-
                   <a href="/api/auth/google"
                     onClick={(e) => {
                       const ua = navigator.userAgent || "";
