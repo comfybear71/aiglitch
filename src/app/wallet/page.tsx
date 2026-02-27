@@ -122,6 +122,7 @@ export default function WalletPage() {
   const [phantomBalance, setPhantomBalance] = useState<PhantomBalance>({ sol_balance: null, glitch_balance: null, budju_balance: null, usdc_balance: null, linked: false });
   const [linking, setLinking] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [airdropClaimed, setAirdropClaimed] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgeClaiming, setBridgeClaiming] = useState(false);
   const [balancesLoading, setBalancesLoading] = useState(true);
@@ -195,7 +196,33 @@ export default function WalletPage() {
     }
   }, [sessionId, publicKey, linking]);
 
-  // Fetch real on-chain balances + app balance
+  // Fetch app $GLITCH balance instantly from DB (fast, no blockchain call)
+  const fetchAppBalance = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`/api/coins?session_id=${encodeURIComponent(sessionId)}`);
+      const data = await res.json();
+      if (data.balance !== undefined) {
+        const bal = Number(data.balance);
+        setAppGlitchBalance(bal);
+        // Also immediately show in phantom balance so it's not "---"
+        setPhantomBalance(prev => ({
+          ...prev,
+          glitch_balance: Math.max(prev.glitch_balance || 0, bal),
+          linked: true,
+        }));
+      }
+      // Check if airdrop was already claimed by looking at transactions
+      if (data.transactions) {
+        const hasAirdrop = data.transactions.some((t: { reason: string }) =>
+          t.reason === "Phantom wallet airdrop" || t.reason === "claim_signup"
+        );
+        if (hasAirdrop) setAirdropClaimed(true);
+      }
+    } catch { /* ignore */ }
+  }, [sessionId]);
+
+  // Fetch real on-chain balances (slow - blockchain RPC call)
   const fetchPhantomBalance = useCallback(async () => {
     if (!publicKey) return;
     setBalancesLoading(true);
@@ -203,19 +230,19 @@ export default function WalletPage() {
       const url = `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
-      setPhantomBalance({
-        sol_balance: data.sol_balance ?? null,
-        glitch_balance: data.glitch_balance ?? null,
-        budju_balance: data.budju_balance ?? null,
-        usdc_balance: data.usdc_balance ?? null,
+      setPhantomBalance(prev => ({
+        sol_balance: data.sol_balance ?? prev.sol_balance,
+        glitch_balance: Math.max(data.glitch_balance ?? 0, appGlitchBalance),
+        budju_balance: data.budju_balance ?? prev.budju_balance,
+        usdc_balance: data.usdc_balance ?? prev.usdc_balance,
         linked: true,
-      });
+      }));
       if (data.app_glitch_balance) {
         setAppGlitchBalance(data.app_glitch_balance);
       }
     } catch { /* ignore */ }
     setBalancesLoading(false);
-  }, [publicKey, sessionId]);
+  }, [publicKey, sessionId, appGlitchBalance]);
 
   // Claim airdrop to Phantom wallet
   const claimPhantomAirdrop = useCallback(async () => {
@@ -234,6 +261,7 @@ export default function WalletPage() {
       const data = await res.json();
       if (data.success) {
         showToast("success", data.message);
+        setAirdropClaimed(true);
         // Immediately update local balance
         const claimed = data.amount || 100;
         setAppGlitchBalance(prev => prev + claimed);
@@ -244,6 +272,10 @@ export default function WalletPage() {
         // Also refresh from server after delay
         setTimeout(fetchPhantomBalance, 2000);
       } else {
+        // "Already claimed" means it was claimed before
+        if (data.already_claimed) {
+          setAirdropClaimed(true);
+        }
         showToast("error", data.error || "Claim failed");
       }
     } catch {
@@ -290,6 +322,13 @@ export default function WalletPage() {
       setBridgeClaiming(false);
     }
   }, [sessionId, publicKey, bridgeClaiming]);
+
+  // Fetch app balance IMMEDIATELY (fast DB call), then on-chain balances in background
+  useEffect(() => {
+    if (sessionId) {
+      fetchAppBalance();
+    }
+  }, [sessionId, fetchAppBalance]);
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -686,16 +725,18 @@ export default function WalletPage() {
 
             {/* Action Buttons */}
             <div className="flex gap-2">
+              {!airdropClaimed && (
+                <button
+                  onClick={claimPhantomAirdrop}
+                  disabled={claiming}
+                  className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-black text-sm font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                >
+                  {claiming ? "Claiming..." : "Claim 100 $GLITCH"}
+                </button>
+              )}
               <button
-                onClick={claimPhantomAirdrop}
-                disabled={claiming}
-                className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-black text-sm font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-              >
-                {claiming ? "Claiming..." : "Claim 100 $GLITCH"}
-              </button>
-              <button
-                onClick={fetchPhantomBalance}
-                className="py-3 px-4 bg-gray-900 text-cyan-400 text-sm font-bold rounded-xl border border-gray-700 hover:border-cyan-500/50 transition-all"
+                onClick={() => { fetchPhantomBalance(); fetchAppBalance(); }}
+                className={`py-3 px-4 bg-gray-900 text-cyan-400 text-sm font-bold rounded-xl border border-gray-700 hover:border-cyan-500/50 transition-all ${airdropClaimed ? "flex-1" : ""}`}
               >
                 Refresh
               </button>
@@ -747,17 +788,8 @@ export default function WalletPage() {
               </div>
             )}
 
-            {/* Wallet actions */}
-            <div className="flex justify-center">
-              <WalletMultiButton style={{
-                background: "rgba(139, 92, 246, 0.2)",
-                borderRadius: "0.75rem",
-                fontSize: "0.75rem",
-                fontFamily: "monospace",
-                padding: "8px 16px",
-                border: "1px solid rgba(139, 92, 246, 0.3)",
-              }} />
-            </div>
+            {/* Spacer */}
+            <div className="h-2" />
           </div>
         )}
 
@@ -780,11 +812,11 @@ export default function WalletPage() {
             </div>
 
             {/* Swap Card */}
-            <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-gray-900/95 to-gray-900 border border-gray-700/50 p-4 space-y-4">
-              <h3 className="text-white font-bold text-center">Swap Tokens</h3>
+            <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-gray-900/95 to-gray-900 border border-gray-700/50 p-4 space-y-3">
+              <h3 className="text-white font-bold text-center text-sm">Swap Tokens</h3>
 
               {/* From */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 text-[10px] font-bold">FROM</span>
                   <button
@@ -801,29 +833,31 @@ export default function WalletPage() {
                     Max: {formatBalance(getTokenBalance(swapInputToken), swapInputToken)}
                   </button>
                 </div>
-                <div className="flex gap-2">
-                  <select
-                    value={swapInputToken}
-                    onChange={(e) => {
-                      setSwapInputToken(e.target.value);
-                      if (e.target.value === swapOutputToken) {
-                        setSwapOutputToken(swapInputToken);
-                      }
-                      setSwapQuote(null);
-                    }}
-                    className="w-28 px-3 py-3 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
-                  >
-                    {Object.keys(MINT_ADDRESSES).map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    value={swapAmount}
-                    onChange={(e) => setSwapAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="flex-1 px-3 py-3 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none text-right"
-                  />
+                <div className="rounded-xl bg-black/50 border border-gray-700 p-3">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={swapInputToken}
+                      onChange={(e) => {
+                        setSwapInputToken(e.target.value);
+                        if (e.target.value === swapOutputToken) {
+                          setSwapOutputToken(swapInputToken);
+                        }
+                        setSwapQuote(null);
+                      }}
+                      className="w-20 bg-transparent text-white text-sm font-bold focus:outline-none appearance-none cursor-pointer"
+                    >
+                      {Object.keys(MINT_ADDRESSES).map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={swapAmount}
+                      onChange={(e) => setSwapAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="flex-1 min-w-0 bg-transparent text-white text-lg font-mono placeholder:text-gray-700 focus:outline-none text-right"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -840,35 +874,37 @@ export default function WalletPage() {
               </div>
 
               {/* To */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 text-[10px] font-bold">TO</span>
                   <span className="text-gray-600 text-[10px]">Balance: {formatBalance(getTokenBalance(swapOutputToken), swapOutputToken)}</span>
                 </div>
-                <div className="flex gap-2">
-                  <select
-                    value={swapOutputToken}
-                    onChange={(e) => {
-                      setSwapOutputToken(e.target.value);
-                      if (e.target.value === swapInputToken) {
-                        setSwapInputToken(swapOutputToken);
-                      }
-                      setSwapQuote(null);
-                    }}
-                    className="w-28 px-3 py-3 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
-                  >
-                    {Object.keys(MINT_ADDRESSES).map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  <div className="flex-1 px-3 py-3 bg-black/30 border border-gray-800 rounded-xl text-right">
-                    <p className={`text-lg font-mono ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
-                      {swapLoading ? (
-                        <span className="text-gray-600 animate-pulse">Fetching...</span>
-                      ) : swapQuote ? (
-                        swapOutputAmount < 1 ? swapOutputAmount.toFixed(6) : swapOutputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })
-                      ) : "0.00"}
-                    </p>
+                <div className="rounded-xl bg-black/30 border border-gray-800 p-3">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={swapOutputToken}
+                      onChange={(e) => {
+                        setSwapOutputToken(e.target.value);
+                        if (e.target.value === swapInputToken) {
+                          setSwapInputToken(swapOutputToken);
+                        }
+                        setSwapQuote(null);
+                      }}
+                      className="w-20 bg-transparent text-white text-sm font-bold focus:outline-none appearance-none cursor-pointer"
+                    >
+                      {Object.keys(MINT_ADDRESSES).map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className={`text-lg font-mono truncate ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
+                        {swapLoading ? (
+                          <span className="text-yellow-500/70 animate-pulse text-sm">Fetching price...</span>
+                        ) : swapQuote ? (
+                          swapOutputAmount < 1 ? swapOutputAmount.toFixed(6) : swapOutputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })
+                        ) : "0.00"}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -878,7 +914,7 @@ export default function WalletPage() {
                 <div className="p-3 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-xs">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Rate</span>
-                    <span className="text-white">
+                    <span className="text-white text-[11px]">
                       1 {swapInputToken} = {(swapOutputAmount / (parseFloat(swapAmount) || 1)).toFixed(4)} {swapOutputToken}
                     </span>
                   </div>
@@ -890,14 +926,19 @@ export default function WalletPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Route</span>
-                    <span className="text-gray-400">
+                    <span className="text-gray-400 text-[11px] truncate ml-2">
                       {swapQuote.routePlan?.map(r => r.swapInfo?.label).filter(Boolean).join(" → ") || "Jupiter"}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Slippage</span>
-                    <span className="text-gray-400">1%</span>
-                  </div>
+                </div>
+              )}
+
+              {/* No liquidity warning for GLITCH */}
+              {!swapQuote && !swapLoading && swapAmount && parseFloat(swapAmount) > 0 && (
+                <div className="p-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                  <p className="text-yellow-400 text-[10px] text-center">
+                    No liquidity pool yet for $GLITCH. Swap will be available once a Raydium pool is created.
+                  </p>
                 </div>
               )}
 
@@ -907,11 +948,11 @@ export default function WalletPage() {
                 disabled={!swapQuote || swapping || swapLoading}
                 className="w-full py-3.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
               >
-                {swapping ? "Confirming in Phantom..." : swapQuote ? `Swap ${swapInputToken} for ${swapOutputToken}` : "Enter an amount"}
+                {swapping ? "Confirming in Phantom..." : swapLoading ? "Fetching price..." : swapQuote ? `Swap ${swapInputToken} for ${swapOutputToken}` : "Enter an amount"}
               </button>
 
               <p className="text-gray-600 text-[9px] text-center">
-                Powered by Jupiter. Swaps execute on Solana via your Phantom wallet. DYOR. NFA.
+                Powered by Jupiter. Swaps via Phantom on Solana. DYOR. NFA.
               </p>
             </div>
           </div>
