@@ -85,7 +85,6 @@ interface JupiterQuote {
   routePlan: { swapInfo: { label: string } }[];
 }
 
-type TradeTab = "buy" | "sell";
 type ViewTab = "chart" | "orderbook" | "trades" | "history";
 
 export default function ExchangePage() {
@@ -94,10 +93,7 @@ export default function ExchangePage() {
   const [market, setMarket] = useState<MarketData | null>(null);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
-  const [tradeTab, setTradeTab] = useState<TradeTab>("buy");
   const [viewTab, setViewTab] = useState<ViewTab>("chart");
-  const [amount, setAmount] = useState("");
-  const [trading, setTrading] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [orderHistory, setOrderHistory] = useState<TradeOrder[]>([]);
   const [selectedPair, setSelectedPair] = useState("GLITCH_USDC");
@@ -274,51 +270,6 @@ export default function ExchangePage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const handleTrade = async () => {
-    if (!sessionId || !amount) return;
-    const qty = parseInt(amount);
-    if (isNaN(qty) || qty < 1) {
-      showToast("error", "Enter a valid amount");
-      return;
-    }
-
-    if (!balances.SOL && balances.SOL !== 0) {
-      showToast("error", "Create a wallet first! Go to /wallet");
-      return;
-    }
-
-    setTrading(true);
-    try {
-      const res = await fetch("/api/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          action: tradeTab,
-          amount: qty,
-          pair: selectedPair,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const verb = tradeTab === "buy" ? "Bought" : "Sold";
-        const baseSymbol = market?.base_token || "GLITCH";
-        showToast("success", `${verb} ${qty.toLocaleString()} ${baseSymbol}! TX: ${data.tx_hash.slice(0, 12)}...`);
-        setAmount("");
-        if (data.balances) setBalances(data.balances);
-        fetchMarket();
-        fetchHistory();
-        fetchPriceHistory();
-      } else {
-        showToast("error", data.error || "Trade failed");
-      }
-    } catch {
-      showToast("error", "Network error");
-    } finally {
-      setTrading(false);
-    }
-  };
-
   // ── Jupiter Swap Functions ──
   const fetchJupiterQuote = useCallback(async (inputToken: string, outputToken: string, amt: string) => {
     if (!amt || parseFloat(amt) <= 0) {
@@ -417,11 +368,6 @@ export default function ExchangePage() {
   const quoteToken = market?.quote_token || "USDC";
   const baseSymbol = baseToken === "GLITCH" ? "$GLITCH" : baseToken === "BUDJU" ? "$BUDJU" : baseToken;
   const quoteSymbol = quoteToken === "GLITCH" ? "$GLITCH" : quoteToken === "BUDJU" ? "$BUDJU" : quoteToken;
-  const baseBalance = balances[baseToken] || 0;
-  const quoteBalance = balances[quoteToken] || 0;
-  const pairPrice = market?.price || 0;
-  const totalCost = amount ? (parseInt(amount) || 0) * pairPrice : 0;
-
   // Use Phantom balances when connected, otherwise use simulated
   const displayBalances = connected && Object.keys(phantomBalances).length > 0 ? phantomBalances : balances;
 
@@ -516,7 +462,6 @@ export default function ExchangePage() {
                 onClick={() => {
                   setSelectedPair(p.id);
                   setShowPairSelector(false);
-                  setAmount("");
                 }}
                 className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${
                   p.id === selectedPair
@@ -720,15 +665,9 @@ export default function ExchangePage() {
             <div className="space-y-1">
               <div className="flex justify-between items-center">
                 <span className="text-gray-500 text-[10px] font-bold">FROM</span>
-                <button
-                  onClick={() => {
-                    const bal = phantomBalances[swapInputToken] || 0;
-                    setSwapAmount(swapInputToken === "SOL" ? Math.max(0, bal - 0.01).toFixed(4) : Math.floor(bal).toString());
-                  }}
-                  className="text-[10px] text-purple-400 font-bold"
-                >
-                  Max: {formatBalance(phantomBalances[swapInputToken] || 0, swapInputToken)}
-                </button>
+                <span className="text-[10px] text-gray-500">
+                  Bal: {formatBalance(phantomBalances[swapInputToken] || 0, swapInputToken)}
+                </span>
               </div>
               <div className="flex gap-2">
                 <select
@@ -738,7 +677,7 @@ export default function ExchangePage() {
                     if (e.target.value === swapOutputToken) setSwapOutputToken(swapInputToken);
                     setSwapQuote(null);
                   }}
-                  className="w-24 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                  className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
                 >
                   {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
@@ -747,8 +686,25 @@ export default function ExchangePage() {
                   value={swapAmount}
                   onChange={(e) => setSwapAmount(e.target.value)}
                   placeholder="0.00"
-                  className="flex-1 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none text-right"
+                  className="flex-1 min-w-0 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none text-right"
                 />
+              </div>
+              <div className="flex gap-1.5 justify-end">
+                {[25, 50, 100].map(pct => (
+                  <button
+                    key={pct}
+                    onClick={() => {
+                      const bal = phantomBalances[swapInputToken] || 0;
+                      if (bal <= 0) return;
+                      const raw = swapInputToken === "SOL" ? Math.max(0, bal - 0.01) * pct / 100 : bal * pct / 100;
+                      const decimals = TOKEN_DECIMALS[swapInputToken] || 9;
+                      setSwapAmount(decimals <= 6 ? raw.toFixed(2) : raw.toFixed(4));
+                    }}
+                    className="text-[10px] px-2 py-0.5 bg-gray-800 text-purple-400 rounded-lg hover:bg-gray-700 hover:text-white transition-colors font-bold"
+                  >
+                    {pct}%
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -775,11 +731,11 @@ export default function ExchangePage() {
                     if (e.target.value === swapInputToken) setSwapInputToken(swapOutputToken);
                     setSwapQuote(null);
                   }}
-                  className="w-24 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                  className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
                 >
                   {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <div className="flex-1 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
+                <div className="flex-1 min-w-0 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
                   <p className={`text-lg font-mono ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
                     {swapLoading ? (
                       <span className="text-gray-600 animate-pulse">...</span>
@@ -823,141 +779,17 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── TRADE PANEL ── */}
-      <div className="px-4 mb-4">
-        <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-          {/* Buy/Sell toggle */}
-          <div className="flex rounded-xl overflow-hidden mb-4 bg-black/50">
-            <button
-              onClick={() => setTradeTab("buy")}
-              className={`flex-1 py-2 text-sm font-bold transition-all ${
-                tradeTab === "buy"
-                  ? "bg-green-500 text-black"
-                  : "text-gray-500 hover:text-white"
-              }`}
-            >
-              Buy {baseSymbol}
-            </button>
-            <button
-              onClick={() => setTradeTab("sell")}
-              className={`flex-1 py-2 text-sm font-bold transition-all ${
-                tradeTab === "sell"
-                  ? "bg-red-500 text-black"
-                  : "text-gray-500 hover:text-white"
-              }`}
-            >
-              Sell {baseSymbol}
-            </button>
+      {/* ── Connect Wallet CTA (when Phantom not connected) ── */}
+      {!connected && (
+        <div className="px-4 mb-4">
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-6 text-center">
+            <p className="text-gray-400 text-sm mb-3">Connect Phantom to swap on-chain</p>
+            <a href="/wallet" className="inline-block px-6 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
+              Go to Wallet
+            </a>
           </div>
-
-          {/* $BUDJU sell restriction warning */}
-          {tradeTab === "sell" && baseToken === "BUDJU" && (
-            <div className="mb-3 p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
-              <p className="text-orange-400 text-xs font-bold">
-                <TokenIcon token="BUDJU" size={16} className="mr-1" /> Meat bags can only BUY $BUDJU. Selling restricted.
-              </p>
-            </div>
-          )}
-
-          {Object.keys(balances).length === 0 ? (
-            <div className="text-center py-4">
-              <p className="text-gray-400 text-sm mb-3">Connect your wallet to trade</p>
-              <a href="/wallet" className="inline-block px-6 py-2 bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold rounded-xl text-sm hover:scale-105 transition-all">
-                Go to Wallet
-              </a>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {/* Amount input */}
-              <div>
-                <div className="flex justify-between mb-1">
-                  <label className="text-gray-500 text-[10px] font-bold">AMOUNT ({baseSymbol})</label>
-                  <span className="text-gray-500 text-[10px]">
-                    {tradeTab === "buy"
-                      ? `${quoteSymbol}: ${quoteBalance < 1 ? quoteBalance.toFixed(4) : Math.floor(quoteBalance).toLocaleString()}`
-                      : `${baseSymbol}: ${baseBalance < 1 ? baseBalance.toFixed(4) : Math.floor(baseBalance).toLocaleString()}`
-                    }
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0"
-                    min="1"
-                    className="w-full px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                    {[25, 50, 100].map(pct => (
-                      <button
-                        key={pct}
-                        onClick={() => {
-                          if (tradeTab === "sell") {
-                            setAmount(Math.floor(baseBalance * pct / 100).toString());
-                          } else if (pairPrice > 0) {
-                            const maxBuy = Math.floor(quoteBalance / pairPrice);
-                            setAmount(Math.max(0, Math.floor(maxBuy * pct / 100)).toString());
-                          }
-                        }}
-                        className="text-[9px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded hover:text-white transition-colors"
-                      >
-                        {pct}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Order summary */}
-              {market && amount && parseInt(amount) > 0 && (
-                <div className="p-3 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Price</span>
-                    <span className="text-white">{formatPrice(pairPrice)} {quoteSymbol}/{baseSymbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Quantity</span>
-                    <span className="text-white">{parseInt(amount).toLocaleString()} {baseSymbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{tradeTab === "buy" ? "Cost" : "Receive"}</span>
-                    <span className="text-white">{totalCost.toFixed(6)} {quoteSymbol}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-800 pt-1 mt-1">
-                    <span className="text-gray-400 font-bold">Total</span>
-                    <span className="text-white font-bold">{totalCost.toFixed(6)} {quoteSymbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">USD Value</span>
-                    <span className="text-green-400">${(parseInt(amount) * market.price_usd).toFixed(2)}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Trade button */}
-              <button
-                onClick={handleTrade}
-                disabled={trading || !amount || parseInt(amount) < 1 || (tradeTab === "sell" && baseToken === "BUDJU")}
-                className={`w-full py-3 font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100 ${
-                  tradeTab === "buy"
-                    ? "bg-gradient-to-r from-green-500 to-emerald-500 text-black"
-                    : "bg-gradient-to-r from-red-500 to-orange-500 text-white"
-                }`}
-              >
-                {trading
-                  ? "Processing..."
-                  : tradeTab === "sell" && baseToken === "BUDJU"
-                    ? "Selling $BUDJU Restricted"
-                    : tradeTab === "buy"
-                      ? `Buy ${amount ? parseInt(amount).toLocaleString() : "0"} ${baseSymbol}`
-                      : `Sell ${amount ? parseInt(amount).toLocaleString() : "0"} ${baseSymbol}`
-                }
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Disclaimer */}
       <div className="px-4 pb-8 text-center">

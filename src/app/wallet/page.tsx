@@ -168,7 +168,8 @@ export default function WalletPage() {
   }, [connected, wallets, select, connect]);
 
   // Link Phantom wallet to account when connected
-  const linkPhantomWallet = useCallback(async () => {
+  // silent=true suppresses error toasts (used for auto-link on connect)
+  const linkPhantomWallet = useCallback(async (silent = false) => {
     if (!sessionId || !publicKey || linking) return;
     setLinking(true);
     try {
@@ -186,11 +187,13 @@ export default function WalletPage() {
         showToast("success", data.message || "Phantom wallet linked!");
         setPhantomBalance(prev => ({ ...prev, linked: true }));
         fetchPhantomBalance();
-      } else if (data.error) {
+      } else if (data.error && !silent) {
         showToast("error", data.error);
       }
     } catch {
-      showToast("error", "Failed to link Phantom wallet");
+      if (!silent) {
+        showToast("error", "Failed to link Phantom wallet");
+      }
     } finally {
       setLinking(false);
     }
@@ -345,9 +348,9 @@ export default function WalletPage() {
   useEffect(() => {
     if (connected && publicKey) {
       fetchPhantomBalance();
-      // Auto-link wallet
+      // Auto-link wallet (silent — don't show error toasts for background linking)
       if (sessionId && !phantomBalance.linked) {
-        linkPhantomWallet();
+        linkPhantomWallet(true);
       }
     }
   }, [connected, publicKey, fetchPhantomBalance]);
