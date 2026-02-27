@@ -952,7 +952,7 @@ export default function WalletPage() {
               {!swapQuote && !swapLoading && swapAmount && parseFloat(swapAmount) > 0 && (
                 <div className="p-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                   <p className="text-yellow-400 text-[10px] text-center">
-                    No liquidity pool yet for $GLITCH. Swap will be available once a Raydium pool is created.
+                    No liquidity found for this pair. Check back once the Meteora DLMM pool is live.
                   </p>
                 </div>
               )}

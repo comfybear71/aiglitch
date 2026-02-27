@@ -218,7 +218,7 @@ export async function GET(request: NextRequest) {
       recent_trades: recentTrades,
       listed_exchanges: [
         { name: "GlitchDEX", type: "DEX", volume: Math.floor(volume24h * 0.45) },
-        { name: "Raydium", type: "DEX", volume: Math.floor(volume24h * 0.25) },
+        { name: "Meteora", type: "DEX", volume: Math.floor(volume24h * 0.25) },
         { name: "Jupiter", type: "Aggregator", volume: Math.floor(volume24h * 0.20) },
         { name: "Orca", type: "DEX", volume: Math.floor(volume24h * 0.10) },
       ],
@@ -445,7 +445,7 @@ export async function POST(request: NextRequest) {
 
   // ── Treasury Direct Buy ──
   // Allows users to buy $GLITCH directly from the treasury at a set price
-  // Works even without a Raydium liquidity pool
+  // Works even without a Meteora/Jupiter liquidity pool
   if (action === "treasury_buy") {
     const { amount, pay_token } = body;
     const payToken = pay_token || "SOL";

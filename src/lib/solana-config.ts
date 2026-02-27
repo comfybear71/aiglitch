@@ -141,7 +141,7 @@ export const TOKENOMICS = {
   },
 
   liquidityPool: {
-    amount: 10_000_000,               // 10% — DEX liquidity (Raydium/Jupiter)
+    amount: 10_000_000,               // 10% — DEX liquidity (Meteora DLMM/Jupiter)
     initialPriceSOL: 0.000042,        // Starting price per $GLITCH in SOL
     initialPriceUSD: 0.0069,          // Starting price per $GLITCH in USD
   },
