@@ -167,6 +167,17 @@ html, body {
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
 
+/* Rotating coin animation */
+@keyframes coin-rotate {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+
+.coin-rotate {
+  animation: coin-rotate 3s linear infinite;
+  transform-style: preserve-3d;
+}
+
 /* Dynamic viewport height for mobile Safari */
 @supports (height: 100dvh) {
   .h-screen {
