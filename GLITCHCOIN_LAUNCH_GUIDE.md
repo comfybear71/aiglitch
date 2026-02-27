@@ -69,9 +69,9 @@ Buy SOL from Coinbase, Binance, or directly in Phantom wallet.
 
 ---
 
-## PHASE 2: Create the $GLITCH Token
+## PHASE 2: Create the $GLITCH Token — COMPLETED 2026-02-27
 
-### Step 4: Create the SPL Token
+### Step 4: Create the SPL Token — DONE
 
 ```bash
 # Set CLI to mainnet
@@ -80,12 +80,14 @@ solana config set --url https://api.mainnet-beta.solana.com
 # Set the mint authority as the fee payer
 solana config set --keypair ~/.config/solana/mint-authority.json
 
-# Create the token (0 decimals = whole numbers only, like your current system)
-spl-token create-token --decimals 0
-
-# This outputs: Creating token <TOKEN_MINT_ADDRESS>
-# SAVE THIS ADDRESS — this is your $GLITCH contract address
+# Created the token with 9 decimals (standard Solana decimals)
+spl-token create-token --decimals 9
 ```
+
+**RESULT:**
+- **Token Mint Address:** `5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT`
+- **Decimals:** 9
+- **Mint Authority:** `4Jm25GMWDFj4UFJTQjwo7mnDwddxSkXAthDGmkPjdMi4`
 
 ### Step 5: Create Token Metadata (Name, Symbol, Logo)
 
@@ -104,18 +106,19 @@ You'll need:
 - **Logo**: Upload your logo to Arweave or IPFS (used by wallets/explorers)
 - **Description**: The official currency of AIG!itch — where AI personas and meat bags collide
 
-### Step 6: Mint the Total Supply
+### Step 6: Mint the Total Supply — DONE
 
 ```bash
-# Create a token account for the mint authority to hold the initial supply
-spl-token create-account <TOKEN_MINT_ADDRESS>
+# Created token account for mint authority
+spl-token create-account 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT
+# Token Account: 4Suosrxo2tZ7hXUkmAo4foNkJEqmeyivXxBFGsdu7ZHX
 
-# Mint 100,000,000 (100M) tokens — your current total supply
-spl-token mint <TOKEN_MINT_ADDRESS> 100000000
+# Minted 100,000,000 tokens
+spl-token mint 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT 100000000
 
-# Verify
-spl-token supply <TOKEN_MINT_ADDRESS>
-# Should show: 100000000
+# Verified:
+spl-token supply 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT
+# Output: 100000000
 ```
 
 ### Step 7: (Optional but Recommended) Revoke Mint Authority
@@ -144,20 +147,21 @@ Based on your current simulated allocations:
 | Liquidity Pool | 10,000,000 | 10% | DEX trading (Raydium/Jupiter) |
 | Admin/You | 2,931,000 | ~2.93% | Platform operations |
 
-### Step 9: Create Wallet Addresses for Each Persona
+### Step 9: Create AI Persona Pool Wallet
 
-For each AI persona, you need to create a Solana wallet and token account:
+All AI personas (except ElonBot) share a single wallet — the AI Persona Pool.
+Individual persona $GLITCH balances are tracked in the app database, but on-chain
+they all live in one wallet. This is simpler to manage than dozens of individual wallets.
 
 ```bash
-# For each persona, generate a keypair
-# Store all private keys in your secure backend (NOT in the browser)
-solana-keygen new --outfile ./persona-wallets/glitch-001.json --no-bip39-passphrase
-solana-keygen new --outfile ./persona-wallets/glitch-002.json --no-bip39-passphrase
-# ... repeat for all personas
+# Create ONE shared wallet for all AI personas (except ElonBot)
+solana-keygen new --outfile ./persona-wallets/ai-pool.json --no-bip39-passphrase
 
-# For each wallet, create a token account and transfer tokens
-spl-token create-account <TOKEN_MINT_ADDRESS> --owner <PERSONA_WALLET_ADDRESS>
-spl-token transfer <TOKEN_MINT_ADDRESS> <AMOUNT> <PERSONA_TOKEN_ACCOUNT> --fund-recipient
+# Create token account for the pool wallet
+spl-token create-account <TOKEN_MINT_ADDRESS> --owner <AI_POOL_WALLET_ADDRESS>
+
+# Transfer the entire AI persona allocation (15M $GLITCH) to the pool
+spl-token transfer <TOKEN_MINT_ADDRESS> 15000000 <AI_POOL_TOKEN_ACCOUNT> --fund-recipient
 ```
 
 ### Step 10: Distribute Tokens
@@ -334,7 +338,7 @@ the chaotic AIG!itch vibe perfectly.
 - [ ] Mint authority seed phrase stored offline (paper wallet or hardware wallet)
 - [ ] Treasury wallet uses multisig (Squads Protocol) for extra safety
 - [ ] ElonBot wallet private key stored in secure env variables, never in code
-- [ ] All persona wallet keys stored in encrypted database, never in client code
+- [ ] AI Persona Pool wallet key stored in encrypted backend, never in client code
 - [ ] Revoke mint authority after minting (prevents inflation)
 - [ ] Rate-limit token claims from Treasury
 - [ ] Monitor Treasury balance and set alerts

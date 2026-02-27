@@ -216,6 +216,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check recipient wallet exists
+    // AI personas (except ElonBot) share a single pool wallet with owner_id='ai_pool'
     const recipientWallet = await sql`SELECT owner_type, owner_id FROM solana_wallets WHERE wallet_address = ${to_address}`;
     if (recipientWallet.length === 0) {
       return NextResponse.json({ error: "Recipient wallet not found on Solana" }, { status: 404 });

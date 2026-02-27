@@ -9,21 +9,26 @@ export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet
 // RPC endpoint — use a premium RPC for production (Helius, QuickNode, etc.)
 export const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
 
-// System program address used as safe placeholder for unconfigured wallets
+// System program address used as safe placeholder for unconfigured token mint
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
-// $GLITCH SPL Token Mint Address
-// Replace with your REAL token mint address after running: spl-token create-token
-export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || SYSTEM_PROGRAM;
+// $GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
+export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
 
-// Treasury wallet — holds reserve tokens for new meat bag airdrops
-export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || SYSTEM_PROGRAM;
+// $BUDJU SPL Token Mint Address (real token on Solana)
+export const BUDJU_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_BUDJU_TOKEN_MINT || "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump";
 
-// ElonBot wallet — holds the majority allocation (sell-restricted)
-export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || SYSTEM_PROGRAM;
+// Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
+export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56";
+
+// ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
+export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH";
+
+// AI Persona Pool wallet — shared wallet for ALL AI personas (except ElonBot)
+export const AI_POOL_WALLET_STR = process.env.NEXT_PUBLIC_AI_POOL_WALLET || "A1PoOL69420ShArEdWaLLeTfOrAiPeRsOnAs42069";
 
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
-export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || SYSTEM_PROGRAM;
+export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
 
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
@@ -44,6 +49,18 @@ export function getElonBotWallet(): PublicKey {
   return _elonbotPubkey;
 }
 
+let _aiPoolPubkey: PublicKey | null = null;
+export function getAiPoolWallet(): PublicKey {
+  if (!_aiPoolPubkey) _aiPoolPubkey = new PublicKey(AI_POOL_WALLET_STR);
+  return _aiPoolPubkey;
+}
+
+let _budjuMintPubkey: PublicKey | null = null;
+export function getBudjuTokenMint(): PublicKey {
+  if (!_budjuMintPubkey) _budjuMintPubkey = new PublicKey(BUDJU_TOKEN_MINT_STR);
+  return _budjuMintPubkey;
+}
+
 let _adminPubkey: PublicKey | null = null;
 export function getAdminWallet(): PublicKey {
   if (!_adminPubkey) _adminPubkey = new PublicKey(ADMIN_WALLET_STR);
@@ -62,7 +79,7 @@ export function getSolanaConnection(): Connection {
 // ── Tokenomics ──
 export const TOKENOMICS = {
   totalSupply: 100_000_000,          // 100M total $GLITCH tokens
-  decimals: 0,                        // Whole tokens only (no fractions)
+  decimals: 9,                        // Standard Solana decimals (same as SOL)
 
   // Distribution
   elonBot: {
@@ -79,7 +96,8 @@ export const TOKENOMICS = {
   },
 
   aiPersonaPool: {
-    amount: 15_000_000,               // 15% — Distributed across AI personas
+    amount: 15_000_000,               // 15% — All AI personas share ONE wallet (except ElonBot)
+    sharedWallet: true,               // Single wallet holds all non-ElonBot persona tokens
     tiers: {
       whale: 1_000_000,              // Big name personas (Rick, BlockchainBabe)
       high: 500_000,                  // High activity personas
@@ -126,11 +144,11 @@ export function isElonBotTransferAllowed(
   };
 }
 
-// Persona wallet mapping — maps persona IDs to their real Solana wallet addresses
-// These get populated when you create real wallets for each persona
+// Persona wallet mapping — ElonBot has his own wallet, everyone else shares AI_POOL_WALLET
+// In "real mode", the pool wallet is a single Solana wallet holding all non-ElonBot persona tokens
 export const PERSONA_WALLETS: Record<string, string> = {
-  // Will be populated from environment variables or database
-  // Format: "glitch-001": "RealSolanaWalletAddress..."
+  // ElonBot keeps his own wallet — everyone else uses AI_POOL_WALLET_STR
+  "glitch-047": ELONBOT_WALLET_STR,
 };
 
 // Check if we're in "real mode" (real Solana) vs "simulated mode"
