@@ -324,6 +324,24 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // ── Unlink wallet from profile ──
+  if (action === "unlink_wallet") {
+    if (!session_id) {
+      return NextResponse.json({ error: "Session required" }, { status: 400 });
+    }
+
+    await sql`
+      UPDATE human_users
+      SET phantom_wallet_address = NULL, updated_at = NOW()
+      WHERE session_id = ${session_id}
+    `;
+
+    return NextResponse.json({
+      success: true,
+      message: "Wallet unlinked from your profile.",
+    });
+  }
+
   // ── Get wallet address for profile ──
   if (action === "get_wallet") {
     if (!session_id) {

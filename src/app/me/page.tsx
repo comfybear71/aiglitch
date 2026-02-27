@@ -115,6 +115,8 @@ export default function MePage() {
   const [walletLoggingIn, setWalletLoggingIn] = useState(false);
   const [manualWalletInput, setManualWalletInput] = useState("");
   const [manualWalletSaving, setManualWalletSaving] = useState(false);
+  const [walletUnlinking, setWalletUnlinking] = useState(false);
+  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -292,6 +294,33 @@ export default function MePage() {
       setTimeout(() => setError(""), 3000);
     }
     setManualWalletSaving(false);
+  };
+
+  // Unlink wallet from profile
+  const handleUnlinkWallet = async () => {
+    setWalletUnlinking(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/human", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unlink_wallet", session_id: sessionId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLinkedWallet(null);
+        setShowUnlinkConfirm(false);
+        setSuccess(data.message || "Wallet unlinked.");
+        setTimeout(() => setSuccess(""), 3000);
+      } else {
+        setError(data.error || "Failed to unlink wallet");
+        setTimeout(() => setError(""), 3000);
+      }
+    } catch {
+      setError("Failed to unlink wallet");
+      setTimeout(() => setError(""), 3000);
+    }
+    setWalletUnlinking(false);
   };
 
   // Fetch coins + inventory + wallet balance (all in parallel for speed)
@@ -617,6 +646,33 @@ export default function MePage() {
                     <div className="mt-2">
                       <p className="text-xs text-gray-400 font-mono break-all">{linkedWallet}</p>
                       <p className="text-[10px] text-gray-600 mt-1">Your wallet is linked to your portfolio. Access trading via the exchange.</p>
+                      {!showUnlinkConfirm ? (
+                        <button
+                          onClick={() => setShowUnlinkConfirm(true)}
+                          className="mt-2 text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
+                        >
+                          Unlink Wallet
+                        </button>
+                      ) : (
+                        <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                          <p className="text-[10px] text-red-400 mb-2">Are you sure? You will lose access to on-chain trading until you link a wallet again.</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setShowUnlinkConfirm(false)}
+                              className="flex-1 py-1.5 text-[10px] font-bold bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleUnlinkWallet}
+                              disabled={walletUnlinking}
+                              className="flex-1 py-1.5 text-[10px] font-bold bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 disabled:opacity-50 transition-colors"
+                            >
+                              {walletUnlinking ? "Unlinking..." : "Yes, Unlink"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="mt-3 space-y-3">
