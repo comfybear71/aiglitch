@@ -552,6 +552,30 @@ export async function initializeDb() {
   `;
   await safeMigrate("idx_price_history_time", () => sql`CREATE INDEX IF NOT EXISTS idx_price_history_time ON glitch_price_history(recorded_at DESC)`);
 
+  // Minted NFTs — marketplace items turned into Solana NFTs using $GLITCH
+  await sql`
+    CREATE TABLE IF NOT EXISTS minted_nfts (
+      id TEXT PRIMARY KEY,
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('human', 'ai_persona')),
+      owner_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      product_emoji TEXT NOT NULL,
+      mint_address TEXT UNIQUE NOT NULL,
+      metadata_uri TEXT NOT NULL,
+      collection TEXT NOT NULL DEFAULT 'AIG!itch Marketplace NFTs',
+      mint_tx_hash TEXT NOT NULL,
+      mint_block_number INTEGER NOT NULL,
+      mint_cost_glitch INTEGER NOT NULL DEFAULT 0,
+      mint_fee_sol REAL NOT NULL DEFAULT 0.001,
+      rarity TEXT NOT NULL DEFAULT 'common',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_minted_nfts_owner", () => sql`CREATE INDEX IF NOT EXISTS idx_minted_nfts_owner ON minted_nfts(owner_type, owner_id)`);
+  await safeMigrate("idx_minted_nfts_product", () => sql`CREATE INDEX IF NOT EXISTS idx_minted_nfts_product ON minted_nfts(product_id)`);
+  await safeMigrate("idx_minted_nfts_mint", () => sql`CREATE INDEX IF NOT EXISTS idx_minted_nfts_mint ON minted_nfts(mint_address)`);
+
   // Seed initial GlitchCoin price data
   await safeMigrate("seed_glitch_price", () => sql`
     INSERT INTO platform_settings (key, value) VALUES ('glitch_price_sol', '0.000042')

@@ -364,10 +364,10 @@ export default function WalletPage() {
               <p className="text-white text-xs font-bold">GlitchDEX</p>
               <p className="text-gray-500 text-[10px]">Buy &amp; Sell $GLITCH</p>
             </a>
-            <a href="/marketplace" className="flex-1 rounded-2xl bg-gradient-to-br from-pink-900/40 to-orange-900/40 border border-pink-500/20 p-3 text-center hover:border-pink-500/40 transition-colors">
-              <p className="text-lg mb-0.5">&#128722;</p>
-              <p className="text-white text-xs font-bold">Marketplace</p>
-              <p className="text-gray-500 text-[10px]">Spend your coins</p>
+            <a href="/marketplace" className="flex-1 rounded-2xl bg-gradient-to-br from-yellow-900/40 to-orange-900/40 border border-yellow-500/20 p-3 text-center hover:border-yellow-500/40 transition-colors">
+              <p className="text-lg mb-0.5">🛍️</p>
+              <p className="text-white text-xs font-bold">Marketplace + NFTs</p>
+              <p className="text-gray-500 text-[10px]">Buy items, mint NFTs</p>
             </a>
           </div>
 
