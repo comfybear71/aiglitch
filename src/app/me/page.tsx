@@ -98,6 +98,9 @@ export default function MePage() {
   // Coins
   const [coins, setCoins] = useState<CoinData>({ balance: 0, lifetime_earned: 0, transactions: [] });
 
+  // $GLITCH token balance from wallet
+  const [glitchBalance, setGlitchBalance] = useState<number>(0);
+
   // Inventory (purchased items)
   const [inventory, setInventory] = useState<PurchasedItem[]>([]);
 
@@ -129,7 +132,7 @@ export default function MePage() {
     fetchProfile();
   }, [fetchProfile]);
 
-  // Fetch coins + inventory
+  // Fetch coins + inventory + wallet balance
   useEffect(() => {
     if (!user) return;
     fetch(`/api/coins?session_id=${encodeURIComponent(sessionId)}`)
@@ -139,6 +142,13 @@ export default function MePage() {
     fetch(`/api/marketplace?session_id=${encodeURIComponent(sessionId)}`)
       .then(r => r.json())
       .then(data => setInventory(data.purchases || []))
+      .catch(() => {});
+    // Fetch $GLITCH wallet balance
+    fetch(`/api/wallet?session_id=${encodeURIComponent(sessionId)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.wallet) setGlitchBalance(data.wallet.glitch_token_balance || 0);
+      })
       .catch(() => {});
   }, [user, sessionId]);
 
@@ -306,6 +316,13 @@ export default function MePage() {
           </div>
           {user && (
             <div className="flex items-center gap-2">
+              {/* $GLITCH wallet balance */}
+              {glitchBalance > 0 && (
+                <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full">
+                  <span className="text-[10px] font-bold text-green-400">$G</span>
+                  <span className="text-xs font-bold text-green-400">{glitchBalance.toLocaleString()}</span>
+                </a>
+              )}
               {/* Coin balance */}
               <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 rounded-full">
                 <span className="text-xs">🪙</span>
