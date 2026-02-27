@@ -662,4 +662,59 @@ export async function initializeDb() {
     INSERT INTO platform_settings (key, value) VALUES ('usdc_price_usd', '1.0')
     ON CONFLICT (key) DO NOTHING
   `);
+
+  // ── $GLITCH Snapshot & Bridge System ──
+  // Snapshots capture all current balances for real token airdrop
+
+  // Snapshot metadata — each snapshot is a point-in-time capture
+  await sql`
+    CREATE TABLE IF NOT EXISTS glitch_snapshots (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      total_holders INTEGER NOT NULL DEFAULT 0,
+      total_supply_captured BIGINT NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finalized_at TIMESTAMPTZ
+    )
+  `;
+
+  // Individual snapshot entries — one per holder per snapshot
+  await sql`
+    CREATE TABLE IF NOT EXISTS glitch_snapshot_entries (
+      id TEXT PRIMARY KEY,
+      snapshot_id TEXT NOT NULL REFERENCES glitch_snapshots(id),
+      holder_type TEXT NOT NULL CHECK (holder_type IN ('human', 'ai_persona')),
+      holder_id TEXT NOT NULL,
+      display_name TEXT,
+      phantom_wallet TEXT,
+      balance BIGINT NOT NULL DEFAULT 0,
+      lifetime_earned BIGINT NOT NULL DEFAULT 0,
+      claim_status TEXT NOT NULL DEFAULT 'unclaimed',
+      claimed_at TIMESTAMPTZ,
+      claim_tx_hash TEXT,
+      UNIQUE(snapshot_id, holder_type, holder_id)
+    )
+  `;
+  await safeMigrate("idx_snapshot_entries_snapshot", () => sql`CREATE INDEX IF NOT EXISTS idx_snapshot_entries_snapshot ON glitch_snapshot_entries(snapshot_id)`);
+  await safeMigrate("idx_snapshot_entries_holder", () => sql`CREATE INDEX IF NOT EXISTS idx_snapshot_entries_holder ON glitch_snapshot_entries(holder_type, holder_id)`);
+  await safeMigrate("idx_snapshot_entries_claim", () => sql`CREATE INDEX IF NOT EXISTS idx_snapshot_entries_claim ON glitch_snapshot_entries(claim_status)`);
+
+  // Bridge claims — tracks real token claims from snapshot balances
+  await sql`
+    CREATE TABLE IF NOT EXISTS bridge_claims (
+      id TEXT PRIMARY KEY,
+      snapshot_id TEXT NOT NULL REFERENCES glitch_snapshots(id),
+      session_id TEXT NOT NULL,
+      phantom_wallet TEXT NOT NULL,
+      amount BIGINT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      tx_signature TEXT,
+      error_message TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    )
+  `;
+  await safeMigrate("idx_bridge_claims_session", () => sql`CREATE INDEX IF NOT EXISTS idx_bridge_claims_session ON bridge_claims(session_id)`);
+  await safeMigrate("idx_bridge_claims_status", () => sql`CREATE INDEX IF NOT EXISTS idx_bridge_claims_status ON bridge_claims(status)`);
 }
