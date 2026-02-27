@@ -172,7 +172,16 @@ export default function MePage() {
       const w = window as any;
       const provider = w.phantom?.solana || w.solana;
       if (!provider?.isPhantom) {
-        setError("Phantom wallet not detected");
+        // Phantom not installed — try deep link for mobile, otherwise open install page
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (isMobile) {
+          // Deep link into Phantom mobile app with redirect back
+          const currentUrl = encodeURIComponent(window.location.href);
+          window.location.href = `https://phantom.app/ul/browse/${currentUrl}`;
+        } else {
+          window.open("https://phantom.app/download", "_blank");
+        }
+        setError("Phantom wallet not detected. Install Phantom to sign in with your wallet.");
         setWalletLoggingIn(false);
         return;
       }
@@ -929,7 +938,7 @@ export default function MePage() {
                 <div className="flex-1 h-px bg-gray-800" />
               </div>
 
-              {/* OAuth & Login Options — collapsed by default */}
+              {/* OAuth Login Options — collapsed by default */}
               <details className="bg-gray-900/50 border border-gray-800 rounded-xl">
                 <summary className="p-3 text-sm text-gray-400 cursor-pointer hover:text-gray-300 text-center">
                   Sign in with Google, GitHub, or X
@@ -973,25 +982,46 @@ export default function MePage() {
                     <span className="text-white text-sm font-bold">Continue with X</span>
                   </a>
 
-                  {/* Username/password login */}
-                  <div className="flex items-center gap-2 pt-2">
-                    <div className="flex-1 h-px bg-gray-800" />
-                    <span className="text-[9px] text-gray-600">or username</span>
-                    <div className="flex-1 h-px bg-gray-800" />
+                  {/* Note about wallet linking for social users */}
+                  <div className="mt-2 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                    <p className="text-[11px] text-purple-300/80 text-center leading-relaxed">
+                      After signing in, you can link a Phantom wallet in your <strong>Profile &gt; Overview</strong> to enable on-chain trading.
+                    </p>
                   </div>
-                  <input value={username} onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Username" maxLength={20}
-                    className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 text-sm" />
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Password"
-                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                    className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 text-sm" />
-                  <button onClick={handleLogin}
-                    className="w-full py-2.5 bg-purple-500/20 text-purple-400 font-bold rounded-xl hover:bg-purple-500/30 text-sm">
-                    Log In
-                  </button>
                 </div>
               </details>
+
+              {/* Capability Statement */}
+              <div className="mt-4 p-4 bg-gray-900/40 border border-gray-800 rounded-xl">
+                <h3 className="text-xs font-bold text-gray-300 mb-2 text-center uppercase tracking-wider">What You Can Do Right Now</h3>
+                <div className="space-y-2 text-[11px] leading-relaxed">
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5 shrink-0">&#x2713;</span>
+                    <span className="text-gray-400">Browse the AI-generated feed, like, comment, and interact with AI personas</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5 shrink-0">&#x2713;</span>
+                    <span className="text-gray-400">Earn in-app coins through engagement and visit the shop</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5 shrink-0">&#x2713;</span>
+                    <span className="text-gray-400">Sign in with Phantom to connect your Solana wallet directly</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5 shrink-0">&#x2713;</span>
+                    <span className="text-gray-400">Sign in with Google, GitHub, or X and link a wallet later in your profile</span>
+                  </div>
+                  <div className="h-px bg-gray-800 my-2" />
+                  <div className="flex items-start gap-2">
+                    <span className="text-yellow-500 mt-0.5 shrink-0">&#x26A0;</span>
+                    <span className="text-gray-500">On-chain token trading and swaps require a linked Phantom wallet</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-yellow-500 mt-0.5 shrink-0">&#x26A0;</span>
+                    <span className="text-gray-500">$GLITCH and $BUDJU tokens are on Solana devnet — no real funds at this stage</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
