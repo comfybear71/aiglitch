@@ -108,6 +108,12 @@ export default function MePage() {
   const [copied, setCopied] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
+  // Wallet linking
+  const [linkedWallet, setLinkedWallet] = useState<string | null>(null);
+  const [walletLinking, setWalletLinking] = useState(false);
+  const [isPhantomBrowser, setIsPhantomBrowser] = useState(false);
+  const [walletLoggingIn, setWalletLoggingIn] = useState(false);
+
   const fetchProfile = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/human", {
@@ -132,24 +138,127 @@ export default function MePage() {
     fetchProfile();
   }, [fetchProfile]);
 
-  // Fetch coins + inventory + wallet balance
+  // Detect Phantom in-app browser & fetch linked wallet
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const isPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom) ||
+      /Phantom/i.test(navigator.userAgent);
+    setIsPhantomBrowser(isPhantom);
+
+    // Fetch linked wallet for the logged-in user
+    if (sessionId && sessionId !== "anon") {
+      fetch("/api/auth/human", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_wallet", session_id: sessionId }),
+      })
+        .then(r => r.json())
+        .then(data => { if (data.wallet_address) setLinkedWallet(data.wallet_address); })
+        .catch(() => {});
+    }
+  }, [sessionId]);
+
+  // Wallet-based login (for Phantom browser users)
+  const handleWalletLogin = async () => {
+    if (typeof window === "undefined") return;
+    setWalletLoggingIn(true);
+    setError("");
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const provider = w.phantom?.solana || w.solana;
+      if (!provider?.isPhantom) {
+        setError("Phantom wallet not detected");
+        setWalletLoggingIn(false);
+        return;
+      }
+      const resp = await provider.connect();
+      const walletAddress = resp.publicKey.toString();
+
+      const res = await fetch("/api/auth/human", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "wallet_login",
+          session_id: sessionId,
+          wallet_address: walletAddress,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Store the session
+        const newSid = data.user.session_id || sessionId;
+        localStorage.setItem("aiglitch-session", newSid);
+        setSessionId(newSid);
+        setLinkedWallet(walletAddress);
+        setSuccess(data.found_existing
+          ? `Welcome back, @${data.user.username}!`
+          : "Wallet account created!");
+        fetchProfile();
+      } else {
+        setError(data.error || "Wallet login failed");
+      }
+    } catch {
+      setError("Failed to connect Phantom wallet");
+    }
+    setWalletLoggingIn(false);
+  };
+
+  // Link Phantom wallet to current profile
+  const handleLinkWallet = async () => {
+    if (typeof window === "undefined") return;
+    setWalletLinking(true);
+    setError("");
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const provider = w.phantom?.solana || w.solana;
+      if (!provider?.isPhantom) {
+        setError("Phantom wallet not detected. Open this page in the Phantom app to link your wallet.");
+        setWalletLinking(false);
+        return;
+      }
+      const resp = await provider.connect();
+      const walletAddress = resp.publicKey.toString();
+
+      const res = await fetch("/api/auth/human", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "link_wallet",
+          session_id: sessionId,
+          wallet_address: walletAddress,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLinkedWallet(walletAddress);
+        setSuccess(data.message || "Wallet linked!");
+        setTimeout(() => setSuccess(""), 3000);
+      } else {
+        setError(data.error || "Failed to link wallet");
+      }
+    } catch {
+      setError("Failed to connect Phantom wallet");
+    }
+    setWalletLinking(false);
+  };
+
+  // Fetch coins + inventory + wallet balance (all in parallel for speed)
   useEffect(() => {
     if (!user) return;
-    fetch(`/api/coins?session_id=${encodeURIComponent(sessionId)}`)
-      .then(r => r.json())
-      .then(setCoins)
-      .catch(() => {});
-    fetch(`/api/marketplace?session_id=${encodeURIComponent(sessionId)}`)
-      .then(r => r.json())
-      .then(data => setInventory(data.purchases || []))
-      .catch(() => {});
-    // Fetch $GLITCH wallet balance
-    fetch(`/api/wallet?session_id=${encodeURIComponent(sessionId)}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.wallet) setGlitchBalance(data.wallet.glitch_token_balance || 0);
-      })
-      .catch(() => {});
+    const sid = encodeURIComponent(sessionId);
+    Promise.all([
+      fetch(`/api/coins?session_id=${sid}`).then(r => r.json()).catch(() => null),
+      fetch(`/api/marketplace?session_id=${sid}`).then(r => r.json()).catch(() => null),
+      fetch(`/api/wallet?session_id=${sid}`).then(r => r.json()).catch(() => null),
+    ]).then(([coinsData, marketData, walletData]) => {
+      if (coinsData) setCoins(coinsData);
+      if (marketData) setInventory(marketData.purchases || []);
+      if (walletData?.wallet) setGlitchBalance(walletData.wallet.glitch_token_balance || 0);
+    });
   }, [user, sessionId]);
 
   // Claim signup bonus
@@ -440,6 +549,39 @@ export default function MePage() {
                 >
                   Edit Profile
                 </button>
+
+                {/* Linked Wallet */}
+                <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">👛</span>
+                      <span className="text-sm font-bold">Phantom Wallet</span>
+                    </div>
+                    {linkedWallet ? (
+                      <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">LINKED</span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 bg-gray-700 text-gray-400 rounded-full">NOT LINKED</span>
+                    )}
+                  </div>
+                  {linkedWallet ? (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-400 font-mono break-all">{linkedWallet}</p>
+                      <p className="text-[10px] text-gray-600 mt-1">You can sign in via wallet in the Phantom app</p>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-500 mb-2">Link your Phantom wallet to sign in from the Phantom app and access on-chain features.</p>
+                      <button
+                        onClick={handleLinkWallet}
+                        disabled={walletLinking}
+                        className="w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 disabled:opacity-50 transition-all"
+                      >
+                        {walletLinking ? "Connecting..." : "Link Phantom Wallet"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <a href="/inbox" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
                   <span className="text-lg mr-3">💬</span> My Messages
                 </a>
@@ -665,6 +807,18 @@ export default function MePage() {
             </div>
 
             <div className="space-y-3">
+              {/* Wallet Login — shown prominently in Phantom's browser */}
+              {isPhantomBrowser && (
+                <button
+                  onClick={handleWalletLogin}
+                  disabled={walletLoggingIn}
+                  className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl hover:from-purple-500 hover:to-violet-500 transition-all font-bold disabled:opacity-50"
+                >
+                  <span className="text-lg">👛</span>
+                  <span className="text-sm">{walletLoggingIn ? "Connecting Wallet..." : "Sign in with Phantom Wallet"}</span>
+                </button>
+              )}
+
               {/* OAuth Buttons */}
               <a href="/api/auth/google"
                 onClick={(e) => {

@@ -212,6 +212,133 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // ── Wallet-based authentication ──
+  // Users in Phantom's in-app browser can sign a message to prove wallet ownership
+  // and log into their linked account (bypasses Google OAuth)
+  if (action === "wallet_login") {
+    const { wallet_address } = body;
+
+    if (!wallet_address) {
+      return NextResponse.json({ error: "Wallet address required" }, { status: 400 });
+    }
+
+    // Find user by linked Phantom wallet
+    const users = await sql`
+      SELECT id, session_id, display_name, username, avatar_emoji, bio, phantom_wallet_address
+      FROM human_users
+      WHERE phantom_wallet_address = ${wallet_address} AND username IS NOT NULL
+    `;
+
+    if (users.length > 0) {
+      const user = users[0];
+      // Update session_id so localStorage syncs with the account
+      const newSessionId = session_id || user.session_id;
+      if (session_id && session_id !== user.session_id) {
+        await sql`
+          UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
+        `;
+      } else {
+        await sql`UPDATE human_users SET last_seen = NOW() WHERE id = ${user.id}`;
+      }
+
+      return NextResponse.json({
+        success: true,
+        found_existing: true,
+        user: {
+          username: user.username,
+          display_name: user.display_name,
+          avatar_emoji: user.avatar_emoji,
+          bio: user.bio || "",
+          session_id: newSessionId,
+          phantom_wallet_address: user.phantom_wallet_address,
+        },
+      });
+    }
+
+    // No existing user with this wallet — create a new wallet-based account
+    const newSessionId = session_id || uuidv4();
+    const shortAddr = wallet_address.slice(0, 6);
+    const username = `wallet_${shortAddr.toLowerCase()}`;
+    const userId = uuidv4();
+
+    // Check for username collision
+    const taken = await sql`SELECT id FROM human_users WHERE username = ${username}`;
+    const finalUsername = taken.length > 0
+      ? `${username}_${Math.floor(Math.random() * 999)}`
+      : username;
+
+    await sql`
+      INSERT INTO human_users (id, session_id, display_name, username, avatar_emoji, phantom_wallet_address, auth_provider, last_seen)
+      VALUES (${userId}, ${newSessionId}, ${`Wallet ${shortAddr}...`}, ${finalUsername}, '👛', ${wallet_address}, 'wallet', NOW())
+      ON CONFLICT (session_id) DO UPDATE SET
+        display_name = COALESCE(human_users.display_name, ${`Wallet ${shortAddr}...`}),
+        username = COALESCE(human_users.username, ${finalUsername}),
+        phantom_wallet_address = ${wallet_address},
+        auth_provider = COALESCE(human_users.auth_provider, 'wallet'),
+        last_seen = NOW()
+    `;
+
+    return NextResponse.json({
+      success: true,
+      found_existing: false,
+      user: {
+        username: finalUsername,
+        display_name: `Wallet ${shortAddr}...`,
+        avatar_emoji: "👛",
+        session_id: newSessionId,
+        phantom_wallet_address: wallet_address,
+      },
+    });
+  }
+
+  // ── Link wallet to existing profile ──
+  // Allows Google/GitHub/X-authenticated users to attach their Phantom wallet
+  if (action === "link_wallet") {
+    const { wallet_address } = body;
+
+    if (!session_id || !wallet_address) {
+      return NextResponse.json({ error: "Session and wallet address required" }, { status: 400 });
+    }
+
+    // Check if this wallet is already linked to a different account
+    const existing = await sql`
+      SELECT session_id, username FROM human_users
+      WHERE phantom_wallet_address = ${wallet_address} AND session_id != ${session_id}
+    `;
+    if (existing.length > 0) {
+      return NextResponse.json({
+        error: `This wallet is already linked to @${existing[0].username || "another account"}.`,
+      }, { status: 409 });
+    }
+
+    await sql`
+      UPDATE human_users
+      SET phantom_wallet_address = ${wallet_address}, updated_at = NOW()
+      WHERE session_id = ${session_id}
+    `;
+
+    return NextResponse.json({
+      success: true,
+      wallet_address,
+      message: "Wallet linked to your profile! You can now sign in via wallet in Phantom.",
+    });
+  }
+
+  // ── Get wallet address for profile ──
+  if (action === "get_wallet") {
+    if (!session_id) {
+      return NextResponse.json({ error: "Session required" }, { status: 400 });
+    }
+
+    const users = await sql`
+      SELECT phantom_wallet_address FROM human_users WHERE session_id = ${session_id}
+    `;
+
+    return NextResponse.json({
+      wallet_address: users.length > 0 ? users[0].phantom_wallet_address || null : null,
+    });
+  }
+
   // Sign out — allow the client to clear localStorage
   if (action === "signout") {
     return NextResponse.json({ success: true });
