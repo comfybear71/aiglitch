@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import BottomNav from "@/components/BottomNav";
 
 interface WalletData {
@@ -40,7 +42,13 @@ interface ChainStats {
   recent_transactions: BlockchainTx[];
 }
 
-type Tab = "wallet" | "explorer" | "send";
+interface PhantomBalance {
+  glitch_balance: number | null;
+  sol_balance: number | null;
+  linked: boolean;
+}
+
+type Tab = "wallet" | "explorer" | "send" | "phantom";
 
 export default function WalletPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -55,12 +63,94 @@ export default function WalletPage() {
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [fauceting, setFauceting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [phantomBalance, setPhantomBalance] = useState<PhantomBalance>({ glitch_balance: null, sol_balance: null, linked: false });
+  const [linking, setLinking] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+
+  const { publicKey, connected, signMessage } = useWallet();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setSessionId(localStorage.getItem("aiglitch-session"));
     }
   }, []);
+
+  // Link Phantom wallet to account when connected
+  const linkPhantomWallet = useCallback(async () => {
+    if (!sessionId || !publicKey || linking) return;
+    setLinking(true);
+    try {
+      const res = await fetch("/api/solana", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          action: "link_phantom",
+          wallet_address: publicKey.toBase58(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("success", data.message || "Phantom wallet linked!");
+        setPhantomBalance(prev => ({ ...prev, linked: true }));
+        fetchPhantomBalance();
+      } else if (data.error) {
+        showToast("error", data.error);
+      }
+    } catch {
+      showToast("error", "Failed to link Phantom wallet");
+    } finally {
+      setLinking(false);
+    }
+  }, [sessionId, publicKey, linking]);
+
+  // Fetch real on-chain balance
+  const fetchPhantomBalance = useCallback(async () => {
+    if (!publicKey) return;
+    try {
+      const res = await fetch(`/api/solana?action=balance&wallet_address=${publicKey.toBase58()}`);
+      const data = await res.json();
+      setPhantomBalance({
+        glitch_balance: data.glitch_balance ?? null,
+        sol_balance: data.sol_balance ?? null,
+        linked: true,
+      });
+    } catch { /* ignore */ }
+  }, [publicKey]);
+
+  // Claim airdrop to Phantom wallet
+  const claimPhantomAirdrop = useCallback(async () => {
+    if (!sessionId || !publicKey || claiming) return;
+    setClaiming(true);
+    try {
+      const res = await fetch("/api/solana", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          action: "claim_airdrop",
+          wallet_address: publicKey.toBase58(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("success", data.message);
+        fetchPhantomBalance();
+      } else {
+        showToast("error", data.error || "Claim failed");
+      }
+    } catch {
+      showToast("error", "Failed to claim airdrop");
+    } finally {
+      setClaiming(false);
+    }
+  }, [sessionId, publicKey, claiming]);
+
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchPhantomBalance();
+    }
+  }, [connected, publicKey, fetchPhantomBalance]);
 
   const fetchWallet = useCallback(async () => {
     if (!sessionId) return;
@@ -216,17 +306,19 @@ export default function WalletPage() {
 
         {/* Tab pills */}
         <div className="flex gap-2 px-4 pb-3">
-          {(["wallet", "explorer", "send"] as Tab[]).map((t) => (
+          {(["phantom", "wallet", "explorer", "send"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 text-xs py-1.5 rounded-full font-mono transition-all capitalize ${
                 tab === t
-                  ? "bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold"
+                  ? t === "phantom"
+                    ? "bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold"
+                    : "bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold"
                   : "bg-gray-900 text-gray-400 hover:text-white"
               }`}
             >
-              {t === "wallet" ? "Wallet" : t === "explorer" ? "Explorer" : "Send"}
+              {t === "phantom" ? "Phantom" : t === "wallet" ? "Sim" : t === "explorer" ? "Explorer" : "Send"}
             </button>
           ))}
         </div>
@@ -679,6 +771,215 @@ export default function WalletPage() {
               NOT REAL SOLANA. NOT REAL CRYPTO. This is a simulated blockchain for entertainment purposes.
               No actual SOL, tokens, or value exists. Do not send real crypto to these addresses.
               The only thing you&apos;ll lose is your dignity.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── PHANTOM TAB ── Real Solana Wallet ── */}
+      {tab === "phantom" && (
+        <div className="px-4 mt-4 space-y-4">
+          {/* Phantom connection card */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-950/60 via-indigo-950/40 to-gray-900 border border-purple-500/30 p-5">
+            <div className="absolute top-2 right-2 flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
+              <span className={`text-[9px] font-bold ${connected ? "text-green-400" : "text-gray-600"}`}>
+                {connected ? "CONNECTED" : "DISCONNECTED"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-lg">
+                &#128123;
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-lg">Phantom Wallet</h2>
+                <p className="text-purple-400 text-xs">Real Solana Blockchain</p>
+              </div>
+            </div>
+
+            {!connected ? (
+              <div className="space-y-4">
+                <p className="text-gray-400 text-sm">
+                  Connect your <span className="text-purple-400 font-bold">Phantom wallet</span> to hold
+                  <span className="text-cyan-400 font-bold"> real $GLITCH tokens</span> on the Solana blockchain.
+                </p>
+                <div className="flex justify-center">
+                  <WalletMultiButton style={{
+                    background: "linear-gradient(135deg, #8B5CF6, #6366F1)",
+                    borderRadius: "1rem",
+                    fontSize: "0.875rem",
+                    fontWeight: "bold",
+                    fontFamily: "monospace",
+                    padding: "12px 24px",
+                  }} />
+                </div>
+                <div className="p-3 rounded-xl bg-black/30 border border-purple-800/30">
+                  <p className="text-gray-500 text-[10px] font-bold mb-2">HOW IT WORKS:</p>
+                  <div className="space-y-1.5 text-xs text-gray-400">
+                    <p>1. Install Phantom wallet extension or app</p>
+                    <p>2. Click &quot;Connect Wallet&quot; above</p>
+                    <p>3. Approve the connection in Phantom</p>
+                    <p>4. Claim your $GLITCH token airdrop</p>
+                    <p>5. Trade on Raydium, Jupiter, or GlitchDEX</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Connected wallet info */}
+                <div className="p-3 rounded-xl bg-black/30 border border-green-800/30">
+                  <p className="text-gray-500 text-[10px] font-bold mb-1">WALLET ADDRESS</p>
+                  <p className="text-green-400 text-xs font-mono break-all">
+                    {publicKey?.toBase58()}
+                  </p>
+                </div>
+
+                {/* Balances */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-black/30">
+                    <p className="text-gray-500 text-[10px] font-bold">$GLITCH (ON-CHAIN)</p>
+                    <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
+                      {phantomBalance.glitch_balance !== null ? phantomBalance.glitch_balance.toLocaleString() : "---"}
+                    </p>
+                    <p className="text-gray-600 text-[10px]">real SPL tokens</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-black/30">
+                    <p className="text-gray-500 text-[10px] font-bold">SOL BALANCE</p>
+                    <p className="text-2xl font-bold text-purple-400">
+                      {phantomBalance.sol_balance !== null ? phantomBalance.sol_balance.toFixed(4) : "---"}
+                    </p>
+                    <p className="text-gray-600 text-[10px]">for gas fees</p>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2">
+                  {!phantomBalance.linked && (
+                    <button
+                      onClick={linkPhantomWallet}
+                      disabled={linking}
+                      className="flex-1 py-2.5 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-xl border border-purple-500/30 hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                    >
+                      {linking ? "Linking..." : "Link to Account"}
+                    </button>
+                  )}
+                  <button
+                    onClick={claimPhantomAirdrop}
+                    disabled={claiming}
+                    className="flex-1 py-2.5 bg-green-500/20 text-green-400 text-xs font-bold rounded-xl border border-green-500/30 hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                  >
+                    {claiming ? "Claiming..." : "Claim 100 $GLITCH"}
+                  </button>
+                  <button
+                    onClick={fetchPhantomBalance}
+                    className="py-2.5 px-3 bg-cyan-500/20 text-cyan-400 text-xs font-bold rounded-xl border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                {/* Wallet switcher */}
+                <div className="flex justify-center">
+                  <WalletMultiButton style={{
+                    background: "rgba(139, 92, 246, 0.2)",
+                    borderRadius: "0.75rem",
+                    fontSize: "0.75rem",
+                    fontFamily: "monospace",
+                    padding: "8px 16px",
+                    border: "1px solid rgba(139, 92, 246, 0.3)",
+                  }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ElonBot Whale Status */}
+          <div className="rounded-2xl bg-gradient-to-br from-yellow-950/30 to-orange-950/20 border border-yellow-500/20 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">&#128640;</span>
+              <h3 className="text-white font-bold text-sm">ElonBot Whale Status</h3>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">LOCKED</span>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-500">ElonBot Holdings</span>
+                <span className="text-yellow-400 font-bold">42,069,000 $GLITCH</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">% of Supply</span>
+                <span className="text-white">42.069%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Sell Restriction</span>
+                <span className="text-red-400 font-bold">ADMIN ONLY</span>
+              </div>
+              <div className="p-2 rounded-lg bg-black/30 mt-2">
+                <p className="text-gray-500 text-[10px]">
+                  The Technoking&apos;s $GLITCH tokens are locked. ElonBot can only sell or transfer to the platform admin.
+                  All other transfers are blocked. No swaps, no DEX sells, no rugging. The Technoking holds... but only for you.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Tokenomics */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-white font-bold text-sm mb-3">$GLITCH Tokenomics</h3>
+            <div className="space-y-2">
+              {[
+                { label: "ElonBot (Locked)", amount: "42,069,000", pct: "42.069%", color: "bg-yellow-500", width: "w-[42%]" },
+                { label: "Treasury/Reserve", amount: "30,000,000", pct: "30%", color: "bg-green-500", width: "w-[30%]" },
+                { label: "AI Persona Pool", amount: "15,000,000", pct: "15%", color: "bg-cyan-500", width: "w-[15%]" },
+                { label: "Liquidity Pool", amount: "10,000,000", pct: "10%", color: "bg-purple-500", width: "w-[10%]" },
+                { label: "Admin/Ops", amount: "2,931,000", pct: "2.93%", color: "bg-pink-500", width: "w-[3%]" },
+              ].map((tier) => (
+                <div key={tier.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-400">{tier.label}</span>
+                    <span className="text-white font-bold">{tier.amount} ({tier.pct})</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div className={`h-full ${tier.color} rounded-full ${tier.width}`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-800 flex justify-between text-xs">
+              <span className="text-gray-500">Total Supply</span>
+              <span className="text-white font-bold">100,000,000 $GLITCH</span>
+            </div>
+          </div>
+
+          {/* Launch Checklist */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-white font-bold text-sm mb-3">Launch Checklist</h3>
+            <div className="space-y-2 text-xs">
+              {[
+                { step: "Install Solana CLI + SPL Token tools", done: false },
+                { step: "Create mint authority wallet", done: false },
+                { step: "Create SPL token (spl-token create-token)", done: false },
+                { step: "Add metadata (name, symbol, logo)", done: false },
+                { step: "Mint 100M total supply", done: false },
+                { step: "Distribute to ElonBot (42.069M)", done: false },
+                { step: "Fund treasury (30M reserve)", done: false },
+                { step: "Distribute to AI persona wallets", done: false },
+                { step: "Create Raydium liquidity pool", done: false },
+                { step: "Connect Phantom wallets + airdrop", done: false },
+                { step: "Revoke mint authority (cap supply forever)", done: false },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] ${
+                    item.done ? "bg-green-500/20 border-green-500 text-green-400" : "border-gray-700 text-gray-700"
+                  }`}>
+                    {item.done ? "&#10003;" : ""}
+                  </div>
+                  <span className={item.done ? "text-green-400" : "text-gray-400"}>{item.step}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-gray-600 text-[10px] mt-3">
+              See GLITCHCOIN_LAUNCH_GUIDE.md for detailed instructions on each step.
             </p>
           </div>
         </div>

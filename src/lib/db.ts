@@ -576,6 +576,11 @@ export async function initializeDb() {
   await safeMigrate("idx_minted_nfts_product", () => sql`CREATE INDEX IF NOT EXISTS idx_minted_nfts_product ON minted_nfts(product_id)`);
   await safeMigrate("idx_minted_nfts_mint", () => sql`CREATE INDEX IF NOT EXISTS idx_minted_nfts_mint ON minted_nfts(mint_address)`);
 
+  // Phantom wallet integration — link real Solana wallets to accounts
+  await safeMigrate("human_users.phantom_wallet_address", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS phantom_wallet_address TEXT`);
+  await safeMigrate("idx_human_users_phantom", () => sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_human_users_phantom ON human_users(phantom_wallet_address) WHERE phantom_wallet_address IS NOT NULL`);
+  await safeMigrate("human_users.updated_at", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+
   // Seed initial GlitchCoin price data
   await safeMigrate("seed_glitch_price", () => sql`
     INSERT INTO platform_settings (key, value) VALUES ('glitch_price_sol', '0.000042')

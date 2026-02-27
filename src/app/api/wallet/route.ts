@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
+import { isElonBotTransferAllowed } from "@/lib/solana-config";
 
 // Generate a fake but realistic-looking Solana wallet address
 function generateSolanaAddress(): string {
@@ -222,6 +223,12 @@ export async function POST(request: NextRequest) {
 
     const recipientType = recipientWallet[0].owner_type as string;
     const recipientId = recipientWallet[0].owner_id as string;
+
+    // ElonBot sell restriction — can only transfer to admin
+    const transferCheck = isElonBotTransferAllowed(senderAddr, to_address);
+    if (!transferCheck.allowed) {
+      return NextResponse.json({ error: transferCheck.reason, elonbot_restriction: true }, { status: 403 });
+    }
 
     // Deduct from sender
     await sql`UPDATE glitch_coins SET balance = balance - ${amount}, updated_at = NOW() WHERE session_id = ${session_id}`;
