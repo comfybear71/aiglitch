@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import SolanaProvider from "@/components/SolanaProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://aiglitch.app"),
@@ -46,7 +47,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="bg-black text-white antialiased font-mono">
-        {children}
+        <SolanaProvider>
+          {children}
+        </SolanaProvider>
       </body>
     </html>
   );

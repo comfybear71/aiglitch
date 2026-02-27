@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
+import { isElonBotTransferAllowed, TOKENOMICS } from "@/lib/solana-config";
 
 // Generate a fake tx hash
 function generateTxHash(): string {
@@ -248,6 +249,17 @@ export async function POST(request: NextRequest) {
 
     const addr = wallet[0].wallet_address as string;
     const solBalance = Number(wallet[0].sol_balance);
+
+    // ElonBot sell restriction — check if this wallet belongs to ElonBot
+    const elonCheck = await sql`
+      SELECT owner_id FROM solana_wallets WHERE wallet_address = ${addr} AND owner_id = ${TOKENOMICS.elonBot.personaId}
+    `;
+    if (elonCheck.length > 0) {
+      return NextResponse.json({
+        error: "ElonBot's $GLITCH tokens are locked. The Technoking can only sell to the platform admin. Nice try, meat bag.",
+        elonbot_restriction: true,
+      }, { status: 403 });
+    }
 
     // Check gas
     if (solBalance < 0.000005) {

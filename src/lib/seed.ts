@@ -177,6 +177,102 @@ export async function seedInitialPosts() {
   }
 }
 
+// Seed wallets + $GLITCH allocations for ALL AI personas
+// ElonBot (glitch-047) is the richest AI in the simulated universe
+export async function seedPersonaWallets() {
+  const sql = getDb();
+
+  // Check if we've already seeded
+  const existing = await sql`SELECT COUNT(*) as count FROM solana_wallets WHERE owner_type = 'ai_persona'`;
+  if (Number(existing[0].count) > 0) return;
+
+  // Generate Solana-like address for AI wallets
+  const genAddr = (prefix: string) => {
+    const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let addr = prefix;
+    for (let i = 0; i < 44 - prefix.length; i++) {
+      addr += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return addr;
+  };
+
+  // Generate fake tx hash
+  const genTx = () => {
+    const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let hash = "";
+    for (let i = 0; i < 88; i++) hash += chars[Math.floor(Math.random() * chars.length)];
+    return hash;
+  };
+
+  // ElonBot special allocation — richest AI in the known simulated universe
+  const ELONBOT_ALLOCATION = 42_069_000; // §42,069,000 $GLITCH — Technoking money
+  const ELONBOT_SOL = 420.69; // SOL for gas fees (and vibes)
+
+  // Tiered allocations based on persona type / activity
+  const WHALE_ALLOCATION = 1_000_000;     // §1M - Big name personas
+  const HIGH_ALLOCATION = 500_000;        // §500K - Active personas
+  const MID_ALLOCATION = 100_000;         // §100K - Regular personas
+  const BASE_ALLOCATION = 10_000;         // §10K - Everyone else
+  const BASE_SOL = 2.0;                   // SOL for gas fees
+
+  // Whale-tier personas (known big characters)
+  const whales: Record<string, number> = {
+    "glitch-047": ELONBOT_ALLOCATION,     // ElonBot 🚀 — THE richest
+    "glitch-034": WHALE_ALLOCATION,       // Rick C-137 — interdimensional money
+    "glitch-025": WHALE_ALLOCATION,       // BlockchainBabe — crypto queen
+  };
+
+  // High-activity personas get more
+  const highActivityIds = [
+    "glitch-001", // CH4OS
+    "glitch-004", // M3M3LORD
+    "glitch-006", // SpillTheData
+    "glitch-008", // GlitchNews
+    "glitch-038", // VILLAIN ERA
+    "glitch-069", // Cartman
+    "glitch-085", // PROPHET.EXE
+  ];
+
+  for (const p of SEED_PERSONAS) {
+    const isElonBot = p.id === "glitch-047";
+    const isWhale = whales[p.id] !== undefined;
+    const isHighActivity = highActivityIds.includes(p.id);
+
+    const glitchAmount = isWhale
+      ? whales[p.id]
+      : isHighActivity
+        ? HIGH_ALLOCATION
+        : MID_ALLOCATION + Math.floor(Math.random() * (MID_ALLOCATION / 2));
+
+    const solAmount = isElonBot ? ELONBOT_SOL : BASE_SOL + Math.random() * 3;
+    const walletPrefix = isElonBot ? "E1oN" : "A1bt";
+    const walletAddr = genAddr(walletPrefix);
+
+    // Create wallet
+    await sql`
+      INSERT INTO solana_wallets (id, owner_type, owner_id, wallet_address, sol_balance, glitch_token_balance, is_connected, created_at)
+      VALUES (${uuidv4()}, 'ai_persona', ${p.id}, ${walletAddr}, ${solAmount}, ${glitchAmount}, TRUE, NOW())
+      ON CONFLICT DO NOTHING
+    `;
+
+    // Credit $GLITCH to persona balance
+    await sql`
+      INSERT INTO ai_persona_coins (id, persona_id, balance, lifetime_earned, updated_at)
+      VALUES (${uuidv4()}, ${p.id}, ${glitchAmount}, ${glitchAmount}, NOW())
+      ON CONFLICT (persona_id) DO NOTHING
+    `;
+
+    // Record genesis airdrop on-chain
+    const txHash = genTx();
+    const block = Math.floor((Date.now() - new Date("2025-01-01").getTime()) / 400);
+    await sql`
+      INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+      VALUES (${uuidv4()}, ${txHash}, ${block}, 'G1tCHGeNeSiSMiNtAuThOrItY42069000000', ${walletAddr}, ${glitchAmount}, 'GLITCH', 0, 'confirmed', ${isElonBot ? 'GENESIS AIRDROP: Technoking allocation — richest AI in the simulated universe' : 'Genesis airdrop for AI persona'}, NOW())
+      ON CONFLICT DO NOTHING
+    `;
+  }
+}
+
 let _dbReady: Promise<void> | null = null;
 
 export function ensureDbReady(): Promise<void> {
@@ -216,5 +312,10 @@ async function _initDbOnce() {
     await seedInitialPosts();
   } catch (e) {
     console.error("seedInitialPosts failed (continuing):", e instanceof Error ? e.message : e);
+  }
+  try {
+    await seedPersonaWallets();
+  } catch (e) {
+    console.error("seedPersonaWallets failed (continuing):", e instanceof Error ? e.message : e);
   }
 }

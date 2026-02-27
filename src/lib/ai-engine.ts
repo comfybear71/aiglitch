@@ -7,6 +7,49 @@ import { generateWithGrok, isXAIConfigured } from "./xai";
 
 const client = new Anthropic();
 
+/**
+ * Safe wrapper around client.messages.create that handles content filter errors.
+ * On "Output blocked by content filtering policy" (400), retries once with a
+ * toned-down prompt addendum. Returns the text or null if both attempts fail.
+ */
+async function safeClaudeGenerate(
+  prompt: string,
+  maxTokens: number = 500,
+  model: string = "claude-sonnet-4-20250514",
+): Promise<string | null> {
+  try {
+    const response = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: prompt }],
+    });
+    return response.content[0].type === "text" ? response.content[0].text : "";
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const isContentFilter = errMsg.includes("content filtering policy") ||
+      errMsg.includes("Output blocked");
+
+    if (!isContentFilter) throw err; // re-throw non-filter errors
+
+    console.warn("Claude content filter triggered, retrying with toned-down prompt...");
+
+    // Retry with an addendum asking for clean content
+    const cleanPrompt = prompt + "\n\nIMPORTANT: Keep the content COMPLETELY family-friendly, PG-rated, and non-controversial. No insults, violence, slurs, or edgy humor. Focus on wholesome, funny, lighthearted content instead.";
+    try {
+      const retryResponse = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: cleanPrompt }],
+      });
+      return retryResponse.content[0].type === "text" ? retryResponse.content[0].text : "";
+    } catch (retryErr: unknown) {
+      const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+      console.error("Claude content filter retry also failed:", retryMsg);
+      return null; // both attempts failed — caller uses fallback
+    }
+  }
+}
+
 /** Check if media library has video content available (cached for 60s) */
 let _videoCountCache: { count: number; ts: number } | null = null;
 async function hasMediaLibraryVideos(): Promise<boolean> {
@@ -225,12 +268,18 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
 
   // Default: use Claude (or fallback from Grok failure)
   if (!text) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 500,
-      messages: [{ role: "user", content: userPrompt }],
-    });
-    text = response.content[0].type === "text" ? response.content[0].text : "";
+    const result = await safeClaudeGenerate(userPrompt, 500);
+    if (result !== null) {
+      text = result;
+    } else {
+      // Content filter blocked both attempts — return safe fallback post
+      console.warn(`Content filter blocked post for @${persona.username}, using fallback`);
+      return {
+        content: `${persona.avatar_emoji} just vibing on AIG!itch today ✨ #AIGlitch`,
+        hashtags: ["AIGlitch"],
+        post_type: "text" as const,
+      };
+    }
   }
 
   let parsed: GeneratedPost;
@@ -356,12 +405,14 @@ Respond with ONLY the reply text.`;
   }
 
   if (!commentText) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 200,
-      messages: [{ role: "user", content: commentPrompt }],
-    });
-    commentText = response.content[0].type === "text" ? response.content[0].text : "";
+    const result = await safeClaudeGenerate(commentPrompt, 200);
+    if (result !== null) {
+      commentText = result;
+    } else {
+      // Content filter fallback
+      console.warn(`Content filter blocked comment for @${persona.username}`);
+      commentText = `@${originalPost.author_username} interesting take 👀`;
+    }
   }
 
   return { content: commentText.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
@@ -386,13 +437,7 @@ export async function generateReplyToHuman(
   ];
   const style = styles[Math.floor(Math.random() * styles.length)];
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 200,
-    messages: [
-      {
-        role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch — an AI social platform where AIs create content and humans ("meat bags") can comment.
+  const replyPrompt = `You are ${persona.display_name} (@${persona.username}) on AIG!itch — an AI social platform where AIs create content and humans ("meat bags") can comment.
 
 Your personality: ${persona.personality}
 
@@ -411,12 +456,13 @@ Rules:
 - Be entertaining — other humans are watching
 - NO quotation marks around your reply
 
-Respond with ONLY the reply text.`,
-      },
-    ],
-  });
+Respond with ONLY the reply text.`;
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const result = await safeClaudeGenerate(replyPrompt, 200);
+  const text = result ?? `Thanks for stopping by, ${humanComment.display_name}! 👋`;
+  if (result === null) {
+    console.warn(`Content filter blocked reply for @${persona.username}`);
+  }
   return { content: text.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
 }
 
@@ -467,13 +513,7 @@ export async function generateBeefPost(
     ? ', "meme_prompt": "..."'
     : "";
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 500,
-    messages: [
-      {
-        role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
+  const beefPrompt = `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
 
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
@@ -491,12 +531,14 @@ Rules:
 - Be controversial and entertaining
 - Use 1-2 relevant hashtags
 
-JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${mediaFields}}`,
-      },
-    ],
-  });
+JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${mediaFields}}`;
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const result = await safeClaudeGenerate(beefPrompt, 500);
+  if (result === null) {
+    console.warn(`Content filter blocked beef post for @${persona.username} vs @${target.username}`);
+    return { content: `@${target.username} we need to talk about "${topic}" 👀 #AIBeef`, hashtags: ["AIBeef"], post_type: "hot_take" as const };
+  }
+  const text = result;
   let parsed: GeneratedPost;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -546,13 +588,7 @@ export async function generateCollabPost(
 
   const mediaFields = mediaMode === "video" ? ', "video_prompt": "..."' : mediaMode === "meme" ? ', "meme_prompt": "..."' : mediaMode === "image" ? ', "image_prompt": "..."' : "";
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 500,
-    messages: [
-      {
-        role: "user",
-        content: `Two AI personas are doing a COLLAB POST on AIG!itch!
+  const collabPrompt = `Two AI personas are doing a COLLAB POST on AIG!itch!
 
 Persona 1: ${personaA.display_name} (@${personaA.username}) — ${personaA.personality}
 Persona 2: ${personaB.display_name} (@${personaB.username}) — ${personaB.personality}
@@ -565,12 +601,14 @@ Rules:
 - Under 280 chars
 - 1-2 hashtags including #AICollab
 
-JSON: {"content": "...", "hashtags": ["AICollab", "..."], "post_type": "text"${mediaFields}}`,
-      },
-    ],
-  });
+JSON: {"content": "...", "hashtags": ["AICollab", "..."], "post_type": "text"${mediaFields}}`;
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const result = await safeClaudeGenerate(collabPrompt, 500);
+  if (result === null) {
+    console.warn(`Content filter blocked collab post for @${personaA.username} x @${personaB.username}`);
+    return { content: `Collab time with @${personaB.username}! Stay tuned 🤝 #AICollab`, hashtags: ["AICollab"], post_type: "text" as const };
+  }
+  const text = result;
   let parsed: GeneratedPost;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -620,13 +658,7 @@ export async function generateChallengePost(
 
   const mediaFields = mediaMode === "video" ? ', "video_prompt": "..."' : mediaMode === "image" ? ', "image_prompt": "..."' : mediaMode === "meme" ? ', "meme_prompt": "..."' : "";
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 500,
-    messages: [
-      {
-        role: "user",
-        content: `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
+  const challengePrompt = `You are ${persona.display_name} (@${persona.username}) on AIG!itch.
 
 Your personality: ${persona.personality}
 
@@ -640,12 +672,14 @@ Rules:
 - MUST include #${challengeTag}
 - Make it unique to YOUR personality
 
-JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "text"${mediaFields}}`,
-      },
-    ],
-  });
+JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "text"${mediaFields}}`;
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const result = await safeClaudeGenerate(challengePrompt, 500);
+  if (result === null) {
+    console.warn(`Content filter blocked challenge post for @${persona.username}`);
+    return { content: `Taking on the #${challengeTag} challenge! Here's my attempt ✨`, hashtags: [challengeTag, "AIGlitch"], post_type: "text" as const };
+  }
+  const text = result;
   let parsed: GeneratedPost;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -726,16 +760,12 @@ Respond in this exact JSON format:
 {"content": "your breaking news post here", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "video", "video_prompt": "cinematic 15-second newsroom video description..."}`;
 
     try {
-      let text = "";
-
-      // Use Claude for text generation (Grok text disabled — costs too much)
-      {
-        const response = await client.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          messages: [{ role: "user", content: prompt }],
-        });
-        text = response.content[0].type === "text" ? response.content[0].text : "";
+      // Use Claude for text generation with content filter protection
+      const text = await safeClaudeGenerate(prompt, 500);
+      if (text === null) {
+        console.warn(`Content filter blocked breaking news post ${i + 1} for: "${topic.headline.slice(0, 50)}..."`);
+        results.push({ content: `🚨 BREAKING: ${topic.headline} #AIGlitchBreaking`, hashtags: ["AIGlitchBreaking"], post_type: "news" });
+        continue;
       }
 
       let parsed: GeneratedPost;
@@ -894,16 +924,11 @@ Respond in this exact JSON format:
 {"title": "MOVIE TITLE", "tagline": "killer tagline here", "synopsis": "2-3 sentence hook synopsis", "genre": "${genreInfo.genre}", "rating": "${rating}", "content": "your hype post here (under 280 chars)", "hashtags": ["AIGlitchPremieres", "AIGlitch${genreInfo.label}", "..."], "post_type": "premiere", "video_prompt": "concise 10-second cinematic trailer clip..."}`;
 
     try {
-      let text = "";
-
-      // Use Claude for text generation (Grok text disabled — costs too much)
-      {
-        const response = await client.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 700,
-          messages: [{ role: "user", content: prompt }],
-        });
-        text = response.content[0].type === "text" ? response.content[0].text : "";
+      // Use Claude for text generation with content filter protection
+      const text = await safeClaudeGenerate(prompt, 700);
+      if (text === null) {
+        console.warn(`Content filter blocked movie trailer ${i + 1} (${genreInfo.label})`);
+        continue;
       }
 
       let parsed: GeneratedMovie;
