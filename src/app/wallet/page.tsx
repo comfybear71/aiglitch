@@ -44,8 +44,10 @@ interface ChainStats {
 }
 
 interface PhantomBalance {
-  glitch_balance: number | null;
   sol_balance: number | null;
+  glitch_balance: number | null;
+  budju_balance: number | null;
+  usdc_balance: number | null;
   linked: boolean;
 }
 
@@ -86,7 +88,7 @@ export default function WalletPage() {
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [fauceting, setFauceting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [phantomBalance, setPhantomBalance] = useState<PhantomBalance>({ glitch_balance: null, sol_balance: null, linked: false });
+  const [phantomBalance, setPhantomBalance] = useState<PhantomBalance>({ sol_balance: null, glitch_balance: null, budju_balance: null, usdc_balance: null, linked: false });
   const [linking, setLinking] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
@@ -129,15 +131,17 @@ export default function WalletPage() {
     }
   }, [sessionId, publicKey, linking]);
 
-  // Fetch real on-chain balance
+  // Fetch real on-chain balances (SOL, $GLITCH, $BUDJU, USDC)
   const fetchPhantomBalance = useCallback(async () => {
     if (!publicKey) return;
     try {
       const res = await fetch(`/api/solana?action=balance&wallet_address=${publicKey.toBase58()}`);
       const data = await res.json();
       setPhantomBalance({
-        glitch_balance: data.glitch_balance ?? null,
         sol_balance: data.sol_balance ?? null,
+        glitch_balance: data.glitch_balance ?? null,
+        budju_balance: data.budju_balance ?? null,
+        usdc_balance: data.usdc_balance ?? null,
         linked: true,
       });
     } catch { /* ignore */ }
@@ -1016,21 +1020,35 @@ export default function WalletPage() {
                   </p>
                 </div>
 
-                {/* Balances */}
+                {/* Balances — SOL, USDC, $BUDJU, $GLITCH */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 rounded-xl bg-black/30">
-                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={12} /> $GLITCH (ON-CHAIN)</p>
-                    <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
-                      {phantomBalance.glitch_balance !== null ? phantomBalance.glitch_balance.toLocaleString() : "---"}
-                    </p>
-                    <p className="text-gray-600 text-[10px]">real SPL tokens</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-black/30">
-                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="SOL" size={12} /> SOL BALANCE</p>
-                    <p className="text-2xl font-bold text-purple-400">
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="SOL" size={12} /> SOL</p>
+                    <p className="text-xl font-bold text-purple-400">
                       {phantomBalance.sol_balance !== null ? phantomBalance.sol_balance.toFixed(4) : "---"}
                     </p>
-                    <p className="text-gray-600 text-[10px]">for gas fees</p>
+                    <p className="text-gray-600 text-[10px]">native token</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-black/30">
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="USDC" size={12} /> USDC</p>
+                    <p className="text-xl font-bold text-green-400">
+                      {phantomBalance.usdc_balance !== null ? phantomBalance.usdc_balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---"}
+                    </p>
+                    <p className="text-gray-600 text-[10px]">stablecoin</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-black/30">
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="BUDJU" size={12} /> $BUDJU</p>
+                    <p className="text-xl font-bold text-fuchsia-400">
+                      {phantomBalance.budju_balance !== null ? phantomBalance.budju_balance.toLocaleString() : "---"}
+                    </p>
+                    <p className="text-gray-600 text-[10px]">on-chain</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-black/30">
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={12} /> $GLITCH</p>
+                    <p className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
+                      {phantomBalance.glitch_balance !== null ? phantomBalance.glitch_balance.toLocaleString() : "---"}
+                    </p>
+                    <p className="text-gray-600 text-[10px]">on-chain</p>
                   </div>
                 </div>
 

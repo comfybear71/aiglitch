@@ -6,41 +6,115 @@ import {
   TOKENOMICS,
   isElonBotTransferAllowed,
   getGlitchTokenMint,
-  getAdminWallet,
   GLITCH_TOKEN_MINT_STR,
+  BUDJU_TOKEN_MINT_STR,
   ADMIN_WALLET_STR,
   isRealSolanaMode,
-  getSolanaConnection,
+  getServerSolanaConnection,
+  hasValidTokenMint,
+  getHeliusApiUrl,
+  HELIUS_API_KEY,
 } from "@/lib/solana-config";
 import { PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
 
-// Get real on-chain $GLITCH balance for a wallet address
-async function getRealTokenBalance(walletAddress: string): Promise<number | null> {
-  if (!isRealSolanaMode()) return null;
+// ── Helius Enhanced API for token balances ──
+// Uses Helius /v0/addresses/{address}/balances endpoint for reliable balance data
+interface HeliusTokenBalance {
+  mint: string;
+  amount: number;
+  decimals: number;
+  tokenAccount: string;
+}
+
+interface HeliusBalanceResponse {
+  tokens: HeliusTokenBalance[];
+  nativeBalance: number;
+}
+
+async function getHeliusBalances(walletAddress: string): Promise<HeliusBalanceResponse | null> {
+  const url = getHeliusApiUrl(`/v0/addresses/${walletAddress}/balances`);
+  if (!url) return null;
 
   try {
-    const connection = getSolanaConnection();
-    const walletPubkey = new PublicKey(walletAddress);
-    const tokenAccount = await getAssociatedTokenAddress(getGlitchTokenMint(), walletPubkey);
-    const account = await getAccount(connection, tokenAccount);
-    return Number(account.amount);
+    const res = await fetch(url, { next: { revalidate: 10 } });
+    if (!res.ok) return null;
+    return await res.json();
   } catch {
-    return 0; // Token account doesn't exist yet = 0 balance
+    return null;
   }
 }
 
-// Get real SOL balance for a wallet address
-async function getRealSolBalance(walletAddress: string): Promise<number | null> {
-  if (!isRealSolanaMode()) return null;
+// USDC mint address on Solana mainnet
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
+interface WalletBalances {
+  sol_balance: number | null;
+  glitch_balance: number | null;
+  budju_balance: number | null;
+  usdc_balance: number | null;
+}
+
+// Get all on-chain balances for a wallet address in one call
+// Returns SOL, $GLITCH, $BUDJU, and USDC using Helius or standard RPC
+async function getWalletBalances(walletAddress: string): Promise<WalletBalances> {
+  const empty: WalletBalances = { sol_balance: null, glitch_balance: null, budju_balance: null, usdc_balance: null };
+
+  if (!hasValidTokenMint()) return empty;
+
+  // Try Helius enhanced API first (single call for ALL token balances)
+  const heliusData = await getHeliusBalances(walletAddress);
+  if (heliusData) {
+    const findToken = (mint: string) => heliusData.tokens.find((t) => t.mint === mint);
+    const tokenBalance = (mint: string, decimals: number) => {
+      const token = findToken(mint);
+      return token ? token.amount / Math.pow(10, token.decimals || decimals) : 0;
+    };
+
+    return {
+      sol_balance: heliusData.nativeBalance / 1_000_000_000,
+      glitch_balance: tokenBalance(GLITCH_TOKEN_MINT_STR, 9),
+      budju_balance: tokenBalance(BUDJU_TOKEN_MINT_STR, 9),
+      usdc_balance: tokenBalance(USDC_MINT, 6),
+    };
+  }
+
+  // Fallback: standard RPC
   try {
-    const connection = getSolanaConnection();
+    const connection = getServerSolanaConnection();
     const walletPubkey = new PublicKey(walletAddress);
-    const balance = await connection.getBalance(walletPubkey);
-    return balance / 1_000_000_000; // Convert lamports to SOL
+
+    let sol_balance: number | null = 0;
+    let glitch_balance: number | null = 0;
+    let budju_balance: number | null = 0;
+    let usdc_balance: number | null = 0;
+
+    // SOL balance
+    try {
+      const lamports = await connection.getBalance(walletPubkey);
+      sol_balance = lamports / 1_000_000_000;
+    } catch { sol_balance = 0; }
+
+    // Helper to get SPL token balance
+    const getSplBalance = async (mintStr: string, decimals: number): Promise<number> => {
+      try {
+        const mint = new PublicKey(mintStr);
+        const tokenAccount = await getAssociatedTokenAddress(mint, walletPubkey);
+        const account = await getAccount(connection, tokenAccount);
+        return Number(account.amount) / Math.pow(10, decimals);
+      } catch { return 0; }
+    };
+
+    // Fetch all SPL token balances in parallel
+    [glitch_balance, budju_balance, usdc_balance] = await Promise.all([
+      getSplBalance(GLITCH_TOKEN_MINT_STR, 9),
+      getSplBalance(BUDJU_TOKEN_MINT_STR, 9),
+      getSplBalance(USDC_MINT, 6),
+    ]);
+
+    return { sol_balance, glitch_balance, budju_balance, usdc_balance };
   } catch {
-    return 0;
+    return empty;
   }
 }
 
@@ -70,22 +144,26 @@ export async function GET(request: NextRequest) {
   }
 
   // Get real on-chain balance for a connected Phantom wallet
+  // Uses Helius enhanced API if HELIUS_API_KEY is set, falls back to standard RPC
   if (action === "balance" && walletAddress) {
-    if (!isRealSolanaMode()) {
+    // Only require a valid token mint (not full "real mode") to query balances
+    if (!hasValidTokenMint()) {
       return NextResponse.json({
         real_mode: false,
-        message: "Real Solana mode is not active. Set NEXT_PUBLIC_SOLANA_REAL_MODE=true and configure token mint.",
+        message: "Token mint not configured. Set NEXT_PUBLIC_GLITCH_TOKEN_MINT.",
       });
     }
 
-    const glitchBalance = await getRealTokenBalance(walletAddress);
-    const solBalance = await getRealSolBalance(walletAddress);
+    const balances = await getWalletBalances(walletAddress);
 
     return NextResponse.json({
       real_mode: true,
+      helius_enabled: !!HELIUS_API_KEY,
       wallet_address: walletAddress,
-      glitch_balance: glitchBalance,
-      sol_balance: solBalance,
+      sol_balance: balances.sol_balance,
+      glitch_balance: balances.glitch_balance,
+      budju_balance: balances.budju_balance,
+      usdc_balance: balances.usdc_balance,
       token_mint: GLITCH_TOKEN_MINT_STR,
     });
   }
@@ -104,14 +182,15 @@ export async function GET(request: NextRequest) {
 
     if (existing.length > 0 && existing[0].phantom_wallet_address) {
       const addr = existing[0].phantom_wallet_address as string;
-      const glitchBalance = await getRealTokenBalance(addr);
-      const solBalance = await getRealSolBalance(addr);
+      const balances = await getWalletBalances(addr);
 
       return NextResponse.json({
         linked: true,
         wallet_address: addr,
-        glitch_balance: glitchBalance,
-        sol_balance: solBalance,
+        sol_balance: balances.sol_balance,
+        glitch_balance: balances.glitch_balance,
+        budju_balance: balances.budju_balance,
+        usdc_balance: balances.usdc_balance,
       });
     }
 

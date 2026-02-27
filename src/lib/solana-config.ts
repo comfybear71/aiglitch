@@ -6,8 +6,27 @@ import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 // Network: "mainnet-beta" for real launch, "devnet" for testing
 export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet") as "mainnet-beta" | "devnet" | "testnet";
 
-// RPC endpoint — use a premium RPC for production (Helius, QuickNode, etc.)
+// Helius API key (server-side only — never exposed to client)
+export const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
+
+// Build Helius RPC URL if API key is available
+function buildHeliusRpcUrl(): string | null {
+  if (!HELIUS_API_KEY) return null;
+  const network = SOLANA_NETWORK === "mainnet-beta" ? "mainnet" : SOLANA_NETWORK;
+  return `https://${network}.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+}
+
+// Helius enhanced API base URL (for token balances, etc.)
+export function getHeliusApiUrl(path: string): string | null {
+  if (!HELIUS_API_KEY) return null;
+  return `https://api.helius.xyz${path}?api-key=${HELIUS_API_KEY}`;
+}
+
+// RPC endpoint — prefers Helius, falls back to NEXT_PUBLIC env var, then public RPC
 export const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
+
+// Server-side RPC URL (uses Helius API key if available, never exposed to client)
+export const SERVER_RPC_URL = buildHeliusRpcUrl() || SOLANA_RPC_URL;
 
 // System program address used as safe placeholder for unconfigured token mint
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
@@ -74,6 +93,21 @@ export function getSolanaConnection(): Connection {
     _connection = new Connection(SOLANA_RPC_URL, "confirmed");
   }
   return _connection;
+}
+
+// Server-side connection (uses Helius if available — never use on client)
+let _serverConnection: Connection | null = null;
+export function getServerSolanaConnection(): Connection {
+  if (!_serverConnection) {
+    _serverConnection = new Connection(SERVER_RPC_URL, "confirmed");
+  }
+  return _serverConnection;
+}
+
+// Check if we have a valid (non-placeholder) token mint configured
+export function hasValidTokenMint(): boolean {
+  const SYSTEM_PROGRAM_ADDR = "11111111111111111111111111111111";
+  return GLITCH_TOKEN_MINT_STR !== SYSTEM_PROGRAM_ADDR && GLITCH_TOKEN_MINT_STR.length > 10;
 }
 
 // ── Tokenomics ──
