@@ -39,18 +39,18 @@ interface MarketData {
   price_usd: number;
   quote_price_usd: number;
   change_24h: number;
-  high_24h: number;
-  low_24h: number;
   volume_24h: number;
   market_cap: number;
   total_supply: number;
   circulating_supply: number;
-  order_book: {
-    bids: { price: number; amount: number; total: number }[];
-    asks: { price: number; amount: number; total: number }[];
-  };
-  recent_trades: { price: number; amount: number; side: string; time: string }[];
-  listed_exchanges: { name: string; type: string; volume: number }[];
+  // Real pool data
+  liquidity_usd: number;
+  liquidity_base: number;
+  liquidity_quote: number;
+  pool_address: string;
+  dex_name: string;
+  txns_24h: { buys: number; sells: number };
+  data_source: string;
   available_pairs: TradingPairInfo[];
 }
 
@@ -85,7 +85,7 @@ interface JupiterQuote {
   routePlan: { swapInfo: { label: string } }[];
 }
 
-type ViewTab = "chart" | "orderbook" | "trades" | "history";
+type ViewTab = "chart" | "pool" | "activity" | "history";
 
 export default function ExchangePage() {
   const { connected, publicKey, signTransaction } = useWallet();
@@ -119,7 +119,10 @@ export default function ExchangePage() {
 
   const fetchMarket = useCallback(async () => {
     try {
-      const res = await fetch(`/api/exchange?action=market&pair=${selectedPair}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(`/api/exchange?action=market&pair=${selectedPair}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
       setMarket(data);
     } catch { /* ignore */ }
@@ -142,11 +145,14 @@ export default function ExchangePage() {
     } catch { /* ignore */ }
   }, [sessionId]);
 
-  // Fetch real Phantom balances when connected
+  // Fetch real Phantom balances when connected (with timeout)
   const fetchPhantomBalances = useCallback(async () => {
     if (!publicKey || !sessionId) return;
     try {
-      const res = await fetch(`/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(`/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
       setPhantomBalances({
         SOL: data.sol_balance || 0,
@@ -154,7 +160,15 @@ export default function ExchangePage() {
         GLITCH: data.glitch_balance || 0,
         BUDJU: data.budju_balance || 0,
       });
-    } catch { /* ignore */ }
+    } catch {
+      // On timeout/error, set to 0 so UI doesn't hang on loading state
+      setPhantomBalances(prev => ({
+        SOL: prev.SOL || 0,
+        USDC: prev.USDC || 0,
+        GLITCH: prev.GLITCH || 0,
+        BUDJU: prev.BUDJU || 0,
+      }));
+    }
   }, [publicKey, sessionId]);
 
   useEffect(() => {
@@ -397,7 +411,7 @@ export default function ExchangePage() {
             <h1 className="text-lg font-bold">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-red-400">Exchange</span>
             </h1>
-            <p className="text-gray-500 text-[10px] tracking-widest">POWERED BY JUPITER</p>
+            <p className="text-gray-500 text-[10px] tracking-widest">REAL ON-CHAIN SWAPS VIA JUPITER</p>
           </div>
           {connected && Object.keys(displayBalances).length > 0 ? (
             <div className="text-right">
@@ -486,21 +500,33 @@ export default function ExchangePage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold text-white">{formatPrice(market.price)}</span>
+                <span className="text-2xl font-bold text-white">{market.price > 0 ? formatPrice(market.price) : "---"}</span>
                 <span className="text-gray-500 text-xs">{quoteSymbol}</span>
-                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                  market.change_24h >= 0
-                    ? "bg-green-500/20 text-green-400"
-                    : "bg-red-500/20 text-red-400"
+                {market.change_24h !== 0 && (
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                    market.change_24h >= 0
+                      ? "bg-green-500/20 text-green-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}>
+                    {market.change_24h >= 0 ? "+" : ""}{market.change_24h.toFixed(2)}%
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <p className="text-gray-500 text-[10px]">${market.price_usd > 0 ? market.price_usd.toFixed(6) : "0"} USD</p>
+                <span className={`text-[8px] px-1 py-0.5 rounded font-bold ${
+                  market.data_source === "dexscreener" ? "bg-green-500/20 text-green-400" :
+                  market.data_source === "jupiter" ? "bg-blue-500/20 text-blue-400" :
+                  "bg-gray-500/20 text-gray-400"
                 }`}>
-                  {market.change_24h >= 0 ? "+" : ""}{market.change_24h.toFixed(2)}%
+                  {market.data_source === "dexscreener" ? "LIVE" : market.data_source === "jupiter" ? "JUPITER" : "CACHED"}
                 </span>
               </div>
-              <p className="text-gray-500 text-[10px]">${market.price_usd.toFixed(6)} USD</p>
             </div>
             <div className="text-right text-[10px] space-y-0.5">
-              <p className="text-gray-500">24h Vol: <span className="text-white">{market.volume_24h.toLocaleString()}</span></p>
-              <p className="text-gray-500">MCap: <span className="text-white">${market.market_cap.toLocaleString()}</span></p>
+              {market.volume_24h > 0 && <p className="text-gray-500">24h Vol: <span className="text-white">${market.volume_24h.toLocaleString()}</span></p>}
+              {market.market_cap > 0 && <p className="text-gray-500">MCap: <span className="text-white">${market.market_cap.toLocaleString()}</span></p>}
+              {market.liquidity_usd > 0 && <p className="text-gray-500">Liq: <span className="text-cyan-400">${market.liquidity_usd.toLocaleString()}</span></p>}
             </div>
           </div>
         </div>
@@ -508,7 +534,7 @@ export default function ExchangePage() {
 
       {/* Chart / View tabs */}
       <div className="flex gap-1 px-4 pt-3 pb-2">
-        {(["chart", "orderbook", "trades", "history"] as ViewTab[]).map((t) => (
+        {(["chart", "pool", "activity", "history"] as ViewTab[]).map((t) => (
           <button
             key={t}
             onClick={() => setViewTab(t)}
@@ -518,7 +544,7 @@ export default function ExchangePage() {
                 : "text-gray-600 hover:text-gray-400"
             }`}
           >
-            {t === "orderbook" ? "Book" : t}
+            {t}
           </button>
         ))}
       </div>
@@ -540,72 +566,109 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── ORDER BOOK ── */}
-      {viewTab === "orderbook" && market && (
-        <div className="px-4 mb-4">
+      {/* ── POOL LIQUIDITY (Real on-chain data) ── */}
+      {viewTab === "pool" && market && (
+        <div className="px-4 mb-4 space-y-3">
           <div className="rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
-            <div className="grid grid-cols-2 gap-0">
-              <div className="border-r border-gray-800">
-                <div className="px-2 py-1.5 border-b border-gray-800 bg-green-500/5">
-                  <div className="flex justify-between text-[9px] text-gray-500 font-bold">
-                    <span>PRICE ({quoteSymbol})</span>
-                    <span>AMOUNT</span>
-                  </div>
-                </div>
-                {market.order_book.bids.map((bid, i) => (
-                  <div key={i} className="flex justify-between px-2 py-0.5 text-[10px] relative">
-                    <div className="absolute inset-0 bg-green-500/5" style={{ width: `${Math.min(100, (bid.amount / 50000) * 100)}%` }} />
-                    <span className="text-green-400 relative z-10">{formatPrice(bid.price)}</span>
-                    <span className="text-gray-400 relative z-10">{bid.amount.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <div className="px-2 py-1.5 border-b border-gray-800 bg-red-500/5">
-                  <div className="flex justify-between text-[9px] text-gray-500 font-bold">
-                    <span>PRICE ({quoteSymbol})</span>
-                    <span>AMOUNT</span>
-                  </div>
-                </div>
-                {market.order_book.asks.map((ask, i) => (
-                  <div key={i} className="flex justify-between px-2 py-0.5 text-[10px] relative">
-                    <div className="absolute inset-0 right-0 bg-red-500/5" style={{ width: `${Math.min(100, (ask.amount / 50000) * 100)}%`, marginLeft: "auto" }} />
-                    <span className="text-red-400 relative z-10">{formatPrice(ask.price)}</span>
-                    <span className="text-gray-400 relative z-10">{ask.amount.toLocaleString()}</span>
-                  </div>
-                ))}
+            <div className="px-3 py-2 border-b border-gray-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500 font-bold">POOL LIQUIDITY</span>
+                {market.data_source === "dexscreener" && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">LIVE</span>
+                )}
               </div>
             </div>
-            <div className="border-t border-gray-800 px-3 py-1.5 flex justify-between text-[10px]">
-              <span className="text-gray-500">Spread</span>
-              <span className="text-yellow-400">
-                {formatPrice(market.order_book.asks[0].price - market.order_book.bids[0].price)} ({((market.order_book.asks[0].price - market.order_book.bids[0].price) / market.price * 100).toFixed(2)}%)
-              </span>
-            </div>
+            {market.liquidity_usd > 0 ? (
+              <div className="p-3 space-y-3">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-white">${market.liquidity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-gray-500">Total Liquidity (USD)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
+                    <p className="text-[9px] text-gray-500">{baseSymbol} in Pool</p>
+                    <p className="text-sm text-white font-bold">{market.liquidity_base.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
+                    <p className="text-[9px] text-gray-500">{quoteSymbol} in Pool</p>
+                    <p className="text-sm text-white font-bold">{market.liquidity_quote.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
+                  </div>
+                </div>
+                {market.pool_address && (
+                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800">
+                    <p className="text-[9px] text-gray-500 mb-1">Pool Address ({market.dex_name || "DEX"})</p>
+                    <p className="text-[10px] text-purple-400 font-mono break-all">{market.pool_address}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-6 text-center">
+                <p className="text-gray-500 text-xs">No liquidity pool found for this pair on DexScreener yet.</p>
+                <p className="text-gray-600 text-[10px] mt-1">Pools may take a few minutes to appear after creation.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* ── RECENT TRADES ── */}
-      {viewTab === "trades" && market && (
-        <div className="px-4 mb-4">
+      {/* ── REAL ACTIVITY ── */}
+      {viewTab === "activity" && market && (
+        <div className="px-4 mb-4 space-y-3">
           <div className="rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
-            <div className="px-3 py-1.5 border-b border-gray-800">
-              <div className="flex justify-between text-[9px] text-gray-500 font-bold">
-                <span>PRICE ({quoteSymbol})</span>
-                <span>AMOUNT</span>
-                <span>TIME</span>
+            <div className="px-3 py-2 border-b border-gray-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500 font-bold">24H TRADING ACTIVITY</span>
+                <span className="text-[9px] text-gray-600">{market.data_source === "dexscreener" ? "DexScreener" : market.data_source}</span>
               </div>
             </div>
-            {market.recent_trades.map((trade, i) => (
-              <div key={i} className="flex justify-between px-3 py-1 text-[10px] border-b border-gray-800/30 last:border-0">
-                <span className={trade.side === "buy" ? "text-green-400" : "text-red-400"}>
-                  {formatPrice(trade.price)}
-                </span>
-                <span className="text-gray-400">{trade.amount.toLocaleString()}</span>
-                <span className="text-gray-600">{timeAgo(trade.time)}</span>
+            {(market.txns_24h.buys > 0 || market.txns_24h.sells > 0) ? (
+              <div className="p-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-green-500/5 border border-green-500/20 text-center">
+                    <p className="text-2xl font-bold text-green-400">{market.txns_24h.buys}</p>
+                    <p className="text-[10px] text-gray-500 font-bold">BUYS (24h)</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/20 text-center">
+                    <p className="text-2xl font-bold text-red-400">{market.txns_24h.sells}</p>
+                    <p className="text-[10px] text-gray-500 font-bold">SELLS (24h)</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
+                    <p className="text-[9px] text-gray-500">Volume (24h)</p>
+                    <p className="text-sm text-white font-bold">${market.volume_24h.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
+                    <p className="text-[9px] text-gray-500">Market Cap</p>
+                    <p className="text-sm text-white font-bold">${market.market_cap.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  </div>
+                </div>
+                {/* Buy/Sell ratio bar */}
+                {(market.txns_24h.buys + market.txns_24h.sells) > 0 && (
+                  <div>
+                    <div className="flex justify-between text-[9px] text-gray-500 mb-1">
+                      <span>Buy pressure</span>
+                      <span>Sell pressure</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-gray-800 overflow-hidden flex">
+                      <div
+                        className="h-full bg-green-500 rounded-l-full"
+                        style={{ width: `${(market.txns_24h.buys / (market.txns_24h.buys + market.txns_24h.sells)) * 100}%` }}
+                      />
+                      <div
+                        className="h-full bg-red-500 rounded-r-full"
+                        style={{ width: `${(market.txns_24h.sells / (market.txns_24h.buys + market.txns_24h.sells)) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+            ) : (
+              <div className="p-6 text-center">
+                <p className="text-gray-500 text-xs">No trading activity found yet.</p>
+                <p className="text-gray-600 text-[10px] mt-1">Activity appears after trades happen on-chain.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
