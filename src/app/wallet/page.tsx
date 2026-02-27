@@ -952,7 +952,18 @@ export default function WalletPage() {
               {!swapQuote && !swapLoading && swapAmount && parseFloat(swapAmount) > 0 && (
                 <div className="p-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                   <p className="text-yellow-400 text-[10px] text-center">
-                    No liquidity found for this pair. Check back once the Meteora DLMM pool is live.
+                    No Jupiter route found yet. The{" "}
+                    <a
+                      href="https://app.meteora.ag/dlmm/LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-yellow-300"
+                    >
+                      Meteora DLMM pool
+                    </a>{" "}
+                    is live on-chain — Jupiter may need time to index it. Try the{" "}
+                    <a href="/exchange" className="underline hover:text-yellow-300">GlitchDEX</a>{" "}
+                    in the meantime.
                   </p>
                 </div>
               )}

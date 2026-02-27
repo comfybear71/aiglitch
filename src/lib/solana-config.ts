@@ -49,6 +49,9 @@ export const AI_POOL_WALLET_STR = process.env.NEXT_PUBLIC_AI_POOL_WALLET || "A1P
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
 export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
 
+// Meteora DLMM Pool Address (GLITCH/BUDJU)
+export const METEORA_GLITCH_BUDJU_POOL = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
 export function getGlitchTokenMint(): PublicKey {
