@@ -443,6 +443,109 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // ── Treasury Direct Buy ──
+  // Allows users to buy $GLITCH directly from the treasury at a set price
+  // Works even without a Raydium liquidity pool
+  if (action === "treasury_buy") {
+    const { amount, pay_token } = body;
+    const payToken = pay_token || "SOL";
+
+    if (!amount || amount < 1 || amount > 1000000) {
+      return NextResponse.json({ error: "Invalid amount (1 - 1,000,000)" }, { status: 400 });
+    }
+
+    // Get wallet
+    const wallet = await sql`
+      SELECT wallet_address, sol_balance FROM solana_wallets WHERE owner_type = 'human' AND owner_id = ${session_id}
+    `;
+    if (wallet.length === 0) {
+      return NextResponse.json({ error: "Create a wallet first" }, { status: 400 });
+    }
+
+    const addr = wallet[0].wallet_address as string;
+
+    // Get current price
+    const prices = await getTokenPrices(sql);
+    const glitchPrice = payToken === "USDC"
+      ? prices.GLITCH.usd
+      : prices.GLITCH.sol;
+
+    const totalCost = amount * glitchPrice;
+
+    // Check balance
+    const balance = await getHumanTokenBalance(sql, session_id, payToken, addr);
+    const totalWithGas = payToken === "SOL" ? totalCost + 0.000005 : totalCost;
+
+    if (balance < totalWithGas) {
+      return NextResponse.json({
+        error: `Need ${totalWithGas.toFixed(6)} ${payToken}. You have ${balance.toFixed(6)} ${payToken}.`,
+        need: totalWithGas,
+        have: balance,
+      }, { status: 402 });
+    }
+
+    // Check treasury supply (30M minus what's already been sold)
+    const [treasurySpent] = await sql`
+      SELECT COALESCE(SUM(amount), 0) as total FROM exchange_orders
+      WHERE order_type = 'buy' AND base_token = 'GLITCH'
+        AND wallet_address = 'TREASURY_DIRECT'
+    `;
+    const treasuryRemaining = TOKENOMICS.treasury.amount - Number(treasurySpent?.total || 0);
+    if (amount > treasuryRemaining) {
+      return NextResponse.json({
+        error: `Treasury only has ${treasuryRemaining.toLocaleString()} $GLITCH remaining.`,
+        treasury_remaining: treasuryRemaining,
+      }, { status: 402 });
+    }
+
+    // Deduct payment
+    await deductHumanToken(sql, session_id, payToken, addr, payToken === "SOL" ? totalWithGas : totalCost);
+    if (payToken !== "SOL") {
+      await sql`UPDATE solana_wallets SET sol_balance = sol_balance - 0.000005, updated_at = NOW() WHERE wallet_address = ${addr}`;
+    }
+
+    // Credit $GLITCH
+    await creditHumanToken(sql, session_id, "GLITCH", amount);
+
+    // Record the order
+    const txHash = generateTxHash();
+    const block = getCurrentBlock();
+
+    await sql`
+      INSERT INTO exchange_orders (id, session_id, wallet_address, order_type, amount, price_per_coin, total_sol, trading_pair, base_token, quote_token, quote_amount, status, created_at)
+      VALUES (${uuidv4()}, ${session_id}, 'TREASURY_DIRECT', 'buy', ${amount}, ${glitchPrice}, ${totalCost}, ${"GLITCH_" + payToken}, 'GLITCH', ${payToken}, ${totalCost}, 'filled', NOW())
+    `;
+
+    await sql`
+      INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+      VALUES (${uuidv4()}, ${txHash}, ${block}, ${TOKENOMICS.treasury.amount > 0 ? "TREASURY" : "ADMIN"}, ${addr}, ${amount}, 'GLITCH', 5000, 'confirmed', ${"Treasury Buy: " + amount + " $GLITCH for " + totalCost.toFixed(6) + " " + payToken}, NOW())
+    `;
+
+    // Small price impact upward
+    const impact = 1 + amount * 0.0000002;
+    const newUsd = prices.GLITCH.usd * impact;
+    const newSol = prices.GLITCH.sol * impact;
+    await sql`UPDATE platform_settings SET value = ${newUsd.toString()}, updated_at = NOW() WHERE key = 'glitch_price_usd'`;
+    await sql`UPDATE platform_settings SET value = ${newSol.toString()}, updated_at = NOW() WHERE key = 'glitch_price_sol'`;
+
+    const updatedBalances = await getAllHumanBalances(sql, session_id, addr);
+
+    return NextResponse.json({
+      success: true,
+      order_type: "treasury_buy",
+      amount,
+      price_per_coin: glitchPrice,
+      total_cost: totalCost,
+      pay_token: payToken,
+      fee: "0.000005 SOL",
+      tx_hash: txHash,
+      block_number: block,
+      balances: updatedBalances,
+      treasury_remaining: treasuryRemaining - amount,
+      message: `Bought ${amount.toLocaleString()} $GLITCH from Treasury for ${totalCost.toFixed(6)} ${payToken}!`,
+    });
+  }
+
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
 
