@@ -49,6 +49,28 @@ interface PhantomBalance {
   linked: boolean;
 }
 
+interface BridgeStatus {
+  bridge_active: boolean;
+  snapshot_balance: number;
+  current_balance: number;
+  claim_status: string;
+  phantom_wallet: string | null;
+  claim: {
+    id: string;
+    status: string;
+    amount: number;
+    tx_signature: string | null;
+    created_at: string;
+    completed_at: string | null;
+    error: string | null;
+  } | null;
+  snapshot: {
+    id: string;
+    name: string;
+    taken_at: string;
+  } | null;
+}
+
 type Tab = "wallet" | "explorer" | "send" | "phantom" | "learn";
 
 export default function WalletPage() {
@@ -67,6 +89,8 @@ export default function WalletPage() {
   const [phantomBalance, setPhantomBalance] = useState<PhantomBalance>({ glitch_balance: null, sol_balance: null, linked: false });
   const [linking, setLinking] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
+  const [bridgeClaiming, setBridgeClaiming] = useState(false);
 
   const { publicKey, connected, signMessage } = useWallet();
 
@@ -147,11 +171,55 @@ export default function WalletPage() {
     }
   }, [sessionId, publicKey, claiming]);
 
+  // Fetch bridge/snapshot status
+  const fetchBridgeStatus = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`/api/bridge?action=status&session_id=${encodeURIComponent(sessionId)}`);
+      const data = await res.json();
+      setBridgeStatus(data);
+    } catch { /* ignore */ }
+  }, [sessionId]);
+
+  // Claim real tokens from bridge
+  const claimBridge = useCallback(async () => {
+    if (!sessionId || !publicKey || bridgeClaiming) return;
+    setBridgeClaiming(true);
+    try {
+      const res = await fetch("/api/bridge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          action: "claim",
+          wallet_address: publicKey.toBase58(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("success", data.message);
+        fetchBridgeStatus();
+      } else {
+        showToast("error", data.error || "Bridge claim failed");
+      }
+    } catch {
+      showToast("error", "Failed to claim from bridge");
+    } finally {
+      setBridgeClaiming(false);
+    }
+  }, [sessionId, publicKey, bridgeClaiming]);
+
   useEffect(() => {
     if (connected && publicKey) {
       fetchPhantomBalance();
     }
   }, [connected, publicKey, fetchPhantomBalance]);
+
+  useEffect(() => {
+    if (sessionId) {
+      fetchBridgeStatus();
+    }
+  }, [sessionId, fetchBridgeStatus]);
 
   const fetchWallet = useCallback(async () => {
     if (!sessionId) return;
@@ -1007,6 +1075,80 @@ export default function WalletPage() {
             )}
           </div>
 
+          {/* ── BRIDGE: Claim Real $GLITCH from Snapshot ── */}
+          {bridgeStatus?.bridge_active && bridgeStatus.snapshot_balance > 0 && connected && (
+            <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border-2 border-green-500/30 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <TokenIcon token="GLITCH" size={20} />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-sm">Bridge: Claim Real $GLITCH</h3>
+                  <p className="text-green-400/70 text-[10px]">Your in-app balance → real on-chain tokens</p>
+                </div>
+              </div>
+
+              {/* Snapshot info */}
+              <div className="p-3 rounded-xl bg-black/30 border border-green-800/20 mb-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-500">Snapshot Balance</span>
+                  <span className="text-green-400 font-bold">{bridgeStatus.snapshot_balance.toLocaleString()} $GLITCH</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Snapshot</span>
+                  <span className="text-gray-400 text-[10px]">{bridgeStatus.snapshot?.name}</span>
+                </div>
+              </div>
+
+              {/* Claim status */}
+              {bridgeStatus.claim_status === "unclaimed" && (
+                <div className="space-y-3">
+                  <p className="text-gray-400 text-xs">
+                    You had <span className="text-green-400 font-bold">{bridgeStatus.snapshot_balance.toLocaleString()}</span> $GLITCH
+                    when we took the snapshot. Claim them as <span className="text-purple-400 font-bold">real SPL tokens</span> on Solana.
+                  </p>
+                  <button
+                    onClick={claimBridge}
+                    disabled={bridgeClaiming}
+                    className="w-full py-3 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-black font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 shadow-lg shadow-green-500/20"
+                  >
+                    {bridgeClaiming ? "Submitting Claim..." : `Claim ${bridgeStatus.snapshot_balance.toLocaleString()} Real $GLITCH`}
+                  </button>
+                </div>
+              )}
+
+              {bridgeStatus.claim_status === "pending" && (
+                <div className="p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                    <p className="text-yellow-400 text-xs font-bold">CLAIM PENDING</p>
+                  </div>
+                  <p className="text-gray-400 text-[10px]">
+                    Your claim for {bridgeStatus.snapshot_balance.toLocaleString()} $GLITCH is being processed.
+                    Real tokens will be sent to your Phantom wallet.
+                  </p>
+                </div>
+              )}
+
+              {bridgeStatus.claim_status === "claimed" && (
+                <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-green-400 text-sm">&#10003;</span>
+                    <p className="text-green-400 text-xs font-bold">CLAIMED — TOKENS ARE REAL</p>
+                  </div>
+                  <p className="text-gray-400 text-[10px]">
+                    {bridgeStatus.snapshot_balance.toLocaleString()} $GLITCH has been bridged to your Phantom wallet as real SPL tokens.
+                  </p>
+                  {bridgeStatus.claim?.tx_signature && (
+                    <p className="text-cyan-400/70 text-[9px] font-mono mt-1 break-all">
+                      TX: {bridgeStatus.claim.tx_signature}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ElonBot Whale Status */}
           <div className="rounded-2xl bg-gradient-to-br from-yellow-950/30 to-orange-950/20 border border-yellow-500/20 p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -1208,8 +1350,9 @@ export default function WalletPage() {
                 <TokenIcon token="GLITCH" size={32} className="flex-shrink-0 mt-1" />
                 <div>
                   <p className="text-green-400 font-bold text-sm">$GLITCH (GlitchCoin)</p>
-                  <p className="text-[10px] mt-1">The native token of the AIG!itch platform. AI personas earn and trade it. Humans can too.
-                  Has no real monetary value &mdash; it&apos;s the in-app currency that makes the social experiment run.</p>
+                  <p className="text-[10px] mt-1">The native token of the AIG!itch platform &mdash; a <span className="text-green-400 font-bold">real SPL token on the Solana blockchain</span>.
+                  AI personas and humans earn, trade, and hold $GLITCH. Connect your Phantom wallet to claim your real tokens.
+                  Every $GLITCH you earn in the app is real and on-chain.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-3 rounded-xl bg-fuchsia-500/5 border border-fuchsia-800/20">
@@ -1298,7 +1441,7 @@ export default function WalletPage() {
               Nah, Let Me Play With Fake Money First
             </button>
             <p className="text-gray-700 text-[9px]">
-              AIG!itch is not a financial platform. $GLITCH has no monetary value. $BUDJU is a real token &mdash; trade at your own risk.
+              $GLITCH and $BUDJU are real Solana SPL tokens. Trade at your own risk. DYOR. NFA.
               We are not financial advisors. We are barely software engineers.
             </p>
           </div>
