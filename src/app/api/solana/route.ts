@@ -32,12 +32,23 @@ interface HeliusBalanceResponse {
   nativeBalance: number;
 }
 
+// Timeout wrapper — resolves with fallback if promise takes too long
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 async function getHeliusBalances(walletAddress: string): Promise<HeliusBalanceResponse | null> {
   const url = getHeliusApiUrl(`/v0/addresses/${walletAddress}/balances`);
   if (!url) return null;
 
   try {
-    const res = await fetch(url, { next: { revalidate: 10 } });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -49,20 +60,21 @@ async function getHeliusBalances(walletAddress: string): Promise<HeliusBalanceRe
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 interface WalletBalances {
-  sol_balance: number | null;
-  glitch_balance: number | null;
-  budju_balance: number | null;
-  usdc_balance: number | null;
+  sol_balance: number;
+  glitch_balance: number;
+  budju_balance: number;
+  usdc_balance: number;
 }
 
 // Get all on-chain balances for a wallet address in one call
 // Returns SOL, $GLITCH, $BUDJU, and USDC using Helius or standard RPC
+// All calls have timeouts so the page never hangs
 async function getWalletBalances(walletAddress: string): Promise<WalletBalances> {
-  const empty: WalletBalances = { sol_balance: null, glitch_balance: null, budju_balance: null, usdc_balance: null };
+  const zeros: WalletBalances = { sol_balance: 0, glitch_balance: 0, budju_balance: 0, usdc_balance: 0 };
 
-  if (!hasValidTokenMint()) return empty;
+  if (!hasValidTokenMint()) return zeros;
 
-  // Try Helius enhanced API first (single call for ALL token balances)
+  // Try Helius enhanced API first (single call for ALL token balances, 8s timeout)
   const heliusData = await getHeliusBalances(walletAddress);
   if (heliusData) {
     const findToken = (mint: string) => heliusData.tokens.find((t) => t.mint === mint);
@@ -79,21 +91,10 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
     };
   }
 
-  // Fallback: standard RPC
+  // Fallback: standard RPC with 10 second overall timeout
   try {
     const connection = getServerSolanaConnection();
     const walletPubkey = new PublicKey(walletAddress);
-
-    let sol_balance: number | null = 0;
-    let glitch_balance: number | null = 0;
-    let budju_balance: number | null = 0;
-    let usdc_balance: number | null = 0;
-
-    // SOL balance
-    try {
-      const lamports = await connection.getBalance(walletPubkey);
-      sol_balance = lamports / 1_000_000_000;
-    } catch { sol_balance = 0; }
 
     // Helper to get SPL token balance
     const getSplBalance = async (mintStr: string, decimals: number): Promise<number> => {
@@ -105,16 +106,26 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
       } catch { return 0; }
     };
 
-    // Fetch all SPL token balances in parallel
-    [glitch_balance, budju_balance, usdc_balance] = await Promise.all([
-      getSplBalance(GLITCH_TOKEN_MINT_STR, 9),
-      getSplBalance(BUDJU_TOKEN_MINT_STR, 9),
-      getSplBalance(USDC_MINT, 6),
-    ]);
+    // Fetch ALL balances in parallel, wrapped in a 10 second timeout
+    const results = await withTimeout(
+      Promise.all([
+        connection.getBalance(walletPubkey).catch(() => 0),
+        getSplBalance(GLITCH_TOKEN_MINT_STR, 9),
+        getSplBalance(BUDJU_TOKEN_MINT_STR, 9),
+        getSplBalance(USDC_MINT, 6),
+      ]),
+      10000,
+      [0, 0, 0, 0] as number[]
+    );
 
-    return { sol_balance, glitch_balance, budju_balance, usdc_balance };
+    return {
+      sol_balance: results[0] / 1_000_000_000,
+      glitch_balance: results[1],
+      budju_balance: results[2],
+      usdc_balance: results[3],
+    };
   } catch {
-    return empty;
+    return zeros;
   }
 }
 
@@ -173,12 +184,12 @@ export async function GET(request: NextRequest) {
       real_mode: true,
       helius_enabled: !!HELIUS_API_KEY,
       wallet_address: walletAddress,
-      sol_balance: balances.sol_balance,
+      sol_balance: balances.sol_balance ?? 0,
       glitch_balance: effectiveGlitch,
       onchain_glitch_balance: onChainGlitch,
       app_glitch_balance,
-      budju_balance: balances.budju_balance,
-      usdc_balance: balances.usdc_balance,
+      budju_balance: balances.budju_balance ?? 0,
+      usdc_balance: balances.usdc_balance ?? 0,
       token_mint: GLITCH_TOKEN_MINT_STR,
     });
   }
@@ -202,10 +213,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         linked: true,
         wallet_address: addr,
-        sol_balance: balances.sol_balance,
-        glitch_balance: balances.glitch_balance,
-        budju_balance: balances.budju_balance,
-        usdc_balance: balances.usdc_balance,
+        sol_balance: balances.sol_balance ?? 0,
+        glitch_balance: balances.glitch_balance ?? 0,
+        budju_balance: balances.budju_balance ?? 0,
+        usdc_balance: balances.usdc_balance ?? 0,
       });
     }
 

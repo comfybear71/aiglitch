@@ -225,7 +225,7 @@ export default function WalletPage() {
     } catch { /* ignore */ }
   }, [sessionId]);
 
-  // Fetch real on-chain balances (slow - blockchain RPC call)
+  // Fetch real on-chain balances (with 15s timeout so it never hangs)
   const fetchPhantomBalance = useCallback(async () => {
     if (!publicKey) {
       setBalancesLoading(false);
@@ -233,8 +233,11 @@ export default function WalletPage() {
     }
     setBalancesLoading(true);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const url = `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ""}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
       setPhantomBalance(prev => ({
         sol_balance: data.sol_balance ?? prev.sol_balance ?? 0,
@@ -247,7 +250,7 @@ export default function WalletPage() {
         setAppGlitchBalance(data.app_glitch_balance);
       }
     } catch {
-      // On error, set balances to 0 so they don't stay as "---"
+      // On error or timeout, set balances to 0 so they don't stay as "---"
       setPhantomBalance(prev => ({
         sol_balance: prev.sol_balance ?? 0,
         glitch_balance: prev.glitch_balance ?? 0,
