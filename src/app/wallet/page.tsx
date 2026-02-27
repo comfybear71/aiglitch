@@ -224,25 +224,37 @@ export default function WalletPage() {
 
   // Fetch real on-chain balances (slow - blockchain RPC call)
   const fetchPhantomBalance = useCallback(async () => {
-    if (!publicKey) return;
+    if (!publicKey) {
+      setBalancesLoading(false);
+      return;
+    }
     setBalancesLoading(true);
     try {
       const url = `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
       setPhantomBalance(prev => ({
-        sol_balance: data.sol_balance ?? prev.sol_balance,
-        glitch_balance: Math.max(data.glitch_balance ?? 0, appGlitchBalance),
-        budju_balance: data.budju_balance ?? prev.budju_balance,
-        usdc_balance: data.usdc_balance ?? prev.usdc_balance,
+        sol_balance: data.sol_balance ?? prev.sol_balance ?? 0,
+        glitch_balance: data.glitch_balance ?? prev.glitch_balance ?? 0,
+        budju_balance: data.budju_balance ?? prev.budju_balance ?? 0,
+        usdc_balance: data.usdc_balance ?? prev.usdc_balance ?? 0,
         linked: true,
       }));
       if (data.app_glitch_balance) {
         setAppGlitchBalance(data.app_glitch_balance);
       }
-    } catch { /* ignore */ }
+    } catch {
+      // On error, set balances to 0 so they don't stay as "---"
+      setPhantomBalance(prev => ({
+        sol_balance: prev.sol_balance ?? 0,
+        glitch_balance: prev.glitch_balance ?? 0,
+        budju_balance: prev.budju_balance ?? 0,
+        usdc_balance: prev.usdc_balance ?? 0,
+        linked: prev.linked,
+      }));
+    }
     setBalancesLoading(false);
-  }, [publicKey, sessionId, appGlitchBalance]);
+  }, [publicKey, sessionId]);
 
   // Claim airdrop to Phantom wallet
   const claimPhantomAirdrop = useCallback(async () => {
