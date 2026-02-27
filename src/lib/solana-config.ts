@@ -16,13 +16,13 @@ const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
 
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
-export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "DTs9ZxT52WA8ahKy6tEsbcZGmr6gP3S3bChLmqZq9fLy";
+export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56";
 
 // ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
-export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "HQqNJdroRttJfiDfAnKBHQg25DZVuyUogq41qjbc34Yk";
+export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH";
 
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
-export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "F9iJgf6aY8vHXpt1JZbZJ1QRnEhdiali5wcQqr3JKfn";
+export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
 
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
