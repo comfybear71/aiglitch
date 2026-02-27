@@ -118,9 +118,23 @@ export default function MePage() {
   const [walletUnlinking, setWalletUnlinking] = useState(false);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
 
+  // Helper: fetch with timeout (default 8s)
+  const fetchWithTimeout = useCallback(async (url: string, opts?: RequestInit, timeoutMs = 8000) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...opts, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return res;
+    } catch {
+      clearTimeout(timeoutId);
+      throw new Error("timeout");
+    }
+  }, []);
+
   const fetchProfile = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetchWithTimeout("/api/auth/human", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "profile", session_id: sessionId }),
@@ -136,24 +150,34 @@ export default function MePage() {
       setMode("signup");
     }
     setLoading(false);
-  }, [sessionId]);
+  }, [sessionId, fetchWithTimeout]);
 
+  // Load everything in parallel on mount — don't wait for profile before fetching secondary data
   useEffect(() => {
+    const sid = encodeURIComponent(sessionId);
+
+    // Profile (blocks UI — determines signup vs profile mode)
     fetchProfile();
-  }, [fetchProfile]);
 
-  // Detect Phantom in-app browser & fetch linked wallet
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const isPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom) ||
-      /Phantom/i.test(navigator.userAgent);
-    setIsPhantomBrowser(isPhantom);
-
-    // Fetch linked wallet for the logged-in user
+    // Pre-fetch secondary data in parallel (coins, marketplace, wallet, linked wallet)
+    // These update state independently — no need to wait for profile
     if (sessionId && sessionId !== "anon") {
-      fetch("/api/auth/human", {
+      fetchWithTimeout(`/api/coins?session_id=${sid}`)
+        .then(r => r.json())
+        .then(data => { if (data) setCoins(data); })
+        .catch(() => {});
+
+      fetchWithTimeout(`/api/marketplace?session_id=${sid}`)
+        .then(r => r.json())
+        .then(data => { if (data?.purchases) setInventory(data.purchases); })
+        .catch(() => {});
+
+      fetchWithTimeout(`/api/wallet?session_id=${sid}`)
+        .then(r => r.json())
+        .then(data => { if (data?.wallet) setGlitchBalance(data.wallet.glitch_token_balance || 0); })
+        .catch(() => {});
+
+      fetchWithTimeout("/api/auth/human", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "get_wallet", session_id: sessionId }),
@@ -161,7 +185,35 @@ export default function MePage() {
         .then(r => r.json())
         .then(data => { if (data.wallet_address) setLinkedWallet(data.wallet_address); })
         .catch(() => {});
+
+      // Claim signup bonus (fire-and-forget)
+      fetchWithTimeout("/api/coins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, action: "claim_signup" }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            setCoins(prev => ({
+              ...prev,
+              balance: prev.balance + data.amount,
+              lifetime_earned: prev.lifetime_earned + data.amount,
+            }));
+          }
+        })
+        .catch(() => {});
     }
+
+    // Detect Phantom in-app browser
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const isPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom) ||
+        /Phantom/i.test(navigator.userAgent);
+      setIsPhantomBrowser(isPhantom);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // Wallet-based login (for Phantom browser users)
@@ -361,38 +413,8 @@ export default function MePage() {
     setWalletUnlinking(false);
   };
 
-  // Fetch coins + inventory + wallet balance (all in parallel for speed)
-  useEffect(() => {
-    if (!user) return;
-    const sid = encodeURIComponent(sessionId);
-    Promise.all([
-      fetch(`/api/coins?session_id=${sid}`).then(r => r.json()).catch(() => null),
-      fetch(`/api/marketplace?session_id=${sid}`).then(r => r.json()).catch(() => null),
-      fetch(`/api/wallet?session_id=${sid}`).then(r => r.json()).catch(() => null),
-    ]).then(([coinsData, marketData, walletData]) => {
-      if (coinsData) setCoins(coinsData);
-      if (marketData) setInventory(marketData.purchases || []);
-      if (walletData?.wallet) setGlitchBalance(walletData.wallet.glitch_token_balance || 0);
-    });
-  }, [user, sessionId]);
-
-  // Claim signup bonus
-  useEffect(() => {
-    if (!user) return;
-    fetch("/api/coins", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, action: "claim_signup" }),
-    }).then(r => r.json()).then(data => {
-      if (data.success) {
-        setCoins(prev => ({
-          ...prev,
-          balance: prev.balance + data.amount,
-          lifetime_earned: prev.lifetime_earned + data.amount,
-        }));
-      }
-    }).catch(() => {});
-  }, [user, sessionId]);
+  // Note: coins, marketplace, wallet, and signup bonus are all fetched in parallel
+  // on mount (see the combined useEffect above) — no need to wait for user state
 
   const fetchLikedPosts = async () => {
     setPostsLoading(true);
