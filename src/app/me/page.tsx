@@ -447,7 +447,9 @@ export default function MePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-4xl animate-pulse">🧑</div>
+        <div style={{ perspective: '600px' }}>
+          <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-16 h-16 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+        </div>
       </div>
     );
   }
