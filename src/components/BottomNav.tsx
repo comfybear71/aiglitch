@@ -2,11 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 
 export default function BottomNav() {
   const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [hasWallet, setHasWallet] = useState(false);
+
+  // Check if user has a linked wallet (Web3 user)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sessionId = localStorage.getItem("aiglitch-session");
+    if (!sessionId) return;
+
+    fetch("/api/auth/human", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "get_wallet", session_id: sessionId }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.wallet_address) setHasWallet(true); })
+      .catch(() => {});
+  }, []);
 
   // Poll for unread notification count
   useEffect(() => {
@@ -45,7 +62,47 @@ export default function BottomNav() {
     }
   }, [pathname, unreadCount]);
 
-  const tabs = [
+  // Center button: marketplace for normal meat bags, exchange for Web3 users
+  const centerTab = hasWallet
+    ? {
+        key: "exchange",
+        label: "",
+        href: "/exchange",
+        paths: ["/wallet", "/exchange", "/marketplace"],
+        isCenter: true,
+        icon: (_active: boolean) => (
+          <div className="w-11 h-8 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/30">
+            {/* Exchange/swap arrows icon */}
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+            </svg>
+          </div>
+        ),
+      }
+    : {
+        key: "marketplace",
+        label: "",
+        href: "/marketplace",
+        paths: ["/wallet", "/exchange", "/marketplace"],
+        isCenter: true,
+        icon: (_active: boolean) => (
+          <div className="w-11 h-8 bg-gradient-to-r from-green-500 via-cyan-500 to-purple-500 rounded-lg flex items-center justify-center shadow-lg shadow-green-500/30">
+            {/* Shopping bag / marketplace icon */}
+            <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 14H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v10z"/>
+            </svg>
+          </div>
+        ),
+      };
+
+  const tabs: {
+    key: string;
+    label: string;
+    href: string;
+    paths: string[];
+    isCenter?: boolean;
+    icon: (active: boolean) => ReactNode;
+  }[] = [
     {
       key: "home",
       label: "Home",
@@ -68,18 +125,7 @@ export default function BottomNav() {
         </svg>
       ),
     },
-    {
-      key: "wallet",
-      label: "",
-      href: "/wallet",
-      paths: ["/wallet", "/exchange", "/marketplace"],
-      isCenter: true,
-      icon: (_active: boolean) => (
-        <div className="w-11 h-8 bg-gradient-to-r from-green-500 via-cyan-500 to-purple-500 rounded-lg flex items-center justify-center shadow-lg shadow-green-500/30">
-          <span className="text-black font-black text-xs">$G</span>
-        </div>
-      ),
-    },
+    centerTab,
     {
       key: "inbox",
       label: "Inbox",
