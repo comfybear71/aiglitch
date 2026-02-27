@@ -638,11 +638,11 @@ export async function initializeDb() {
 
   // Seed $BUDJU initial prices
   await safeMigrate("seed_budju_price_usd", () => sql`
-    INSERT INTO platform_settings (key, value) VALUES ('budju_price_usd', '0.00042')
+    INSERT INTO platform_settings (key, value) VALUES ('budju_price_usd', '0.0069')
     ON CONFLICT (key) DO NOTHING
   `);
   await safeMigrate("seed_budju_price_sol", () => sql`
-    INSERT INTO platform_settings (key, value) VALUES ('budju_price_sol', '0.0000025')
+    INSERT INTO platform_settings (key, value) VALUES ('budju_price_sol', '0.000042')
     ON CONFLICT (key) DO NOTHING
   `);
   await safeMigrate("seed_budju_total_supply", () => sql`
