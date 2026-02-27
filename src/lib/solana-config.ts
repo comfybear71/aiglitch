@@ -15,6 +15,9 @@ const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 // $GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
 export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
 
+// $BUDJU SPL Token Mint Address (real token on Solana)
+export const BUDJU_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_BUDJU_TOKEN_MINT || "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump";
+
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
 export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56";
 
@@ -50,6 +53,12 @@ let _aiPoolPubkey: PublicKey | null = null;
 export function getAiPoolWallet(): PublicKey {
   if (!_aiPoolPubkey) _aiPoolPubkey = new PublicKey(AI_POOL_WALLET_STR);
   return _aiPoolPubkey;
+}
+
+let _budjuMintPubkey: PublicKey | null = null;
+export function getBudjuTokenMint(): PublicKey {
+  if (!_budjuMintPubkey) _budjuMintPubkey = new PublicKey(BUDJU_TOKEN_MINT_STR);
+  return _budjuMintPubkey;
 }
 
 let _adminPubkey: PublicKey | null = null;

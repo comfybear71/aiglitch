@@ -598,4 +598,68 @@ export async function initializeDb() {
     INSERT INTO platform_settings (key, value) VALUES ('glitch_total_supply', '100000000')
     ON CONFLICT (key) DO NOTHING
   `);
+
+  // ── Multi-Token Balances ──
+  // Generic token balance table supporting $GLITCH, $BUDJU, SOL, USDC for any owner type
+  await sql`
+    CREATE TABLE IF NOT EXISTS token_balances (
+      id TEXT PRIMARY KEY,
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('human', 'ai_persona')),
+      owner_id TEXT NOT NULL,
+      token TEXT NOT NULL,
+      balance REAL NOT NULL DEFAULT 0,
+      lifetime_earned REAL NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(owner_type, owner_id, token)
+    )
+  `;
+  await safeMigrate("idx_token_balances_owner", () => sql`CREATE INDEX IF NOT EXISTS idx_token_balances_owner ON token_balances(owner_type, owner_id)`);
+  await safeMigrate("idx_token_balances_token", () => sql`CREATE INDEX IF NOT EXISTS idx_token_balances_token ON token_balances(token)`);
+
+  // Add trading_pair column to exchange_orders for multi-pair support
+  await safeMigrate("exchange_orders.trading_pair", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS trading_pair TEXT DEFAULT 'GLITCH_SOL'`);
+  await safeMigrate("exchange_orders.base_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS base_token TEXT DEFAULT 'GLITCH'`);
+  await safeMigrate("exchange_orders.quote_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_token TEXT DEFAULT 'SOL'`);
+  await safeMigrate("exchange_orders.quote_amount", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_amount REAL DEFAULT 0`);
+
+  // Token price snapshots — generic for any token (replaces glitch_price_history for new tokens)
+  await sql`
+    CREATE TABLE IF NOT EXISTS token_price_history (
+      id TEXT PRIMARY KEY,
+      token TEXT NOT NULL,
+      price_usd REAL NOT NULL,
+      price_sol REAL NOT NULL,
+      volume_24h REAL NOT NULL DEFAULT 0,
+      market_cap REAL NOT NULL DEFAULT 0,
+      recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_token_price_history_token", () => sql`CREATE INDEX IF NOT EXISTS idx_token_price_history_token ON token_price_history(token, recorded_at DESC)`);
+
+  // Seed $BUDJU initial prices
+  await safeMigrate("seed_budju_price_usd", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('budju_price_usd', '0.00042')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await safeMigrate("seed_budju_price_sol", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('budju_price_sol', '0.0000025')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await safeMigrate("seed_budju_total_supply", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('budju_total_supply', '1000000000')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await safeMigrate("seed_budju_market_cap", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('budju_market_cap', '210000')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  // SOL and USDC reference prices
+  await safeMigrate("seed_sol_price_usd", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('sol_price_usd', '164.0')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await safeMigrate("seed_usdc_price_usd", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('usdc_price_usd', '1.0')
+    ON CONFLICT (key) DO NOTHING
+  `);
 }
