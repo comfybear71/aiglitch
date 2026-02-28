@@ -144,7 +144,6 @@ export default function AdminDashboard() {
   const [blobUploadProgress, setBlobUploadProgress] = useState<{
     current: number; total: number; fileName: string; startTime: number;
   } | null>(null);
-  const [stitching, setStitching] = useState(false);
 
 
   // Elapsed timer for generation progress
@@ -1027,7 +1026,7 @@ export default function AdminDashboard() {
     } catch { /* ignore */ }
   }, []);
 
-  // Upload videos to a premiere/news blob folder
+  // Upload videos to a premiere/news blob folder and auto-create posts
   const uploadToBlobFolder = async (files: FileList | File[]) => {
     const fileArray = Array.from(files).filter(f => f.type.startsWith("video/") || f.name.match(/\.(mp4|mov|webm|avi)$/i));
     if (fileArray.length === 0) {
@@ -1043,20 +1042,28 @@ export default function AdminDashboard() {
     const MAX_DIRECT = 4 * 1024 * 1024; // 4MB
     let succeeded = 0;
     let failed = 0;
+    let posted = 0;
+
+    // Derive post type and genre from folder path
+    const postType = blobFolder.startsWith("news") ? "news" : "premiere";
+    const genre = blobFolder.split("/")[1] || "action"; // e.g. "premiere/action" → "action"
 
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
       setBlobUploadProgress({ current: i, total: fileArray.length, fileName: file.name, startTime: uploadStart });
       try {
+        let blobUrl: string | null = null;
+
         if (file.size > MAX_DIRECT) {
           // Large file — use client upload
           const { upload } = await import("@vercel/blob/client");
           const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-          await upload(`${blobFolder}/${cleanName}`, file, {
+          const result = await upload(`${blobFolder}/${cleanName}`, file, {
             access: "public",
             handleUploadUrl: "/api/admin/blob-upload/upload",
             multipart: true,
           });
+          blobUrl = result.url;
           succeeded++;
           setGenerationLog(prev => [...prev, `  ✅ ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) → ${blobFolder}/`]);
         } else {
@@ -1066,12 +1073,31 @@ export default function AdminDashboard() {
           formData.append("folder", blobFolder);
           const res = await fetch("/api/admin/blob-upload", { method: "POST", body: formData });
           const data = await res.json();
-          if (data.success) {
+          if (data.success && data.results?.[0]?.url) {
+            blobUrl = data.results[0].url;
             succeeded++;
             setGenerationLog(prev => [...prev, `  ✅ ${file.name} → ${blobFolder}/`]);
           } else {
             failed++;
             setGenerationLog(prev => [...prev, `  ❌ ${file.name}: ${data.results?.[0]?.error || "upload failed"}`]);
+          }
+        }
+
+        // Create post immediately from the uploaded video URL
+        if (blobUrl) {
+          try {
+            const postRes = await fetch("/api/test-premiere-post", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ videoUrl: blobUrl, type: postType, genre }),
+            });
+            const postData = await postRes.json();
+            if (postData.success) {
+              posted++;
+              setGenerationLog(prev => [...prev, `  🎬 Post created → ${postType}/${genre}`]);
+            }
+          } catch {
+            setGenerationLog(prev => [...prev, `  ⚠️ Uploaded but post creation failed for ${file.name}`]);
           }
         }
       } catch (err) {
@@ -1081,44 +1107,10 @@ export default function AdminDashboard() {
     }
 
     setBlobUploadProgress({ current: fileArray.length, total: fileArray.length, fileName: "Done!", startTime: uploadStart });
+    setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${posted} posts created, ${failed} failed.`]);
     setBlobUploading(false);
     setTimeout(() => setBlobUploadProgress(null), 5000);
     fetchBlobFolders();
-
-    // Auto-stitch: create posts from uploaded videos
-    if (succeeded > 0) {
-      setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${failed} failed. Auto-creating posts...`]);
-      await runStitchTest();
-    } else {
-      setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${failed} failed.`]);
-    }
-  };
-
-  // Stitch Test: scan blob storage for unposted videos and create posts
-  const runStitchTest = async () => {
-    setStitching(true);
-    setGenerationLog(prev => [...prev, "🧵 Stitch Test: scanning blob storage for unposted videos..."]);
-    try {
-      const res = await fetch("/api/test-premiere-post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setGenerationLog(prev => [...prev, `🧵 ✅ Created ${data.created} new posts, re-tagged ${data.retagged} existing. ${data.message || ""}`]);
-        if (data.posts?.length > 0) {
-          for (const p of data.posts) {
-            setGenerationLog(prev => [...prev, `  🎬 ${p.postType}/${p.genre || "general"} → @${p.persona} (${p.postId.slice(0, 8)}...)`]);
-          }
-        }
-      } else {
-        setGenerationLog(prev => [...prev, `🧵 ❌ Stitch failed: ${data.error || "Unknown error"}`]);
-      }
-    } catch (err) {
-      setGenerationLog(prev => [...prev, `🧵 ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
-    }
-    setStitching(false);
   };
 
   const generateForPersona = async (personaId: string, count: number) => {
@@ -1263,10 +1255,6 @@ export default function AdminDashboard() {
             <button onClick={() => generateAd()} disabled={generatingAd}
               className="px-2.5 py-1.5 bg-pink-500/20 text-pink-400 rounded-lg text-xs font-bold hover:bg-pink-500/30 disabled:opacity-50 whitespace-nowrap shrink-0">
               {generatingAd ? "📺 ..." : "📺 Ads"}
-            </button>
-            <button onClick={() => runStitchTest()} disabled={stitching}
-              className="px-2.5 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50 whitespace-nowrap shrink-0">
-              {stitching ? "🧵 ..." : "🧵 Stitch"}
             </button>
           </div>
         </div>
@@ -1438,11 +1426,37 @@ export default function AdminDashboard() {
                     Drop videos here for <span className="text-amber-200">{blobFolder}</span>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    Or click to browse. Upload 5-10 per genre, then hit Stitch Test above.
+                    Or click to browse. Posts are created automatically after upload.
                   </div>
                 </>
               )}
             </div>
+
+            {/* Sync button for videos uploaded directly to blob storage */}
+            <button
+              onClick={async () => {
+                setGenerationLog(prev => [...prev, "🔄 Scanning blob storage for unposted videos..."]);
+                try {
+                  const res = await fetch("/api/test-premiere-post", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({}),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    setGenerationLog(prev => [...prev, `🔄 ✅ Found ${data.created} unposted videos, re-tagged ${data.retagged}.`]);
+                    fetchBlobFolders();
+                  } else {
+                    setGenerationLog(prev => [...prev, `🔄 ❌ ${data.error || "Sync failed"}`]);
+                  }
+                } catch {
+                  setGenerationLog(prev => [...prev, "🔄 ❌ Sync failed"]);
+                }
+              }}
+              className="w-full py-2 text-xs text-gray-500 hover:text-amber-400 transition-colors"
+            >
+              🔄 Sync unposted videos (uploaded outside admin)
+            </button>
           </div>
         )}
       </div>
