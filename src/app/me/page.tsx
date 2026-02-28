@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import BottomNav from "@/components/BottomNav";
+import NFTTradingCard from "@/components/NFTTradingCard";
+import { getProductById } from "@/lib/marketplace";
 
 const AVATAR_OPTIONS = ["🧑", "👩", "👨", "🧑‍💻", "👽", "🤡", "💀", "🦊", "🐱", "🐶", "🦄", "🤖", "👾", "🎭", "🧙", "🥷", "🐸", "🦇", "🐻", "🎃", "👻", "🤠", "🧛", "🧟"];
 
@@ -103,6 +105,9 @@ export default function MePage() {
 
   // Inventory (purchased items)
   const [inventory, setInventory] = useState<PurchasedItem[]>([]);
+
+  // NFT data for owned items
+  const [nftMap, setNftMap] = useState<Map<string, { mint_address: string; rarity: string }>>(new Map());
 
   // Share/invite
   const [copied, setCopied] = useState(false);
@@ -369,10 +374,18 @@ export default function MePage() {
       fetch(`/api/coins?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch(`/api/marketplace?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch(`/api/wallet?session_id=${sid}`).then(r => r.json()).catch(() => null),
-    ]).then(([coinsData, marketData, walletData]) => {
+      fetch(`/api/nft?session_id=${sid}`).then(r => r.json()).catch(() => null),
+    ]).then(([coinsData, marketData, walletData, nftData]) => {
       if (coinsData) setCoins(coinsData);
       if (marketData) setInventory(marketData.purchases || []);
       if (walletData?.wallet) setGlitchBalance(walletData.wallet.glitch_token_balance || 0);
+      if (nftData?.nfts) {
+        const map = new Map<string, { mint_address: string; rarity: string }>();
+        for (const nft of nftData.nfts) {
+          map.set(nft.product_id, { mint_address: nft.mint_address, rarity: nft.rarity });
+        }
+        setNftMap(map);
+      }
     });
   }, [user, sessionId]);
 
@@ -881,41 +894,54 @@ export default function MePage() {
               </div>
             )}
 
-            {/* Inventory tab */}
+            {/* Inventory tab — NFT Trading Cards */}
             {activeTab === "inventory" && (
               <div>
                 {inventory.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-4xl mb-3">🎒</p>
-                    <p className="text-gray-400 text-sm font-bold">Inventory Empty</p>
-                    <p className="text-gray-600 text-xs mt-1">Buy useless items from the Marketplace!</p>
+                    <p className="text-4xl mb-3">🃏</p>
+                    <p className="text-gray-400 text-sm font-bold">No Trading Cards Yet</p>
+                    <p className="text-gray-600 text-xs mt-1">Buy useless items from the Marketplace to collect NFT cards!</p>
                     <a href="/marketplace" className="inline-block mt-4 px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full">
                       Browse Marketplace
                     </a>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <div className="text-center mb-3">
-                      <p className="text-lg font-bold">{inventory.length} item{inventory.length !== 1 ? "s" : ""}</p>
-                      <p className="text-[10px] text-gray-500">All completely useless. Congrats!</p>
-                    </div>
-                    {inventory.map((item) => (
-                      <div key={item.product_id} className="bg-gray-900/50 rounded-xl border border-green-500/20 p-3 flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl flex-shrink-0">
-                          {item.product_emoji}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-white truncate">{item.product_name}</p>
-                          <p className="text-[10px] text-gray-500">Purchased {timeAgo(item.created_at)}</p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-xs font-bold text-yellow-400">§{item.price_paid}</p>
-                          <span className="text-[8px] px-1 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">OWNED</span>
-                        </div>
+                  <div>
+                    <div className="text-center mb-4">
+                      <p className="text-lg font-bold">{inventory.length} Card{inventory.length !== 1 ? "s" : ""} Collected</p>
+                      <p className="text-[10px] text-gray-500">
+                        {nftMap.size} on-chain NFT{nftMap.size !== 1 ? "s" : ""} · {inventory.length}/45 complete
+                      </p>
+                      {/* Collection progress bar */}
+                      <div className="mt-2 mx-auto max-w-[200px] h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all"
+                          style={{ width: `${(inventory.length / 45) * 100}%` }}
+                        />
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Trading card grid */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {inventory.map((item) => {
+                        const product = getProductById(item.product_id);
+                        const nft = nftMap.get(item.product_id);
+                        if (!product) return null;
+                        return (
+                          <NFTTradingCard
+                            key={item.product_id}
+                            product={product}
+                            mintAddress={nft?.mint_address}
+                            rarity={nft?.rarity}
+                            owned={true}
+                            compact={true}
+                          />
+                        );
+                      })}
+                    </div>
                     <a href="/marketplace" className="block text-center mt-4 text-xs text-purple-400 hover:text-purple-300">
-                      Browse more useless items →
+                      Collect more trading cards →
                     </a>
                   </div>
                 )}

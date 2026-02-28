@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "@/lib/marketplace";
 import BottomNav from "@/components/BottomNav";
+import NFTTradingCard from "@/components/NFTTradingCard";
 
 const CATEGORIES = [
   "All",
@@ -206,6 +207,7 @@ export default function MarketplacePage() {
   const [mintResult, setMintResult] = useState<MintResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "cards">("cards");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -264,8 +266,20 @@ export default function MarketplacePage() {
       if (data.success) {
         setBalance(data.new_balance);
         setOwnedIds(prev => new Set([...prev, product.id]));
-        setPurchaseResult(data);
-        setTimeout(() => setPurchaseResult(null), 4000);
+        // Auto-minted as NFT? Update the minted map
+        if (data.auto_minted && data.nft) {
+          setMintedNfts(prev => {
+            const next = new Map(prev);
+            next.set(product.id, {
+              product_id: product.id,
+              mint_address: data.nft.mint_address,
+              rarity: data.nft.rarity,
+            });
+            return next;
+          });
+        }
+        setPurchaseResult({ ...data, auto_minted: data.auto_minted });
+        setTimeout(() => setPurchaseResult(null), 5000);
       } else if (data.already_owned) {
         setError("You already own this item!");
         setTimeout(() => setError(null), 3000);
@@ -427,33 +441,118 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      {/* Products grid */}
-      <div className="px-4 pb-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {filtered.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            owned={ownedIds.has(product.id)}
-            minted={mintedNfts.get(product.id) || null}
-            balance={balance}
-            onBuy={handleBuy}
-            onMint={handleMint}
-            buying={buying}
-            minting={minting}
-          />
-        ))}
+      {/* View mode toggle */}
+      <div className="mx-4 mb-3 flex items-center justify-between">
+        <p className="text-gray-500 text-[10px]">{filtered.length} items</p>
+        <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode("cards")}
+            className={`text-[10px] px-2.5 py-1 rounded-md font-bold transition-all ${
+              viewMode === "cards" ? "bg-purple-500 text-white" : "text-gray-500 hover:text-white"
+            }`}
+          >
+            Cards
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className={`text-[10px] px-2.5 py-1 rounded-md font-bold transition-all ${
+              viewMode === "list" ? "bg-purple-500 text-white" : "text-gray-500 hover:text-white"
+            }`}
+          >
+            List
+          </button>
+        </div>
       </div>
+
+      {/* Products grid */}
+      {viewMode === "cards" ? (
+        <div className="px-4 pb-8 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {filtered.map((product) => {
+            const nft = mintedNfts.get(product.id);
+            const owned = ownedIds.has(product.id);
+            const price = parseCoinPrice(product.price);
+            const canAfford = balance >= price;
+            const isBuying = buying === product.id;
+
+            return (
+              <div key={product.id} className="flex flex-col gap-2">
+                <NFTTradingCard
+                  product={product}
+                  mintAddress={nft?.mint_address}
+                  rarity={nft?.rarity}
+                  owned={owned}
+                  compact={true}
+                />
+                {/* Buy/status button below card */}
+                {nft ? (
+                  <span className="text-center text-[9px] px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded-lg border border-yellow-500/20 font-bold">
+                    NFT OWNED
+                  </span>
+                ) : owned ? (
+                  <span className="text-center text-[9px] px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20 font-bold">
+                    OWNED
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleBuy(product)}
+                    disabled={!canAfford || isBuying}
+                    className={`text-[10px] py-1.5 font-bold rounded-lg transition-all active:scale-95 ${
+                      isBuying
+                        ? "bg-gray-700 text-gray-400"
+                        : canAfford
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500"
+                          : "bg-gray-800 text-gray-600 cursor-not-allowed"
+                    }`}
+                  >
+                    {isBuying ? "..." : canAfford ? `Buy §${price}` : `§${price}`}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="px-4 pb-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filtered.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              owned={ownedIds.has(product.id)}
+              minted={mintedNfts.get(product.id) || null}
+              balance={balance}
+              onBuy={handleBuy}
+              onMint={handleMint}
+              buying={buying}
+              minting={minting}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Purchase success notification */}
       {purchaseResult && (
         <div className="fixed bottom-20 left-4 right-4 z-[60] animate-slide-up">
-          <div className="bg-gradient-to-r from-green-900/95 to-emerald-900/95 backdrop-blur-xl border border-green-500/30 rounded-2xl p-4 shadow-2xl">
+          <div className={`backdrop-blur-xl border rounded-2xl p-4 shadow-2xl ${
+            (purchaseResult as PurchaseResult & { auto_minted?: boolean }).auto_minted
+              ? "bg-gradient-to-r from-yellow-900/95 to-amber-900/95 border-yellow-500/30"
+              : "bg-gradient-to-r from-green-900/95 to-emerald-900/95 border-green-500/30"
+          }`}>
             <div className="flex items-center gap-3">
               <span className="text-3xl">{purchaseResult.product_emoji}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-green-400 font-bold text-sm">Purchased!</p>
-                <p className="text-green-300 text-xs truncate">{purchaseResult.product_name}</p>
-                <p className="text-gray-400 text-[10px] mt-0.5">You can now mint this as an NFT on Solana!</p>
+                {(purchaseResult as PurchaseResult & { auto_minted?: boolean }).auto_minted ? (
+                  <>
+                    <p className="text-yellow-400 font-bold text-sm">NFT Minted!</p>
+                    <p className="text-yellow-300 text-xs truncate">{purchaseResult.product_name}</p>
+                    <p className="text-gray-400 text-[10px] mt-0.5">Added to your wallet as a trading card NFT on Solana</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-green-400 font-bold text-sm">Purchased!</p>
+                    <p className="text-green-300 text-xs truncate">{purchaseResult.product_name}</p>
+                    <p className="text-gray-400 text-[10px] mt-0.5">Connect a Phantom wallet to auto-mint as NFT!</p>
+                  </>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-red-400 font-bold text-sm">-§{purchaseResult.price_paid}</p>

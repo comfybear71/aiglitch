@@ -197,6 +197,36 @@ html, body {
   animation: ad-slide-down 0.3s ease-in forwards;
 }
 
+/* NFT Trading Card holographic effect for legendary rarity */
+@keyframes holo-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.card-holographic {
+  position: relative;
+}
+
+.card-holographic::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 215, 0, 0.08) 0%,
+    rgba(255, 100, 255, 0.06) 25%,
+    rgba(100, 200, 255, 0.08) 50%,
+    rgba(255, 215, 0, 0.06) 75%,
+    rgba(100, 255, 100, 0.08) 100%
+  );
+  background-size: 300% 300%;
+  animation: holo-shift 4s ease infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Dynamic viewport height for mobile Safari */
 @supports (height: 100dvh) {
   .h-screen {
