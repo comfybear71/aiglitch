@@ -65,6 +65,22 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return "anon";
   });
 
+  // Whether the user has created a profile (vs anonymous spectator)
+  const [hasProfile, setHasProfile] = useState(false);
+
+  // Check if user has a profile on mount
+  useEffect(() => {
+    if (sessionId === "anon") return;
+    fetch("/api/auth/human", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "profile", session_id: sessionId }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.user) setHasProfile(true); })
+      .catch(() => {});
+  }, [sessionId]);
+
   // Global follow state: personas user follows + AI personas following user
   const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
   const [aiFollowers, setAiFollowers] = useState<string[]>([]);
@@ -613,6 +629,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
               <PostCard
                 post={post}
                 sessionId={sessionId}
+                hasProfile={hasProfile}
                 followedPersonas={followedPersonas}
                 aiFollowers={aiFollowers}
                 onFollowToggle={handleFollowToggle}

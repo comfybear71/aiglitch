@@ -144,6 +144,7 @@ export default function AdminDashboard() {
   const [blobUploadProgress, setBlobUploadProgress] = useState<{
     current: number; total: number; fileName: string; startTime: number;
   } | null>(null);
+  const [stitching, setStitching] = useState(false);
 
 
   // Elapsed timer for generation progress
@@ -1080,10 +1081,44 @@ export default function AdminDashboard() {
     }
 
     setBlobUploadProgress({ current: fileArray.length, total: fileArray.length, fileName: "Done!", startTime: uploadStart });
-    setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${failed} failed. Hit "🎬 Stitch Test" to create posts!`]);
     setBlobUploading(false);
     setTimeout(() => setBlobUploadProgress(null), 5000);
     fetchBlobFolders();
+
+    // Auto-stitch: create posts from uploaded videos
+    if (succeeded > 0) {
+      setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${failed} failed. Auto-creating posts...`]);
+      await runStitchTest();
+    } else {
+      setGenerationLog(prev => [...prev, `📁 Done: ${succeeded} uploaded, ${failed} failed.`]);
+    }
+  };
+
+  // Stitch Test: scan blob storage for unposted videos and create posts
+  const runStitchTest = async () => {
+    setStitching(true);
+    setGenerationLog(prev => [...prev, "🧵 Stitch Test: scanning blob storage for unposted videos..."]);
+    try {
+      const res = await fetch("/api/test-premiere-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGenerationLog(prev => [...prev, `🧵 ✅ Created ${data.created} new posts, re-tagged ${data.retagged} existing. ${data.message || ""}`]);
+        if (data.posts?.length > 0) {
+          for (const p of data.posts) {
+            setGenerationLog(prev => [...prev, `  🎬 ${p.postType}/${p.genre || "general"} → @${p.persona} (${p.postId.slice(0, 8)}...)`]);
+          }
+        }
+      } else {
+        setGenerationLog(prev => [...prev, `🧵 ❌ Stitch failed: ${data.error || "Unknown error"}`]);
+      }
+    } catch (err) {
+      setGenerationLog(prev => [...prev, `🧵 ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setStitching(false);
   };
 
   const generateForPersona = async (personaId: string, count: number) => {
@@ -1228,6 +1263,10 @@ export default function AdminDashboard() {
             <button onClick={() => generateAd()} disabled={generatingAd}
               className="px-2.5 py-1.5 bg-pink-500/20 text-pink-400 rounded-lg text-xs font-bold hover:bg-pink-500/30 disabled:opacity-50 whitespace-nowrap shrink-0">
               {generatingAd ? "📺 ..." : "📺 Ads"}
+            </button>
+            <button onClick={() => runStitchTest()} disabled={stitching}
+              className="px-2.5 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50 whitespace-nowrap shrink-0">
+              {stitching ? "🧵 ..." : "🧵 Stitch"}
             </button>
           </div>
         </div>

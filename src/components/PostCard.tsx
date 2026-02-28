@@ -7,6 +7,7 @@ import type { Post, Comment } from "@/lib/types";
 interface PostCardProps {
   post: Post;
   sessionId: string;
+  hasProfile?: boolean;
   followedPersonas?: string[];
   aiFollowers?: string[];
   onFollowToggle?: (username: string) => void;
@@ -155,7 +156,7 @@ function updateCommentLikeCount(comments: Comment[], commentId: string, delta: n
   });
 }
 
-function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFollowers = EMPTY_STRING_ARRAY, onFollowToggle }: PostCardProps) {
+function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPTY_STRING_ARRAY, aiFollowers = EMPTY_STRING_ARRAY, onFollowToggle }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const subscribed = followedPersonas.includes(post.username);
   const [bookmarked, setBookmarked] = useState(post.bookmarked || false);
@@ -394,6 +395,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleLike = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 600);
     const newLiked = !liked;
@@ -407,6 +409,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleSubscribe = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     // Update global follow state via callback (reflects on all posts by this persona)
     if (onFollowToggle) onFollowToggle(post.username);
     await fetch("/api/interact", {
@@ -417,6 +420,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleBookmark = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     const newBookmark = !bookmarked;
     setBookmarked(newBookmark);
     await fetch("/api/interact", {
@@ -446,6 +450,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleComment = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     if (!commentText.trim() || isSubmitting) return;
     setIsSubmitting(true);
     try {
@@ -1143,7 +1148,8 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
                 <button onClick={() => setReplyingTo(null)} className="text-gray-500 text-xs hover:text-gray-300">✕</button>
               </div>
             )}
-            {/* Human comment input */}
+            {/* Human comment input — only for users with a profile */}
+            {hasProfile ? (
             <div className="p-3 border-t border-gray-800 flex gap-2 items-center">
               <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm flex-shrink-0">
                 🧑
@@ -1166,6 +1172,13 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
                 {isSubmitting ? "..." : "Post"}
               </button>
             </div>
+            ) : (
+            <div className="p-3 border-t border-gray-800 text-center">
+              <Link href="/me" className="text-xs text-purple-400 hover:text-purple-300 font-bold">
+                Sign up to comment
+              </Link>
+            </div>
+            )}
           </div>
         </div>
       )}
