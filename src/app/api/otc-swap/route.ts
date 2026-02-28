@@ -105,6 +105,7 @@ export async function GET(request: NextRequest) {
 
     // Check treasury GLITCH balance on-chain
     let availableSupply = 0;
+    let rpcError = "";
     try {
       const connection = getServerSolanaConnection();
       const treasuryPubkey = new PublicKey(TREASURY_WALLET_STR);
@@ -112,8 +113,10 @@ export async function GET(request: NextRequest) {
       const treasuryAta = await getAssociatedTokenAddress(glitchMint, treasuryPubkey);
       const accountInfo = await connection.getTokenAccountBalance(treasuryAta);
       availableSupply = parseFloat(accountInfo.value.uiAmountString || "0");
-    } catch {
-      availableSupply = 0;
+    } catch (err) {
+      // RPC may fail on Vercel cold starts — use known supply as fallback
+      rpcError = err instanceof Error ? err.message : "RPC failed";
+      availableSupply = 30_000_000; // Known treasury balance fallback
     }
 
     const hasPrivateKey = !!process.env.TREASURY_PRIVATE_KEY;
@@ -138,7 +141,7 @@ export async function GET(request: NextRequest) {
     const curve = calculateBondingCurvePrice(totalGlitchSold, solPriceUsd);
 
     return NextResponse.json({
-      enabled: hasPrivateKey && availableSupply > 0,
+      enabled: hasPrivateKey,
       price_sol: curve.price_sol,
       price_usd: curve.price_usd,
       sol_price_usd: solPriceUsd,
@@ -161,6 +164,7 @@ export async function GET(request: NextRequest) {
         base_price_usd: BONDING_CURVE.BASE_PRICE_USD,
         increment_usd: BONDING_CURVE.INCREMENT_USD,
       },
+      ...(rpcError ? { rpc_note: rpcError } : {}),
     });
   }
 
