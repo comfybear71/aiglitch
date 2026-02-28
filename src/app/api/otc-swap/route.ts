@@ -58,52 +58,49 @@ function calculateBondingCurvePrice(totalGlitchSold: number, solPriceUsd: number
   };
 }
 
-// Cache the token program ID for GLITCH mint (detected on first use)
-let _glitchTokenProgram: PublicKey | null = null;
-
-async function getGlitchTokenProgram(connection: Connection): Promise<PublicKey> {
-  if (_glitchTokenProgram) return _glitchTokenProgram;
-  // Check which program owns the GLITCH mint account
-  try {
-    const mintInfo = await connection.getAccountInfo(new PublicKey(GLITCH_TOKEN_MINT_STR));
-    if (mintInfo && mintInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
-      _glitchTokenProgram = TOKEN_2022_PROGRAM_ID;
-      console.log("GLITCH mint uses Token-2022 program");
-    } else {
-      _glitchTokenProgram = TOKEN_PROGRAM_ID;
-      console.log("GLITCH mint uses standard Token program");
-    }
-  } catch (err) {
-    console.warn("Failed to detect token program, defaulting to Token program:", err);
-    _glitchTokenProgram = TOKEN_PROGRAM_ID;
-  }
-  return _glitchTokenProgram;
-}
-
-// Find the actual token account for a given owner and mint by searching on-chain.
-// Explicitly searches BOTH Token program and Token-2022 program.
-async function findTokenAccount(
+// Detect token program from mint account and find/derive ATAs reliably.
+// Tries both Token and Token-2022 programs with ATA derivation + verification.
+async function findTokenAccountForMint(
   connection: Connection,
   owner: PublicKey,
   mint: PublicKey,
-): Promise<{ address: PublicKey; tokenProgram: PublicKey } | null> {
-  // Search both token programs explicitly
-  for (const programId of [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID]) {
+): Promise<{ address: PublicKey; tokenProgram: PublicKey; exists: boolean } | null> {
+  // Step 1: Detect which token program owns the mint
+  const mintInfo = await connection.getAccountInfo(mint);
+  if (!mintInfo) {
+    console.error(`Mint account ${mint.toBase58()} not found on-chain`);
+    return null;
+  }
+
+  const detectedProgram = mintInfo.owner;
+  console.log(`Mint ${mint.toBase58()} owned by program: ${detectedProgram.toBase58()}`);
+
+  // Step 2: Try the detected program first, then the other as fallback
+  const programsToTry = detectedProgram.equals(TOKEN_2022_PROGRAM_ID)
+    ? [TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID]
+    : [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID];
+
+  for (const tokenProgram of programsToTry) {
     try {
-      const accounts = await connection.getTokenAccountsByOwner(owner, {
-        mint,
-        programId,
-      });
-      if (accounts.value.length > 0) {
-        const acc = accounts.value[0];
-        console.log(`Found token account ${acc.pubkey.toBase58()} under program ${programId.toBase58()}`);
-        return { address: acc.pubkey, tokenProgram: programId };
+      const ata = await getAssociatedTokenAddress(
+        mint, owner, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataInfo = await connection.getAccountInfo(ata);
+      if (ataInfo) {
+        console.log(`Found ATA ${ata.toBase58()} under ${tokenProgram.toBase58()} (exists=true)`);
+        return { address: ata, tokenProgram, exists: true };
       }
-    } catch {
-      // This program might not have accounts for this owner/mint
+      // ATA doesn't exist yet but we know the right program
+      if (tokenProgram.equals(detectedProgram)) {
+        console.log(`ATA ${ata.toBase58()} under ${tokenProgram.toBase58()} (exists=false, will create)`);
+        return { address: ata, tokenProgram, exists: false };
+      }
+    } catch (err) {
+      console.warn(`Error checking ATA under ${tokenProgram.toBase58()}:`, err instanceof Error ? err.message : err);
     }
   }
-  console.error(`No token account found for owner=${owner.toBase58()} mint=${mint.toBase58()} under either Token program`);
+
+  console.error(`Could not find or derive ATA for owner=${owner.toBase58()} mint=${mint.toBase58()}`);
   return null;
 }
 
@@ -154,19 +151,19 @@ export async function GET(request: NextRequest) {
     `.catch(() => [null]);
     const solPriceUsd = parseFloat(solSetting?.value || "164");
 
-    // Check treasury GLITCH balance on-chain (find actual token account, don't guess ATA)
+    // Check treasury GLITCH balance on-chain
     let availableSupply = 0;
     let rpcError = "";
     try {
       const connection = getServerSolanaConnection();
       const treasuryPubkey = new PublicKey(TREASURY_WALLET_STR);
       const glitchMint = new PublicKey(GLITCH_TOKEN_MINT_STR);
-      const treasuryAccount = await findTokenAccount(connection, treasuryPubkey, glitchMint);
-      if (treasuryAccount) {
+      const treasuryAccount = await findTokenAccountForMint(connection, treasuryPubkey, glitchMint);
+      if (treasuryAccount && treasuryAccount.exists) {
         const accountInfo = await connection.getTokenAccountBalance(treasuryAccount.address);
         availableSupply = parseFloat(accountInfo.value.uiAmountString || "0");
       } else {
-        rpcError = "Treasury GLITCH token account not found";
+        rpcError = treasuryAccount ? "Treasury ATA exists=false" : "Treasury GLITCH token account not found";
         availableSupply = 30_000_000;
       }
     } catch (err) {
@@ -333,27 +330,29 @@ export async function POST(request: NextRequest) {
       const glitchMint = new PublicKey(GLITCH_TOKEN_MINT_STR);
       const treasuryPubkey = treasuryKeypair.publicKey;
 
-      // Find the treasury's ACTUAL GLITCH token account on-chain
-      // This is more robust than deriving ATAs which can fail with wrong token program
-      const treasuryAccount = await findTokenAccount(connection, treasuryPubkey, glitchMint);
-      if (!treasuryAccount) {
-        console.error("Treasury has no GLITCH token account on-chain!");
+      // Find treasury's GLITCH token account (detects program from mint, derives + verifies ATA)
+      const treasuryAccount = await findTokenAccountForMint(connection, treasuryPubkey, glitchMint);
+      if (!treasuryAccount || !treasuryAccount.exists) {
+        console.error("Treasury GLITCH ATA not found or doesn't exist on-chain!");
         return NextResponse.json({
           error: "Treasury GLITCH token account not found on-chain. Contact admin.",
+          debug: treasuryAccount ? {
+            derived_ata: treasuryAccount.address.toBase58(),
+            token_program: treasuryAccount.tokenProgram.toBase58(),
+            exists: treasuryAccount.exists,
+          } : "null",
         }, { status: 500 });
       }
 
       const treasuryAta = treasuryAccount.address;
       const tokenProgram = treasuryAccount.tokenProgram;
-      // Update the cached token program to match what's actually on-chain
-      _glitchTokenProgram = tokenProgram;
 
-      console.log(`Treasury ATA: ${treasuryAta.toBase58()}, Token program: ${tokenProgram.toBase58()}`);
-
-      // Derive buyer's ATA using the SAME token program as the treasury
-      const buyerAta = await getAssociatedTokenAddress(
-        glitchMint, buyerPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
-      );
+      // Find or derive buyer's ATA using the same token program
+      const buyerAccount = await findTokenAccountForMint(connection, buyerPubkey, glitchMint);
+      const buyerAta = buyerAccount
+        ? buyerAccount.address
+        : await getAssociatedTokenAddress(glitchMint, buyerPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID);
+      const buyerAtaExists = buyerAccount?.exists ?? false;
 
       // Check treasury has enough GLITCH
       try {
@@ -374,8 +373,7 @@ export async function POST(request: NextRequest) {
       const tx = new Transaction();
 
       // Step 1: Create buyer's GLITCH token account if it doesn't exist
-      const buyerAtaInfo = await connection.getAccountInfo(buyerAta);
-      if (!buyerAtaInfo) {
+      if (!buyerAtaExists) {
         tx.add(
           createAssociatedTokenAccountInstruction(
             buyerPubkey,  // payer (buyer pays rent)
