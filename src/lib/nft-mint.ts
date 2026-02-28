@@ -175,8 +175,8 @@ export interface NftPurchaseTxResult {
  *  1. Creates a new SPL token mint (the NFT)
  *  2. Creates buyer's token account for the new mint
  *  3. Mints exactly 1 token to the buyer
- *  4. Sets mint authority to null (true 1/1 NFT)
- *  5. Creates Metaplex metadata on-chain
+ *  4. Creates Metaplex metadata on-chain (requires valid mint authority)
+ *  5. Sets mint authority to null (true 1/1 NFT — no more can be minted)
  *  6. Transfers $GLITCH from buyer to treasury (100% on-chain)
  *
  * Treasury keypair partially signs (mint authority + $GLITCH receiver).
@@ -304,7 +304,21 @@ export async function buildNftPurchaseTransaction(
     )
   );
 
-  // 5. Set mint authority to null (makes it a true 1/1 NFT — no more can be minted)
+  // 5. Create Metaplex metadata account (must happen BEFORE revoking mint authority)
+  tx.add(
+    createMetadataAccountV3Instruction(
+      metadataPDA,
+      mintPubkey,
+      treasuryPubkey,  // mint authority (still valid at this point)
+      buyerPubkey,     // payer
+      treasuryPubkey,  // update authority
+      nftName,
+      nftSymbol,
+      metadataUri,
+    )
+  );
+
+  // 6. Set mint authority to null (makes it a true 1/1 NFT — no more can be minted)
   tx.add(
     createSetAuthorityInstruction(
       mintPubkey,      // account
@@ -313,20 +327,6 @@ export async function buildNftPurchaseTransaction(
       null,            // new authority = null
       [],              // multiSigners
       TOKEN_PROGRAM_ID,
-    )
-  );
-
-  // 6. Create Metaplex metadata account
-  tx.add(
-    createMetadataAccountV3Instruction(
-      metadataPDA,
-      mintPubkey,
-      treasuryPubkey,  // mint authority
-      buyerPubkey,     // payer
-      treasuryPubkey,  // update authority
-      nftName,
-      nftSymbol,
-      metadataUri,
     )
   );
 
