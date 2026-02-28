@@ -115,12 +115,8 @@ function buildUpdateMetadataInstruction(
   offset = writeBorshString(buf, offset, symbol.slice(0, 10));
   offset = writeBorshString(buf, offset, uri.slice(0, 200));
   buf.writeUInt16LE(0, offset); offset += 2; // seller_fee_basis_points
-  // creators: Some([{treasury, verified=true, share=100}])
-  buf.writeUInt8(1, offset); offset += 1;
-  buf.writeUInt32LE(1, offset); offset += 4;
-  new PublicKey(TREASURY_WALLET_STR).toBuffer().copy(buf, offset); offset += 32;
-  buf.writeUInt8(1, offset); offset += 1; // verified
-  buf.writeUInt8(100, offset); offset += 1; // share
+  // creators: None (keep existing creators unchanged)
+  buf.writeUInt8(0, offset); offset += 1;
   buf.writeUInt8(0, offset); offset += 1; // collection: None
   buf.writeUInt8(0, offset); offset += 1; // uses: None
 
