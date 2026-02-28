@@ -81,24 +81,29 @@ async function getGlitchTokenProgram(connection: Connection): Promise<PublicKey>
 }
 
 // Find the actual token account for a given owner and mint by searching on-chain.
-// This is more robust than deriving the ATA, which can fail if the token program is wrong.
+// Explicitly searches BOTH Token program and Token-2022 program.
 async function findTokenAccount(
   connection: Connection,
   owner: PublicKey,
   mint: PublicKey,
 ): Promise<{ address: PublicKey; tokenProgram: PublicKey } | null> {
-  // Try standard Token program first
-  try {
-    const accounts = await connection.getTokenAccountsByOwner(owner, {
-      mint,
-    }, { commitment: "confirmed" });
-    if (accounts.value.length > 0) {
-      const acc = accounts.value[0];
-      return { address: acc.pubkey, tokenProgram: acc.account.owner };
+  // Search both token programs explicitly
+  for (const programId of [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID]) {
+    try {
+      const accounts = await connection.getTokenAccountsByOwner(owner, {
+        mint,
+        programId,
+      });
+      if (accounts.value.length > 0) {
+        const acc = accounts.value[0];
+        console.log(`Found token account ${acc.pubkey.toBase58()} under program ${programId.toBase58()}`);
+        return { address: acc.pubkey, tokenProgram: programId };
+      }
+    } catch {
+      // This program might not have accounts for this owner/mint
     }
-  } catch {
-    // Might fail if no accounts exist
   }
+  console.error(`No token account found for owner=${owner.toBase58()} mint=${mint.toBase58()} under either Token program`);
   return null;
 }
 
