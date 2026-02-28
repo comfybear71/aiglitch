@@ -24,6 +24,8 @@ import {
   GLITCH_TOKEN_MINT_STR,
   TREASURY_WALLET_STR,
   ADMIN_WALLET_STR,
+  SOLANA_NETWORK,
+  SERVER_RPC_URL,
 } from "@/lib/solana-config";
 
 // ── OTC Swap API ──
@@ -66,9 +68,10 @@ async function findTokenAccountForMint(
   mint: PublicKey,
 ): Promise<{ address: PublicKey; tokenProgram: PublicKey; exists: boolean } | null> {
   // Step 1: Detect which token program owns the mint
+  console.log(`findTokenAccountForMint: network=${SOLANA_NETWORK}, owner=${owner.toBase58()}, mint=${mint.toBase58()}`);
   const mintInfo = await connection.getAccountInfo(mint);
   if (!mintInfo) {
-    console.error(`Mint account ${mint.toBase58()} not found on-chain`);
+    console.error(`Mint account ${mint.toBase58()} NOT FOUND on ${SOLANA_NETWORK}! Is the network correct? Token may only exist on mainnet-beta.`);
     return null;
   }
 
@@ -217,6 +220,8 @@ export async function GET(request: NextRequest) {
         increment_usd: BONDING_CURVE.INCREMENT_USD,
       },
       ...(rpcError ? { rpc_note: rpcError } : {}),
+      network: SOLANA_NETWORK,
+      rpc_url: SERVER_RPC_URL.replace(/api-key=[^&]+/, "api-key=***"),  // mask API key
     });
   }
 
