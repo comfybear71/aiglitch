@@ -13,6 +13,9 @@ import {
   createTransferInstruction,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { v4 as uuidv4 } from "uuid";
 import bs58 from "bs58";
@@ -53,6 +56,21 @@ function calculateBondingCurvePrice(totalGlitchSold: number, solPriceUsd: number
     next_price_usd: nextPriceUsd,
     next_price_sol: solPriceUsd > 0 ? nextPriceUsd / solPriceUsd : 0,
   };
+}
+
+// Cache the token program ID for GLITCH mint (detected on first use)
+let _glitchTokenProgram: PublicKey | null = null;
+
+async function getGlitchTokenProgram(connection: Connection): Promise<PublicKey> {
+  if (_glitchTokenProgram) return _glitchTokenProgram;
+  // Check which program owns the GLITCH mint account
+  const mintInfo = await connection.getAccountInfo(new PublicKey(GLITCH_TOKEN_MINT_STR));
+  if (mintInfo && mintInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+    _glitchTokenProgram = TOKEN_2022_PROGRAM_ID;
+  } else {
+    _glitchTokenProgram = TOKEN_PROGRAM_ID;
+  }
+  return _glitchTokenProgram;
 }
 
 // Parse treasury private key from env (supports JSON array and base58)
@@ -109,11 +127,14 @@ export async function GET(request: NextRequest) {
       const connection = getServerSolanaConnection();
       const treasuryPubkey = new PublicKey(TREASURY_WALLET_STR);
       const glitchMint = new PublicKey(GLITCH_TOKEN_MINT_STR);
-      const treasuryAta = await getAssociatedTokenAddress(glitchMint, treasuryPubkey);
+      const tokenProgram = await getGlitchTokenProgram(connection);
+      const treasuryAta = await getAssociatedTokenAddress(
+        glitchMint, treasuryPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
+      );
       const accountInfo = await connection.getTokenAccountBalance(treasuryAta);
       availableSupply = parseFloat(accountInfo.value.uiAmountString || "0");
     } catch (err) {
-      // RPC may fail on Vercel cold starts — use known supply as fallback
+      // RPC may fail or ATA may not exist — use known supply as fallback
       rpcError = err instanceof Error ? err.message : "RPC failed";
       availableSupply = 30_000_000; // Known treasury balance fallback
     }
@@ -277,18 +298,30 @@ export async function POST(request: NextRequest) {
       const glitchMint = new PublicKey(GLITCH_TOKEN_MINT_STR);
       const treasuryPubkey = treasuryKeypair.publicKey;
 
-      // Get associated token accounts
-      const treasuryAta = await getAssociatedTokenAddress(glitchMint, treasuryPubkey);
-      const buyerAta = await getAssociatedTokenAddress(glitchMint, buyerPubkey);
+      // Detect if GLITCH uses Token or Token-2022
+      const tokenProgram = await getGlitchTokenProgram(connection);
+
+      // Get associated token accounts (using correct token program)
+      const treasuryAta = await getAssociatedTokenAddress(
+        glitchMint, treasuryPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const buyerAta = await getAssociatedTokenAddress(
+        glitchMint, buyerPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
+      );
 
       // Check treasury has enough GLITCH
-      const treasuryBalance = await connection.getTokenAccountBalance(treasuryAta);
-      const available = parseFloat(treasuryBalance.value.uiAmountString || "0");
-      if (available < amount) {
-        return NextResponse.json({
-          error: `Not enough $GLITCH in treasury. Available: ${available.toLocaleString()}`,
-          available_supply: available,
-        }, { status: 400 });
+      try {
+        const treasuryBalance = await connection.getTokenAccountBalance(treasuryAta);
+        const available = parseFloat(treasuryBalance.value.uiAmountString || "0");
+        if (available < amount) {
+          return NextResponse.json({
+            error: `Not enough $GLITCH in treasury. Available: ${available.toLocaleString()}`,
+            available_supply: available,
+          }, { status: 400 });
+        }
+      } catch (balErr) {
+        // If we can't check balance, try to proceed anyway — tx will fail on-chain if insufficient
+        console.warn("Could not check treasury balance:", balErr instanceof Error ? balErr.message : balErr);
       }
 
       // Build the atomic swap transaction
@@ -302,7 +335,9 @@ export async function POST(request: NextRequest) {
             buyerPubkey,  // payer (buyer pays rent)
             buyerAta,     // ATA address
             buyerPubkey,  // owner
-            glitchMint    // token mint
+            glitchMint,   // token mint
+            tokenProgram, // correct token program
+            ASSOCIATED_TOKEN_PROGRAM_ID
           )
         );
       }
@@ -322,7 +357,9 @@ export async function POST(request: NextRequest) {
           treasuryAta,     // source (treasury's GLITCH ATA)
           buyerAta,        // destination (buyer's GLITCH ATA)
           treasuryPubkey,  // authority (treasury must sign)
-          BigInt(glitchAmountRaw)
+          BigInt(glitchAmountRaw),
+          [],              // multiSigners
+          tokenProgram     // correct token program
         )
       );
 
