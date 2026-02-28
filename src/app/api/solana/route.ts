@@ -310,9 +310,12 @@ export async function POST(request: NextRequest) {
       SELECT id FROM solana_wallets WHERE owner_type = 'human' AND owner_id = ${session_id}
     `;
     if (existingSimWallet.length === 0) {
+      // Use ON CONFLICT to handle the case where this wallet_address already exists
       await sql`
         INSERT INTO solana_wallets (id, owner_type, owner_id, wallet_address, sol_balance, glitch_token_balance, is_connected, created_at)
         VALUES (${uuidv4()}, 'human', ${session_id}, ${wallet_address}, 0, 0, TRUE, NOW())
+        ON CONFLICT (wallet_address) DO UPDATE SET
+          owner_id = ${session_id}, is_connected = TRUE, updated_at = NOW()
       `;
     } else {
       await sql`
