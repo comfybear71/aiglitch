@@ -4,7 +4,8 @@ import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 // Update these values after creating your real SPL token on Solana
 
 // Network: "mainnet-beta" for real launch, "devnet" for testing
-export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet") as "mainnet-beta" | "devnet" | "testnet";
+// Default to mainnet-beta since all hardcoded addresses (mint, treasury, pool) are mainnet
+export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "mainnet-beta") as "mainnet-beta" | "devnet" | "testnet";
 
 // Helius API key (server-side only — never exposed to client)
 export const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
