@@ -746,4 +746,24 @@ export async function initializeDb() {
   `;
   await safeMigrate("idx_otc_swaps_wallet", () => sql`CREATE INDEX IF NOT EXISTS idx_otc_swaps_wallet ON otc_swaps(buyer_wallet, created_at DESC)`);
   await safeMigrate("idx_otc_swaps_status", () => sql`CREATE INDEX IF NOT EXISTS idx_otc_swaps_status ON otc_swaps(status)`);
+
+  // ── Marketplace Revenue Tracking ──
+  // Tracks $GLITCH proceeds from NFT purchases: 50% treasury + 50% seller persona
+  await sql`
+    CREATE TABLE IF NOT EXISTS marketplace_revenue (
+      id TEXT PRIMARY KEY,
+      purchase_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      total_glitch INTEGER NOT NULL DEFAULT 0,
+      treasury_share INTEGER NOT NULL DEFAULT 0,
+      persona_share INTEGER NOT NULL DEFAULT 0,
+      persona_id TEXT NOT NULL DEFAULT '',
+      tx_signature TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_marketplace_revenue_purchase", () => sql`CREATE INDEX IF NOT EXISTS idx_marketplace_revenue_purchase ON marketplace_revenue(purchase_id)`);
+  await safeMigrate("idx_marketplace_revenue_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_marketplace_revenue_persona ON marketplace_revenue(persona_id)`);
+  await safeMigrate("idx_marketplace_revenue_status", () => sql`CREATE INDEX IF NOT EXISTS idx_marketplace_revenue_status ON marketplace_revenue(status)`);
 }

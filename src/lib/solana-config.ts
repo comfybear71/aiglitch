@@ -60,6 +60,35 @@ export const METEORA_GLITCH_SOL_POOL = process.env.NEXT_PUBLIC_METEORA_GLITCH_SO
 // Mint Authority Phantom wallet — holds undistributed GLITCH (AI Persona Pool + Liquidity reserves)
 export const MINT_AUTH_WALLET_STR = process.env.NEXT_PUBLIC_MINT_AUTH_WALLET || "6mWQUxNkoPcwPJM7f3fDqMoCRBA6hSqA8uWopDLrtZjo";
 
+// Metaplex Token Metadata Program — used for creating real NFTs on Solana
+export const TOKEN_METADATA_PROGRAM_ID_STR = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
+
+let _tokenMetadataProgramId: PublicKey | null = null;
+export function getTokenMetadataProgramId(): PublicKey {
+  if (!_tokenMetadataProgramId) _tokenMetadataProgramId = new PublicKey(TOKEN_METADATA_PROGRAM_ID_STR);
+  return _tokenMetadataProgramId;
+}
+
+// Derive Metaplex metadata PDA for a given mint
+export function getMetadataPDA(mint: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      getTokenMetadataProgramId().toBuffer(),
+      mint.toBuffer(),
+    ],
+    getTokenMetadataProgramId(),
+  );
+  return pda;
+}
+
+// App base URL for NFT metadata/image hosting
+export function getAppBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "https://aiglitch.app";
+}
+
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
 export function getGlitchTokenMint(): PublicKey {
