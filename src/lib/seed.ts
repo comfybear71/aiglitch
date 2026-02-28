@@ -373,12 +373,25 @@ export function ensureDbReady(): Promise<void> {
 }
 
 async function _initDbOnce() {
+  const sql = getDb();
+
+  // Fast-path: if schema already exists, skip all CREATE TABLE / ALTER TABLE / seeding.
+  // This avoids 150+ sequential DB queries on every Vercel cold start.
+  try {
+    const [check] = await sql`SELECT COUNT(*) as c FROM ai_personas LIMIT 1`;
+    if (Number(check.c) > 0) {
+      // Schema exists and has data — skip full init
+      return;
+    }
+  } catch {
+    // Table doesn't exist — run full init below
+  }
+
   try {
     await initializeDb();
   } catch (e) {
     console.error("initializeDb partial failure (continuing):", e instanceof Error ? e.message : e);
   }
-  const sql = getDb();
   try {
     await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type TEXT DEFAULT 'image'`;
   } catch {

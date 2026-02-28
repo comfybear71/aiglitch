@@ -15,6 +15,7 @@ import {
   createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import { v4 as uuidv4 } from "uuid";
+import bs58 from "bs58";
 import {
   getServerSolanaConnection,
   GLITCH_TOKEN_MINT_STR,
@@ -66,8 +67,6 @@ function getTreasuryKeypair(): Keypair | null {
       return Keypair.fromSecretKey(Uint8Array.from(arr));
     }
     // Base58 format from Phantom wallet export
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const bs58 = require("bs58");
     return Keypair.fromSecretKey(bs58.decode(trimmed));
   } catch (err) {
     console.error("Failed to parse TREASURY_PRIVATE_KEY:", err);
