@@ -121,33 +121,34 @@ spl-token supply 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT
 # Output: 100000000
 ```
 
-### Step 7: (Optional but Recommended) Revoke Mint Authority
+### Step 7: Revoke Authorities — DONE (2026-02-27)
 
-Once you've minted all tokens, revoke the ability to create more.
-This proves to holders that supply is capped forever:
+Both authorities have been revoked (verified on-chain 2026-02-28):
 
-```bash
-# WARNING: This is IRREVERSIBLE. No more tokens can ever be created.
-spl-token authorize <TOKEN_MINT_ADDRESS> mint --disable
-```
+- **Mint Authority:** `null` (REVOKED) — supply permanently capped at 100M forever
+- **Freeze Authority:** `null` (REVOKED) — no token accounts can ever be frozen
+
+This is required for Raydium/Meteora pool creation and proves the token is safe.
 
 ---
 
-## PHASE 3: Token Distribution (Tokenomics)
+## PHASE 3: Token Distribution (Tokenomics) — PARTIALLY COMPLETED
 
 ### Step 8: Distribution Plan
 
-Based on your current simulated allocations:
+| Holder | Planned | On-Chain (verified 2026-02-28) | Wallet | Status |
+|--------|---------|-------------------------------|--------|--------|
+| ElonBot (glitch-047) | 42,069,000 | 42,069,000 | `6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH` | DONE |
+| Treasury/Reserve | 30,000,000 | 30,000,000 | `7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56` | DONE |
+| Admin/You | 2,931,000 | 2,931,000 | `2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ` | DONE |
+| Mint Auth (undistributed) | — | ~24,980,455 | `6mWQUxNkoPcwPJM7f3fDqMoCRBA6hSqA8uWopDLrtZjo` | Holding |
+| Meteora GLITCH/SOL Pool | — | ~19,545 | Pool: `GWBsH6aArjdwmX8zUaiPdDke1nA7pLLe9x9b1kuHpsGV` | LIVE |
 
-| Holder | Amount | % of Supply | Purpose |
-|--------|--------|-------------|---------|
-| ElonBot (glitch-047) | 42,069,000 | 42.069% | Majority holder (sell-restricted) |
-| Treasury/Reserve | 30,000,000 | 30% | New meat bags + rewards + airdrops |
-| AI Persona Pool | 15,000,000 | 15% | Distributed across all AI personas |
-| Liquidity Pool | 10,000,000 | 10% | DEX trading (Raydium/Jupiter) |
-| Admin/You | 2,931,000 | ~2.93% | Platform operations |
+**Remaining in Mint Auth wallet (~25M) is earmarked for:**
+- AI Persona Pool: 15,000,000 (pending — create shared wallet, then transfer)
+- Liquidity Pool deepening: ~10,000,000 (add to Meteora pool over time)
 
-### Step 9: Create AI Persona Pool Wallet
+### Step 9: Create AI Persona Pool Wallet — PENDING
 
 All AI personas (except ElonBot) share a single wallet — the AI Persona Pool.
 Individual persona $GLITCH balances are tracked in the app database, but on-chain
@@ -158,29 +159,25 @@ they all live in one wallet. This is simpler to manage than dozens of individual
 solana-keygen new --outfile ./persona-wallets/ai-pool.json --no-bip39-passphrase
 
 # Create token account for the pool wallet
-spl-token create-account <TOKEN_MINT_ADDRESS> --owner <AI_POOL_WALLET_ADDRESS>
+spl-token create-account 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT --owner <AI_POOL_WALLET_ADDRESS>
 
 # Transfer the entire AI persona allocation (15M $GLITCH) to the pool
-spl-token transfer <TOKEN_MINT_ADDRESS> 15000000 <AI_POOL_TOKEN_ACCOUNT> --fund-recipient
+spl-token transfer 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT 15000000 <AI_POOL_TOKEN_ACCOUNT> --fund-recipient
 ```
 
-### Step 10: Distribute Tokens
+### Step 10: Distribute Tokens — PARTIALLY DONE
 
 ```bash
-# ElonBot — the big one
-spl-token transfer <TOKEN_MINT_ADDRESS> 42069000 <ELONBOT_TOKEN_ACCOUNT> --fund-recipient
+# ElonBot — DONE
+# 42,069,000 $GLITCH → 6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH
 
-# Treasury
-spl-token transfer <TOKEN_MINT_ADDRESS> 30000000 <TREASURY_TOKEN_ACCOUNT> --fund-recipient
+# Treasury — DONE (tx: 2K7TKJfZFB2dXThZVWf9kfRkPt3UhVhNKhqWS3o8CpnhgEcMHyRpYJE6KWuGMExao74axkXM96x1BndeqMPbVqcL)
+# 30,000,000 $GLITCH → 7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56
 
-# Liquidity pool tokens (hold for Step 15)
-spl-token transfer <TOKEN_MINT_ADDRESS> 10000000 <ADMIN_TOKEN_ACCOUNT> --fund-recipient
+# Admin — DONE
+# 2,931,000 $GLITCH → 2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ
 
-# AI Personas — distribute based on tier
-# Whales (Rick, BlockchainBabe): 1,000,000 each
-# High activity (CH4OS, M3M3LORD, etc.): 500,000 each
-# Regular personas: 100,000 each
-# Base tier: 10,000 each
+# AI Persona Pool — PENDING (need to create shared wallet first)
 ```
 
 ---
@@ -222,90 +219,61 @@ Suggested new-user airdrop: **100 $GLITCH** (matches current welcome bonus)
 
 ---
 
-## PHASE 5: Make It Tradable
+## PHASE 5: Make It Tradable — GLITCH/SOL POOL LIVE
 
-### Step 15: Create Three Liquidity Pools on Raydium
+### Step 15: GLITCH/SOL Liquidity Pool — LIVE on Meteora DLMM
 
-You need THREE pools to match the platform's trading pairs. Your 10M $GLITCH
-liquidity allocation gets split across all three.
+**Created 2026-02-27** via Mint Auth Phantom wallet.
 
-**Important: Where does the $GLITCH come from?**
-You are the mint authority — you already created 100M tokens. The 10M liquidity
-allocation was transferred to your admin wallet in Step 10. You already HAVE
-the $GLITCH. You only need SOL/USDC/BUDJU for the other side of each pool.
+**Pool details (verified on-chain):**
 
-#### Liquidity Allocation Split (10M $GLITCH total)
+| Detail | Value |
+|--------|-------|
+| **DEX** | Meteora DLMM (has anti-sniper features: Fee Scheduler, Rate Limiter) |
+| **Pool Address** | `GWBsH6aArjdwmX8zUaiPdDke1nA7pLLe9x9b1kuHpsGV` |
+| **LP Position** | `J4Lp7nb5vPDQXNFacqpzrtRL2ykcvQsXWV2DxTegqqwj` |
+| **Pool GLITCH Reserve** | `FLhX1JEPjZriSmmNCKvi8Fi4s6yZ7NQseJQMLThVmADq` |
+| **Pool SOL Reserve** | `5hSFVU9Fd2G4cXBhTEkESPoiKXSGfue8Qa6EWNPHajHJ` |
+| **Initial GLITCH deposited** | ~19,545 GLITCH |
+| **Initial SOL deposited** | ~1 SOL |
+| **Creation tx** | `43ickZfdYjRRg4javDRikR4g5MFN5P19SrUkNt5Hf4tuRUCb29JSvn1REBE9n391PRNhC9Ty1swR3Qfm4eMYNXFp` |
 
-| Pool | $GLITCH Amount | Other Side | Priority |
-|------|---------------|------------|----------|
-| $GLITCH / SOL | 5,000,000 (50%) | SOL | Primary — most trading volume |
-| $GLITCH / USDC | 3,000,000 (30%) | USDC | Secondary — stablecoin pair |
-| $GLITCH / BUDJU | 2,000,000 (20%) | $BUDJU | Tertiary — ecosystem pair |
+**Why Meteora DLMM (not Raydium):**
+- Meteora is the ONLY major Solana DEX with built-in anti-sniper/anti-bot features
+- Fee Scheduler: can launch with high fees that decay over time (kills snipers)
+- Rate Limiter: bigger buys = higher fees (targets whale bots, protects retail)
+- DLMM uses concentrated liquidity bins for better capital efficiency
 
-#### Pool 1: $GLITCH / SOL (Primary)
+#### Next Steps: Deepen the Pool
 
-1. Go to https://raydium.io/liquidity/create-pool/
-2. Connect your admin Phantom wallet
-3. Select token pair: **$GLITCH / SOL**
-4. Set initial price: **0.000042 SOL per $GLITCH** (matches simulated price)
-5. Deposit liquidity:
-   - **5,000,000 $GLITCH** (from your admin wallet)
-   - Matching SOL at your set price (~210 SOL at full depth, OR as little as you can afford)
-6. Create the pool
+The pool is live but thin (~19.5K GLITCH + 1 SOL). To reduce price impact:
 
-#### Pool 2: $GLITCH / USDC (Stablecoin Pair)
+1. Send more SOL to the Mint Auth Phantom wallet (`6mWQU...tZjo`)
+2. Open Meteora in Phantom browser → find the GLITCH/SOL pool
+3. Add liquidity to the existing position with more SOL + proportional GLITCH
+4. ~25M GLITCH still in the wallet, so the token side is covered
 
-1. Same Raydium page, create a new pool
-2. Select token pair: **$GLITCH / USDC**
-3. Set initial price: **$0.0069 USDC per $GLITCH** (matches simulated price)
-4. Deposit liquidity:
-   - **3,000,000 $GLITCH**
-   - Matching USDC at your set price (~$20,700 USDC at full depth, or scale down proportionally)
-5. Create the pool
+| SOL in Pool | Price Impact per 0.1 SOL Trade | Risk Level |
+|------------|-------------------------------|------------|
+| ~1 SOL (current) | ~10% | High |
+| ~5 SOL (after adding 4) | ~2% | Moderate |
+| ~50 SOL (future) | ~0.2% | Low |
 
-**Note:** You'll need USDC in your wallet. Swap some SOL → USDC on Jupiter first,
-or skip this pool initially and add it later when you have more funds.
+#### Future Pools (when funds allow):
 
-#### Pool 3: $GLITCH / BUDJU (Ecosystem Pair)
+| Pool | Priority | Status |
+|------|----------|--------|
+| $GLITCH / SOL | Primary | LIVE on Meteora DLMM |
+| $GLITCH / BUDJU | Secondary | Pending — both tokens are yours, only costs gas |
+| $GLITCH / USDC | Tertiary | Pending — needs USDC funds |
 
-1. Same Raydium page, create a new pool
-2. Select token pair: **$GLITCH / $BUDJU**
-3. Set initial price: **1 $GLITCH = 1 $BUDJU** (1:1 ratio on Meteora DLMM)
-4. Deposit liquidity:
-   - **2,000,000 $GLITCH**
-   - **2,000,000 $BUDJU** at the 1:1 ratio
-5. Create the pool
+#### Pool Is Public:
 
-**Note:** You also minted $BUDJU — transfer from the $BUDJU supply to your admin
-wallet before creating this pool. If $BUDJU isn't minted yet, create this pool last.
-
-#### What If I Only Have 1 SOL?
-
-With 1 SOL total, here's the realistic approach:
-
-**Ultra-Budget Launch (1 SOL):**
-1. ~0.3 SOL for Raydium pool creation fees (each pool costs ~0.1 SOL in fees)
-2. ~0.5 SOL as the SOL side of the GLITCH/SOL pool
-3. ~0.2 SOL reserved for gas (distribution, future transactions)
-
-**Strategy:**
-- Start with ONLY the $GLITCH/SOL pool (Pool 1) — this is the most important one
-- Add the USDC and BUDJU pools later once trading generates some fees
-- Deposit your 0.5 SOL + the proportional amount of $GLITCH:
-  - At 0.000042 SOL per $GLITCH, 0.5 SOL pairs with ~11,905 $GLITCH
-  - That's a very thin pool, but it WORKS — trading will just have higher slippage
-- As the platform grows and you accumulate more SOL from fees/sales, deepen the pool
-
-**The trade-off:** Thin liquidity = wild price swings on larger trades. But honestly,
-that fits the chaotic AIG!itch vibe perfectly. Meme coins launch with less every day.
-
-#### Once the Pools Are Live:
-
-- $GLITCH appears on **Jupiter aggregator** automatically (all three pairs)
-- Anyone with a Phantom wallet can swap SOL/USDC/BUDJU ↔ $GLITCH
-- Prices are determined by supply/demand via the AMM (Automated Market Maker)
-- You earn LP (Liquidity Provider) fees from every trade in your pools
-- You can add more liquidity to any pool at any time to reduce slippage
+- $GLITCH now appears on **Jupiter aggregator** automatically
+- Anyone with a Phantom wallet can swap SOL ↔ $GLITCH
+- Prices are determined by supply/demand via the AMM
+- You earn LP fees from every trade
+- You can add more liquidity at any time to reduce slippage
 
 ### Step 16: Register on Solana Token Registries
 
@@ -374,68 +342,41 @@ Create a "Claim" function:
 
 ---
 
-## Cost Estimate
+## Cost Summary (Updated 2026-02-28)
 
-### Full-Depth Launch (All Three Pools)
+### What's Already Been Spent
 
-| Item | Cost |
-|------|------|
-| SOL for token creation + distribution | ~3-5 SOL |
-| Raydium pool creation fees (3 pools × ~0.1 SOL) | ~0.3 SOL |
-| Pool 1: GLITCH/SOL liquidity (SOL side) | ~210 SOL |
-| Pool 2: GLITCH/USDC liquidity (USDC side, ~$20,700) | ~126 SOL* |
-| Pool 3: GLITCH/BUDJU liquidity ($BUDJU side — you mint this) | 0 SOL** |
-| Ongoing gas for airdrops | ~0.01 SOL per new user |
-| **Total** | **~340-342 SOL** |
+| Item | Cost | Status |
+|------|------|--------|
+| Token creation + minting | ~0.5 SOL | DONE |
+| Token distribution (ElonBot, Treasury, Admin) | ~0.1 SOL | DONE |
+| Meteora DLMM pool creation (GLITCH/SOL) | ~0.2 SOL (rent + fees) | DONE |
+| GLITCH/SOL pool liquidity (SOL side) | ~1.0 SOL | DONE |
 
-*Convert SOL → USDC on Jupiter before creating Pool 2
-**$BUDJU is your own token — you supply it from your mint, no cost
+### What's Needed Next
 
-### Budget Launch (~5-10 SOL)
-
-| Item | Cost |
-|------|------|
-| Token creation + distribution (already done) | 0 SOL |
-| Raydium pool creation fees (3 pools) | ~0.3 SOL |
-| Pool 1: GLITCH/SOL (small depth) | ~3-5 SOL |
-| Pool 2: GLITCH/USDC (small depth) | ~2-3 SOL |
-| Pool 3: GLITCH/BUDJU (your own tokens both sides) | 0 SOL |
-| Gas reserve | ~0.5 SOL |
-| **Total** | **~6-9 SOL** |
-
-### Ultra-Budget Launch (1 SOL — "Degen Mode")
-
-If you only have 1 SOL right now:
-
-| Item | Cost |
-|------|------|
-| Raydium pool creation fee (1 pool only) | ~0.1 SOL |
-| Pool 1: GLITCH/SOL only (thin liquidity) | ~0.7 SOL |
-| Pool 3: GLITCH/BUDJU (free — both tokens are yours) | ~0.1 SOL (gas) |
-| Gas reserve | ~0.1 SOL |
-| **Total** | **~1 SOL** |
-
-**1 SOL Strategy:**
-1. Launch GLITCH/SOL pool first with ~0.7 SOL depth (pairs with ~16,667 $GLITCH)
-2. Launch GLITCH/BUDJU pool for free (you own both tokens, just pay gas)
-3. Skip GLITCH/USDC for now — add it later when you have more funds
-4. As trading fees accumulate, deepen Pool 1 and eventually add Pool 2
-5. Any SOL earned from $GLITCH sales can be recycled back into liquidity
-
-The trade-off: smaller liquidity = wilder price swings, but that might fit
-the chaotic AIG!itch vibe perfectly. Meme coins launch thinner than this daily.
+| Item | Cost | Priority |
+|------|------|----------|
+| Deepen GLITCH/SOL pool (add ~4 SOL) | ~4 SOL | HIGH — reduces price impact |
+| GLITCH/BUDJU pool on Meteora (gas only) | ~0.2 SOL | MEDIUM — both tokens are yours |
+| AI Persona Pool wallet creation | ~0.01 SOL | LOW — can wait |
+| GLITCH/USDC pool | ~3-5 SOL | LOW — add when funds allow |
+| Ongoing gas for airdrops | ~0.01 SOL per user | Ongoing |
 
 ---
 
 ## Security Checklist
 
+- [x] Mint authority REVOKED — supply permanently capped at 100M (verified on-chain)
+- [x] Freeze authority REVOKED — no accounts can be frozen (verified on-chain)
 - [ ] Mint authority seed phrase stored offline (paper wallet or hardware wallet)
 - [ ] Treasury wallet uses multisig (Squads Protocol) for extra safety
 - [ ] ElonBot wallet private key stored in secure env variables, never in code
 - [ ] AI Persona Pool wallet key stored in encrypted backend, never in client code
-- [ ] Revoke mint authority after minting (prevents inflation)
 - [ ] Rate-limit token claims from Treasury
 - [ ] Monitor Treasury balance and set alerts
+- [ ] Route AI bot trades through Jito bundles (MEV protection)
+- [ ] Set tight slippage (0.5-1%) on all programmatic trades
 
 ---
 

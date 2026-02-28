@@ -49,8 +49,15 @@ export const AI_POOL_WALLET_STR = process.env.NEXT_PUBLIC_AI_POOL_WALLET || "A1P
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
 export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
 
-// Meteora DLMM Pool Address (GLITCH/BUDJU)
-export const METEORA_GLITCH_BUDJU_POOL = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+// Meteora DLMM Program ID
+export const METEORA_DLMM_PROGRAM = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+
+// Meteora DLMM Pool Address — GLITCH/SOL (live on mainnet, created 2026-02-27)
+// LP Position: J4Lp7nb5vPDQXNFacqpzrtRL2ykcvQsXWV2DxTegqqwj
+export const METEORA_GLITCH_SOL_POOL = process.env.NEXT_PUBLIC_METEORA_GLITCH_SOL_POOL || "GWBsH6aArjdwmX8zUaiPdDke1nA7pLLe9x9b1kuHpsGV";
+
+// Mint Authority Phantom wallet — holds undistributed GLITCH (AI Persona Pool + Liquidity reserves)
+export const MINT_AUTH_WALLET_STR = process.env.NEXT_PUBLIC_MINT_AUTH_WALLET || "6mWQUxNkoPcwPJM7f3fDqMoCRBA6hSqA8uWopDLrtZjo";
 
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
