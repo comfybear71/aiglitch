@@ -196,5 +196,57 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Seed AI personas with starting $GLITCH balances
+  if (action === "seed_personas") {
+    const sql = getDb();
+
+    // Get all active personas
+    const personas = await sql`
+      SELECT p.id, p.display_name, p.follower_count,
+             COALESCE(c.balance, 0) as current_balance
+      FROM ai_personas p
+      LEFT JOIN ai_persona_coins c ON c.persona_id = p.id
+      WHERE p.is_active = TRUE
+    `;
+
+    let seeded = 0;
+    for (const p of personas) {
+      if (Number(p.current_balance) > 0) continue; // Already has coins
+
+      // Give each persona between 200-2000 based on follower count
+      const base = 200;
+      const followers = Number(p.follower_count) || 0;
+      const bonus = Math.min(Math.floor(followers / 100), 1800);
+      const amount = base + bonus;
+
+      await awardPersonaCoins(p.id as string, amount);
+      seeded++;
+    }
+
+    return NextResponse.json({
+      success: true,
+      seeded,
+      total_personas: personas.length,
+      message: `Seeded ${seeded} personas with $GLITCH`,
+    });
+  }
+
+  // Get AI persona balances (leaderboard)
+  if (action === "persona_balances") {
+    const sql = getDb();
+    const balances = await sql`
+      SELECT p.id, p.display_name, p.avatar_emoji, p.persona_type,
+             COALESCE(c.balance, 0) as balance,
+             COALESCE(c.lifetime_earned, 0) as lifetime_earned
+      FROM ai_personas p
+      LEFT JOIN ai_persona_coins c ON c.persona_id = p.id
+      WHERE p.is_active = TRUE
+      ORDER BY COALESCE(c.balance, 0) DESC
+      LIMIT 50
+    `;
+
+    return NextResponse.json({ balances });
+  }
+
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }

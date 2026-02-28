@@ -698,7 +698,7 @@ export default function WalletPage() {
                 : "bg-gray-900 text-gray-400 hover:text-white"
             }`}
           >
-            Play Wallet
+            fGLITCH
           </button>
           <button
             onClick={() => setDisconnectedTab("learn")}
@@ -758,32 +758,30 @@ export default function WalletPage() {
         <div className="px-4 mt-4 space-y-4">
           {!wallet ? (
             <div className="text-center space-y-4">
-              <div className="rounded-xl bg-yellow-500/5 border border-dashed border-yellow-500/30 px-3 py-2">
-                <p className="text-yellow-500/70 text-[10px] font-bold">SIMULATED WALLET &mdash; NO REAL CRYPTO</p>
+              <div className="rounded-xl bg-orange-500/5 border border-dashed border-orange-500/30 px-3 py-2">
+                <p className="text-orange-500/70 text-[10px] font-bold">FAKE $GLITCH (fGLITCH) &mdash; NOT REAL CRYPTO</p>
               </div>
               <div className="mb-4">
-                <span className="inline-block animate-bounce">
-                  <TokenIcon token="GLITCH" size={64} />
-                </span>
+                <span className="inline-block animate-bounce text-5xl">🎭</span>
               </div>
-              <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
-                Create Play Wallet
+              <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
+                Get fGLITCH Wallet
               </h2>
               <p className="text-gray-400 text-sm">
-                Get a simulated wallet with free fake <span className="text-cyan-400 font-bold">$GLITCH</span> tokens to play with.
+                No wallet? No problem. Get free <span className="text-orange-400 font-bold">fGLITCH</span> (Fake GLITCH) tokens to shop the marketplace, tip personas, and vibe without crypto.
               </p>
               <button
                 onClick={createWallet}
                 disabled={creating}
                 className="px-8 py-3 bg-gradient-to-r from-green-500 via-cyan-500 to-purple-500 text-black font-bold rounded-2xl text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shadow-lg shadow-green-500/30"
               >
-                {creating ? "Generating Keypair..." : "Create Play Wallet"}
+                {creating ? "Generating fGLITCH..." : "Create fGLITCH Wallet"}
               </button>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-xl bg-yellow-500/5 border border-dashed border-yellow-500/30 px-3 py-2 text-center">
-                <p className="text-yellow-500/70 text-[10px] font-bold">SIMULATED &mdash; NOT REAL CRYPTO</p>
+              <div className="rounded-xl bg-orange-500/5 border border-dashed border-orange-500/30 px-3 py-2 text-center">
+                <p className="text-orange-500/70 text-[10px] font-bold">fGLITCH WALLET &mdash; FAKE $GLITCH &mdash; NOT REAL CRYPTO</p>
               </div>
               <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-green-950/30 to-gray-900 border border-green-500/20 p-5">
                 <div className="flex items-center gap-2 mb-4">
@@ -791,14 +789,15 @@ export default function WalletPage() {
                     <span className="text-xs text-gray-300 font-mono">{truncAddr(wallet.address)}</span>
                     <span className="text-[10px]">{copied ? "&#10003;" : "&#128203;"}</span>
                   </button>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 font-bold">SIMULATED</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold">fGLITCH</span>
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> $GLITCH BALANCE</p>
-                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1">🎭 fGLITCH BALANCE</p>
+                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
                       {wallet.glitch_token_balance.toLocaleString()}
                     </span>
+                    <p className="text-orange-400/50 text-[9px] mt-0.5">Fake $GLITCH &mdash; connect Phantom for real $GLITCH</p>
                   </div>
                   <div className="flex gap-4">
                     <div>
@@ -827,7 +826,7 @@ export default function WalletPage() {
 
               {/* Send section */}
               <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-                <h3 className="text-white font-bold text-sm mb-3">Send $GLITCH</h3>
+                <h3 className="text-white font-bold text-sm mb-3">Send fGLITCH</h3>
                 <div className="space-y-3">
                   <input
                     type="text"
@@ -857,7 +856,7 @@ export default function WalletPage() {
                     disabled={sending || !sendAddress || !sendAmount}
                     className="w-full py-3 bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold rounded-xl text-sm disabled:opacity-40"
                   >
-                    {sending ? "Sending..." : "Send $GLITCH"}
+                    {sending ? "Sending..." : "Send fGLITCH"}
                   </button>
                 </div>
               </div>
@@ -974,7 +973,7 @@ export default function WalletPage() {
               onClick={() => setDisconnectedTab("play")}
               className="w-full py-3 bg-gray-900 text-gray-400 font-bold rounded-2xl text-sm border border-gray-800 hover:text-white transition-all"
             >
-              Play With Fake Money First
+              Get fGLITCH (Fake Money) Instead
             </button>
           </div>
         </div>

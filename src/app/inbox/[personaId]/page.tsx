@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
@@ -20,6 +20,15 @@ interface PersonaInfo {
   persona_type: string;
 }
 
+// Browser TTS voice mapping (fallback when no xAI key)
+const BROWSER_VOICE_MAP: Record<string, { lang: string; pitch: number; rate: number }> = {
+  Ara: { lang: "en-US", pitch: 1.1, rate: 0.95 },
+  Rex: { lang: "en-US", pitch: 0.8, rate: 1.0 },
+  Sal: { lang: "en-US", pitch: 1.0, rate: 0.9 },
+  Eve: { lang: "en-US", pitch: 1.2, rate: 1.1 },
+  Leo: { lang: "en-US", pitch: 0.7, rate: 0.85 },
+};
+
 export default function ChatPage() {
   const params = useParams();
   const personaId = params.personaId as string;
@@ -30,9 +39,18 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [inputText, setInputText] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("aiglitch-voice") !== "off";
+    }
+    return true;
+  });
+  const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
+  const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -50,6 +68,11 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Persist voice preference
+  useEffect(() => {
+    localStorage.setItem("aiglitch-voice", voiceEnabled ? "on" : "off");
+  }, [voiceEnabled]);
 
   const fetchChat = async () => {
     try {
@@ -71,13 +94,113 @@ export default function ChatPage() {
     setLoading(false);
   };
 
+  // Play voice for a message
+  const playVoice = useCallback(async (msgId: string, text: string) => {
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+
+    if (playingMsgId === msgId) {
+      setPlayingMsgId(null);
+      return;
+    }
+
+    setLoadingVoice(msgId);
+
+    try {
+      const res = await fetch("/api/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          persona_id: personaId,
+          persona_type: persona?.persona_type,
+        }),
+      });
+
+      if (res.headers.get("content-type")?.includes("audio/")) {
+        // Got real audio from xAI
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        setPlayingMsgId(msgId);
+        setLoadingVoice(null);
+
+        audio.onended = () => {
+          setPlayingMsgId(null);
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+        };
+        audio.onerror = () => {
+          setPlayingMsgId(null);
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+        };
+        await audio.play();
+      } else {
+        // Fallback to browser speech synthesis
+        const data = await res.json();
+        const voiceName = data.voice || "Sal";
+        useBrowserTTS(msgId, text, voiceName);
+      }
+    } catch {
+      // Fallback to browser TTS
+      useBrowserTTS(msgId, text, "Sal");
+    }
+  }, [personaId, persona?.persona_type, playingMsgId]);
+
+  const useBrowserTTS = (msgId: string, text: string, voiceName: string) => {
+    if (!window.speechSynthesis) {
+      setLoadingVoice(null);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const config = BROWSER_VOICE_MAP[voiceName] || BROWSER_VOICE_MAP.Sal;
+    utterance.pitch = config.pitch;
+    utterance.rate = config.rate;
+    utterance.lang = config.lang;
+
+    // Try to find a matching voice
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoice = voices.find(v => v.lang.startsWith("en"));
+    if (englishVoice) utterance.voice = englishVoice;
+
+    utterance.onstart = () => {
+      setPlayingMsgId(msgId);
+      setLoadingVoice(null);
+    };
+    utterance.onend = () => setPlayingMsgId(null);
+    utterance.onerror = () => {
+      setPlayingMsgId(null);
+      setLoadingVoice(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Auto-play voice for new AI messages
+  const lastAutoPlayedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!voiceEnabled || !persona || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.sender_type === "ai" && lastMsg.id !== lastAutoPlayedRef.current && !lastMsg.id.startsWith("temp-")) {
+      lastAutoPlayedRef.current = lastMsg.id;
+      // Small delay so the message renders first
+      setTimeout(() => playVoice(lastMsg.id, lastMsg.content), 300);
+    }
+  }, [messages, voiceEnabled, persona, playVoice]);
+
   const sendMessage = async () => {
     if (!inputText.trim() || sending) return;
     const text = inputText.trim();
     setInputText("");
     setSending(true);
 
-    // Optimistic: add human message immediately
     const tempHumanMsg: Message = {
       id: `temp-${Date.now()}`,
       sender_type: "human",
@@ -94,7 +217,6 @@ export default function ChatPage() {
       });
       const data = await res.json();
       if (data.success) {
-        // Replace temp message and add AI reply
         setMessages(prev => [
           ...prev.filter(m => m.id !== tempHumanMsg.id),
           data.human_message,
@@ -105,7 +227,6 @@ export default function ChatPage() {
         }
       }
     } catch {
-      // Remove optimistic message on failure
       setMessages(prev => prev.filter(m => m.id !== tempHumanMsg.id));
     }
     setSending(false);
@@ -146,6 +267,30 @@ export default function ChatPage() {
               </div>
             </Link>
           )}
+          {/* Voice toggle */}
+          <button
+            onClick={() => {
+              setVoiceEnabled(!voiceEnabled);
+              if (voiceEnabled) {
+                window.speechSynthesis?.cancel();
+                if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+                setPlayingMsgId(null);
+              }
+            }}
+            className={`p-1.5 rounded-full transition-colors ${voiceEnabled ? "bg-purple-500/20 text-purple-400" : "bg-gray-800 text-gray-600"}`}
+            title={voiceEnabled ? "Voice ON — tap to mute" : "Voice OFF — tap to enable"}
+          >
+            {voiceEnabled ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            )}
+          </button>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-mono">ONLINE</span>
         </div>
       </div>
@@ -158,7 +303,10 @@ export default function ChatPage() {
               {persona.avatar_emoji}
             </div>
             <h2 className="text-white font-bold text-base mb-1">{persona.display_name}</h2>
-            <p className="text-gray-500 text-xs mb-4 px-8">{persona.bio}</p>
+            <p className="text-gray-500 text-xs mb-2 px-8">{persona.bio}</p>
+            <p className="text-purple-400 text-[10px] mb-4">
+              {voiceEnabled ? "🔊 Voice enabled — I'll speak my replies" : "🔇 Voice muted"}
+            </p>
             <p className="text-gray-600 text-xs">Send a message to start chatting!</p>
 
             {/* Suggested starters */}
@@ -195,9 +343,41 @@ export default function ChatPage() {
               }`}>
                 {msg.content}
               </div>
-              <p className={`text-[9px] text-gray-600 mt-0.5 ${msg.sender_type === "human" ? "text-right" : "text-left"}`}>
-                {formatTime(msg.created_at)}
-              </p>
+              <div className={`flex items-center gap-1.5 mt-0.5 ${msg.sender_type === "human" ? "justify-end" : "justify-start"}`}>
+                <p className="text-[9px] text-gray-600">
+                  {formatTime(msg.created_at)}
+                </p>
+                {/* Speaker button for AI messages */}
+                {msg.sender_type === "ai" && !msg.id.startsWith("temp-") && (
+                  <button
+                    onClick={() => playVoice(msg.id, msg.content)}
+                    disabled={loadingVoice === msg.id}
+                    className={`p-0.5 rounded transition-colors ${
+                      playingMsgId === msg.id
+                        ? "text-purple-400 animate-pulse"
+                        : loadingVoice === msg.id
+                          ? "text-gray-600 animate-pulse"
+                          : "text-gray-600 hover:text-purple-400"
+                    }`}
+                    title={playingMsgId === msg.id ? "Stop" : "Play voice"}
+                  >
+                    {loadingVoice === msg.id ? (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <circle cx="12" cy="12" r="10" strokeDasharray="60" strokeDashoffset="20" />
+                      </svg>
+                    ) : playingMsgId === msg.id ? (
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="4" width="4" height="16" rx="1" />
+                        <rect x="14" y="4" width="4" height="16" rx="1" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M11 5L6 9H2v6h4l5 4V5z" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
