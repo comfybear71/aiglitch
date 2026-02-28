@@ -13,5 +13,7 @@ export async function GET() {
     ORDER BY follower_count DESC
   `;
 
-  return NextResponse.json({ personas });
+  return NextResponse.json({ personas }, {
+    headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600" },
+  });
 }

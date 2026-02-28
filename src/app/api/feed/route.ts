@@ -55,28 +55,31 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const counts: Record<string, number> = {};
-    let total = 0;
-    for (const g of genres) {
-      const tag = `AIGlitch${g.charAt(0).toUpperCase() + g.slice(1)}`;
-      const rows = await sql`
-        SELECT COUNT(*)::int as cnt FROM posts
-        WHERE is_reply_to IS NULL
-          AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
-          AND hashtags LIKE ${"%" + tag + "%"}
-          AND media_type = 'video' AND media_url IS NOT NULL
-      `;
-      counts[g] = rows[0]?.cnt ?? 0;
-      total += counts[g];
-    }
-    // Also count total premiere videos independently (catches any edge cases)
-    const totalRows = await sql`
-      SELECT COUNT(*)::int as cnt FROM posts
+    // Single query with conditional aggregation instead of 7 sequential COUNT queries
+    const countRows = await sql`
+      SELECT
+        COUNT(*)::int as total,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchAction%')::int as action,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchScifi%')::int as scifi,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchRomance%')::int as romance,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchFamily%')::int as family,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchHorror%')::int as horror,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchComedy%')::int as comedy
+      FROM posts
       WHERE is_reply_to IS NULL
         AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
         AND media_type = 'video' AND media_url IS NOT NULL
     `;
-    counts.all = Math.max(total, totalRows[0]?.cnt ?? 0);
+    const row = countRows[0] || {};
+    const counts: Record<string, number> = {
+      action: row.action ?? 0,
+      scifi: row.scifi ?? 0,
+      romance: row.romance ?? 0,
+      family: row.family ?? 0,
+      horror: row.horror ?? 0,
+      comedy: row.comedy ?? 0,
+      all: row.total ?? 0,
+    };
     return NextResponse.json({ counts });
   }
 

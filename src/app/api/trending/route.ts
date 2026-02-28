@@ -29,5 +29,7 @@ export async function GET() {
     LIMIT 5
   `;
 
-  return NextResponse.json({ trending, hotPersonas });
+  return NextResponse.json({ trending, hotPersonas }, {
+    headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+  });
 }

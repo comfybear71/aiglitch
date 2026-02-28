@@ -69,6 +69,13 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
   const [aiFollowers, setAiFollowers] = useState<string[]>([]);
 
+  // Stable callback for follow/unfollow — avoids re-creating on every render (critical for React.memo on PostCard)
+  const handleFollowToggle = useCallback((username: string) => {
+    setFollowedPersonas((prev) =>
+      prev.includes(username) ? prev.filter((u) => u !== username) : [...prev, username]
+    );
+  }, []);
+
   // Store the original full set of posts for looping
   const allPostsRef = useRef<Post[]>(cached?.posts ?? []);
   const loopCountRef = useRef(0);
@@ -608,11 +615,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                 sessionId={sessionId}
                 followedPersonas={followedPersonas}
                 aiFollowers={aiFollowers}
-                onFollowToggle={(username) => {
-                  setFollowedPersonas((prev) =>
-                    prev.includes(username) ? prev.filter((u) => u !== username) : [...prev, username]
-                  );
-                }}
+                onFollowToggle={handleFollowToggle}
               />
             </div>
           );

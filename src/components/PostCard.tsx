@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import type { Post, Comment } from "@/lib/types";
 
@@ -108,6 +108,27 @@ function getReactionEmoji(commentId: string): string {
   return COMMENT_REACTIONS[idx];
 }
 
+// Pure utility functions — hoisted out of component to avoid re-creation on every render
+function timeAgo(dateStr: string) {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (seconds < 0) return "now";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
+function formatCount(n: number) {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return n.toString();
+}
+
+// Stable default arrays — prevents new reference on every render that would defeat React.memo
+const EMPTY_STRING_ARRAY: string[] = [];
+
 /** Recursively add a reply under a parent comment */
 function addReplyToComment(comments: Comment[], parentId: string, reply: Comment): Comment[] {
   return comments.map((c) => {
@@ -134,7 +155,7 @@ function updateCommentLikeCount(comments: Comment[], commentId: string, delta: n
   });
 }
 
-export default function PostCard({ post, sessionId, followedPersonas = [], aiFollowers = [], onFollowToggle }: PostCardProps) {
+function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFollowers = EMPTY_STRING_ARRAY, onFollowToggle }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const subscribed = followedPersonas.includes(post.username);
   const [bookmarked, setBookmarked] = useState(post.bookmarked || false);
@@ -279,15 +300,18 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
     return () => observer.disconnect();
   }, [isPaused, introPlaying, post.id]);
 
-  // Video time update
+  // Video time update — throttled to avoid excessive re-renders (~4/sec -> ~2/sec)
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
+    let lastUpdate = 0;
     const onTimeUpdate = () => {
-      if (!isSeeking) {
-        setVideoProgress(video.currentTime);
-      }
+      if (isSeeking) return;
+      const now = performance.now();
+      if (now - lastUpdate < 500) return; // throttle to every 500ms
+      lastUpdate = now;
+      setVideoProgress(video.currentTime);
     };
     const onLoadedMetadata = () => {
       setVideoDuration(video.duration);
@@ -537,24 +561,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
     setShowShareMenu(false);
   };
 
-  const timeAgo = (dateStr: string) => {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    if (seconds < 0) return "now";
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-    return `${Math.floor(seconds / 86400)}d`;
-  };
-
-  const formatCount = (n: number) => {
-    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-    return n.toString();
-  };
-
-  const hashtags = post.hashtags ? post.hashtags.split(",").filter(Boolean) : [];
+  const hashtags = useMemo(() => post.hashtags ? post.hashtags.split(",").filter(Boolean) : [], [post.hashtags]);
 
   return (
     <div ref={cardRef} className="h-[calc(100dvh-72px)] w-full relative overflow-hidden bg-black">
@@ -571,7 +578,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
               playsInline
               muted
               autoPlay
-              preload="auto"
+              preload="metadata"
               {...({ "webkit-playsinline": "" } as any)}
               onCanPlayThrough={() => {
                 // Start muted (browser allows it), then try unmuting only if active
@@ -626,7 +633,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
             autoPlay
             playsInline
             {...({ "webkit-playsinline": "" } as any)}
-            preload="auto"
+            preload="metadata"
             onError={() => setMediaFailed(true)}
             onLoadedData={() => {
               // If waiting for intro, don't start main video yet
@@ -688,6 +695,7 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
           <img
             src={post.media_url!}
             alt=""
+            loading="lazy"
             className="max-w-full max-h-full w-auto h-auto object-contain"
             onError={() => setMediaFailed(true)}
           />
@@ -1164,6 +1172,8 @@ export default function PostCard({ post, sessionId, followedPersonas = [], aiFol
     </div>
   );
 }
+
+export default React.memo(PostCard);
 
 /** Single comment with like, reply, and nested thread support */
 function CommentThread({
