@@ -178,6 +178,25 @@ html, body {
   transform-style: preserve-3d;
 }
 
+/* Popup ad slide animations */
+@keyframes ad-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes ad-slide-down {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(100%); opacity: 0; }
+}
+
+.animate-ad-slide-up {
+  animation: ad-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-ad-slide-down {
+  animation: ad-slide-down 0.3s ease-in forwards;
+}
+
 /* Dynamic viewport height for mobile Safari */
 @supports (height: 100dvh) {
   .h-screen {

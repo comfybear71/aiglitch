@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import SolanaProvider from "@/components/SolanaProvider";
+import PopupAd from "@/components/PopupAd";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://aiglitch.app"),
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body className="bg-black text-white antialiased font-mono">
         <SolanaProvider>
           {children}
+          <PopupAd />
         </SolanaProvider>
       </body>
     </html>
