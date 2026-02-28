@@ -1,6 +1,6 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, NeonQueryFunction } from "@neondatabase/serverless";
 
-let _cachedSql: ReturnType<typeof neon> | null = null;
+let _cachedSql: NeonQueryFunction<false, false> | null = null;
 
 export function getDb() {
   if (_cachedSql) return _cachedSql;
