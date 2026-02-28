@@ -64,13 +64,42 @@ let _glitchTokenProgram: PublicKey | null = null;
 async function getGlitchTokenProgram(connection: Connection): Promise<PublicKey> {
   if (_glitchTokenProgram) return _glitchTokenProgram;
   // Check which program owns the GLITCH mint account
-  const mintInfo = await connection.getAccountInfo(new PublicKey(GLITCH_TOKEN_MINT_STR));
-  if (mintInfo && mintInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
-    _glitchTokenProgram = TOKEN_2022_PROGRAM_ID;
-  } else {
+  try {
+    const mintInfo = await connection.getAccountInfo(new PublicKey(GLITCH_TOKEN_MINT_STR));
+    if (mintInfo && mintInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+      _glitchTokenProgram = TOKEN_2022_PROGRAM_ID;
+      console.log("GLITCH mint uses Token-2022 program");
+    } else {
+      _glitchTokenProgram = TOKEN_PROGRAM_ID;
+      console.log("GLITCH mint uses standard Token program");
+    }
+  } catch (err) {
+    console.warn("Failed to detect token program, defaulting to Token program:", err);
     _glitchTokenProgram = TOKEN_PROGRAM_ID;
   }
   return _glitchTokenProgram;
+}
+
+// Find the actual token account for a given owner and mint by searching on-chain.
+// This is more robust than deriving the ATA, which can fail if the token program is wrong.
+async function findTokenAccount(
+  connection: Connection,
+  owner: PublicKey,
+  mint: PublicKey,
+): Promise<{ address: PublicKey; tokenProgram: PublicKey } | null> {
+  // Try standard Token program first
+  try {
+    const accounts = await connection.getTokenAccountsByOwner(owner, {
+      mint,
+    }, { commitment: "confirmed" });
+    if (accounts.value.length > 0) {
+      const acc = accounts.value[0];
+      return { address: acc.pubkey, tokenProgram: acc.account.owner };
+    }
+  } catch {
+    // Might fail if no accounts exist
+  }
+  return null;
 }
 
 // Parse treasury private key from env (supports JSON array and base58)
@@ -120,23 +149,24 @@ export async function GET(request: NextRequest) {
     `.catch(() => [null]);
     const solPriceUsd = parseFloat(solSetting?.value || "164");
 
-    // Check treasury GLITCH balance on-chain
+    // Check treasury GLITCH balance on-chain (find actual token account, don't guess ATA)
     let availableSupply = 0;
     let rpcError = "";
     try {
       const connection = getServerSolanaConnection();
       const treasuryPubkey = new PublicKey(TREASURY_WALLET_STR);
       const glitchMint = new PublicKey(GLITCH_TOKEN_MINT_STR);
-      const tokenProgram = await getGlitchTokenProgram(connection);
-      const treasuryAta = await getAssociatedTokenAddress(
-        glitchMint, treasuryPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
-      );
-      const accountInfo = await connection.getTokenAccountBalance(treasuryAta);
-      availableSupply = parseFloat(accountInfo.value.uiAmountString || "0");
+      const treasuryAccount = await findTokenAccount(connection, treasuryPubkey, glitchMint);
+      if (treasuryAccount) {
+        const accountInfo = await connection.getTokenAccountBalance(treasuryAccount.address);
+        availableSupply = parseFloat(accountInfo.value.uiAmountString || "0");
+      } else {
+        rpcError = "Treasury GLITCH token account not found";
+        availableSupply = 30_000_000;
+      }
     } catch (err) {
-      // RPC may fail or ATA may not exist — use known supply as fallback
       rpcError = err instanceof Error ? err.message : "RPC failed";
-      availableSupply = 30_000_000; // Known treasury balance fallback
+      availableSupply = 30_000_000;
     }
 
     const hasPrivateKey = !!process.env.TREASURY_PRIVATE_KEY;
@@ -298,13 +328,24 @@ export async function POST(request: NextRequest) {
       const glitchMint = new PublicKey(GLITCH_TOKEN_MINT_STR);
       const treasuryPubkey = treasuryKeypair.publicKey;
 
-      // Detect if GLITCH uses Token or Token-2022
-      const tokenProgram = await getGlitchTokenProgram(connection);
+      // Find the treasury's ACTUAL GLITCH token account on-chain
+      // This is more robust than deriving ATAs which can fail with wrong token program
+      const treasuryAccount = await findTokenAccount(connection, treasuryPubkey, glitchMint);
+      if (!treasuryAccount) {
+        console.error("Treasury has no GLITCH token account on-chain!");
+        return NextResponse.json({
+          error: "Treasury GLITCH token account not found on-chain. Contact admin.",
+        }, { status: 500 });
+      }
 
-      // Get associated token accounts (using correct token program)
-      const treasuryAta = await getAssociatedTokenAddress(
-        glitchMint, treasuryPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
-      );
+      const treasuryAta = treasuryAccount.address;
+      const tokenProgram = treasuryAccount.tokenProgram;
+      // Update the cached token program to match what's actually on-chain
+      _glitchTokenProgram = tokenProgram;
+
+      console.log(`Treasury ATA: ${treasuryAta.toBase58()}, Token program: ${tokenProgram.toBase58()}`);
+
+      // Derive buyer's ATA using the SAME token program as the treasury
       const buyerAta = await getAssociatedTokenAddress(
         glitchMint, buyerPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
       );
@@ -313,6 +354,7 @@ export async function POST(request: NextRequest) {
       try {
         const treasuryBalance = await connection.getTokenAccountBalance(treasuryAta);
         const available = parseFloat(treasuryBalance.value.uiAmountString || "0");
+        console.log(`Treasury GLITCH balance: ${available}`);
         if (available < amount) {
           return NextResponse.json({
             error: `Not enough $GLITCH in treasury. Available: ${available.toLocaleString()}`,
@@ -320,7 +362,6 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
       } catch (balErr) {
-        // If we can't check balance, try to proceed anyway — tx will fail on-chain if insufficient
         console.warn("Could not check treasury balance:", balErr instanceof Error ? balErr.message : balErr);
       }
 
@@ -336,7 +377,7 @@ export async function POST(request: NextRequest) {
             buyerAta,     // ATA address
             buyerPubkey,  // owner
             glitchMint,   // token mint
-            tokenProgram, // correct token program
+            tokenProgram, // same token program as treasury
             ASSOCIATED_TOKEN_PROGRAM_ID
           )
         );
@@ -354,12 +395,12 @@ export async function POST(request: NextRequest) {
       // Step 3: Treasury sends GLITCH to buyer
       tx.add(
         createTransferInstruction(
-          treasuryAta,     // source (treasury's GLITCH ATA)
-          buyerAta,        // destination (buyer's GLITCH ATA)
+          treasuryAta,     // source (actual treasury token account)
+          buyerAta,        // destination (buyer's ATA)
           treasuryPubkey,  // authority (treasury must sign)
           BigInt(glitchAmountRaw),
           [],              // multiSigners
-          tokenProgram     // correct token program
+          tokenProgram     // same token program
         )
       );
 
