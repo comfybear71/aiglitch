@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
-import { Transaction, Connection } from "@solana/web3.js";
+import { Transaction } from "@solana/web3.js";
 
 interface OtcConfig {
   enabled: boolean;
@@ -172,25 +172,24 @@ export default function ExchangePage() {
       const transaction = Transaction.from(txBuf);
       const signed = await signTransaction(transaction);
 
-      // Step 3: Submit to Solana
-      const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
-      const txid = await connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: true,
-        maxRetries: 2,
-      });
-
-      // Step 4: Confirm in database
-      await fetch("/api/otc-swap", {
+      // Step 3: Submit signed tx via our server (avoids client-side RPC 403 errors)
+      const submitRes = await fetch("/api/otc-swap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "confirm_swap",
+          action: "submit_swap",
           swap_id: data.swap_id,
-          tx_signature: txid,
+          signed_transaction: Buffer.from(signed.serialize()).toString("base64"),
         }),
       });
+      const submitData = await submitRes.json();
+      if (!submitRes.ok || !submitData.success) {
+        showToast("error", submitData.error || "Transaction submission failed");
+        setBuying(false);
+        return;
+      }
 
-      showToast("success", `Bought ${glitchAmount.toLocaleString()} $GLITCH! TX: ${txid.slice(0, 12)}...`);
+      showToast("success", `Bought ${glitchAmount.toLocaleString()} $GLITCH! TX: ${submitData.tx_signature.slice(0, 12)}...`);
       setSolAmount("");
       setTimeout(() => {
         fetchBalances();

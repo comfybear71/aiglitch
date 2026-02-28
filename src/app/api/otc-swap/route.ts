@@ -400,7 +400,56 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Confirm completed swap (called after on-chain confirmation) ──
+  // ── Submit signed transaction (server-side RPC submission) ──
+  if (action === "submit_swap") {
+    const { swap_id, signed_transaction } = body;
+    if (!swap_id || !signed_transaction) {
+      return NextResponse.json({ error: "Missing swap_id or signed_transaction" }, { status: 400 });
+    }
+
+    try {
+      const connection = getServerSolanaConnection();
+      const txBuf = Buffer.from(signed_transaction, "base64");
+      const txid = await connection.sendRawTransaction(txBuf, {
+        skipPreflight: true,
+        maxRetries: 3,
+      });
+
+      // Update swap record
+      await sql`
+        UPDATE otc_swaps
+        SET status = 'completed', tx_signature = ${txid}, completed_at = NOW()
+        WHERE id = ${swap_id} AND status = 'pending'
+      `;
+
+      // Record in exchange_orders for unified trade history
+      try {
+        const [swap] = await sql`SELECT * FROM otc_swaps WHERE id = ${swap_id}`;
+        if (swap) {
+          const orderId = uuidv4();
+          await sql`
+            INSERT INTO exchange_orders (id, session_id, wallet_address, order_type, amount, price_per_coin, total_sol, trading_pair, base_token, quote_token, quote_amount, status, created_at)
+            VALUES (${orderId}, ${swap.buyer_wallet}, ${swap.buyer_wallet}, 'buy', ${swap.glitch_amount}, ${swap.price_per_glitch}, ${swap.sol_cost}, 'GLITCH_SOL', 'GLITCH', 'SOL', ${swap.sol_cost}, 'filled', NOW())
+          `;
+        }
+      } catch {
+        // Non-critical — swap still completed
+      }
+
+      return NextResponse.json({
+        success: true,
+        swap_id,
+        tx_signature: txid,
+        message: "Swap confirmed! $GLITCH tokens are in your wallet.",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Submission failed";
+      console.error("TX submission error:", msg);
+      return NextResponse.json({ error: `Transaction failed: ${msg}` }, { status: 500 });
+    }
+  }
+
+  // ── Confirm completed swap (legacy — called after client-side submission) ──
   if (action === "confirm_swap") {
     const { swap_id, tx_signature } = body;
     if (!swap_id || !tx_signature) {
@@ -412,20 +461,6 @@ export async function POST(request: NextRequest) {
       SET status = 'completed', tx_signature = ${tx_signature}, completed_at = NOW()
       WHERE id = ${swap_id} AND status = 'pending'
     `;
-
-    // Also record in exchange_orders for unified trade history
-    try {
-      const [swap] = await sql`SELECT * FROM otc_swaps WHERE id = ${swap_id}`;
-      if (swap) {
-        const orderId = uuidv4();
-        await sql`
-          INSERT INTO exchange_orders (id, session_id, wallet_address, order_type, amount, price_per_coin, total_sol, trading_pair, base_token, quote_token, quote_amount, status, created_at)
-          VALUES (${orderId}, ${swap.buyer_wallet}, ${swap.buyer_wallet}, 'buy', ${swap.glitch_amount}, ${swap.price_per_glitch}, ${swap.sol_cost}, 'GLITCH_SOL', 'GLITCH', 'SOL', ${swap.sol_cost}, 'filled', NOW())
-        `;
-      }
-    } catch {
-      // Non-critical — swap still completed
-    }
 
     return NextResponse.json({
       success: true,
