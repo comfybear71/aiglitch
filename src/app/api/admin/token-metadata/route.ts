@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  Connection,
   Keypair,
   PublicKey,
   SystemProgram,
@@ -9,6 +8,8 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import bs58 from "bs58";
+import * as bip39 from "bip39";
+import { createHmac } from "crypto";
 import {
   getServerSolanaConnection,
   GLITCH_TOKEN_MINT_STR,
@@ -25,7 +26,9 @@ import {
  * Creates or updates the Metaplex on-chain metadata for the $GLITCH token.
  * This makes the token show its name, symbol, and logo in Phantom and other wallets.
  *
- * Requires TREASURY_PRIVATE_KEY in env (the mint authority / update authority).
+ * For "update" action: uses METADATA_AUTHORITY_MNEMONIC or METADATA_AUTHORITY_PRIVATE_KEY
+ *   (the wallet that is the current update authority: 4Jm25GMWDFj4UFJTQjwo7mnDwddxSkXAthDGmkPjdMi4)
+ * For "create" action: uses TREASURY_PRIVATE_KEY (the mint authority)
  *
  * Actions:
  *   - "check"  — Check if metadata already exists on-chain
@@ -139,10 +142,32 @@ function buildUpdateMetadataInstruction(
   });
 }
 
-// Parse treasury keypair from env
-function getTreasuryKeypair(): Keypair | null {
-  const keyStr = process.env.TREASURY_PRIVATE_KEY;
-  if (!keyStr) return null;
+// ── ED25519 derivation (SLIP-0010) for BIP44 path ──
+function deriveEd25519(seed: Buffer, path: string): Buffer {
+  const segments = path.split("/").slice(1); // drop "m"
+  let key = seed;
+
+  // Master key from seed
+  const I = createHmac("sha512", "ed25519 seed").update(seed).digest();
+  let il = I.subarray(0, 32);
+  let ir = I.subarray(32);
+
+  for (const seg of segments) {
+    const index = parseInt(seg.replace("'", ""), 10);
+    const indexBuf = Buffer.alloc(4);
+    // Hardened: index + 0x80000000
+    indexBuf.writeUInt32BE((index | 0x80000000) >>> 0, 0);
+    const data = Buffer.concat([Buffer.from([0x00]), il, indexBuf]);
+    const I2 = createHmac("sha512", ir).update(data).digest();
+    il = I2.subarray(0, 32);
+    ir = I2.subarray(32);
+  }
+
+  return il;
+}
+
+// Parse a keypair from a private key string (base58 or JSON array)
+function parseKeypairFromString(keyStr: string): Keypair | null {
   try {
     const trimmed = keyStr.trim();
     if (trimmed.startsWith("[")) {
@@ -152,6 +177,48 @@ function getTreasuryKeypair(): Keypair | null {
   } catch {
     return null;
   }
+}
+
+// Parse treasury keypair from env
+function getTreasuryKeypair(): Keypair | null {
+  const keyStr = process.env.TREASURY_PRIVATE_KEY;
+  if (!keyStr) return null;
+  return parseKeypairFromString(keyStr);
+}
+
+/**
+ * Get the metadata update authority keypair.
+ *
+ * Tries in order:
+ *   1. METADATA_AUTHORITY_PRIVATE_KEY (base58 or JSON array)
+ *   2. METADATA_AUTHORITY_MNEMONIC (BIP39 mnemonic → Solana CLI derivation)
+ *
+ * Solana CLI uses the raw BIP39 seed (first 32 bytes) as the private key — no
+ * BIP44 derivation path. Phantom uses m/44'/501'/0'/0', which gives a different
+ * address from the same mnemonic.
+ */
+function getMetadataAuthorityKeypair(): Keypair | null {
+  // Option 1: Direct private key
+  const keyStr = process.env.METADATA_AUTHORITY_PRIVATE_KEY;
+  if (keyStr) {
+    return parseKeypairFromString(keyStr);
+  }
+
+  // Option 2: Mnemonic (Solana CLI derivation — raw seed, first 32 bytes)
+  const mnemonic = process.env.METADATA_AUTHORITY_MNEMONIC;
+  if (mnemonic) {
+    try {
+      const seed = bip39.mnemonicToSeedSync(mnemonic.trim());
+      // Solana CLI default: use first 32 bytes of the BIP39 seed directly
+      const privateKey = seed.subarray(0, 32);
+      return Keypair.fromSeed(privateKey);
+    } catch (err) {
+      console.error("Failed to derive keypair from mnemonic:", err);
+      return null;
+    }
+  }
+
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -267,15 +334,21 @@ export async function POST(request: NextRequest) {
 
   // ── Update metadata ──
   if (action === "update") {
-    const treasuryKeypair = getTreasuryKeypair();
-    if (!treasuryKeypair) {
+    const authorityKeypair = getMetadataAuthorityKeypair();
+    if (!authorityKeypair) {
       return NextResponse.json({
-        error: "TREASURY_PRIVATE_KEY not configured",
+        error: "Neither METADATA_AUTHORITY_PRIVATE_KEY nor METADATA_AUTHORITY_MNEMONIC is configured. " +
+          "Add one of these to your Vercel env vars for the wallet that owns the metadata update authority " +
+          "(4Jm25GMWDFj4UFJTQjwo7mnDwddxSkXAthDGmkPjdMi4).",
       }, { status: 503 });
     }
 
-    if (treasuryKeypair.publicKey.toBase58() !== TREASURY_WALLET_STR) {
-      return NextResponse.json({ error: "Treasury keypair mismatch" }, { status: 500 });
+    // Treasury pays the tx fees
+    const treasuryKeypair = getTreasuryKeypair();
+    if (!treasuryKeypair) {
+      return NextResponse.json({
+        error: "TREASURY_PRIVATE_KEY not configured (needed to pay tx fees)",
+      }, { status: 503 });
     }
 
     // Verify metadata exists
@@ -296,7 +369,7 @@ export async function POST(request: NextRequest) {
       tx.add(
         buildUpdateMetadataInstruction(
           metadataPDA,
-          treasuryKeypair.publicKey, // update authority
+          authorityKeypair.publicKey, // update authority (4Jm25...)
           name,
           symbol,
           uri,
@@ -305,8 +378,8 @@ export async function POST(request: NextRequest) {
 
       const { blockhash } = await connection.getLatestBlockhash("confirmed");
       tx.recentBlockhash = blockhash;
-      tx.feePayer = treasuryKeypair.publicKey;
-      tx.sign(treasuryKeypair);
+      tx.feePayer = treasuryKeypair.publicKey; // treasury pays fees
+      tx.sign(treasuryKeypair, authorityKeypair); // both sign
 
       const txid = await connection.sendRawTransaction(tx.serialize(), {
         skipPreflight: false,
@@ -321,6 +394,7 @@ export async function POST(request: NextRequest) {
         action: "updated",
         tx_signature: txid,
         metadata_pda: metadataPDA.toBase58(),
+        authority_used: authorityKeypair.publicKey.toBase58(),
         name,
         symbol,
         uri,
@@ -335,8 +409,34 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Verify mnemonic derives the right wallet ──
+  if (action === "verify") {
+    const authorityKeypair = getMetadataAuthorityKeypair();
+    if (!authorityKeypair) {
+      return NextResponse.json({
+        error: "Neither METADATA_AUTHORITY_PRIVATE_KEY nor METADATA_AUTHORITY_MNEMONIC is configured.",
+        instructions: "Add METADATA_AUTHORITY_MNEMONIC to your Vercel env vars with your seed phrase.",
+      }, { status: 503 });
+    }
+
+    const derivedAddress = authorityKeypair.publicKey.toBase58();
+    const expectedAuthority = "4Jm25GMWDFj4UFJTQjwo7mnDwddxSkXAthDGmkPjdMi4";
+    const matches = derivedAddress === expectedAuthority;
+
+    return NextResponse.json({
+      derived_address: derivedAddress,
+      expected_authority: expectedAuthority,
+      matches,
+      message: matches
+        ? "Mnemonic derives the correct update authority wallet. You can now use action='update'."
+        : `Mismatch! The mnemonic derives ${derivedAddress} but the on-chain authority is ${expectedAuthority}. ` +
+          "This may be a different mnemonic, or the wallet may have used a BIP44 derivation path. " +
+          "Try exporting the private key directly instead.",
+    });
+  }
+
   return NextResponse.json({
-    error: "Invalid action. Use 'check', 'create', or 'update'.",
+    error: "Invalid action. Use 'check', 'create', 'update', or 'verify'.",
     metadata_uri: metadataUri,
     logo_url: `${baseUrl}/api/token/logo`,
   }, { status: 400 });

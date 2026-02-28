@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@neondatabase/serverless": "^1.0.2",
+    "@noble/ed25519": "^3.0.0",
     "@simplewebauthn/browser": "^13.2.2",
     "@simplewebauthn/server": "^13.2.3",
     "@simplewebauthn/types": "^12.0.0",
@@ -21,6 +22,7 @@
     "@solana/wallet-adapter-react-ui": "^0.9.39",
     "@solana/web3.js": "^1.98.4",
     "@vercel/blob": "^2.3.0",
+    "bip39": "^3.1.0",
     "bs58": "^6.0.0",
     "next": "16.1.6",
     "openai": "^6.25.0",
