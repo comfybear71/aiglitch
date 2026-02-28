@@ -722,4 +722,28 @@ export async function initializeDb() {
   `;
   await safeMigrate("idx_bridge_claims_session", () => sql`CREATE INDEX IF NOT EXISTS idx_bridge_claims_session ON bridge_claims(session_id)`);
   await safeMigrate("idx_bridge_claims_status", () => sql`CREATE INDEX IF NOT EXISTS idx_bridge_claims_status ON bridge_claims(status)`);
+
+  // Seed OTC price at $0.01 USD per GLITCH (SOL equivalent based on SOL ~$150)
+  await safeMigrate("seed_otc_glitch_price_sol", () => sql`
+    INSERT INTO platform_settings (key, value) VALUES ('otc_glitch_price_sol', '0.0000667')
+    ON CONFLICT (key) DO NOTHING
+  `);
+
+  // ── OTC Swaps — Direct atomic swaps without liquidity pools ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS otc_swaps (
+      id TEXT PRIMARY KEY,
+      buyer_wallet TEXT NOT NULL,
+      glitch_amount REAL NOT NULL,
+      sol_cost REAL NOT NULL,
+      price_per_glitch REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      blockhash TEXT,
+      tx_signature TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    )
+  `;
+  await safeMigrate("idx_otc_swaps_wallet", () => sql`CREATE INDEX IF NOT EXISTS idx_otc_swaps_wallet ON otc_swaps(buyer_wallet, created_at DESC)`);
+  await safeMigrate("idx_otc_swaps_status", () => sql`CREATE INDEX IF NOT EXISTS idx_otc_swaps_status ON otc_swaps(status)`);
 }

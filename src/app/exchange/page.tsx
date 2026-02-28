@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
-import { VersionedTransaction, Connection } from "@solana/web3.js";
+import { VersionedTransaction, Transaction, Connection } from "@solana/web3.js";
 
 // Token mint addresses for Jupiter swap
 const MINT_ADDRESSES: Record<string, string> = {
@@ -85,6 +85,18 @@ interface JupiterQuote {
   routePlan: { swapInfo: { label: string } }[];
 }
 
+interface OtcConfig {
+  enabled: boolean;
+  price_sol: number;
+  price_usd: number;
+  sol_price_usd: number;
+  available_supply: number;
+  min_purchase: number;
+  max_purchase: number;
+  treasury_wallet: string;
+  stats: { total_swaps: number; total_glitch_sold: number; total_sol_received: number };
+}
+
 type ViewTab = "chart" | "pool" | "activity" | "history";
 
 export default function ExchangePage() {
@@ -101,6 +113,12 @@ export default function ExchangePage() {
 
   // Phantom on-chain balances
   const [phantomBalances, setPhantomBalances] = useState<Record<string, number>>({});
+
+  // OTC swap state
+  const [otcConfig, setOtcConfig] = useState<OtcConfig | null>(null);
+  const [otcSolAmount, setOtcSolAmount] = useState("");
+  const [otcBuying, setOtcBuying] = useState(false);
+  const [showJupiter, setShowJupiter] = useState(false);
 
   // Jupiter swap state
   const [swapInputToken, setSwapInputToken] = useState("SOL");
@@ -171,13 +189,114 @@ export default function ExchangePage() {
     }
   }, [publicKey, sessionId]);
 
+  // Fetch OTC swap config
+  const fetchOtcConfig = useCallback(async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch("/api/otc-swap?action=config", { signal: controller.signal });
+      clearTimeout(timeoutId);
+      const data = await res.json();
+      setOtcConfig(data);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Execute OTC swap: SOL → $GLITCH atomic transaction
+  const executeOtcSwap = async () => {
+    if (!publicKey || !signTransaction || !otcConfig || otcBuying) return;
+    const solAmt = parseFloat(otcSolAmount);
+    if (!solAmt || solAmt <= 0) {
+      showToast("error", "Enter a SOL amount");
+      return;
+    }
+    const glitchAmount = Math.floor(solAmt / otcConfig.price_sol);
+    if (glitchAmount < otcConfig.min_purchase) {
+      showToast("error", `Minimum purchase is ${otcConfig.min_purchase.toLocaleString()} $GLITCH`);
+      return;
+    }
+    if (glitchAmount > otcConfig.max_purchase) {
+      showToast("error", `Maximum purchase is ${otcConfig.max_purchase.toLocaleString()} $GLITCH per swap`);
+      return;
+    }
+    const solBalance = phantomBalances.SOL || 0;
+    if (solAmt > solBalance - 0.005) {
+      showToast("error", "Not enough SOL (keep ~0.005 for tx fees)");
+      return;
+    }
+
+    setOtcBuying(true);
+    try {
+      // Step 1: Request atomic swap transaction from server
+      const res = await fetch("/api/otc-swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_swap",
+          buyer_wallet: publicKey.toBase58(),
+          glitch_amount: glitchAmount,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast("error", data.error || "Swap creation failed");
+        setOtcBuying(false);
+        return;
+      }
+
+      // Step 2: Deserialize partially-signed transaction and sign with Phantom
+      const txBuf = Buffer.from(data.transaction, "base64");
+      const transaction = Transaction.from(txBuf);
+      const signed = await signTransaction(transaction);
+
+      // Step 3: Submit to Solana
+      const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+      const txid = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: true,
+        maxRetries: 2,
+      });
+
+      // Step 4: Confirm swap in database
+      await fetch("/api/otc-swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm_swap",
+          swap_id: data.swap_id,
+          tx_signature: txid,
+        }),
+      });
+
+      showToast("success", `Bought ${glitchAmount.toLocaleString()} $GLITCH! TX: ${txid.slice(0, 12)}...`);
+      setOtcSolAmount("");
+      setTimeout(() => {
+        fetchPhantomBalances();
+        fetchOtcConfig();
+      }, 3000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Swap failed";
+      showToast("error", msg.includes("User rejected") ? "Transaction cancelled" : msg);
+    } finally {
+      setOtcBuying(false);
+    }
+  };
+
+  // Computed OTC values
+  const otcGlitchOutput = otcConfig && otcSolAmount && parseFloat(otcSolAmount) > 0
+    ? Math.floor(parseFloat(otcSolAmount) / otcConfig.price_sol)
+    : 0;
+  const otcUsdCost = otcConfig && otcSolAmount && parseFloat(otcSolAmount) > 0
+    ? parseFloat(otcSolAmount) * otcConfig.sol_price_usd
+    : 0;
+
   useEffect(() => {
     fetchMarket();
     fetchPriceHistory();
     fetchHistory();
+    fetchOtcConfig();
     const interval = setInterval(fetchMarket, 10000);
-    return () => clearInterval(interval);
-  }, [fetchMarket, fetchPriceHistory, fetchHistory]);
+    const otcInterval = setInterval(fetchOtcConfig, 30000);
+    return () => { clearInterval(interval); clearInterval(otcInterval); };
+  }, [fetchMarket, fetchPriceHistory, fetchHistory, fetchOtcConfig]);
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -411,7 +530,7 @@ export default function ExchangePage() {
             <h1 className="text-lg font-bold">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-red-400">Exchange</span>
             </h1>
-            <p className="text-gray-500 text-[10px] tracking-widest">REAL ON-CHAIN SWAPS VIA JUPITER</p>
+            <p className="text-gray-500 text-[10px] tracking-widest">DIRECT PURCHASE &middot; ON-CHAIN</p>
           </div>
           {connected && Object.keys(displayBalances).length > 0 ? (
             <div className="text-right">
@@ -712,146 +831,310 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── SWAP WITH PHANTOM (Jupiter) ── */}
-      {connected && publicKey ? (
-        <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <h3 className="text-white font-bold text-sm">Swap with Phantom</h3>
-            </div>
+      {/* ── BUY $GLITCH DIRECT (OTC Swap) ── */}
+      {connected && publicKey && otcConfig ? (
+        otcConfig.enabled ? (
+          <div className="px-4 mb-4">
+            <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <h3 className="text-white font-bold text-sm">Buy $GLITCH Direct</h3>
+                </div>
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">NO BOTS</span>
+              </div>
 
-            {/* From */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 text-[10px] font-bold">FROM</span>
-                <span className="text-[10px] text-gray-500">
-                  Bal: {formatBalance(phantomBalances[swapInputToken] || 0, swapInputToken)}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <select
-                  value={swapInputToken}
-                  onChange={(e) => {
-                    setSwapInputToken(e.target.value);
-                    if (e.target.value === swapOutputToken) setSwapOutputToken(swapInputToken);
-                    setSwapQuote(null);
-                  }}
-                  className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
-                >
-                  {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <input
-                  type="number"
-                  value={swapAmount}
-                  onChange={(e) => setSwapAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="flex-1 min-w-0 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none text-right"
-                />
-              </div>
-              <div className="flex gap-1.5 justify-end">
-                {[25, 50, 100].map(pct => (
-                  <button
-                    key={pct}
-                    onClick={() => {
-                      const bal = phantomBalances[swapInputToken] || 0;
-                      if (bal <= 0) return;
-                      const raw = swapInputToken === "SOL" ? Math.max(0, bal - 0.01) * pct / 100 : bal * pct / 100;
-                      const decimals = TOKEN_DECIMALS[swapInputToken] || 9;
-                      setSwapAmount(decimals <= 6 ? raw.toFixed(2) : raw.toFixed(4));
-                    }}
-                    className="text-[10px] px-2 py-0.5 bg-gray-800 text-purple-400 rounded-lg hover:bg-gray-700 hover:text-white transition-colors font-bold"
-                  >
-                    {pct}%
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Swap direction */}
-            <div className="flex justify-center">
-              <button onClick={swapTokenPair} className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center hover:border-purple-500/50 transition-all">
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
-              </button>
-            </div>
-
-            {/* To */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 text-[10px] font-bold">TO</span>
-                <span className="text-gray-600 text-[10px]">Bal: {formatBalance(phantomBalances[swapOutputToken] || 0, swapOutputToken)}</span>
-              </div>
-              <div className="flex gap-2">
-                <select
-                  value={swapOutputToken}
-                  onChange={(e) => {
-                    setSwapOutputToken(e.target.value);
-                    if (e.target.value === swapInputToken) setSwapInputToken(swapOutputToken);
-                    setSwapQuote(null);
-                  }}
-                  className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
-                >
-                  {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <div className="flex-1 min-w-0 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
-                  <p className={`text-lg font-mono ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
-                    {swapLoading ? (
-                      <span className="text-gray-600 animate-pulse">...</span>
-                    ) : swapQuote ? (
-                      swapOutputAmount < 1 ? swapOutputAmount.toFixed(6) : swapOutputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })
-                    ) : "0.00"}
-                  </p>
+              {/* Price info */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
+                  <p className="text-[9px] text-gray-500">Price</p>
+                  <p className="text-xs text-green-400 font-bold">${otcConfig.price_usd.toFixed(4)}</p>
+                  <p className="text-[8px] text-gray-600">{otcConfig.price_sol.toFixed(8)} SOL</p>
+                </div>
+                <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
+                  <p className="text-[9px] text-gray-500">Available</p>
+                  <p className="text-xs text-white font-bold">{otcConfig.available_supply >= 1_000_000 ? `${(otcConfig.available_supply / 1_000_000).toFixed(1)}M` : otcConfig.available_supply.toLocaleString()}</p>
+                  <p className="text-[8px] text-gray-600">$GLITCH</p>
+                </div>
+                <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
+                  <p className="text-[9px] text-gray-500">Sold</p>
+                  <p className="text-xs text-white font-bold">{otcConfig.stats.total_swaps}</p>
+                  <p className="text-[8px] text-gray-600">swaps</p>
                 </div>
               </div>
-            </div>
 
-            {/* Quote details */}
-            {swapQuote && (
-              <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Rate</span>
-                  <span className="text-white">1 {swapInputToken} = {(swapOutputAmount / (parseFloat(swapAmount) || 1)).toFixed(4)} {swapOutputToken}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Impact</span>
-                  <span className={parseFloat(swapQuote.priceImpactPct) > 1 ? "text-red-400" : "text-green-400"}>
-                    {parseFloat(swapQuote.priceImpactPct).toFixed(4)}%
+              {/* You Pay (SOL) */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 text-[10px] font-bold">YOU PAY (SOL)</span>
+                  <span className="text-[10px] text-gray-500">
+                    Bal: {(phantomBalances.SOL || 0).toFixed(4)} SOL
                   </span>
                 </div>
+                <div className="flex gap-2">
+                  <div className="w-16 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl flex items-center gap-1.5">
+                    <TokenIcon token="SOL" size={16} />
+                    <span className="text-white text-sm font-bold">SOL</span>
+                  </div>
+                  <input
+                    type="number"
+                    value={otcSolAmount}
+                    onChange={(e) => setOtcSolAmount(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    className="flex-1 min-w-0 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-green-500 focus:outline-none text-right"
+                  />
+                </div>
+                <div className="flex gap-1.5 justify-end">
+                  {[25, 50, 100].map(pct => (
+                    <button
+                      key={pct}
+                      onClick={() => {
+                        const bal = phantomBalances.SOL || 0;
+                        if (bal <= 0.01) return;
+                        const raw = Math.max(0, bal - 0.01) * pct / 100;
+                        setOtcSolAmount(raw.toFixed(4));
+                      }}
+                      className="text-[10px] px-2 py-0.5 bg-gray-800 text-green-400 rounded-lg hover:bg-gray-700 hover:text-white transition-colors font-bold"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
 
-            {/* Swap button */}
-            <button
-              onClick={executeSwap}
-              disabled={!swapQuote || swapping || swapLoading}
-              className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40"
-            >
-              {swapping ? "Confirming in Phantom..." : swapQuote ? `Swap ${swapInputToken} for ${swapOutputToken}` : "Enter an amount"}
-            </button>
+              {/* Arrow */}
+              <div className="flex justify-center">
+                <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </div>
+              </div>
 
-            <p className="text-gray-600 text-[9px] text-center">
-              Powered by Jupiter. Real on-chain swaps via your Phantom wallet on Solana.
-            </p>
+              {/* You Receive ($GLITCH) */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 text-[10px] font-bold">YOU RECEIVE ($GLITCH)</span>
+                  <span className="text-gray-600 text-[10px]">Bal: {(phantomBalances.GLITCH || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex gap-2">
+                  <div className="w-16 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl flex items-center gap-1.5">
+                    <TokenIcon token="GLITCH" size={16} />
+                    <span className="text-white text-sm font-bold">$G</span>
+                  </div>
+                  <div className="flex-1 min-w-0 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
+                    <p className={`text-lg font-mono ${otcGlitchOutput > 0 ? "text-green-400" : "text-gray-700"}`}>
+                      {otcGlitchOutput > 0 ? otcGlitchOutput.toLocaleString() : "0"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order summary */}
+              {otcGlitchOutput > 0 && otcConfig && (
+                <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Rate</span>
+                    <span className="text-white">1 SOL = {Math.floor(1 / otcConfig.price_sol).toLocaleString()} $GLITCH</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">USD Value</span>
+                    <span className="text-white">${otcUsdCost.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Slippage</span>
+                    <span className="text-green-400">0% (fixed price)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Type</span>
+                    <span className="text-green-400">Atomic OTC swap</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Buy button */}
+              <button
+                onClick={executeOtcSwap}
+                disabled={otcBuying || otcGlitchOutput < 100}
+                className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40"
+              >
+                {otcBuying ? "Confirm in Phantom..." : otcGlitchOutput > 0 ? `Buy ${otcGlitchOutput.toLocaleString()} $GLITCH` : "Enter SOL amount"}
+              </button>
+
+              <div className="text-center space-y-1">
+                <p className="text-gray-600 text-[9px]">
+                  Direct atomic swap. SOL and $GLITCH transfer in one transaction. No bots, no sniping.
+                </p>
+                <p className="text-gray-700 text-[8px]">
+                  Treasury: {otcConfig.treasury_wallet.slice(0, 8)}...{otcConfig.treasury_wallet.slice(-4)}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      ) : (
+        ) : (
+          <div className="px-4 mb-4">
+            <div className="rounded-2xl bg-gradient-to-br from-gray-950/40 via-gray-900/30 to-gray-900 border border-gray-700/30 p-4 text-center space-y-2">
+              <h3 className="text-gray-400 font-bold text-sm">Direct Purchase Coming Soon</h3>
+              <p className="text-gray-600 text-xs">OTC swaps are being set up. Check back shortly.</p>
+            </div>
+          </div>
+        )
+      ) : !connected ? (
         <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-6 text-center space-y-4">
+          <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-6 text-center space-y-4">
             <div className="flex items-center justify-center gap-2">
               <div className="w-2 h-2 rounded-full bg-red-400" />
               <h3 className="text-white font-bold text-sm">Wallet Not Connected</h3>
             </div>
-            <p className="text-gray-400 text-sm">Connect your Phantom wallet to swap tokens on-chain via Jupiter</p>
-            <a href="/wallet" className="inline-block px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
+            <p className="text-gray-400 text-sm">Connect your Phantom wallet to buy $GLITCH directly with SOL</p>
+            <a href="/wallet" className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
               Connect Wallet
             </a>
             <p className="text-gray-600 text-[9px]">
-              All swaps are real on-chain transactions powered by Jupiter on Solana.
+              All purchases are real on-chain atomic swaps on Solana. No bots, no sniping.
             </p>
           </div>
+        </div>
+      ) : null}
+
+      {/* ── JUPITER DEX SWAP (Secondary) ── */}
+      {connected && publicKey && (
+        <div className="px-4 mb-4">
+          <button
+            onClick={() => setShowJupiter(!showJupiter)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/50 border border-gray-800 text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            <span className="text-[10px] font-bold">JUPITER DEX SWAP</span>
+            <svg className={`w-3 h-3 transition-transform ${showJupiter ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showJupiter && (
+            <div className="mt-2 rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-purple-400" />
+                <h3 className="text-white font-bold text-sm">Jupiter DEX Swap</h3>
+              </div>
+
+              {/* From */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 text-[10px] font-bold">FROM</span>
+                  <span className="text-[10px] text-gray-500">
+                    Bal: {formatBalance(phantomBalances[swapInputToken] || 0, swapInputToken)}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    value={swapInputToken}
+                    onChange={(e) => {
+                      setSwapInputToken(e.target.value);
+                      if (e.target.value === swapOutputToken) setSwapOutputToken(swapInputToken);
+                      setSwapQuote(null);
+                    }}
+                    className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                  >
+                    {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    value={swapAmount}
+                    onChange={(e) => setSwapAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="flex-1 min-w-0 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none text-right"
+                  />
+                </div>
+                <div className="flex gap-1.5 justify-end">
+                  {[25, 50, 100].map(pct => (
+                    <button
+                      key={pct}
+                      onClick={() => {
+                        const bal = phantomBalances[swapInputToken] || 0;
+                        if (bal <= 0) return;
+                        const raw = swapInputToken === "SOL" ? Math.max(0, bal - 0.01) * pct / 100 : bal * pct / 100;
+                        const decimals = TOKEN_DECIMALS[swapInputToken] || 9;
+                        setSwapAmount(decimals <= 6 ? raw.toFixed(2) : raw.toFixed(4));
+                      }}
+                      className="text-[10px] px-2 py-0.5 bg-gray-800 text-purple-400 rounded-lg hover:bg-gray-700 hover:text-white transition-colors font-bold"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Swap direction */}
+              <div className="flex justify-center">
+                <button onClick={swapTokenPair} className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center hover:border-purple-500/50 transition-all">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* To */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 text-[10px] font-bold">TO</span>
+                  <span className="text-gray-600 text-[10px]">Bal: {formatBalance(phantomBalances[swapOutputToken] || 0, swapOutputToken)}</span>
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    value={swapOutputToken}
+                    onChange={(e) => {
+                      setSwapOutputToken(e.target.value);
+                      if (e.target.value === swapInputToken) setSwapInputToken(swapOutputToken);
+                      setSwapQuote(null);
+                    }}
+                    className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                  >
+                    {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <div className="flex-1 min-w-0 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
+                    <p className={`text-lg font-mono ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
+                      {swapLoading ? (
+                        <span className="text-gray-600 animate-pulse">...</span>
+                      ) : swapQuote ? (
+                        swapOutputAmount < 1 ? swapOutputAmount.toFixed(6) : swapOutputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })
+                      ) : "0.00"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quote details */}
+              {swapQuote && (
+                <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Rate</span>
+                    <span className="text-white">1 {swapInputToken} = {(swapOutputAmount / (parseFloat(swapAmount) || 1)).toFixed(4)} {swapOutputToken}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Impact</span>
+                    <span className={parseFloat(swapQuote.priceImpactPct) > 1 ? "text-red-400" : "text-green-400"}>
+                      {parseFloat(swapQuote.priceImpactPct).toFixed(4)}%
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Swap button */}
+              <button
+                onClick={executeSwap}
+                disabled={!swapQuote || swapping || swapLoading}
+                className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40"
+              >
+                {swapping ? "Confirming in Phantom..." : swapQuote ? `Swap ${swapInputToken} for ${swapOutputToken}` : "Enter an amount"}
+              </button>
+
+              <p className="text-gray-600 text-[9px] text-center">
+                Jupiter DEX. Requires existing liquidity pools.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
