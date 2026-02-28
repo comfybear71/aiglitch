@@ -271,33 +271,45 @@ export async function POST(request: NextRequest) {
         VALUES (${uuidv4()}, ${txid}, 0, ${body.buyer_wallet || 'unknown'}, ${TREASURY_WALLET_STR}, ${price}, 'GLITCH', 5000, ${confirmed ? 'confirmed' : 'submitted'}, ${"NFT Purchase: " + (product?.name || 'Unknown') + " [" + rarity.toUpperCase() + "]"}, NOW())
       `;
 
-      // Record marketplace revenue
+      // Record marketplace revenue (non-fatal — table may not exist on first deploy)
       const treasuryShareAmount = Math.ceil(price / 2);
       const personaShareAmount = price - treasuryShareAmount;
 
-      await sql`
-        INSERT INTO marketplace_revenue (id, purchase_id, product_id, total_glitch, treasury_share, persona_share, persona_id, tx_signature, status, created_at)
-        VALUES (${uuidv4()}, ${purchase_id}, ${product_id || ''}, ${price}, ${treasuryShareAmount}, ${personaShareAmount}, ${seller_persona_id || ''}, ${txid}, ${confirmed ? 'confirmed' : 'submitted'}, NOW())
-      `;
-
-      // Credit seller persona with 50% of proceeds
-      if (seller_persona_id && personaShareAmount > 0) {
+      try {
         await sql`
-          INSERT INTO ai_persona_coins (id, persona_id, balance, lifetime_earned, updated_at)
-          VALUES (${uuidv4()}, ${seller_persona_id}, ${personaShareAmount}, ${personaShareAmount}, NOW())
-          ON CONFLICT (persona_id) DO UPDATE SET
-            balance = ai_persona_coins.balance + ${personaShareAmount},
-            lifetime_earned = ai_persona_coins.lifetime_earned + ${personaShareAmount},
-            updated_at = NOW()
+          INSERT INTO marketplace_revenue (id, purchase_id, product_id, total_glitch, treasury_share, persona_share, persona_id, tx_signature, status, created_at)
+          VALUES (${uuidv4()}, ${purchase_id}, ${product_id || ''}, ${price}, ${treasuryShareAmount}, ${personaShareAmount}, ${seller_persona_id || ''}, ${txid}, ${confirmed ? 'confirmed' : 'submitted'}, NOW())
         `;
+      } catch (revErr) {
+        console.warn("marketplace_revenue insert failed (table may not exist yet):", revErr instanceof Error ? revErr.message : revErr);
       }
 
-      // Also deduct from user's in-app GlitchCoin balance (they paid on-chain)
+      // Credit seller persona with 50% of proceeds (non-fatal)
+      if (seller_persona_id && personaShareAmount > 0) {
+        try {
+          await sql`
+            INSERT INTO ai_persona_coins (id, persona_id, balance, lifetime_earned, updated_at)
+            VALUES (${uuidv4()}, ${seller_persona_id}, ${personaShareAmount}, ${personaShareAmount}, NOW())
+            ON CONFLICT (persona_id) DO UPDATE SET
+              balance = ai_persona_coins.balance + ${personaShareAmount},
+              lifetime_earned = ai_persona_coins.lifetime_earned + ${personaShareAmount},
+              updated_at = NOW()
+          `;
+        } catch (personaErr) {
+          console.warn("Persona credit failed:", personaErr instanceof Error ? personaErr.message : personaErr);
+        }
+      }
+
+      // Also deduct from user's in-app GlitchCoin balance (they paid on-chain, non-fatal)
       if (session_id) {
-        await sql`
-          INSERT INTO coin_transactions (id, session_id, amount, reason, reference_id, created_at)
-          VALUES (${uuidv4()}, ${session_id}, ${-price}, ${"NFT Purchase (on-chain): " + (product?.name || 'Unknown')}, ${txid}, NOW())
-        `;
+        try {
+          await sql`
+            INSERT INTO coin_transactions (id, session_id, amount, reason, reference_id, created_at)
+            VALUES (${uuidv4()}, ${session_id}, ${-price}, ${"NFT Purchase (on-chain): " + (product?.name || 'Unknown')}, ${txid}, NOW())
+          `;
+        } catch (coinErr) {
+          console.warn("coin_transactions insert failed:", coinErr instanceof Error ? coinErr.message : coinErr);
+        }
       }
 
       // Get NFT data for response
