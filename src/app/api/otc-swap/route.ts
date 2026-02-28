@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
       const swaps = await sql`
         SELECT id, glitch_amount, sol_cost, price_per_glitch, tx_signature, status, created_at, completed_at
         FROM otc_swaps
-        WHERE buyer_wallet = ${wallet} AND status = 'completed'
+        WHERE buyer_wallet = ${wallet} AND status IN ('completed', 'submitted')
         ORDER BY created_at DESC LIMIT 50
       `;
       return NextResponse.json({ swaps });
@@ -410,15 +410,46 @@ export async function POST(request: NextRequest) {
     try {
       const connection = getServerSolanaConnection();
       const txBuf = Buffer.from(signed_transaction, "base64");
+
+      // Send the raw transaction
       const txid = await connection.sendRawTransaction(txBuf, {
-        skipPreflight: true,
+        skipPreflight: false,  // Run preflight to catch errors before sending
         maxRetries: 3,
       });
+
+      console.log(`OTC swap ${swap_id} submitted: ${txid}`);
+
+      // Wait for on-chain confirmation (up to 30 seconds)
+      let confirmed = false;
+      try {
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+        const confirmation = await connection.confirmTransaction(
+          { signature: txid, blockhash, lastValidBlockHeight },
+          "confirmed"
+        );
+        if (confirmation.value.err) {
+          console.error(`TX ${txid} confirmed but FAILED on-chain:`, confirmation.value.err);
+          await sql`
+            UPDATE otc_swaps
+            SET status = 'failed', tx_signature = ${txid}, completed_at = NOW()
+            WHERE id = ${swap_id} AND status = 'pending'
+          `;
+          return NextResponse.json({
+            error: `Transaction failed on-chain. TX: ${txid}`,
+            tx_signature: txid,
+          }, { status: 400 });
+        }
+        confirmed = true;
+        console.log(`OTC swap ${swap_id} CONFIRMED on-chain: ${txid}`);
+      } catch (confirmErr) {
+        // Confirmation timed out — tx may still land, mark as submitted
+        console.warn(`TX ${txid} confirmation timeout:`, confirmErr instanceof Error ? confirmErr.message : confirmErr);
+      }
 
       // Update swap record
       await sql`
         UPDATE otc_swaps
-        SET status = 'completed', tx_signature = ${txid}, completed_at = NOW()
+        SET status = ${confirmed ? "completed" : "submitted"}, tx_signature = ${txid}, completed_at = NOW()
         WHERE id = ${swap_id} AND status = 'pending'
       `;
 
@@ -440,7 +471,10 @@ export async function POST(request: NextRequest) {
         success: true,
         swap_id,
         tx_signature: txid,
-        message: "Swap confirmed! $GLITCH tokens are in your wallet.",
+        confirmed,
+        message: confirmed
+          ? "Swap confirmed on-chain! $GLITCH tokens are in your wallet."
+          : "Swap submitted — confirming on-chain. Check Solscan for status.",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Submission failed";

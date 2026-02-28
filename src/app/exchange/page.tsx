@@ -52,6 +52,7 @@ export default function ExchangePage() {
   const [solBalance, setSolBalance] = useState(0);
   const [glitchBalance, setGlitchBalance] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -189,13 +190,21 @@ export default function ExchangePage() {
         return;
       }
 
-      showToast("success", `Bought ${glitchAmount.toLocaleString()} $GLITCH! TX: ${submitData.tx_signature.slice(0, 12)}...`);
+      setLastTxSignature(submitData.tx_signature);
+      showToast("success", `Bought ${glitchAmount.toLocaleString()} $GLITCH!`);
       setSolAmount("");
+      // Refresh immediately + again after confirmation settles
+      fetchBalances();
+      fetchOtcConfig();
+      fetchHistory();
       setTimeout(() => {
         fetchBalances();
         fetchOtcConfig();
         fetchHistory();
-      }, 3000);
+      }, 5000);
+      setTimeout(() => {
+        fetchBalances();
+      }, 12000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Swap failed";
       showToast("error", msg.includes("User rejected") ? "Transaction cancelled" : msg);
@@ -266,6 +275,29 @@ export default function ExchangePage() {
           </div>
         </div>
       ) : null}
+
+      {/* Last TX banner */}
+      {lastTxSignature && connected && (
+        <div className="px-4 pt-2">
+          <a
+            href={`https://solscan.io/tx/${lastTxSignature}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-green-950/50 border border-green-500/30 hover:border-green-400/50 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-400" />
+              <span className="text-green-400 text-[10px] font-bold">LAST TX</span>
+              <span className="text-gray-400 text-[10px] font-mono">
+                {lastTxSignature.slice(0, 12)}...{lastTxSignature.slice(-6)}
+              </span>
+            </div>
+            <span className="text-purple-400 text-[10px] group-hover:text-purple-300">
+              View on Solscan &rarr;
+            </span>
+          </a>
+        </div>
+      )}
 
       {/* ── OTC SWAP INTERFACE ── */}
       {connected && publicKey ? (
@@ -573,6 +605,16 @@ export default function ExchangePage() {
             <p className={`text-sm font-bold ${toast.type === "success" ? "text-green-300" : "text-red-300"}`}>
               {toast.message}
             </p>
+            {toast.type === "success" && lastTxSignature && (
+              <a
+                href={`https://solscan.io/tx/${lastTxSignature}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-2 text-xs text-purple-400 hover:text-purple-300 underline"
+              >
+                View on Solscan &rarr;
+              </a>
+            )}
           </div>
         </div>
       )}
