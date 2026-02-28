@@ -1,4 +1,4 @@
-import { type MarketplaceProduct } from "@/lib/marketplace";
+import { type MarketplaceProduct, MARKETPLACE_PRODUCTS } from "@/lib/marketplace";
 
 // Rarity config with colors, borders, and holographic effects
 const RARITY_CONFIG: Record<string, {
@@ -81,10 +81,11 @@ function getCardStats(product: MarketplaceProduct) {
   };
 }
 
-// Get the card number (001/045)
+// Get the card number (001/055, etc.)
 function getCardNumber(productId: string): string {
   const num = parseInt(productId.replace("prod-", ""));
-  return `#${String(num).padStart(3, "0")}/045`;
+  const total = String(MARKETPLACE_PRODUCTS.length).padStart(3, "0");
+  return `#${String(num).padStart(3, "0")}/${total}`;
 }
 
 interface NFTTradingCardProps {

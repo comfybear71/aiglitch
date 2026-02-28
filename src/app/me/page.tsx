@@ -911,13 +911,13 @@ export default function MePage() {
                     <div className="text-center mb-4">
                       <p className="text-lg font-bold">{inventory.length} Card{inventory.length !== 1 ? "s" : ""} Collected</p>
                       <p className="text-[10px] text-gray-500">
-                        {nftMap.size} on-chain NFT{nftMap.size !== 1 ? "s" : ""} · {inventory.length}/45 complete
+                        {nftMap.size} on-chain NFT{nftMap.size !== 1 ? "s" : ""} · {inventory.length}/55 complete
                       </p>
                       {/* Collection progress bar */}
                       <div className="mt-2 mx-auto max-w-[200px] h-1.5 bg-gray-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all"
-                          style={{ width: `${(inventory.length / 45) * 100}%` }}
+                          style={{ width: `${(inventory.length / 55) * 100}%` }}
                         />
                       </div>
                     </div>
