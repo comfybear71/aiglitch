@@ -95,6 +95,15 @@ interface OtcConfig {
   max_purchase: number;
   treasury_wallet: string;
   stats: { total_swaps: number; total_glitch_sold: number; total_sol_received: number };
+  bonding_curve: {
+    tier: number;
+    tier_size: number;
+    remaining_in_tier: number;
+    next_price_usd: number;
+    next_price_sol: number;
+    base_price_usd: number;
+    increment_usd: number;
+  };
 }
 
 type ViewTab = "chart" | "pool" | "activity" | "history";
@@ -847,21 +856,40 @@ export default function ExchangePage() {
               {/* Price info */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
-                  <p className="text-[9px] text-gray-500">Price</p>
-                  <p className="text-xs text-green-400 font-bold">${otcConfig.price_usd.toFixed(4)}</p>
+                  <p className="text-[9px] text-gray-500">Current Price</p>
+                  <p className="text-sm text-green-400 font-bold">${otcConfig.price_usd.toFixed(2)}</p>
                   <p className="text-[8px] text-gray-600">{otcConfig.price_sol.toFixed(8)} SOL</p>
                 </div>
                 <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
-                  <p className="text-[9px] text-gray-500">Available</p>
-                  <p className="text-xs text-white font-bold">{otcConfig.available_supply >= 1_000_000 ? `${(otcConfig.available_supply / 1_000_000).toFixed(1)}M` : otcConfig.available_supply.toLocaleString()}</p>
-                  <p className="text-[8px] text-gray-600">$GLITCH</p>
+                  <p className="text-[9px] text-gray-500">Next Price</p>
+                  <p className="text-sm text-yellow-400 font-bold">${otcConfig.bonding_curve.next_price_usd.toFixed(2)}</p>
+                  <p className="text-[8px] text-gray-600">after {otcConfig.bonding_curve.remaining_in_tier.toLocaleString()}</p>
                 </div>
                 <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
-                  <p className="text-[9px] text-gray-500">Sold</p>
-                  <p className="text-xs text-white font-bold">{otcConfig.stats.total_swaps}</p>
-                  <p className="text-[8px] text-gray-600">swaps</p>
+                  <p className="text-[9px] text-gray-500">Total Sold</p>
+                  <p className="text-sm text-white font-bold">{otcConfig.stats.total_glitch_sold >= 1000 ? `${(otcConfig.stats.total_glitch_sold / 1000).toFixed(1)}K` : otcConfig.stats.total_glitch_sold.toLocaleString()}</p>
+                  <p className="text-[8px] text-gray-600">$GLITCH</p>
                 </div>
               </div>
+
+              {/* Bonding curve progress */}
+              {otcConfig.bonding_curve && (
+                <div className="p-2 rounded-lg bg-black/30 border border-gray-800 space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px]">
+                    <span className="text-gray-500 font-bold">PRICE TIER {otcConfig.bonding_curve.tier + 1}</span>
+                    <span className="text-gray-500">{otcConfig.bonding_curve.remaining_in_tier.toLocaleString()} until ${otcConfig.bonding_curve.next_price_usd.toFixed(2)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-green-500 to-yellow-500 rounded-full transition-all"
+                      style={{ width: `${((otcConfig.bonding_curve.tier_size - otcConfig.bonding_curve.remaining_in_tier) / otcConfig.bonding_curve.tier_size) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-[8px] text-gray-600 text-center">
+                    Price increases ${otcConfig.bonding_curve.increment_usd.toFixed(2)} every {otcConfig.bonding_curve.tier_size.toLocaleString()} $GLITCH sold
+                  </p>
+                </div>
+              )}
 
               {/* You Pay (SOL) */}
               <div className="space-y-1">

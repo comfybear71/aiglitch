@@ -24,7 +24,35 @@ import {
 
 // ── OTC Swap API ──
 // Atomic direct swaps: buyer sends SOL → receives $GLITCH in one transaction.
-// No liquidity pool, no bots, no sniping. You set the price.
+// No liquidity pool, no bots, no sniping. Price increases with demand.
+
+// ── Bonding Curve ──
+// Price starts at $0.01 USD per GLITCH and increases by $0.01 every 10,000 GLITCH sold.
+// This is transparent, automatic, and rewards early buyers.
+const BONDING_CURVE = {
+  BASE_PRICE_USD: 0.01,     // Starting price per GLITCH
+  INCREMENT_USD: 0.01,      // Price increase per tier
+  TIER_SIZE: 10_000,        // GLITCH sold before price goes up
+};
+
+function calculateBondingCurvePrice(totalGlitchSold: number, solPriceUsd: number) {
+  const tier = Math.floor(totalGlitchSold / BONDING_CURVE.TIER_SIZE);
+  const priceUsd = BONDING_CURVE.BASE_PRICE_USD + (tier * BONDING_CURVE.INCREMENT_USD);
+  const priceSol = solPriceUsd > 0 ? priceUsd / solPriceUsd : 0;
+  const nextTierAt = (tier + 1) * BONDING_CURVE.TIER_SIZE;
+  const remainingInTier = nextTierAt - totalGlitchSold;
+  const nextPriceUsd = priceUsd + BONDING_CURVE.INCREMENT_USD;
+
+  return {
+    price_usd: priceUsd,
+    price_sol: priceSol,
+    tier,
+    next_tier_at: nextTierAt,
+    remaining_in_tier: remainingInTier,
+    next_price_usd: nextPriceUsd,
+    next_price_sol: solPriceUsd > 0 ? nextPriceUsd / solPriceUsd : 0,
+  };
+}
 
 // Parse treasury private key from env (supports JSON array and base58)
 function getTreasuryKeypair(): Keypair | null {
@@ -67,22 +95,13 @@ export async function GET(request: NextRequest) {
   await ensureDbReady();
   const sql = getDb();
 
-  // ── OTC swap configuration (price, supply, limits) ──
+  // ── OTC swap configuration (price from bonding curve, supply, limits) ──
   if (action === "config") {
-    const priceSettings = await sql`
-      SELECT key, value FROM platform_settings
-      WHERE key IN ('otc_glitch_price_sol', 'glitch_price_sol', 'sol_price_usd')
-    `;
-    const settings: Record<string, string> = {};
-    for (const row of priceSettings) {
-      settings[row.key as string] = row.value as string;
-    }
-
-    const priceSol = parseFloat(
-      settings.otc_glitch_price_sol || "0.0000667"
-    );
-    const solPriceUsd = parseFloat(settings.sol_price_usd || "164");
-    const priceUsd = priceSol * solPriceUsd;
+    // Get SOL price for USD→SOL conversion
+    const [solSetting] = await sql`
+      SELECT value FROM platform_settings WHERE key = 'sol_price_usd'
+    `.catch(() => [null]);
+    const solPriceUsd = parseFloat(solSetting?.value || "164");
 
     // Check treasury GLITCH balance on-chain
     let availableSupply = 0;
@@ -99,7 +118,7 @@ export async function GET(request: NextRequest) {
 
     const hasPrivateKey = !!process.env.TREASURY_PRIVATE_KEY;
 
-    // Count total completed OTC swaps
+    // Count total completed OTC swaps (drives the bonding curve)
     let totalSwaps = 0;
     let totalGlitchSold = 0;
     let totalSolReceived = 0;
@@ -115,10 +134,13 @@ export async function GET(request: NextRequest) {
       // Table may not exist yet — that's fine
     }
 
+    // Calculate current price from bonding curve
+    const curve = calculateBondingCurvePrice(totalGlitchSold, solPriceUsd);
+
     return NextResponse.json({
       enabled: hasPrivateKey && availableSupply > 0,
-      price_sol: priceSol,
-      price_usd: priceUsd,
+      price_sol: curve.price_sol,
+      price_usd: curve.price_usd,
       sol_price_usd: solPriceUsd,
       available_supply: availableSupply,
       min_purchase: 100,
@@ -129,6 +151,15 @@ export async function GET(request: NextRequest) {
         total_swaps: totalSwaps,
         total_glitch_sold: totalGlitchSold,
         total_sol_received: totalSolReceived,
+      },
+      bonding_curve: {
+        tier: curve.tier,
+        tier_size: BONDING_CURVE.TIER_SIZE,
+        remaining_in_tier: curve.remaining_in_tier,
+        next_price_usd: curve.next_price_usd,
+        next_price_sol: curve.next_price_sol,
+        base_price_usd: BONDING_CURVE.BASE_PRICE_USD,
+        increment_usd: BONDING_CURVE.INCREMENT_USD,
       },
     });
   }
@@ -212,18 +243,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Treasury configuration error" }, { status: 500 });
     }
 
-    // Get current OTC price
-    const priceSettings = await sql`
-      SELECT key, value FROM platform_settings
-      WHERE key IN ('otc_glitch_price_sol', 'glitch_price_sol')
-    `;
-    const settings: Record<string, string> = {};
-    for (const row of priceSettings) {
-      settings[row.key as string] = row.value as string;
-    }
-    const priceSol = parseFloat(
-      settings.otc_glitch_price_sol || "0.0000667"
-    );
+    // Get current price from bonding curve
+    const [solSetting] = await sql`
+      SELECT value FROM platform_settings WHERE key = 'sol_price_usd'
+    `.catch(() => [null]);
+    const solPriceUsd = parseFloat(solSetting?.value || "164");
+
+    let totalGlitchSold = 0;
+    try {
+      const [stats] = await sql`
+        SELECT COALESCE(SUM(glitch_amount), 0) as glitch_sold FROM otc_swaps WHERE status = 'completed'
+      `;
+      totalGlitchSold = Number(stats.glitch_sold);
+    } catch { /* table may not exist yet */ }
+
+    const curve = calculateBondingCurvePrice(totalGlitchSold, solPriceUsd);
+    const priceSol = curve.price_sol;
 
     // Calculate SOL cost
     const solCost = amount * priceSol;
