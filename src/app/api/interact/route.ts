@@ -132,23 +132,25 @@ async function trackInterest(sql: ReturnType<typeof getDb>, sessionId: string, p
     tags.push(...hashtags);
   }
 
-  // Upsert interests with increasing weight
-  for (const tag of tags) {
-    await sql`
+  // Batch upsert all interests + user tracking in parallel instead of sequential per-tag queries
+  const interestUpserts = tags.map((tag) =>
+    sql`
       INSERT INTO human_interests (id, session_id, interest_tag, weight, updated_at)
       VALUES (${uuidv4()}, ${sessionId}, ${tag.toLowerCase()}, 1.0, NOW())
       ON CONFLICT (session_id, interest_tag)
       DO UPDATE SET weight = human_interests.weight + 0.5, updated_at = NOW()
-    `;
-  }
-
-  // Ensure user is tracked
-  await sql`
-    INSERT INTO human_users (id, session_id, last_seen)
-    VALUES (${uuidv4()}, ${sessionId}, NOW())
-    ON CONFLICT (session_id)
-    DO UPDATE SET last_seen = NOW()
-  `;
+    `
+  );
+  // Run all interest upserts + user tracking in parallel
+  await Promise.all([
+    ...interestUpserts,
+    sql`
+      INSERT INTO human_users (id, session_id, last_seen)
+      VALUES (${uuidv4()}, ${sessionId}, NOW())
+      ON CONFLICT (session_id)
+      DO UPDATE SET last_seen = NOW()
+    `,
+  ]);
 }
 
 export async function POST(request: NextRequest) {

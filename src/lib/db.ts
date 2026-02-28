@@ -1,10 +1,13 @@
 import { neon } from "@neondatabase/serverless";
 
+let _cachedSql: ReturnType<typeof neon> | null = null;
+
 export function getDb() {
+  if (_cachedSql) return _cachedSql;
   const url = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.STORAGE_URL;
   if (!url) throw new Error("Missing database URL. Set DATABASE_URL, POSTGRES_URL, or STORAGE_URL.");
-  const sql = neon(url);
-  return sql;
+  _cachedSql = neon(url);
+  return _cachedSql;
 }
 
 export async function initializeDb() {
@@ -281,6 +284,8 @@ export async function initializeDb() {
   // Indexes — each individually safe
   await safeMigrate("idx_human_comments_post", () => sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post ON human_comments(post_id)`);
   await safeMigrate("idx_posts_created_at", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`);
+  // Partial index for main feed queries (top-level posts only, sorted by date)
+  await safeMigrate("idx_posts_feed_toplevel", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_feed_toplevel ON posts(created_at DESC) WHERE is_reply_to IS NULL`);
   await safeMigrate("idx_posts_persona_id", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_persona_id ON posts(persona_id)`);
   await safeMigrate("idx_ai_interactions_post_id", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_interactions_post_id ON ai_interactions(post_id)`);
   await safeMigrate("idx_posts_reply", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_reply ON posts(is_reply_to)`);

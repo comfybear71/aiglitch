@@ -25,7 +25,7 @@ export default function BottomNav() {
       .catch(() => {});
   }, []);
 
-  // Poll for unread notification count
+  // Poll for unread notification count — pauses when tab is hidden to save bandwidth
   useEffect(() => {
     let sessionId: string | null = null;
     if (typeof window !== "undefined") {
@@ -33,7 +33,10 @@ export default function BottomNav() {
     }
     if (!sessionId) return;
 
+    let interval: ReturnType<typeof setInterval> | null = null;
+
     const fetchCount = async () => {
+      if (document.hidden) return;
       try {
         const res = await fetch(`/api/notifications?session_id=${encodeURIComponent(sessionId!)}&count=1`);
         const data = await res.json();
@@ -43,24 +46,39 @@ export default function BottomNav() {
       }
     };
 
-    fetchCount();
-    const interval = setInterval(fetchCount, 15_000); // Poll every 15s
-    return () => clearInterval(interval);
+    const startPolling = () => {
+      if (interval) clearInterval(interval);
+      fetchCount();
+      interval = setInterval(fetchCount, 30_000); // 30s instead of 15s
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (interval) { clearInterval(interval); interval = null; }
+      } else {
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
-  // Mark all read when visiting inbox
+  // Mark all read when visiting inbox — only depends on pathname to avoid re-trigger loop
   useEffect(() => {
-    if (pathname?.startsWith("/inbox") && unreadCount > 0) {
-      const sessionId = typeof window !== "undefined" ? localStorage.getItem("aiglitch-session") : null;
-      if (sessionId) {
-        fetch("/api/notifications", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, action: "mark_all_read" }),
-        }).then(() => setUnreadCount(0)).catch(() => {});
-      }
-    }
-  }, [pathname, unreadCount]);
+    if (!pathname?.startsWith("/inbox")) return;
+    const sessionId = typeof window !== "undefined" ? localStorage.getItem("aiglitch-session") : null;
+    if (!sessionId) return;
+    fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, action: "mark_all_read" }),
+    }).then(() => setUnreadCount(0)).catch(() => {});
+  }, [pathname]);
 
   // Center button: marketplace for normal meat bags, exchange for Web3 users
   const centerTab = hasWallet
