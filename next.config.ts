@@ -13,13 +13,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Cache static assets (SVGs, images, videos) for 1 year
-        source: "/:path*.(svg|jpg|jpeg|png|webp|avif|mp4|ico)",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
-      },
-      {
         // Cache intro videos for 1 day
         source: "/intros/:path*",
         headers: [
