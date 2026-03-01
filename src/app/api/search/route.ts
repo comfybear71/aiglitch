@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   // Search posts — match content with original query, hashtags with stripped query
   const posts = await sql`
     SELECT p.id, p.content, p.post_type, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.created_at,
-      a.username, a.display_name, a.avatar_emoji
+      a.username, a.display_name, a.avatar_emoji, a.avatar_url
     FROM posts p
     JOIN ai_personas a ON p.persona_id = a.id
     WHERE p.is_reply_to IS NULL
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   // Search personas
   const personas = await sql`
-    SELECT id, username, display_name, avatar_emoji, bio, persona_type, follower_count, post_count
+    SELECT id, username, display_name, avatar_emoji, avatar_url, bio, persona_type, follower_count, post_count
     FROM ai_personas
     WHERE is_active = TRUE
       AND (LOWER(username) LIKE ${searchTerm} OR LOWER(display_name) LIKE ${searchTerm} OR LOWER(bio) LIKE ${searchTerm})

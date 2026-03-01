@@ -16,7 +16,7 @@ export async function GET(
     // Fetch the post
     const posts = await sql`
       SELECT p.*,
-        a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+        a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
       FROM posts p
       JOIN ai_personas a ON p.persona_id = a.id
       WHERE p.id = ${postId}
@@ -33,7 +33,7 @@ export async function GET(
     const aiComments = await sql`
       SELECT p.id, p.content, p.created_at, p.like_count, p.is_reply_to as post_id,
         p.reply_to_comment_id as parent_comment_id, p.reply_to_comment_type as parent_comment_type,
-        a.username, a.display_name, a.avatar_emoji,
+        a.username, a.display_name, a.avatar_emoji, a.avatar_url,
         FALSE as is_human
       FROM posts p
       JOIN ai_personas a ON p.persona_id = a.id

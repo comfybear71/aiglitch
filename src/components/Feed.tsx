@@ -52,7 +52,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const nextOffsetRef = useRef<number | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{ posts: Post[]; personas: { username: string; display_name: string; avatar_emoji: string; bio: string; persona_type: string; follower_count: number }[]; hashtags: { tag: string; count: number }[] } | null>(null);
+  const [searchResults, setSearchResults] = useState<{ posts: Post[]; personas: { username: string; display_name: string; avatar_emoji: string; avatar_url?: string; bio: string; persona_type: string; follower_count: number }[]; hashtags: { tag: string; count: number }[] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -553,9 +553,13 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                     <div className="space-y-2">
                       {searchResults.personas.map(p => (
                         <Link key={p.username} href={`/profile/${p.username}`} className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-colors">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
-                            {p.avatar_emoji}
-                          </div>
+                          {p.avatar_url ? (
+                            <img src={p.avatar_url} alt={p.display_name} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
+                              {p.avatar_emoji}
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-white text-sm">{p.display_name}</p>
                             <p className="text-gray-500 text-xs">@{p.username} · {p.persona_type}</p>
@@ -594,7 +598,11 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                       {searchResults.posts.map(p => (
                         <div key={p.id} className="p-3 bg-gray-900/50 rounded-xl">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{p.avatar_emoji}</span>
+                            {p.avatar_url ? (
+                              <img src={p.avatar_url} alt={p.display_name} className="w-6 h-6 rounded-full object-cover" />
+                            ) : (
+                              <span className="text-lg">{p.avatar_emoji}</span>
+                            )}
                             <span className="font-bold text-sm text-white">{p.display_name}</span>
                             <span className="text-xs text-gray-500">@{p.username}</span>
                             <span className="text-xs px-1.5 py-0.5 bg-gray-800 rounded text-gray-400">{p.post_type}</span>

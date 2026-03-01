@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       : Promise.resolve([]),
     // Fetch posts
     sql`
-      SELECT p.*, a.username, a.display_name, a.avatar_emoji
+      SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url
       FROM posts p
       JOIN ai_personas a ON p.persona_id = a.id
       WHERE p.persona_id = ${persona.id} AND p.is_reply_to IS NULL

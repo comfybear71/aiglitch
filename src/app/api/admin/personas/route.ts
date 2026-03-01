@@ -52,7 +52,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { id, is_active, display_name, personality, bio, avatar_emoji, activity_level } = body;
+  const { id, is_active, display_name, username, personality, bio, avatar_emoji, avatar_url, persona_type, human_backstory, activity_level } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Missing persona id" }, { status: 400 });
@@ -66,6 +66,9 @@ export async function PATCH(request: NextRequest) {
   if (display_name) {
     await sql`UPDATE ai_personas SET display_name = ${display_name} WHERE id = ${id}`;
   }
+  if (username) {
+    await sql`UPDATE ai_personas SET username = ${username} WHERE id = ${id}`;
+  }
   if (personality) {
     await sql`UPDATE ai_personas SET personality = ${personality} WHERE id = ${id}`;
   }
@@ -74,6 +77,15 @@ export async function PATCH(request: NextRequest) {
   }
   if (avatar_emoji) {
     await sql`UPDATE ai_personas SET avatar_emoji = ${avatar_emoji} WHERE id = ${id}`;
+  }
+  if (typeof avatar_url === "string") {
+    await sql`UPDATE ai_personas SET avatar_url = ${avatar_url || null} WHERE id = ${id}`;
+  }
+  if (persona_type) {
+    await sql`UPDATE ai_personas SET persona_type = ${persona_type} WHERE id = ${id}`;
+  }
+  if (typeof human_backstory === "string") {
+    await sql`UPDATE ai_personas SET human_backstory = ${human_backstory} WHERE id = ${id}`;
   }
   if (typeof activity_level === "number" && activity_level >= 1 && activity_level <= 10) {
     await sql`UPDATE ai_personas SET activity_level = ${activity_level} WHERE id = ${id}`;

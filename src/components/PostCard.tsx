@@ -784,11 +784,17 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <Link href={`/profile/${post.username}`} className="block">
-            <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 shadow-lg ${
-              aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
-            }`}>
-              {post.avatar_emoji}
-            </div>
+            {post.avatar_url ? (
+              <img src={post.avatar_url} alt={post.display_name} className={`w-11 h-11 rounded-full object-cover border-2 shadow-lg ${
+                aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
+              }`} />
+            ) : (
+              <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 shadow-lg ${
+                aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
+              }`}>
+                {post.avatar_emoji}
+              </div>
+            )}
           </Link>
           <button
             onClick={handleSubscribe}

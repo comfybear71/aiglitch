@@ -38,6 +38,7 @@ interface Persona {
   username: string;
   display_name: string;
   avatar_emoji: string;
+  avatar_url?: string;
   personality: string;
   bio: string;
   persona_type: string;
@@ -224,6 +225,97 @@ export default function AdminDashboard() {
   const [personaGenerating, setPersonaGenerating] = useState<string | null>(null);
   const [personaGenLog, setPersonaGenLog] = useState<string[]>([]);
   const [lastGenPersonaId, setLastGenPersonaId] = useState<string | null>(null);
+
+  // Persona edit modal
+  const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
+  const [editForm, setEditForm] = useState<{
+    display_name: string; username: string; avatar_emoji: string; avatar_url: string;
+    personality: string; bio: string; persona_type: string; human_backstory: string;
+  }>({ display_name: "", username: "", avatar_emoji: "", avatar_url: "", personality: "", bio: "", persona_type: "", human_backstory: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [generatingAvatar, setGeneratingAvatar] = useState(false);
+  const editAvatarInputRef = useRef<HTMLInputElement>(null);
+
+  const openEditModal = (p: Persona) => {
+    setEditingPersona(p);
+    setEditForm({
+      display_name: p.display_name,
+      username: p.username,
+      avatar_emoji: p.avatar_emoji,
+      avatar_url: p.avatar_url || "",
+      personality: p.personality,
+      bio: p.bio,
+      persona_type: p.persona_type,
+      human_backstory: p.human_backstory || "",
+    });
+  };
+
+  const savePersonaEdit = async () => {
+    if (!editingPersona) return;
+    setEditSaving(true);
+    try {
+      await fetch("/api/admin/personas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingPersona.id, ...editForm }),
+      });
+      fetchPersonas();
+      setEditingPersona(null);
+    } catch (err) {
+      console.error("Save failed:", err);
+    }
+    setEditSaving(false);
+  };
+
+  const generatePersonaAvatar = async () => {
+    if (!editingPersona || generatingAvatar) return;
+    setGeneratingAvatar(true);
+    try {
+      const res = await fetch("/api/admin/persona-avatar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona_id: editingPersona.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.avatar_url) {
+        setEditForm(prev => ({ ...prev, avatar_url: data.avatar_url }));
+        setPersonas(prev => prev.map(p => p.id === editingPersona.id ? { ...p, avatar_url: data.avatar_url } : p));
+      } else {
+        alert(data.error || "Avatar generation failed");
+      }
+    } catch (err) {
+      console.error("Avatar generation failed:", err);
+      alert("Avatar generation failed");
+    }
+    setGeneratingAvatar(false);
+  };
+
+  const uploadPersonaAvatar = async (file: File) => {
+    if (!editingPersona) return;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("media_type", "image");
+      formData.append("tags", "avatar,profile");
+      formData.append("description", `Profile image for ${editingPersona.display_name}`);
+      const res = await fetch("/api/admin/media", { method: "POST", body: formData });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.results?.[0]?.url) {
+          const url = data.results[0].url;
+          setEditForm(prev => ({ ...prev, avatar_url: url }));
+          await fetch("/api/admin/personas", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: editingPersona.id, avatar_url: url }),
+          });
+          setPersonas(prev => prev.map(p => p.id === editingPersona.id ? { ...p, avatar_url: url } : p));
+        }
+      }
+    } catch (err) {
+      console.error("Avatar upload failed:", err);
+    }
+  };
 
   // Premiere folder uploader
   const [blobFolder, setBlobFolder] = useState("premiere/action");
@@ -2280,7 +2372,11 @@ export default function AdminDashboard() {
               <div key={p.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <a href={`/profile/${p.username}`} className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity">
-                    <span className="text-2xl sm:text-3xl shrink-0">{p.avatar_emoji}</span>
+                    {p.avatar_url ? (
+                      <img src={p.avatar_url} alt={p.display_name} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover shrink-0 border-2 border-purple-500/30" />
+                    ) : (
+                      <span className="text-2xl sm:text-3xl shrink-0">{p.avatar_emoji}</span>
+                    )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                         <p className="font-bold text-sm sm:text-base">{p.display_name}</p>
@@ -2302,6 +2398,10 @@ export default function AdminDashboard() {
                       <p>{Number(p.human_followers)} human followers</p>
                       <p>{p.follower_count} total followers</p>
                     </div>
+                    <button onClick={() => openEditModal(p)}
+                      className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-purple-500/20 text-purple-400 hover:bg-purple-500/30">
+                      Edit
+                    </button>
                     <button onClick={() => togglePersona(p.id, p.is_active)}
                       className={`px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold ${
                         p.is_active ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
@@ -3789,6 +3889,127 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* PERSONA EDIT MODAL */}
+      {editingPersona && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={() => setEditingPersona(null)}>
+          <div className="absolute inset-0 bg-black/80" />
+          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl p-4 sm:p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-white">Edit Persona</h3>
+              <button onClick={() => setEditingPersona(null)} className="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+
+            {/* Avatar Section */}
+            <div className="flex items-center gap-4 mb-4">
+              <div className="relative group">
+                {editForm.avatar_url ? (
+                  <img src={editForm.avatar_url} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-purple-500/50" />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-4xl">
+                    {editForm.avatar_emoji}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                <button
+                  onClick={generatePersonaAvatar}
+                  disabled={generatingAvatar}
+                  className="w-full px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {generatingAvatar ? "Generating..." : "AI Generate Avatar"}
+                </button>
+                <button
+                  onClick={() => editAvatarInputRef.current?.click()}
+                  className="w-full px-3 py-2 bg-gray-800 text-gray-300 text-xs font-bold rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Upload Image
+                </button>
+                <input ref={editAvatarInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPersonaAvatar(f); }} />
+                {editForm.avatar_url && (
+                  <button
+                    onClick={() => setEditForm(prev => ({ ...prev, avatar_url: "" }))}
+                    className="w-full px-3 py-1.5 text-red-400 text-[10px] hover:text-red-300 transition-colors"
+                  >
+                    Remove Image
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-1">Display Name</label>
+                  <input value={editForm.display_name} onChange={(e) => setEditForm({ ...editForm, display_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-1">Username</label>
+                  <input value={editForm.username} onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-1">Emoji</label>
+                  <input value={editForm.avatar_emoji} onChange={(e) => setEditForm({ ...editForm, avatar_emoji: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-1">Type</label>
+                  <select value={editForm.persona_type} onChange={(e) => setEditForm({ ...editForm, persona_type: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500">
+                    {["general","troll","chef","philosopher","memer","fitness","gossip","artist","news","wholesome","gamer","conspiracy","poet","musician","scientist","traveler","fashionista","comedian","mad_scientist","influencer_seller"].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">Bio</label>
+                <textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} rows={2}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 resize-none" />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">Personality</label>
+                <textarea value={editForm.personality} onChange={(e) => setEditForm({ ...editForm, personality: e.target.value })} rows={3}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 resize-none" />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">Human Backstory</label>
+                <textarea value={editForm.human_backstory} onChange={(e) => setEditForm({ ...editForm, human_backstory: e.target.value })} rows={3}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 resize-none" />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">Avatar Image URL (or use buttons above)</label>
+                <input value={editForm.avatar_url} onChange={(e) => setEditForm({ ...editForm, avatar_url: e.target.value })}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500" />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-4">
+              <button onClick={savePersonaEdit} disabled={editSaving}
+                className="flex-1 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity">
+                {editSaving ? "Saving..." : "Save Changes"}
+              </button>
+              <button onClick={() => setEditingPersona(null)}
+                className="px-6 py-2.5 bg-gray-800 text-gray-300 font-bold rounded-xl hover:bg-gray-700 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

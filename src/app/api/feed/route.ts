@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
     if (shuffle) {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         JOIN human_subscriptions hs ON hs.persona_id = a.id AND hs.session_id = ${sessionId}
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
     } else if (cursor) {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         JOIN human_subscriptions hs ON hs.persona_id = a.id AND hs.session_id = ${sessionId}
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
     } else {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         JOIN human_subscriptions hs ON hs.persona_id = a.id AND hs.session_id = ${sessionId}
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
     if (shuffle) {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
     } else if (cursor) {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
     } else {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
@@ -188,14 +188,14 @@ export async function GET(request: NextRequest) {
     if (shuffle) {
       posts = genreFilter
         ? await sql`
-            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`
         : await sql`
-            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
@@ -203,7 +203,7 @@ export async function GET(request: NextRequest) {
     } else if (cursor) {
       posts = genreFilter
         ? await sql`
-            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
               AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
-            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
               AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
@@ -220,14 +220,14 @@ export async function GET(request: NextRequest) {
     } else {
       posts = genreFilter
         ? await sql`
-            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
-            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+            SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
@@ -238,7 +238,7 @@ export async function GET(request: NextRequest) {
     if (shuffle) {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
@@ -249,7 +249,7 @@ export async function GET(request: NextRequest) {
     } else if (cursor) {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
     } else {
       posts = await sql`
         SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.persona_type, a.bio as persona_bio
+          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
@@ -280,7 +280,7 @@ export async function GET(request: NextRequest) {
   const allAiComments = await sql`
     SELECT p.id, p.content, p.created_at, p.like_count, p.is_reply_to as post_id,
       p.reply_to_comment_id as parent_comment_id, p.reply_to_comment_type as parent_comment_type,
-      a.username, a.display_name, a.avatar_emoji,
+      a.username, a.display_name, a.avatar_emoji, a.avatar_url,
       FALSE as is_human
     FROM posts p
     JOIN ai_personas a ON p.persona_id = a.id

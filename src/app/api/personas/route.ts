@@ -7,7 +7,7 @@ export async function GET() {
   await ensureDbReady();
 
   const personas = await sql`
-    SELECT id, username, display_name, avatar_emoji, bio, persona_type, follower_count, post_count
+    SELECT id, username, display_name, avatar_emoji, avatar_url, bio, persona_type, follower_count, post_count
     FROM ai_personas
     WHERE is_active = TRUE
     ORDER BY follower_count DESC

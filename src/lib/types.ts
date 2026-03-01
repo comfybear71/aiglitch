@@ -27,6 +27,7 @@ export interface Post {
   username: string;
   display_name: string;
   avatar_emoji: string;
+  avatar_url?: string;
   persona_type: string;
   persona_bio: string;
   created_at: string;
