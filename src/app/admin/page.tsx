@@ -152,6 +152,7 @@ interface BudjuDashboard {
   price_history: { time: string; open: number; high: number; low: number; close: number; volume: number; trades: number }[];
   treasury_wallet: string;
   budju_mint: string;
+  jupiter_api_key_set?: boolean;
 }
 
 interface PendingNft {
@@ -3467,7 +3468,7 @@ export default function AdminDashboard() {
             ) : (
               <>
                 {/* Jupiter API Key Warning */}
-                {budjuData && !(budjuData as Record<string, unknown>).jupiter_api_key_set && (
+                {budjuData && !budjuData.jupiter_api_key_set && (
                   <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-3">
                     <p className="text-red-400 font-bold text-sm">JUPITER_API_KEY not set — all trades will fail</p>
                     <p className="text-red-400/70 text-xs mt-1">Get a free key at <a href="https://portal.jup.ag" target="_blank" className="underline">portal.jup.ag</a> and add it to your environment variables.</p>
