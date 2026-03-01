@@ -2,15 +2,26 @@
 
 import { useState } from "react";
 import { Keypair } from "@solana/web3.js";
-import { mnemonicToSeedSync, validateMnemonic } from "bip39";
+import { mnemonicToSeedSync, mnemonicToEntropy, validateMnemonic } from "bip39";
 import { derivePath } from "ed25519-hd-key";
 import bs58 from "bs58";
+import nacl from "tweetnacl";
 
 const DERIVATION_PATHS = [
   {
+    label: "Direct entropy (older Solana CLI)",
+    path: "entropy",
+    description: "Mnemonic encodes the private key directly — used by older solana-keygen",
+  },
+  {
+    label: "Raw seed (first 32 bytes)",
+    path: "raw-seed",
+    description: "BIP39 seed used directly as private key, no HD derivation",
+  },
+  {
     label: "Solana CLI default",
     path: "m/44'/501'",
-    description: "Used by solana-keygen new (most likely your minting wallet)",
+    description: "Used by solana-keygen new",
   },
   {
     label: "Solana CLI with account 0",
@@ -21,6 +32,16 @@ const DERIVATION_PATHS = [
     label: "Phantom / Backpack / Solflare",
     path: "m/44'/501'/0'/0'",
     description: "Standard BIP44 used by browser/mobile wallets",
+  },
+  {
+    label: "BIP44 account 1",
+    path: "m/44'/501'/1'/0'",
+    description: "Second account in wallet apps",
+  },
+  {
+    label: "BIP44 account 2",
+    path: "m/44'/501'/2'/0'",
+    description: "Third account in wallet apps",
   },
 ];
 
@@ -54,18 +75,48 @@ export default function DeriveWalletPage() {
 
     try {
       const seed = mnemonicToSeedSync(cleaned);
-      const derived: DerivedWallet[] = DERIVATION_PATHS.map((dp) => {
-        const { key } = derivePath(dp.path, seed.toString("hex"));
-        const keypair = Keypair.fromSeed(Uint8Array.from(key));
-        // Full 64-byte secret key (32 private + 32 public) encoded as base58
-        const privateKeyBase58 = bs58.encode(keypair.secretKey);
-        return {
-          path: dp.path,
-          label: dp.label,
-          publicKey: keypair.publicKey.toBase58(),
-          privateKeyBase58,
-        };
-      });
+      const derived: DerivedWallet[] = [];
+
+      for (const dp of DERIVATION_PATHS) {
+        try {
+          let secretKey: Uint8Array;
+
+          if (dp.path === "entropy") {
+            // Older Solana CLI: mnemonic entropy IS the private key
+            const entropyHex = mnemonicToEntropy(cleaned);
+            const entropyBytes = Uint8Array.from(
+              Buffer.from(entropyHex, "hex")
+            );
+            // 24 words = 32 bytes entropy, 12 words = 16 bytes (pad to 32)
+            const keyBytes = new Uint8Array(32);
+            keyBytes.set(entropyBytes);
+            const fullKey = nacl.sign.keyPair.fromSeed(keyBytes);
+            secretKey = fullKey.secretKey;
+          } else if (dp.path === "raw-seed") {
+            // Use first 32 bytes of BIP39 seed directly
+            const keyBytes = Uint8Array.from(seed.subarray(0, 32));
+            const fullKey = nacl.sign.keyPair.fromSeed(keyBytes);
+            secretKey = fullKey.secretKey;
+          } else {
+            // Standard HD derivation with BIP44 path
+            const { key } = derivePath(dp.path, seed.toString("hex"));
+            const keypair = Keypair.fromSeed(Uint8Array.from(key));
+            secretKey = keypair.secretKey;
+          }
+
+          const keypair = Keypair.fromSecretKey(secretKey);
+          const privateKeyBase58 = bs58.encode(keypair.secretKey);
+          derived.push({
+            path: dp.path,
+            label: dp.label,
+            publicKey: keypair.publicKey.toBase58(),
+            privateKeyBase58,
+          });
+        } catch {
+          // Skip paths that fail (e.g. 12-word entropy too short for some methods)
+        }
+      }
+
       setResults(derived);
     } catch (err) {
       setError(`Derivation failed: ${err instanceof Error ? err.message : String(err)}`);
