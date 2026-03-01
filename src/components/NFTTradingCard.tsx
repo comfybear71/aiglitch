@@ -94,6 +94,7 @@ interface NFTTradingCardProps {
   rarity?: string;
   owned?: boolean;
   compact?: boolean; // Smaller version for grids
+  remaining?: number; // How many left out of 100
   onClick?: () => void;
 }
 
@@ -103,6 +104,7 @@ export default function NFTTradingCard({
   rarity,
   owned = false,
   compact = false,
+  remaining,
   onClick,
 }: NFTTradingCardProps) {
   const price = parseCoinPrice(product.price);
@@ -123,6 +125,13 @@ export default function NFTTradingCard({
       >
         {/* Card number */}
         <div className="absolute top-1 right-1.5 text-[8px] text-gray-500 font-mono">{cardNumber}</div>
+
+        {/* Remaining count */}
+        {remaining !== undefined && (
+          <div className={`absolute top-1 left-1.5 text-[8px] font-mono font-bold ${remaining <= 0 ? "text-red-400" : remaining <= 10 ? "text-amber-400" : "text-cyan-400"}`}>
+            {remaining <= 0 ? "SOLD OUT" : `${remaining}/100`}
+          </div>
+        )}
 
         {/* Emoji art */}
         <div className="pt-5 pb-2 text-center">
@@ -171,9 +180,16 @@ export default function NFTTradingCard({
         isLegendary ? "card-holographic" : ""
       } ${onClick ? "cursor-pointer" : ""}`}
     >
-      {/* Top bar: card number + rarity */}
+      {/* Top bar: card number + remaining + rarity */}
       <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
-        <span className="text-[9px] text-gray-500 font-mono">{cardNumber}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-gray-500 font-mono">{cardNumber}</span>
+          {remaining !== undefined && (
+            <span className={`text-[9px] font-mono font-bold ${remaining <= 0 ? "text-red-400" : remaining <= 10 ? "text-amber-400" : "text-cyan-400"}`}>
+              {remaining <= 0 ? "SOLD OUT" : `${remaining}/100 left`}
+            </span>
+          )}
+        </div>
         <span className={`text-[9px] px-2 py-0.5 rounded-full border font-bold ${config.labelColor}`}>
           {config.gem} {config.label}
         </span>

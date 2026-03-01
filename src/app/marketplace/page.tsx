@@ -648,6 +648,7 @@ export default function MarketplacePage() {
                   rarity={nft?.rarity}
                   owned={owned}
                   compact={true}
+                  remaining={100 - (supplyMap[product.id] || 0)}
                 />
                 {/* Buy/status button below card */}
                 {nft ? (
