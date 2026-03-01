@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
 import { getProductById } from "@/lib/marketplace";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import bs58 from "bs58";
 import {
   getServerSolanaConnection,
@@ -175,6 +175,18 @@ export async function POST(request: NextRequest) {
 
     try {
       const connection = getServerSolanaConnection();
+
+      // Pre-flight: check buyer has enough SOL for rent + fees (~0.02 SOL)
+      const buyerBalance = await connection.getBalance(buyerPubkey);
+      const MIN_SOL_LAMPORTS = 20_000_000; // 0.02 SOL for mint rent + metadata rent + fees
+      if (buyerBalance < MIN_SOL_LAMPORTS) {
+        const needed = (MIN_SOL_LAMPORTS / LAMPORTS_PER_SOL).toFixed(3);
+        const has = (buyerBalance / LAMPORTS_PER_SOL).toFixed(4);
+        return NextResponse.json(
+          { error: `Need ~${needed} SOL for NFT minting (rent + fees). You have ${has} SOL. Top up your wallet!` },
+          { status: 400 },
+        );
+      }
 
       // Build the atomic NFT purchase transaction
       const result = await buildNftPurchaseTransaction(

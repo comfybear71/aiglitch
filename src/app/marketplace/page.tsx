@@ -338,8 +338,8 @@ export default function MarketplacePage() {
       setTimeout(() => setError(null), 5000);
       return;
     }
-    if (solBalance < 0.005) {
-      setError("Need ~0.005 SOL for transaction fees. Top up your wallet!");
+    if (solBalance < 0.02) {
+      setError("Need ~0.02 SOL for mint account rent + metadata + fees. Top up your wallet!");
       setTimeout(() => setError(null), 4000);
       return;
     }
@@ -637,7 +637,7 @@ export default function MarketplacePage() {
             const nft = mintedNfts.get(product.id);
             const owned = ownedIds.has(product.id);
             const price = parseCoinPrice(product.price);
-            const canAfford = glitchBalance >= price && solBalance >= 0.005;
+            const canAfford = glitchBalance >= price && solBalance >= 0.02;
             const isBuying = buying === product.id;
 
             return (
@@ -698,7 +698,7 @@ export default function MarketplacePage() {
               product={product}
               owned={ownedIds.has(product.id)}
               minted={mintedNfts.get(product.id) || null}
-              canAffordGlitch={glitchBalance >= parseCoinPrice(product.price) && solBalance >= 0.005}
+              canAffordGlitch={glitchBalance >= parseCoinPrice(product.price) && solBalance >= 0.02}
               onBuy={handleBuy}
               buying={buying}
               walletConnected={connected}
