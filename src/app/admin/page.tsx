@@ -129,6 +129,19 @@ interface TradingData {
   holdings: { persona_id: string; display_name: string; avatar_emoji: string; username: string; glitch_balance: number; sol_balance: number }[];
 }
 
+interface PendingNft {
+  id: string;
+  product_name: string;
+  product_emoji: string;
+  mint_address: string;
+  owner_id: string;
+  owner_name?: string;
+  owner_username?: string;
+  rarity: string;
+  edition_number: number;
+  created_at: string;
+}
+
 const MOOD_COLORS: Record<string, string> = {
   outraged: "text-red-400 bg-red-500/10 border-red-500/20",
   amused: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
@@ -202,6 +215,12 @@ export default function AdminDashboard() {
   const [tradingData, setTradingData] = useState<TradingData | null>(null);
   const [tradingView, setTradingView] = useState<"chart" | "leaderboard" | "holdings">("chart");
   const [triggeringTrades, setTriggeringTrades] = useState(false);
+
+  // NFT management state
+  const [pendingNfts, setPendingNfts] = useState<PendingNft[]>([]);
+  const [nftReconciling, setNftReconciling] = useState(false);
+  const [nftLookupTx, setNftLookupTx] = useState("");
+  const [nftLookupResult, setNftLookupResult] = useState<Record<string, unknown> | null>(null);
 
   // Elapsed timer for generation progress
   useEffect(() => {
@@ -516,6 +535,53 @@ export default function AdminDashboard() {
     setTriggeringTrades(false);
   };
 
+  const fetchPendingNfts = async () => {
+    const res = await fetch("/api/admin/nfts?action=pending");
+    if (res.ok) {
+      const data = await res.json();
+      setPendingNfts(data.pending);
+    }
+  };
+
+  const autoReconcileNfts = async () => {
+    setNftReconciling(true);
+    const res = await fetch("/api/admin/nfts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "auto_reconcile" }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      alert(`Reconciled ${data.reconciled} of ${data.total_pending} pending NFTs.\n\n${data.results.map((r: { product: string; status: string; tx?: string }) => `${r.product}: ${r.status}${r.tx ? ` (${r.tx.slice(0, 12)}...)` : ""}`).join("\n")}`);
+      fetchPendingNfts();
+    }
+    setNftReconciling(false);
+  };
+
+  const lookupNftTx = async () => {
+    if (!nftLookupTx.trim()) return;
+    const res = await fetch(`/api/admin/nfts?action=lookup_tx&tx=${nftLookupTx.trim()}`);
+    if (res.ok) {
+      setNftLookupResult(await res.json());
+    } else {
+      const data = await res.json();
+      setNftLookupResult({ error: data.error });
+    }
+  };
+
+  const reconcileSingleNft = async (nftId: string, txSig: string) => {
+    const res = await fetch("/api/admin/nfts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reconcile", nft_id: nftId, tx_signature: txSig }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      alert(data.message);
+      fetchPendingNfts();
+    }
+  };
+
   // Lazy load data per tab — only fetch what's needed for the current tab
   useEffect(() => {
     if (!authenticated) return;
@@ -526,7 +592,7 @@ export default function AdminDashboard() {
     else if (tab === "media" && mediaItems.length === 0) { fetchMedia(); if (personas.length === 0) fetchPersonas(); }
     else if (tab === "posts" && !stats) fetchStats();
     else if (tab === "create" && personas.length === 0) fetchPersonas();
-    else if (tab === "trading" && !tradingData) fetchTrading();
+    else if (tab === "trading" && !tradingData) { fetchTrading(); fetchPendingNfts(); }
   }, [authenticated, tab]);
 
   // Initial load: just stats for the overview tab
@@ -2967,6 +3033,87 @@ export default function AdminDashboard() {
                       </div>
                     ))}
                   </div>
+                </div>
+                {/* NFT Reconciliation Tools */}
+                <div className="bg-gray-900 border border-amber-500/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-amber-400">NFT Reconciliation Tools</h3>
+                    <div className="flex gap-2">
+                      <button onClick={fetchPendingNfts} className="px-2 py-1 bg-gray-800 text-gray-400 rounded text-[10px] font-bold hover:bg-gray-700">
+                        Check Pending
+                      </button>
+                      <button onClick={autoReconcileNfts} disabled={nftReconciling}
+                        className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-[10px] font-bold hover:bg-amber-500/30 disabled:opacity-50">
+                        {nftReconciling ? "Reconciling..." : "Auto-Reconcile All"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tx lookup */}
+                  <div className="flex gap-2 mb-3">
+                    <input value={nftLookupTx} onChange={(e) => setNftLookupTx(e.target.value)}
+                      placeholder="Paste Solana tx signature to look up..."
+                      className="flex-1 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-amber-500" />
+                    <button onClick={lookupNftTx} className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30">
+                      Lookup
+                    </button>
+                  </div>
+
+                  {/* Lookup result */}
+                  {nftLookupResult && (
+                    <div className="bg-gray-800/50 rounded-lg p-3 mb-3 text-xs space-y-1">
+                      {(nftLookupResult as Record<string, unknown>).error ? (
+                        <p className="text-red-400">{String((nftLookupResult as Record<string, unknown>).error)}</p>
+                      ) : (
+                        <>
+                          <p className="text-green-400 font-bold">Transaction found on-chain</p>
+                          {(nftLookupResult as Record<string, unknown>).on_chain && (
+                            <p className="text-gray-400">
+                              Slot: {String(((nftLookupResult as Record<string, unknown>).on_chain as Record<string, unknown>)?.slot)} |
+                              Success: {String(((nftLookupResult as Record<string, unknown>).on_chain as Record<string, unknown>)?.success)} |
+                              Fee: {String(((nftLookupResult as Record<string, unknown>).on_chain as Record<string, unknown>)?.fee)} lamports
+                            </p>
+                          )}
+                          {(nftLookupResult as Record<string, unknown>).db_nft ? (
+                            <p className="text-purple-400">DB Record: {String(((nftLookupResult as Record<string, unknown>).db_nft as Record<string, unknown>)?.product_name)} — hash: {String(((nftLookupResult as Record<string, unknown>).db_nft as Record<string, unknown>)?.mint_tx_hash)}</p>
+                          ) : (
+                            <p className="text-amber-400">No matching NFT record in database for this tx</p>
+                          )}
+                        </>
+                      )}
+                      <button onClick={() => setNftLookupResult(null)} className="text-[10px] text-gray-500 hover:text-gray-300 mt-1">Dismiss</button>
+                    </div>
+                  )}
+
+                  {/* Pending NFTs list */}
+                  {pendingNfts.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] text-amber-400 font-bold mb-1">{pendingNfts.length} pending NFTs (minted in DB but not confirmed on-chain)</p>
+                      {pendingNfts.map((nft) => (
+                        <div key={nft.id} className="flex items-center justify-between bg-gray-800/30 rounded-lg px-2 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <span>{nft.product_emoji}</span>
+                            <div>
+                              <p className="text-xs font-bold text-gray-300">{nft.product_name}</p>
+                              <p className="text-[10px] text-gray-500">
+                                Owner: {nft.owner_username ? `@${nft.owner_username}` : nft.owner_id.slice(0, 12)} |
+                                {nft.rarity} #{nft.edition_number} |
+                                {new Date(nft.created_at).toLocaleString()}
+                              </p>
+                              <p className="text-[10px] text-gray-600 font-mono truncate max-w-xs">Mint: {nft.mint_address}</p>
+                            </div>
+                          </div>
+                          <button onClick={() => {
+                            const tx = prompt(`Paste the Solana tx signature for "${nft.product_name}":`);
+                            if (tx) reconcileSingleNft(nft.id, tx.trim());
+                          }}
+                            className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] font-bold hover:bg-green-500/30 shrink-0">
+                            Fix
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             )}

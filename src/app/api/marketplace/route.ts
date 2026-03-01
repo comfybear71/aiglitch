@@ -128,16 +128,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Check edition supply — max 100 per product per generation
+    // Include ALL records (including pending) to prevent duplicate edition numbers
     const MAX_SUPPLY = 100;
     const [editionCount] = await sql`
       SELECT COUNT(*) as minted, COALESCE(MAX(generation), 1) as current_gen
       FROM minted_nfts
-      WHERE product_id = ${product_id} AND mint_tx_hash != 'pending'
+      WHERE product_id = ${product_id}
     `;
     const currentGen = Number(editionCount?.current_gen || 1);
     const [genCount] = await sql`
       SELECT COUNT(*) as cnt FROM minted_nfts
-      WHERE product_id = ${product_id} AND generation = ${currentGen} AND mint_tx_hash != 'pending'
+      WHERE product_id = ${product_id} AND generation = ${currentGen}
     `;
     const mintedInGen = Number(genCount?.cnt || 0);
     if (mintedInGen >= MAX_SUPPLY) {
