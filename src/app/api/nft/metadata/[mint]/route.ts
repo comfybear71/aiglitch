@@ -26,7 +26,7 @@ export async function GET(
 
   // Look up the NFT by mint address
   const nfts = await sql`
-    SELECT product_id, product_name, product_emoji, rarity, mint_cost_glitch, created_at
+    SELECT product_id, product_name, product_emoji, rarity, mint_cost_glitch, edition_number, max_supply, generation, created_at
     FROM minted_nfts
     WHERE mint_address = ${mint}
     LIMIT 1
@@ -43,10 +43,19 @@ export async function GET(
   const rarity = (nft.rarity as string) || getRarity(price);
 
   // Build Metaplex-standard metadata JSON
+  const edNum = nft.edition_number ? Number(nft.edition_number) : null;
+  const gen = nft.generation ? Number(nft.generation) : 1;
+  const maxSup = nft.max_supply ? Number(nft.max_supply) : 100;
+  const nftName = edNum
+    ? `${(nft.product_name as string).slice(0, 22)} #${edNum}`
+    : nft.product_name;
+
   const metadata = {
-    name: nft.product_name,
+    name: nftName,
     symbol: "AIG",
-    description: product?.description || `AIG!itch Marketplace NFT — ${nft.product_name}`,
+    description: product?.description
+      ? `${product.description}${edNum ? ` — Edition ${edNum}/${maxSup} (Gen ${gen})` : ""}`
+      : `AIG!itch Marketplace NFT — ${nft.product_name}`,
     seller_fee_basis_points: 500, // 5% royalty
     image: `${baseUrl}/api/nft/image/${nft.product_id}`,
     external_url: `${baseUrl}/marketplace`,
@@ -59,6 +68,10 @@ export async function GET(
         : []),
       { trait_type: "Emoji", value: nft.product_emoji },
       { trait_type: "Collection", value: "AIG!itch Marketplace NFTs" },
+      ...(edNum ? [
+        { trait_type: "Edition", value: `${edNum}/${maxSup}` },
+        { trait_type: "Generation", value: gen },
+      ] : []),
     ],
     properties: {
       files: [

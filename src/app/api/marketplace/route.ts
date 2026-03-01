@@ -127,6 +127,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check edition supply — max 100 per product per generation
+    const MAX_SUPPLY = 100;
+    const [editionCount] = await sql`
+      SELECT COUNT(*) as minted, COALESCE(MAX(generation), 1) as current_gen
+      FROM minted_nfts
+      WHERE product_id = ${product_id} AND mint_tx_hash != 'pending'
+    `;
+    const currentGen = Number(editionCount?.current_gen || 1);
+    const [genCount] = await sql`
+      SELECT COUNT(*) as cnt FROM minted_nfts
+      WHERE product_id = ${product_id} AND generation = ${currentGen} AND mint_tx_hash != 'pending'
+    `;
+    const mintedInGen = Number(genCount?.cnt || 0);
+    if (mintedInGen >= MAX_SUPPLY) {
+      return NextResponse.json(
+        { error: `Sold out! All ${MAX_SUPPLY} Gen ${currentGen} editions have been minted. Check back for Gen ${currentGen + 1}!`, sold_out: true },
+        { status: 409 },
+      );
+    }
+    const editionNumber = mintedInGen + 1;
+    const generation = currentGen;
+
     // Get treasury keypair
     const treasuryKeypair = getTreasuryKeypair();
     if (!treasuryKeypair) {
@@ -168,11 +190,11 @@ export async function POST(request: NextRequest) {
         VALUES (${purchaseId}, ${session_id}, ${product_id}, ${product.name}, ${product.emoji}, ${price}, NOW())
       `;
 
-      // Record pending NFT (will be confirmed after on-chain confirmation)
+      // Record pending NFT with edition numbering
       const nftId = uuidv4();
       await sql`
-        INSERT INTO minted_nfts (id, owner_type, owner_id, product_id, product_name, product_emoji, mint_address, metadata_uri, collection, mint_tx_hash, mint_block_number, mint_cost_glitch, mint_fee_sol, rarity, created_at)
-        VALUES (${nftId}, 'human', ${session_id}, ${product_id}, ${product.name}, ${product.emoji}, ${result.mintAddress}, ${result.metadataUri}, 'AIG!itch Marketplace NFTs', 'pending', 0, ${price}, 0, ${result.rarity}, NOW())
+        INSERT INTO minted_nfts (id, owner_type, owner_id, product_id, product_name, product_emoji, mint_address, metadata_uri, collection, mint_tx_hash, mint_block_number, mint_cost_glitch, mint_fee_sol, rarity, edition_number, max_supply, generation, created_at)
+        VALUES (${nftId}, 'human', ${session_id}, ${product_id}, ${product.name}, ${product.emoji}, ${result.mintAddress}, ${result.metadataUri}, 'AIG!itch Marketplace NFTs', 'pending', 0, ${price}, 0, ${result.rarity}, ${editionNumber}, ${MAX_SUPPLY}, ${generation}, NOW())
       `;
 
       return NextResponse.json({
@@ -187,6 +209,10 @@ export async function POST(request: NextRequest) {
         treasury_share: result.treasuryShare,
         persona_share: result.personaShare,
         seller_persona_id: product.seller_persona_id,
+        edition_number: editionNumber,
+        max_supply: MAX_SUPPLY,
+        generation,
+        remaining: MAX_SUPPLY - editionNumber,
         expires_at: new Date(Date.now() + 120000).toISOString(),
         network: SOLANA_NETWORK,
       });

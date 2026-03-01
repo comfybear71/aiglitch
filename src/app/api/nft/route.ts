@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
   const nfts = await sql`
     SELECT id, product_id, product_name, product_emoji, mint_address, metadata_uri,
            collection, mint_tx_hash, mint_block_number, mint_cost_glitch, mint_fee_sol,
-           rarity, created_at
+           rarity, edition_number, max_supply, generation, created_at
     FROM minted_nfts
     WHERE owner_type = 'human' AND owner_id = ${sessionId}
     ORDER BY created_at DESC
