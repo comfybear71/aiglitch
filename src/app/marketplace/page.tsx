@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useSearchParams } from "next/navigation";
 import { Transaction } from "@solana/web3.js";
 import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "@/lib/marketplace";
 import BottomNav from "@/components/BottomNav";
@@ -46,6 +47,7 @@ function ProductCard({
   onBuy,
   buying,
   walletConnected,
+  id,
 }: {
   product: MarketplaceProduct;
   owned: boolean;
@@ -54,6 +56,7 @@ function ProductCard({
   onBuy: (p: MarketplaceProduct) => void;
   buying: string | null;
   walletConnected: boolean;
+  id?: string;
 }) {
   const price = parseCoinPrice(product.price);
   const isBuying = buying === product.id;
@@ -61,7 +64,7 @@ function ProductCard({
   const rarityClass = RARITY_COLORS[minted?.rarity || rarity] || RARITY_COLORS.common;
 
   return (
-    <div className={`bg-gray-900/80 border rounded-2xl p-4 flex flex-col gap-3 transition-all hover:shadow-lg ${
+    <div id={id} className={`bg-gray-900/80 border rounded-2xl p-4 flex flex-col gap-3 transition-all duration-500 hover:shadow-lg ${
       minted
         ? "border-yellow-500/40 hover:shadow-yellow-500/10"
         : owned
@@ -201,8 +204,15 @@ interface PurchaseResult {
 
 export default function MarketplacePage() {
   const { connected, publicKey, signTransaction } = useWallet();
+  const searchParams = useSearchParams();
+  const targetProductId = searchParams.get("product");
+  const scrolledRef = useRef(false);
 
-  const [category, setCategory] = useState("All");
+  const [category, setCategory] = useState(() => {
+    // If deep-linking to a product, show "All" so the product is visible regardless of category
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("product")) return "All";
+    return "All";
+  });
   const [glitchBalance, setGlitchBalance] = useState(0);
   const [solBalance, setSolBalance] = useState(0);
   const [ownedIds, setOwnedIds] = useState<Set<string>>(new Set());
@@ -265,6 +275,22 @@ export default function MarketplacePage() {
   useEffect(() => {
     fetchOwnership();
   }, [fetchOwnership]);
+
+  // Deep link: scroll to target product when loaded via ?product=xxx
+  useEffect(() => {
+    if (!targetProductId || scrolledRef.current) return;
+    // Small delay to let DOM render
+    const timeout = setTimeout(() => {
+      const el = document.getElementById(`product-${targetProductId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-purple-500", "ring-offset-2", "ring-offset-black");
+        setTimeout(() => el.classList.remove("ring-2", "ring-purple-500", "ring-offset-2", "ring-offset-black"), 3000);
+        scrolledRef.current = true;
+      }
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [targetProductId, category]);
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -593,7 +619,7 @@ export default function MarketplacePage() {
             const isBuying = buying === product.id;
 
             return (
-              <div key={product.id} className="flex flex-col gap-2">
+              <div key={product.id} id={`product-${product.id}`} className="flex flex-col gap-2 rounded-2xl transition-all duration-500">
                 <NFTTradingCard
                   product={product}
                   mintAddress={nft?.mint_address}
@@ -646,6 +672,7 @@ export default function MarketplacePage() {
           {filtered.map((product) => (
             <ProductCard
               key={product.id}
+              id={`product-${product.id}`}
               product={product}
               owned={ownedIds.has(product.id)}
               minted={mintedNfts.get(product.id) || null}

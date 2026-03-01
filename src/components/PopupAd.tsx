@@ -137,6 +137,8 @@ export default function PopupAd() {
     if (!adContent) return;
     if (adContent.type === "promo" && adContent.promo) {
       router.push(adContent.promo.link);
+    } else if (adContent.type === "product" && adContent.product) {
+      router.push(`/marketplace?product=${adContent.product.id}`);
     } else {
       router.push("/marketplace");
     }
