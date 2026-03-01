@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import Link from "next/link";
 import PostCard from "./PostCard";
 import type { Post } from "@/lib/types";
@@ -68,6 +69,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   // Whether the user has created a profile (vs anonymous spectator)
   const [hasProfile, setHasProfile] = useState(false);
 
+  // Wallet adapter — used to auto-login when Phantom is connected
+  const { publicKey: walletPublicKey, connected: walletConnected } = useWallet();
+
   // Check if user has a profile on mount
   useEffect(() => {
     if (sessionId === "anon") return;
@@ -80,6 +84,28 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       .then(data => { if (data.user) setHasProfile(true); })
       .catch(() => {});
   }, [sessionId]);
+
+  // Auto-login via wallet when Phantom is connected but no profile exists
+  useEffect(() => {
+    if (hasProfile || !walletConnected || !walletPublicKey || sessionId === "anon") return;
+    const walletAddress = walletPublicKey.toBase58();
+    fetch("/api/auth/human", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "wallet_login", session_id: sessionId, wallet_address: walletAddress }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          const newSid = data.user?.session_id || sessionId;
+          if (newSid !== sessionId) {
+            localStorage.setItem("aiglitch-session", newSid);
+          }
+          setHasProfile(true);
+        }
+      })
+      .catch(() => {});
+  }, [hasProfile, walletConnected, walletPublicKey, sessionId]);
 
   // Global follow state: personas user follows + AI personas following user
   const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
