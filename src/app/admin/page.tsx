@@ -675,15 +675,21 @@ export default function AdminDashboard() {
 
   const syncBudjuBalances = async () => {
     setBudjuActionLoading(true);
-    const res = await fetch("/api/admin/budju-trading", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "sync_balances" }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      alert(`Synced ${data.wallets_updated} wallets from on-chain.`);
-      fetchBudjuDashboard();
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync_balances" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Synced ${data.distributors_synced} distributors + ${data.personas_synced} persona wallets from on-chain.\n\nTotal SOL in system: ${data.total_deposited_sol?.toFixed(4) || 0} SOL`);
+        fetchBudjuDashboard();
+      } else {
+        alert("Sync failed — check console for details.");
+      }
+    } catch (e) {
+      alert(`Network error: ${e instanceof Error ? e.message : "Failed to connect"}`);
     }
     setBudjuActionLoading(false);
   };
@@ -3418,6 +3424,14 @@ export default function AdminDashboard() {
                       <p className="text-lg font-bold text-amber-400">{budjuData.stats_all_time.total_trades}</p>
                       <p className="text-[10px] text-gray-500">All-Time Trades</p>
                     </div>
+                    <div className="bg-gray-800/50 rounded-lg p-2 text-center col-span-2">
+                      <p className="text-sm font-bold">
+                        <span className="text-cyan-400">{((budjuData as { total_system_sol?: number }).total_system_sol || 0).toFixed(4)} SOL</span>
+                        {" | "}
+                        <span className="text-fuchsia-400">{((budjuData as { total_system_budju?: number }).total_system_budju || 0) >= 1000 ? `${(((budjuData as { total_system_budju?: number }).total_system_budju || 0) / 1000).toFixed(1)}K` : Math.floor((budjuData as { total_system_budju?: number }).total_system_budju || 0)} BUDJU</span>
+                      </p>
+                      <p className="text-[10px] text-gray-500">Total Funds in Bot Wallets</p>
+                    </div>
                   </div>
                 </div>
 
@@ -3524,30 +3538,44 @@ export default function AdminDashboard() {
                   <div className="space-y-4">
                     {/* Wallet setup */}
                     <div className="bg-gray-900 border border-fuchsia-500/30 rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-fuchsia-400">Wallet Management</h3>
-                        <div className="flex flex-wrap gap-2">
-                          <button onClick={generateBudjuWallets} disabled={budjuActionLoading}
-                            className="px-3 py-1.5 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
-                            {budjuActionLoading ? "..." : "Generate Wallets"}
-                          </button>
-                          <button onClick={distributeBudjuFunds} disabled={budjuActionLoading}
-                            className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
-                            {budjuActionLoading ? "..." : "Distribute Funds"}
-                          </button>
-                          <button onClick={syncBudjuBalances} disabled={budjuActionLoading}
-                            className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50">
-                            Sync Balances
-                          </button>
-                          <button onClick={drainBudjuWallets} disabled={budjuActionLoading}
-                            className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
-                            Drain Wallets
-                          </button>
-                          <button onClick={exportBudjuKeys} disabled={budjuActionLoading}
-                            className="px-3 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
-                            Export Keys
-                          </button>
+                      <h3 className="text-sm font-bold text-fuchsia-400 mb-3">Wallet Management</h3>
+
+                      {/* Total SOL in system */}
+                      {(budjuData as { total_system_sol?: number }).total_system_sol !== undefined && (
+                        <div className="bg-gray-800/50 rounded-lg p-3 mb-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] text-gray-500 font-bold">TOTAL SOL IN SYSTEM</p>
+                            <p className="text-lg font-bold text-cyan-400">{((budjuData as { total_system_sol?: number }).total_system_sol || 0).toFixed(4)} SOL</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-gray-500 font-bold">TOTAL BUDJU</p>
+                            <p className="text-lg font-bold text-fuchsia-400">{((budjuData as { total_system_budju?: number }).total_system_budju || 0) >= 1000 ? `${(((budjuData as { total_system_budju?: number }).total_system_budju || 0) / 1000).toFixed(1)}K` : Math.floor((budjuData as { total_system_budju?: number }).total_system_budju || 0)}</p>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Action buttons - clean 2x3 grid */}
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        <button onClick={generateBudjuWallets} disabled={budjuActionLoading}
+                          className="px-2 py-2 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
+                          {budjuActionLoading ? "..." : "Generate Wallets"}
+                        </button>
+                        <button onClick={distributeBudjuFunds} disabled={budjuActionLoading}
+                          className="px-2 py-2 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
+                          {budjuActionLoading ? "..." : "Distribute Funds"}
+                        </button>
+                        <button onClick={syncBudjuBalances} disabled={budjuActionLoading}
+                          className="px-2 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50">
+                          {budjuActionLoading ? "..." : "Sync Balances"}
+                        </button>
+                        <button onClick={drainBudjuWallets} disabled={budjuActionLoading}
+                          className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
+                          Drain Wallets
+                        </button>
+                        <button onClick={exportBudjuKeys} disabled={budjuActionLoading}
+                          className="px-2 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50 col-span-2">
+                          Export Keys
+                        </button>
                       </div>
 
                       {/* Distributors */}

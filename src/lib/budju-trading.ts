@@ -953,6 +953,10 @@ export async function getBudjuDashboard() {
     price_history: priceHistoryResult,
     treasury_wallet: TREASURY_WALLET_STR,
     budju_mint: BUDJU_MINT,
+    total_system_sol: (distributors as { sol_balance?: number }[]).reduce((s, d) => s + Number(d.sol_balance || 0), 0) +
+      (wallets as { sol_balance?: number }[]).reduce((s, w) => s + Number(w.sol_balance || 0), 0),
+    total_system_budju: (distributors as { budju_balance?: number }[]).reduce((s, d) => s + Number(d.budju_balance || 0), 0) +
+      (wallets as { budju_balance?: number }[]).reduce((s, w) => s + Number(w.budju_balance || 0), 0),
   };
 }
 
@@ -987,22 +991,51 @@ export async function deletePersonaWallet(personaId: string): Promise<boolean> {
   return !!deleted;
 }
 
-// ── Sync wallet balances from on-chain ──
-export async function syncWalletBalances(): Promise<number> {
+// ── Sync wallet balances from on-chain (distributors + personas) ──
+export async function syncWalletBalances(): Promise<{ personas_synced: number; distributors_synced: number; total_deposited_sol: number }> {
   const sql = getDb();
-  const wallets = await sql`SELECT id, wallet_address FROM budju_wallets WHERE is_active = TRUE`;
-
   const connection = new Connection(SERVER_RPC_URL, "confirmed");
-  let updated = 0;
+  let personasSynced = 0;
+  let distributorsSynced = 0;
+  let totalDepositedSol = 0;
 
+  // 1. Sync DISTRIBUTOR wallets first
+  try {
+    const distributors = await sql`SELECT id, group_number, wallet_address FROM budju_distributors ORDER BY group_number`;
+    for (const dist of distributors) {
+      try {
+        const pubkey = new PublicKey(dist.wallet_address as string);
+        const solBalance = await connection.getBalance(pubkey);
+        const solBal = solBalance / LAMPORTS_PER_SOL;
+
+        let budjuBal = 0;
+        try {
+          const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+          const budjuMint = new PublicKey(BUDJU_MINT);
+          const ata = await getAssociatedTokenAddress(budjuMint, pubkey);
+          const account = await getAccount(connection, ata);
+          budjuBal = Number(account.amount) / 1e9;
+        } catch { /* no BUDJU ATA yet */ }
+
+        await sql`
+          UPDATE budju_distributors SET sol_balance = ${solBal}, budju_balance = ${budjuBal} WHERE id = ${dist.id}
+        `;
+        totalDepositedSol += solBal;
+        distributorsSynced++;
+      } catch {
+        // Skip failed distributor
+      }
+    }
+  } catch { /* skip if table doesn't exist */ }
+
+  // 2. Sync PERSONA wallets
+  const wallets = await sql`SELECT id, wallet_address FROM budju_wallets WHERE is_active = TRUE`;
   for (const wallet of wallets) {
     try {
-      // Get SOL balance
       const pubkey = new PublicKey(wallet.wallet_address as string);
       const solBalance = await connection.getBalance(pubkey);
-      const solBal = solBalance / 1e9;
+      const solBal = solBalance / LAMPORTS_PER_SOL;
 
-      // Get BUDJU token balance
       let budjuBal = 0;
       try {
         const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
@@ -1016,11 +1049,12 @@ export async function syncWalletBalances(): Promise<number> {
         UPDATE budju_wallets SET sol_balance = ${solBal}, budju_balance = ${budjuBal}, updated_at = NOW()
         WHERE id = ${wallet.id}
       `;
-      updated++;
+      totalDepositedSol += solBal;
+      personasSynced++;
     } catch {
       // Skip failed wallets
     }
   }
 
-  return updated;
+  return { personas_synced: personasSynced, distributors_synced: distributorsSynced, total_deposited_sol: totalDepositedSol };
 }

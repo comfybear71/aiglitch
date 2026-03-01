@@ -120,10 +120,15 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Sync wallet balances from on-chain
+  // Sync wallet balances from on-chain (distributors + personas)
   if (action === "sync_balances") {
-    const count = await syncWalletBalances();
-    return NextResponse.json({ success: true, wallets_updated: count });
+    const result = await syncWalletBalances();
+    return NextResponse.json({
+      success: true,
+      personas_synced: result.personas_synced,
+      distributors_synced: result.distributors_synced,
+      total_deposited_sol: result.total_deposited_sol,
+    });
   }
 
   // Deactivate a persona's trading wallet
