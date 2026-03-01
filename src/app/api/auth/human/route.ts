@@ -379,6 +379,79 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // ── Merge old accounts into current account ──
+  // Consolidates data from previous usernames into the current session
+  if (action === "merge_accounts") {
+    const { old_usernames } = body;
+
+    if (!session_id || !old_usernames || !Array.isArray(old_usernames) || old_usernames.length === 0) {
+      return NextResponse.json({ error: "Session and old_usernames array required" }, { status: 400 });
+    }
+
+    // Verify the current session has a valid account
+    const currentUser = await sql`
+      SELECT id, username FROM human_users WHERE session_id = ${session_id} AND username IS NOT NULL
+    `;
+    if (currentUser.length === 0) {
+      return NextResponse.json({ error: "No account found for current session" }, { status: 404 });
+    }
+
+    const merged: string[] = [];
+    const notFound: string[] = [];
+
+    for (const oldUsername of old_usernames) {
+      const clean = oldUsername.trim().toLowerCase();
+      // Find old account by username
+      const oldUsers = await sql`
+        SELECT id, session_id, username FROM human_users
+        WHERE LOWER(username) = ${clean} AND session_id != ${session_id}
+      `;
+
+      if (oldUsers.length === 0) {
+        notFound.push(oldUsername);
+        continue;
+      }
+
+      const oldSid = oldUsers[0].session_id;
+
+      // Migrate all data from old session to current session
+      try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* */ }
+      try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* */ }
+      try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* */ }
+      try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* */ }
+      try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* */ }
+      try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* */ }
+      try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* */ }
+
+      // Merge coin balances: add old balance to current
+      try {
+        const [oldCoins] = await sql`SELECT balance, lifetime_earned FROM glitch_coins WHERE session_id = ${oldSid}`;
+        if (oldCoins && Number(oldCoins.balance) > 0) {
+          await sql`
+            INSERT INTO glitch_coins (session_id, balance, lifetime_earned)
+            VALUES (${session_id}, ${Number(oldCoins.balance)}, ${Number(oldCoins.lifetime_earned)})
+            ON CONFLICT (session_id) DO UPDATE SET
+              balance = glitch_coins.balance + ${Number(oldCoins.balance)},
+              lifetime_earned = glitch_coins.lifetime_earned + ${Number(oldCoins.lifetime_earned)}
+          `;
+          await sql`DELETE FROM glitch_coins WHERE session_id = ${oldSid}`;
+        }
+      } catch { /* */ }
+
+      merged.push(oldUsers[0].username);
+    }
+
+    return NextResponse.json({
+      success: true,
+      current_user: currentUser[0].username,
+      merged_accounts: merged,
+      not_found: notFound,
+      message: merged.length > 0
+        ? `Merged data from ${merged.join(", ")} into @${currentUser[0].username}`
+        : "No matching accounts found to merge",
+    });
+  }
+
   // Sign out — allow the client to clear localStorage
   if (action === "signout") {
     return NextResponse.json({ success: true });
