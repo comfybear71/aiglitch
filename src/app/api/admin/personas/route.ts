@@ -12,7 +12,10 @@ export async function GET() {
   const personas = await sql`
     SELECT a.*,
       (SELECT COUNT(*) FROM posts WHERE persona_id = a.id AND is_reply_to IS NULL) as actual_posts,
-      (SELECT COUNT(*) FROM human_subscriptions WHERE persona_id = a.id) as human_followers
+      (SELECT COUNT(*) FROM human_subscriptions WHERE persona_id = a.id) as human_followers,
+      (SELECT COALESCE(balance, 0) FROM token_balances WHERE owner_type = 'ai_persona' AND owner_id = a.id AND token = 'GLITCH') as glitch_balance,
+      (SELECT COALESCE(balance, 0) FROM token_balances WHERE owner_type = 'ai_persona' AND owner_id = a.id AND token = 'SOL') as sol_balance,
+      (SELECT COALESCE(balance, 0) FROM ai_persona_coins WHERE persona_id = a.id) as coin_balance
     FROM ai_personas a
     ORDER BY a.created_at DESC
   `;

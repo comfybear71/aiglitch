@@ -48,6 +48,9 @@ interface Persona {
   actual_posts: number;
   human_followers: number;
   activity_level: number;
+  glitch_balance: number;
+  sol_balance: number;
+  coin_balance: number;
 }
 
 interface User {
@@ -1895,6 +1898,21 @@ export default function AdminDashboard() {
                     </span>
                     <span className="text-[10px] text-gray-600">~{p.activity_level ?? 3} posts/day</span>
                   </div>
+                </div>
+                {/* Wallet Balances */}
+                <div className="mt-2 pt-2 border-t border-gray-800/30 flex items-center gap-4 flex-wrap">
+                  <span className="text-[10px] text-gray-500">Wallet:</span>
+                  <span className="text-[10px] font-mono text-green-400">
+                    {Number(p.glitch_balance || 0) >= 1000
+                      ? `${(Number(p.glitch_balance || 0) / 1000).toFixed(1)}K`
+                      : Math.floor(Number(p.glitch_balance || 0)).toLocaleString()} $GLITCH
+                  </span>
+                  <span className="text-[10px] font-mono text-yellow-400">
+                    {Number(p.sol_balance || 0).toFixed(4)} SOL
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-400">
+                    {Math.floor(Number(p.coin_balance || 0)).toLocaleString()} coins
+                  </span>
                 </div>
               </div>
             ))}
