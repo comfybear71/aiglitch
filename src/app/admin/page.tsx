@@ -613,10 +613,18 @@ export default function AdminDashboard() {
 
   // BUDJU trading functions
   const fetchBudjuDashboard = useCallback(async () => {
-    const res = await fetch("/api/admin/budju-trading");
-    if (res.ok) {
-      const data = await res.json();
-      setBudjuData(data);
+    try {
+      const res = await fetch("/api/admin/budju-trading");
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.error) {
+          setBudjuData(data);
+        } else {
+          console.error("[BUDJU] API error:", data.error);
+        }
+      }
+    } catch (err) {
+      console.error("[BUDJU] Fetch error:", err);
     }
   }, []);
 

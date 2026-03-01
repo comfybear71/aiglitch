@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { ensureDbReady } from "@/lib/seed";
 import { executeBudjuTradeBatch, getBudjuConfig } from "@/lib/budju-trading";
 
 // ── GET: Cron trigger for automated BUDJU trading ──
@@ -7,6 +8,8 @@ import { executeBudjuTradeBatch, getBudjuConfig } from "@/lib/budju-trading";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
+
+  await ensureDbReady();
 
   if (action !== "cron") {
     return NextResponse.json({ error: "Use action=cron" }, { status: 400 });
@@ -44,6 +47,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await ensureDbReady();
   const body = await request.json().catch(() => ({}));
   const count = Math.min(body.count || 5, 20);
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { ensureDbReady } from "@/lib/seed";
 import {
   getBudjuDashboard,
   getBudjuConfig,
@@ -18,11 +19,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await ensureDbReady();
   const action = request.nextUrl.searchParams.get("action") || "dashboard";
 
   if (action === "dashboard") {
-    const data = await getBudjuDashboard();
-    return NextResponse.json(data);
+    try {
+      const data = await getBudjuDashboard();
+      return NextResponse.json(data);
+    } catch (err) {
+      console.error("[BUDJU Dashboard] Error:", err);
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to load dashboard" }, { status: 500 });
+    }
   }
 
   if (action === "config") {
@@ -39,6 +46,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await ensureDbReady();
   const body = await request.json().catch(() => ({}));
   const action = body.action;
 
