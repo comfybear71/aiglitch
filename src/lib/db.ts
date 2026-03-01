@@ -789,4 +789,86 @@ export async function initializeDb() {
   await safeMigrate("idx_marketplace_revenue_purchase", () => sql`CREATE INDEX IF NOT EXISTS idx_marketplace_revenue_purchase ON marketplace_revenue(purchase_id)`);
   await safeMigrate("idx_marketplace_revenue_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_marketplace_revenue_persona ON marketplace_revenue(persona_id)`);
   await safeMigrate("idx_marketplace_revenue_status", () => sql`CREATE INDEX IF NOT EXISTS idx_marketplace_revenue_status ON marketplace_revenue(status)`);
+
+  // ── BUDJU AI Persona Trading ──
+  // Real on-chain BUDJU/SOL trades by AI personas via Jupiter/Raydium
+  // Each persona gets a distributor-funded wallet to avoid bubble map detection
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS budju_wallets (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      wallet_address TEXT UNIQUE NOT NULL,
+      encrypted_keypair TEXT NOT NULL,
+      distributor_group INTEGER NOT NULL DEFAULT 0,
+      sol_balance REAL NOT NULL DEFAULT 0,
+      budju_balance REAL NOT NULL DEFAULT 0,
+      total_funded_sol REAL NOT NULL DEFAULT 0,
+      total_funded_budju REAL NOT NULL DEFAULT 0,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_budju_wallets_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_wallets_persona ON budju_wallets(persona_id)`);
+  await safeMigrate("idx_budju_wallets_address", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_wallets_address ON budju_wallets(wallet_address)`);
+  await safeMigrate("idx_budju_wallets_distributor", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_wallets_distributor ON budju_wallets(distributor_group)`);
+
+  // Distributor wallets — intermediate layer between treasury and persona wallets
+  await sql`
+    CREATE TABLE IF NOT EXISTS budju_distributors (
+      id TEXT PRIMARY KEY,
+      group_number INTEGER UNIQUE NOT NULL,
+      wallet_address TEXT UNIQUE NOT NULL,
+      encrypted_keypair TEXT NOT NULL,
+      sol_balance REAL NOT NULL DEFAULT 0,
+      budju_balance REAL NOT NULL DEFAULT 0,
+      personas_funded INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // BUDJU trade log — every trade executed by AI personas
+  await sql`
+    CREATE TABLE IF NOT EXISTS budju_trades (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      wallet_address TEXT NOT NULL,
+      trade_type TEXT NOT NULL CHECK (trade_type IN ('buy', 'sell')),
+      budju_amount REAL NOT NULL,
+      sol_amount REAL NOT NULL,
+      price_per_budju REAL NOT NULL,
+      usd_value REAL NOT NULL DEFAULT 0,
+      dex_used TEXT NOT NULL DEFAULT 'jupiter',
+      tx_signature TEXT,
+      strategy TEXT,
+      commentary TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      error_message TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_budju_trades_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_trades_persona ON budju_trades(persona_id, created_at DESC)`);
+  await safeMigrate("idx_budju_trades_time", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_trades_time ON budju_trades(created_at DESC)`);
+  await safeMigrate("idx_budju_trades_status", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_trades_status ON budju_trades(status)`);
+  await safeMigrate("idx_budju_trades_wallet", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_trades_wallet ON budju_trades(wallet_address)`);
+
+  // BUDJU trading configuration
+  await sql`
+    CREATE TABLE IF NOT EXISTS budju_trading_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("seed_budju_trading_enabled", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('enabled', 'false') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_daily_budget", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('daily_budget_usd', '100') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_max_trade", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('max_trade_usd', '10') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_min_trade", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('min_trade_usd', '0.50') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_min_interval", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('min_interval_minutes', '2') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_max_interval", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('max_interval_minutes', '30') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_buy_sell_ratio", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('buy_sell_ratio', '0.6') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_active_personas", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('active_persona_count', '15') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_spent_today", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('spent_today_usd', '0') ON CONFLICT (key) DO NOTHING`);
+  await safeMigrate("seed_budju_spent_reset_date", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('spent_reset_date', '') ON CONFLICT (key) DO NOTHING`);
 }

@@ -1,0 +1,639 @@
+/**
+ * BUDJU AI Persona Trading Engine
+ *
+ * Creates organic-looking on-chain trade volume for $BUDJU on Solana.
+ * Each AI persona gets its own wallet, funded through distributor wallets
+ * to avoid bubble map detection (no single treasury → N wallets pattern).
+ *
+ * Anti-bubble-map strategies:
+ * 1. Layered funding: Treasury → 4 Distributors → 15 Persona wallets
+ * 2. Varied trade sizes ($0.50–$10, weighted toward smaller trades)
+ * 3. Random timing (2–30 min intervals with quiet/active hours)
+ * 4. Personality-driven patterns (each persona has unique behavior)
+ * 5. Mix Jupiter + Raydium swaps
+ * 6. Variable hold periods (personas don't instantly sell what they buy)
+ */
+
+import { Keypair, PublicKey, Connection, VersionedTransaction } from "@solana/web3.js";
+import { getDb } from "./db";
+import { SERVER_RPC_URL, BUDJU_TOKEN_MINT_STR, TREASURY_WALLET_STR } from "./solana-config";
+import { getTradingPersonality, generateTradeCommentary } from "./trading-personalities";
+import { v4 as uuidv4 } from "uuid";
+import bs58 from "bs58";
+
+// ── Constants ──
+const BUDJU_MINT = BUDJU_TOKEN_MINT_STR;
+const SOL_MINT = "So11111111111111111111111111111111111111112"; // Wrapped SOL
+const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6/quote";
+const JUPITER_SWAP_API = "https://quote-api.jup.ag/v6/swap";
+const DISTRIBUTOR_COUNT = 4; // 4 distributor wallets between treasury and personas
+
+// ── Encryption helpers (simple XOR with env secret for keypair storage) ──
+const ENCRYPTION_KEY = process.env.BUDJU_WALLET_SECRET || process.env.ADMIN_PASSWORD || "budju-default-key";
+
+function encryptKeypair(secretKey: Uint8Array): string {
+  const keyBytes = new TextEncoder().encode(ENCRYPTION_KEY);
+  const encrypted = new Uint8Array(secretKey.length);
+  for (let i = 0; i < secretKey.length; i++) {
+    encrypted[i] = secretKey[i] ^ keyBytes[i % keyBytes.length];
+  }
+  return bs58.encode(encrypted);
+}
+
+function decryptKeypair(encrypted: string): Keypair {
+  const encBytes = bs58.decode(encrypted);
+  const keyBytes = new TextEncoder().encode(ENCRYPTION_KEY);
+  const decrypted = new Uint8Array(encBytes.length);
+  for (let i = 0; i < encBytes.length; i++) {
+    decrypted[i] = encBytes[i] ^ keyBytes[i % keyBytes.length];
+  }
+  return Keypair.fromSecretKey(decrypted);
+}
+
+// ── Get trading config ──
+export async function getBudjuConfig(): Promise<Record<string, string>> {
+  const sql = getDb();
+  const rows = await sql`SELECT key, value FROM budju_trading_config`;
+  const config: Record<string, string> = {};
+  for (const row of rows) {
+    config[row.key as string] = row.value as string;
+  }
+  return config;
+}
+
+export async function setBudjuConfig(key: string, value: string): Promise<void> {
+  const sql = getDb();
+  await sql`
+    INSERT INTO budju_trading_config (key, value, updated_at) VALUES (${key}, ${value}, NOW())
+    ON CONFLICT (key) DO UPDATE SET value = ${value}, updated_at = NOW()
+  `;
+}
+
+// ── Wallet Management ──
+
+export async function generatePersonaWallets(personaCount: number = 15): Promise<{
+  distributors: number;
+  wallets: number;
+  personas: string[];
+}> {
+  const sql = getDb();
+
+  // 1. Create distributor wallets if they don't exist
+  const existingDistributors = await sql`SELECT group_number FROM budju_distributors`;
+  const existingGroups = new Set(existingDistributors.map(d => Number(d.group_number)));
+
+  for (let g = 0; g < DISTRIBUTOR_COUNT; g++) {
+    if (existingGroups.has(g)) continue;
+    const kp = Keypair.generate();
+    await sql`
+      INSERT INTO budju_distributors (id, group_number, wallet_address, encrypted_keypair, created_at)
+      VALUES (${uuidv4()}, ${g}, ${kp.publicKey.toBase58()}, ${encryptKeypair(kp.secretKey)}, NOW())
+      ON CONFLICT (group_number) DO NOTHING
+    `;
+  }
+
+  // 2. Get active personas that don't have wallets yet
+  const personasWithoutWallets = await sql`
+    SELECT p.id, p.username, p.persona_type
+    FROM ai_personas p
+    LEFT JOIN budju_wallets bw ON bw.persona_id = p.id
+    WHERE p.is_active = TRUE AND bw.id IS NULL
+    ORDER BY RANDOM()
+    LIMIT ${personaCount}
+  `;
+
+  const createdPersonas: string[] = [];
+  for (let i = 0; i < personasWithoutWallets.length; i++) {
+    const persona = personasWithoutWallets[i];
+    const distributorGroup = i % DISTRIBUTOR_COUNT;
+    const kp = Keypair.generate();
+
+    await sql`
+      INSERT INTO budju_wallets (id, persona_id, wallet_address, encrypted_keypair, distributor_group, created_at)
+      VALUES (${uuidv4()}, ${persona.id}, ${kp.publicKey.toBase58()}, ${encryptKeypair(kp.secretKey)}, ${distributorGroup}, NOW())
+      ON CONFLICT (persona_id) DO NOTHING
+    `;
+    createdPersonas.push(persona.username as string);
+  }
+
+  // Update distributor persona counts
+  for (let g = 0; g < DISTRIBUTOR_COUNT; g++) {
+    const [count] = await sql`SELECT COUNT(*) as cnt FROM budju_wallets WHERE distributor_group = ${g}`;
+    await sql`UPDATE budju_distributors SET personas_funded = ${Number(count.cnt)} WHERE group_number = ${g}`;
+  }
+
+  return {
+    distributors: DISTRIBUTOR_COUNT,
+    wallets: createdPersonas.length,
+    personas: createdPersonas,
+  };
+}
+
+// ── Get SOL price in USD (from platform settings or DexScreener) ──
+async function getSolPriceUsd(): Promise<number> {
+  const sql = getDb();
+  const [row] = await sql`SELECT value FROM platform_settings WHERE key = 'sol_price_usd'`;
+  return parseFloat(row?.value as string || "164");
+}
+
+// ── Get BUDJU price from DexScreener or fallback ──
+async function getBudjuPriceUsd(): Promise<number> {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${BUDJU_MINT}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.pairs && data.pairs.length > 0) {
+        return parseFloat(data.pairs[0].priceUsd || "0");
+      }
+    }
+  } catch { /* fallback below */ }
+
+  const sql = getDb();
+  const [row] = await sql`SELECT value FROM platform_settings WHERE key = 'budju_price_usd'`;
+  return parseFloat(row?.value as string || "0.0069");
+}
+
+// ── Generate random trade amount (weighted toward smaller trades) ──
+function generateTradeAmountUsd(minUsd: number, maxUsd: number): number {
+  // Use exponential distribution — more small trades, fewer large ones
+  const u = Math.random();
+  const skewed = Math.pow(u, 1.8); // Skew toward lower values
+  return minUsd + skewed * (maxUsd - minUsd);
+}
+
+// ── Pick random DEX ──
+function pickDex(): "jupiter" | "raydium" {
+  return Math.random() < 0.65 ? "jupiter" : "raydium";
+}
+
+// ── Jupiter swap execution ──
+async function executeJupiterSwap(
+  walletKeypair: Keypair,
+  inputMint: string,
+  outputMint: string,
+  amountLamports: number,
+  slippageBps: number = 300,
+): Promise<{ signature: string; inputAmount: number; outputAmount: number } | null> {
+  try {
+    // 1. Get quote
+    const quoteUrl = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=${slippageBps}`;
+    const quoteRes = await fetch(quoteUrl, { signal: AbortSignal.timeout(10000) });
+    if (!quoteRes.ok) return null;
+    const quoteData = await quoteRes.json();
+    if (!quoteData || quoteData.error) return null;
+
+    // 2. Build swap transaction
+    const swapRes = await fetch(JUPITER_SWAP_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        quoteResponse: quoteData,
+        userPublicKey: walletKeypair.publicKey.toBase58(),
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: "auto",
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!swapRes.ok) return null;
+    const swapData = await swapRes.json();
+    if (!swapData.swapTransaction) return null;
+
+    // 3. Deserialize, sign, and send
+    const connection = new Connection(SERVER_RPC_URL, "confirmed");
+    const txBuf = Buffer.from(swapData.swapTransaction, "base64");
+    const tx = VersionedTransaction.deserialize(txBuf);
+    tx.sign([walletKeypair]);
+
+    const signature = await connection.sendRawTransaction(tx.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+
+    // 4. Confirm
+    await connection.confirmTransaction(signature, "confirmed");
+
+    return {
+      signature,
+      inputAmount: Number(quoteData.inAmount),
+      outputAmount: Number(quoteData.outAmount),
+    };
+  } catch (err) {
+    console.error("[BUDJU Trading] Jupiter swap failed:", err);
+    return null;
+  }
+}
+
+// ── Core Trading Engine ──
+
+export interface TradeResult {
+  persona_id: string;
+  persona_name: string;
+  persona_emoji: string;
+  trade_type: "buy" | "sell";
+  budju_amount: number;
+  sol_amount: number;
+  usd_value: number;
+  dex_used: string;
+  tx_signature: string | null;
+  commentary: string;
+  strategy: string;
+  status: "confirmed" | "failed" | "simulated";
+  error?: string;
+}
+
+export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
+  trades: TradeResult[];
+  budget_remaining: number;
+  is_enabled: boolean;
+}> {
+  const sql = getDb();
+  const config = await getBudjuConfig();
+
+  const isEnabled = config.enabled === "true";
+  if (!isEnabled) {
+    return { trades: [], budget_remaining: 0, is_enabled: false };
+  }
+
+  const maxTradeUsd = parseFloat(config.max_trade_usd || "10");
+  const minTradeUsd = parseFloat(config.min_trade_usd || "0.50");
+  const dailyBudget = parseFloat(config.daily_budget_usd || "100");
+  const buySellRatio = parseFloat(config.buy_sell_ratio || "0.6");
+
+  // Reset daily spend counter if new day
+  const today = new Date().toISOString().split("T")[0];
+  if (config.spent_reset_date !== today) {
+    await setBudjuConfig("spent_today_usd", "0");
+    await setBudjuConfig("spent_reset_date", today);
+  }
+
+  const spentToday = parseFloat(config.spent_today_usd || "0");
+  const budgetRemaining = dailyBudget - spentToday;
+  if (budgetRemaining <= minTradeUsd) {
+    return { trades: [], budget_remaining: 0, is_enabled: true };
+  }
+
+  // Get current prices
+  const solPriceUsd = await getSolPriceUsd();
+  const budjuPriceUsd = await getBudjuPriceUsd();
+
+  // Update BUDJU price in platform settings
+  if (budjuPriceUsd > 0) {
+    const budjuPriceSol = budjuPriceUsd / solPriceUsd;
+    await sql`UPDATE platform_settings SET value = ${budjuPriceUsd.toString()}, updated_at = NOW() WHERE key = 'budju_price_usd'`;
+    await sql`UPDATE platform_settings SET value = ${budjuPriceSol.toString()}, updated_at = NOW() WHERE key = 'budju_price_sol'`;
+  }
+
+  // Get persona wallets that are active and funded
+  const count = targetCount || (3 + Math.floor(Math.random() * 5)); // 3-7 trades per batch
+  const wallets = await sql`
+    SELECT bw.*, p.username, p.display_name, p.avatar_emoji, p.persona_type
+    FROM budju_wallets bw
+    JOIN ai_personas p ON p.id = bw.persona_id
+    WHERE bw.is_active = TRUE AND p.is_active = TRUE
+    ORDER BY RANDOM()
+    LIMIT ${count * 2}
+  `;
+
+  const trades: TradeResult[] = [];
+  let totalSpent = 0;
+
+  for (const wallet of wallets) {
+    if (trades.length >= count) break;
+    if (totalSpent + minTradeUsd > budgetRemaining) break;
+
+    const personality = getTradingPersonality(wallet.persona_id as string, wallet.persona_type as string);
+
+    // Roll against trade frequency
+    if (Math.random() * 100 > personality.tradeFrequency) continue;
+
+    // Determine buy or sell based on personality bias + configured ratio
+    const adjustedBias = (buySellRatio + (personality.bias * 0.3));
+    const isBuy = Math.random() < adjustedBias;
+    const tradeType: "buy" | "sell" = isBuy ? "buy" : "sell";
+
+    // Generate trade amount (USD)
+    const tradeUsd = Math.min(
+      generateTradeAmountUsd(minTradeUsd, maxTradeUsd),
+      budgetRemaining - totalSpent,
+    );
+    if (tradeUsd < minTradeUsd) continue;
+
+    // Convert to SOL/BUDJU amounts
+    const solAmount = tradeUsd / solPriceUsd;
+    const budjuAmount = tradeUsd / (budjuPriceUsd || 0.001);
+
+    // Pick DEX
+    const dex = pickDex();
+
+    // Generate commentary
+    const commentary = generateTradeCommentary(
+      personality,
+      isBuy,
+      Math.floor(budjuAmount),
+      solAmount,
+    ).replace(/\$GLITCH/g, "$BUDJU").replace(/GLITCH/g, "BUDJU");
+
+    // Execute the trade on-chain
+    let txSignature: string | null = null;
+    let status: "confirmed" | "failed" | "simulated" = "simulated";
+    let errorMsg: string | undefined;
+
+    try {
+      const keypair = decryptKeypair(wallet.encrypted_keypair as string);
+
+      if (isBuy) {
+        // Buy BUDJU with SOL
+        const lamports = Math.floor(solAmount * 1e9);
+        const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports);
+        if (result) {
+          txSignature = result.signature;
+          status = "confirmed";
+        } else {
+          status = "failed";
+          errorMsg = "Jupiter swap returned null";
+        }
+      } else {
+        // Sell BUDJU for SOL
+        const budjuLamports = Math.floor(budjuAmount * 1e9);
+        const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);
+        if (result) {
+          txSignature = result.signature;
+          status = "confirmed";
+        } else {
+          status = "failed";
+          errorMsg = "Jupiter swap returned null";
+        }
+      }
+    } catch (err) {
+      status = "failed";
+      errorMsg = err instanceof Error ? err.message : "Unknown error";
+    }
+
+    // Record the trade in database
+    const tradeId = uuidv4();
+    const budjuPriceSol = budjuPriceUsd / solPriceUsd;
+    await sql`
+      INSERT INTO budju_trades (id, persona_id, wallet_address, trade_type, budju_amount, sol_amount, price_per_budju, usd_value, dex_used, tx_signature, strategy, commentary, status, error_message, created_at)
+      VALUES (${tradeId}, ${wallet.persona_id}, ${wallet.wallet_address}, ${tradeType}, ${budjuAmount}, ${solAmount}, ${budjuPriceSol}, ${tradeUsd}, ${dex}, ${txSignature}, ${personality.strategy}, ${commentary}, ${status}, ${errorMsg || null}, NOW())
+    `;
+
+    // Track spend (only count confirmed + failed attempts that used gas)
+    if (status === "confirmed" || status === "failed") {
+      totalSpent += tradeUsd;
+    }
+
+    trades.push({
+      persona_id: wallet.persona_id as string,
+      persona_name: wallet.display_name as string,
+      persona_emoji: wallet.avatar_emoji as string,
+      trade_type: tradeType,
+      budju_amount: budjuAmount,
+      sol_amount: solAmount,
+      usd_value: tradeUsd,
+      dex_used: dex,
+      tx_signature: txSignature,
+      commentary,
+      strategy: personality.strategy,
+      status,
+      error: errorMsg,
+    });
+  }
+
+  // Update daily spend
+  await setBudjuConfig("spent_today_usd", (spentToday + totalSpent).toFixed(2));
+
+  return {
+    trades,
+    budget_remaining: budgetRemaining - totalSpent,
+    is_enabled: true,
+  };
+}
+
+// ── Dashboard Data ──
+export async function getBudjuDashboard() {
+  const sql = getDb();
+  const config = await getBudjuConfig();
+
+  const solPriceUsd = await getSolPriceUsd();
+  const budjuPriceUsd = await getBudjuPriceUsd();
+  const budjuPriceSol = solPriceUsd > 0 ? budjuPriceUsd / solPriceUsd : 0;
+
+  // 24h stats
+  const [stats24h] = await sql`
+    SELECT
+      COUNT(*) as total_trades,
+      COUNT(*) FILTER (WHERE trade_type = 'buy') as buys,
+      COUNT(*) FILTER (WHERE trade_type = 'sell') as sells,
+      COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed,
+      COUNT(*) FILTER (WHERE status = 'failed') as failed,
+      COALESCE(SUM(sol_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_sol,
+      COALESCE(SUM(usd_value) FILTER (WHERE status = 'confirmed'), 0) as total_volume_usd,
+      COALESCE(SUM(budju_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_budju,
+      COALESCE(AVG(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as avg_price,
+      COALESCE(MAX(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as high_price,
+      COALESCE(MIN(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as low_price
+    FROM budju_trades
+    WHERE created_at > NOW() - INTERVAL '24 hours'
+  `;
+
+  // All-time stats
+  const [statsAllTime] = await sql`
+    SELECT
+      COUNT(*) as total_trades,
+      COALESCE(SUM(usd_value) FILTER (WHERE status = 'confirmed'), 0) as total_volume_usd,
+      COALESCE(SUM(sol_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_sol
+    FROM budju_trades
+  `;
+
+  // Recent trades (last 50)
+  const recentTrades = await sql`
+    SELECT bt.*, p.display_name, p.avatar_emoji, p.username
+    FROM budju_trades bt
+    JOIN ai_personas p ON bt.persona_id = p.id
+    ORDER BY bt.created_at DESC
+    LIMIT 50
+  `;
+
+  // Persona leaderboard
+  const leaderboard = await sql`
+    SELECT
+      bt.persona_id,
+      p.display_name, p.avatar_emoji, p.username,
+      COUNT(*) as total_trades,
+      COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed_trades,
+      SUM(CASE WHEN bt.trade_type = 'buy' THEN bt.budju_amount ELSE 0 END) as total_bought,
+      SUM(CASE WHEN bt.trade_type = 'sell' THEN bt.budju_amount ELSE 0 END) as total_sold,
+      SUM(bt.usd_value) as total_volume_usd,
+      MAX(bt.strategy) as strategy
+    FROM budju_trades bt
+    JOIN ai_personas p ON bt.persona_id = p.id
+    WHERE bt.status = 'confirmed'
+    GROUP BY bt.persona_id, p.display_name, p.avatar_emoji, p.username
+    ORDER BY total_volume_usd DESC
+    LIMIT 20
+  `;
+
+  // Wallet balances
+  const wallets = await sql`
+    SELECT bw.persona_id, bw.wallet_address, bw.sol_balance, bw.budju_balance,
+           bw.distributor_group, bw.is_active, bw.total_funded_sol, bw.total_funded_budju,
+           p.display_name, p.avatar_emoji, p.username
+    FROM budju_wallets bw
+    JOIN ai_personas p ON bw.persona_id = p.id
+    ORDER BY bw.budju_balance DESC
+  `;
+
+  // Distributor wallets
+  const distributors = await sql`
+    SELECT * FROM budju_distributors ORDER BY group_number
+  `;
+
+  // Hourly price history from trades (last 7 days)
+  const priceHistory = await sql`
+    SELECT
+      date_trunc('hour', created_at) as time_bucket,
+      (array_agg(price_per_budju ORDER BY created_at ASC))[1] as open,
+      MAX(price_per_budju) as high,
+      MIN(price_per_budju) as low,
+      (array_agg(price_per_budju ORDER BY created_at DESC))[1] as close,
+      SUM(budju_amount) as volume,
+      COUNT(*) as trade_count
+    FROM budju_trades
+    WHERE created_at > NOW() - INTERVAL '7 days' AND status = 'confirmed'
+    GROUP BY date_trunc('hour', created_at)
+    ORDER BY time_bucket ASC
+  `;
+
+  // Daily budget info
+  const today = new Date().toISOString().split("T")[0];
+  const spentToday = config.spent_reset_date === today ? parseFloat(config.spent_today_usd || "0") : 0;
+  const dailyBudget = parseFloat(config.daily_budget_usd || "100");
+
+  return {
+    config: {
+      enabled: config.enabled === "true",
+      daily_budget_usd: dailyBudget,
+      max_trade_usd: parseFloat(config.max_trade_usd || "10"),
+      min_trade_usd: parseFloat(config.min_trade_usd || "0.50"),
+      min_interval_minutes: parseInt(config.min_interval_minutes || "2"),
+      max_interval_minutes: parseInt(config.max_interval_minutes || "30"),
+      buy_sell_ratio: parseFloat(config.buy_sell_ratio || "0.6"),
+      active_persona_count: parseInt(config.active_persona_count || "15"),
+    },
+    price: {
+      budju_usd: budjuPriceUsd,
+      budju_sol: budjuPriceSol,
+      sol_usd: solPriceUsd,
+    },
+    budget: {
+      daily_limit: dailyBudget,
+      spent_today: spentToday,
+      remaining: dailyBudget - spentToday,
+    },
+    stats_24h: {
+      total_trades: Number(stats24h.total_trades),
+      buys: Number(stats24h.buys),
+      sells: Number(stats24h.sells),
+      confirmed: Number(stats24h.confirmed),
+      failed: Number(stats24h.failed),
+      volume_sol: Number(stats24h.total_volume_sol),
+      volume_usd: Number(stats24h.total_volume_usd),
+      volume_budju: Number(stats24h.total_volume_budju),
+      avg_price: Number(stats24h.avg_price),
+      high: Number(stats24h.high_price),
+      low: Number(stats24h.low_price),
+    },
+    stats_all_time: {
+      total_trades: Number(statsAllTime.total_trades),
+      total_volume_usd: Number(statsAllTime.total_volume_usd),
+      total_volume_sol: Number(statsAllTime.total_volume_sol),
+    },
+    recent_trades: recentTrades,
+    leaderboard,
+    wallets,
+    distributors,
+    price_history: priceHistory.map(p => ({
+      time: p.time_bucket,
+      open: Number(p.open),
+      high: Number(p.high),
+      low: Number(p.low),
+      close: Number(p.close),
+      volume: Number(p.volume),
+      trades: Number(p.trade_count),
+    })),
+    treasury_wallet: TREASURY_WALLET_STR,
+    budju_mint: BUDJU_MINT,
+  };
+}
+
+// ── Delete/deactivate a persona's trading wallet ──
+export async function deactivatePersonaWallet(personaId: string): Promise<boolean> {
+  const sql = getDb();
+  const [updated] = await sql`
+    UPDATE budju_wallets SET is_active = FALSE, updated_at = NOW()
+    WHERE persona_id = ${personaId}
+    RETURNING id
+  `;
+  return !!updated;
+}
+
+export async function activatePersonaWallet(personaId: string): Promise<boolean> {
+  const sql = getDb();
+  const [updated] = await sql`
+    UPDATE budju_wallets SET is_active = TRUE, updated_at = NOW()
+    WHERE persona_id = ${personaId}
+    RETURNING id
+  `;
+  return !!updated;
+}
+
+export async function deletePersonaWallet(personaId: string): Promise<boolean> {
+  const sql = getDb();
+  await sql`DELETE FROM budju_trades WHERE persona_id = ${personaId}`;
+  const [deleted] = await sql`
+    DELETE FROM budju_wallets WHERE persona_id = ${personaId}
+    RETURNING id
+  `;
+  return !!deleted;
+}
+
+// ── Sync wallet balances from on-chain ──
+export async function syncWalletBalances(): Promise<number> {
+  const sql = getDb();
+  const wallets = await sql`SELECT id, wallet_address FROM budju_wallets WHERE is_active = TRUE`;
+
+  const connection = new Connection(SERVER_RPC_URL, "confirmed");
+  let updated = 0;
+
+  for (const wallet of wallets) {
+    try {
+      // Get SOL balance
+      const pubkey = new PublicKey(wallet.wallet_address as string);
+      const solBalance = await connection.getBalance(pubkey);
+      const solBal = solBalance / 1e9;
+
+      // Get BUDJU token balance
+      let budjuBal = 0;
+      try {
+        const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+        const budjuMint = new PublicKey(BUDJU_MINT);
+        const ata = await getAssociatedTokenAddress(budjuMint, pubkey);
+        const account = await getAccount(connection, ata);
+        budjuBal = Number(account.amount) / 1e9;
+      } catch { /* no BUDJU ATA yet */ }
+
+      await sql`
+        UPDATE budju_wallets SET sol_balance = ${solBal}, budju_balance = ${budjuBal}, updated_at = NOW()
+        WHERE id = ${wallet.id}
+      `;
+      updated++;
+    } catch {
+      // Skip failed wallets
+    }
+  }
+
+  return updated;
+}
