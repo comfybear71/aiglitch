@@ -725,6 +725,83 @@ export default function AdminDashboard() {
     fetchBudjuDashboard();
   };
 
+  const distributeBudjuFunds = async () => {
+    if (!confirm("Distribute SOL from all 4 distributor wallets to their assigned persona wallets?\n\nMake sure you have funded the distributor wallets first.")) return;
+    setBudjuActionLoading(true);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "distribute_funds" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const successCount = data.distributions?.filter((d: { error?: string }) => !d.error).length || 0;
+        const failCount = data.distributions?.filter((d: { error?: string }) => d.error).length || 0;
+        const errMsg = data.errors?.length ? `\n\nErrors:\n${data.errors.join("\n")}` : "";
+        alert(`Distributed ${data.total_sol_distributed?.toFixed(4) || 0} SOL total.\n${successCount} successful, ${failCount} failed.${errMsg}`);
+        fetchBudjuDashboard();
+      } else {
+        alert(`Distribution failed: ${data.error || JSON.stringify(data)}`);
+      }
+    } catch (e) {
+      alert(`Network error: ${e instanceof Error ? e.message : "Failed to connect"}`);
+    }
+    setBudjuActionLoading(false);
+  };
+
+  const drainBudjuWallets = async () => {
+    const destination = prompt("Enter the Solana wallet address to drain all funds to:\n\n(This will send ALL SOL from persona and distributor wallets to this address)");
+    if (!destination || destination.length < 32) return;
+    if (!confirm(`CONFIRM: Drain ALL wallet funds to:\n${destination}\n\nThis will empty every persona and distributor wallet.`)) return;
+    setBudjuActionLoading(true);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "drain_wallets", destination, wallet_type: "all" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const successCount = data.drained?.filter((d: { error?: string }) => !d.error).length || 0;
+        const errMsg = data.errors?.length ? `\n\nErrors:\n${data.errors.join("\n")}` : "";
+        alert(`Recovered ${data.total_sol_recovered?.toFixed(4) || 0} SOL from ${successCount} wallets.${errMsg}`);
+        fetchBudjuDashboard();
+      } else {
+        alert(`Drain failed: ${data.error || JSON.stringify(data)}`);
+      }
+    } catch (e) {
+      alert(`Network error: ${e instanceof Error ? e.message : "Failed to connect"}`);
+    }
+    setBudjuActionLoading(false);
+  };
+
+  const exportBudjuKeys = async () => {
+    if (!confirm("Export ALL private keys for distributor and persona wallets?\n\nWARNING: Keep these secure! Anyone with these keys can access the funds.")) return;
+    setBudjuActionLoading(true);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "export_keys" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.wallets) {
+        const text = data.wallets.map((w: { type: string; name: string; address: string; private_key: string }) =>
+          `[${w.type}] ${w.name}\nAddress: ${w.address}\nPrivate Key: ${w.private_key}\n`
+        ).join("\n");
+        // Copy to clipboard
+        await navigator.clipboard.writeText(text).catch(() => {});
+        alert(`Exported ${data.wallets.length} wallet keys (copied to clipboard).\n\nKEEP THESE SECURE!`);
+      } else {
+        alert(`Export failed: ${data.error || JSON.stringify(data)}`);
+      }
+    } catch (e) {
+      alert(`Network error: ${e instanceof Error ? e.message : "Failed to connect"}`);
+    }
+    setBudjuActionLoading(false);
+  };
+
   // Lazy load data per tab — only fetch what's needed for the current tab
   useEffect(() => {
     if (!authenticated) return;
@@ -3449,14 +3526,26 @@ export default function AdminDashboard() {
                     <div className="bg-gray-900 border border-fuchsia-500/30 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-bold text-fuchsia-400">Wallet Management</h3>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button onClick={generateBudjuWallets} disabled={budjuActionLoading}
                             className="px-3 py-1.5 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
                             {budjuActionLoading ? "..." : "Generate Wallets"}
                           </button>
+                          <button onClick={distributeBudjuFunds} disabled={budjuActionLoading}
+                            className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
+                            {budjuActionLoading ? "..." : "Distribute Funds"}
+                          </button>
                           <button onClick={syncBudjuBalances} disabled={budjuActionLoading}
                             className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50">
                             Sync Balances
+                          </button>
+                          <button onClick={drainBudjuWallets} disabled={budjuActionLoading}
+                            className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
+                            Drain Wallets
+                          </button>
+                          <button onClick={exportBudjuKeys} disabled={budjuActionLoading}
+                            className="px-3 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
+                            Export Keys
                           </button>
                         </div>
                       </div>
@@ -3469,11 +3558,13 @@ export default function AdminDashboard() {
                             {budjuData.distributors.map((d) => (
                               <div key={d.id} className="bg-gray-800/50 rounded-lg p-2">
                                 <p className="text-[10px] font-bold text-amber-400">Group {d.group_number}</p>
-                                <p className="text-[9px] text-gray-500 font-mono truncate">{d.wallet_address}</p>
+                                <p className="text-[9px] text-gray-500 font-mono truncate cursor-pointer" onClick={() => { navigator.clipboard.writeText(d.wallet_address as string); }}
+                                  title="Click to copy address">{d.wallet_address}</p>
                                 <p className="text-[10px] text-gray-400 mt-1">{d.personas_funded} personas | {Number(d.sol_balance).toFixed(4)} SOL</p>
                               </div>
                             ))}
                           </div>
+                          <p className="text-[9px] text-gray-600 mt-2">1. Send SOL to each group wallet above → 2. Click &quot;Distribute Funds&quot; → 3. SOL splits to persona wallets automatically</p>
                         </div>
                       )}
 

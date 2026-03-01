@@ -11,6 +11,9 @@ import {
   deletePersonaWallet,
   syncWalletBalances,
   executeBudjuTradeBatch,
+  distributeFundsFromDistributors,
+  drainWallets,
+  exportWalletKeys,
 } from "@/lib/budju-trading";
 
 // ── GET: Dashboard data ──
@@ -148,6 +151,48 @@ export async function POST(request: NextRequest) {
   if (action === "reset_budget") {
     await setBudjuConfig("spent_today_usd", "0");
     return NextResponse.json({ success: true });
+  }
+
+  // Distribute funds from distributors to persona wallets
+  if (action === "distribute_funds") {
+    try {
+      const result = await distributeFundsFromDistributors();
+      return NextResponse.json({
+        success: true,
+        total_sol_distributed: result.total_sol_distributed,
+        distributions: result.distributions,
+        errors: result.errors,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Distribution failed" }, { status: 500 });
+    }
+  }
+
+  // Drain all wallets back to a destination address
+  if (action === "drain_wallets") {
+    if (!body.destination) return NextResponse.json({ error: "Missing destination address" }, { status: 400 });
+    const walletType = body.wallet_type || "all"; // "personas" | "distributors" | "all"
+    try {
+      const result = await drainWallets(body.destination, walletType);
+      return NextResponse.json({
+        success: true,
+        total_sol_recovered: result.total_sol_recovered,
+        drained: result.drained,
+        errors: result.errors,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Drain failed" }, { status: 500 });
+    }
+  }
+
+  // Export private keys (for manual wallet recovery)
+  if (action === "export_keys") {
+    try {
+      const result = await exportWalletKeys(body.persona_id);
+      return NextResponse.json({ success: true, ...result });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Export failed" }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

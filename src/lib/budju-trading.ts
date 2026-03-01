@@ -14,7 +14,7 @@
  * 6. Variable hold periods (personas don't instantly sell what they buy)
  */
 
-import { Keypair, PublicKey, Connection, VersionedTransaction } from "@solana/web3.js";
+import { Keypair, PublicKey, Connection, VersionedTransaction, Transaction, SystemProgram, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { getDb } from "./db";
 import { SERVER_RPC_URL, BUDJU_TOKEN_MINT_STR, TREASURY_WALLET_STR } from "./solana-config";
 import { getTradingPersonality, generateTradeCommentary } from "./trading-personalities";
@@ -526,6 +526,271 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
     budget_remaining: budgetRemaining - totalSpent,
     is_enabled: true,
   };
+}
+
+// ── Distribute SOL from distributors to persona wallets ──
+export async function distributeFundsFromDistributors(): Promise<{
+  distributions: { group: number; persona: string; wallet: string; sol_sent: number; tx: string | null; error?: string }[];
+  total_sol_distributed: number;
+  errors: string[];
+}> {
+  await ensureBudjuTables();
+  const sql = getDb();
+  const connection = new Connection(SERVER_RPC_URL, "confirmed");
+  const distributions: { group: number; persona: string; wallet: string; sol_sent: number; tx: string | null; error?: string }[] = [];
+  const errors: string[] = [];
+  let totalDistributed = 0;
+
+  // Get all distributors
+  const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
+  if (distributors.length === 0) {
+    return { distributions: [], total_sol_distributed: 0, errors: ["No distributor wallets found. Generate wallets first."] };
+  }
+
+  for (const dist of distributors) {
+    try {
+      const distKeypair = decryptKeypair(dist.encrypted_keypair as string);
+      const distPubkey = distKeypair.publicKey;
+
+      // Get on-chain SOL balance
+      const balanceLamports = await connection.getBalance(distPubkey);
+      const balanceSol = balanceLamports / LAMPORTS_PER_SOL;
+
+      // Reserve 0.005 SOL for rent/fees on the distributor
+      const reserveSol = 0.005;
+      const availableSol = balanceSol - reserveSol;
+
+      if (availableSol <= 0.001) {
+        errors.push(`Group ${dist.group_number}: Insufficient balance (${balanceSol.toFixed(4)} SOL)`);
+        continue;
+      }
+
+      // Get persona wallets in this group
+      const personas = await sql`
+        SELECT bw.*, p.display_name FROM budju_wallets bw
+        JOIN ai_personas p ON p.id = bw.persona_id
+        WHERE bw.distributor_group = ${dist.group_number} AND bw.is_active = TRUE
+      `;
+
+      if (personas.length === 0) {
+        errors.push(`Group ${dist.group_number}: No active persona wallets`);
+        continue;
+      }
+
+      // Split available SOL across personas with slight variation (anti-bubble-map)
+      const baseAmount = availableSol / personas.length;
+      const amounts: number[] = [];
+      let totalAllocated = 0;
+
+      for (let i = 0; i < personas.length; i++) {
+        // Vary each amount by +/- 20% for organic look
+        const variance = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
+        const amount = baseAmount * variance;
+        amounts.push(amount);
+        totalAllocated += amount;
+      }
+
+      // Normalize so total doesn't exceed available
+      const scale = availableSol / totalAllocated;
+      for (let i = 0; i < amounts.length; i++) {
+        amounts[i] *= scale;
+      }
+
+      // Send SOL to each persona wallet
+      for (let i = 0; i < personas.length; i++) {
+        const persona = personas[i];
+        const solToSend = amounts[i];
+        const lamportsToSend = Math.floor(solToSend * LAMPORTS_PER_SOL);
+
+        if (lamportsToSend < 5000) continue; // Skip tiny amounts
+
+        try {
+          const tx = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: distPubkey,
+              toPubkey: new PublicKey(persona.wallet_address as string),
+              lamports: lamportsToSend,
+            })
+          );
+
+          const signature = await sendAndConfirmTransaction(connection, tx, [distKeypair], {
+            commitment: "confirmed",
+          });
+
+          // Update DB balance
+          await sql`
+            UPDATE budju_wallets SET
+              sol_balance = sol_balance + ${solToSend},
+              total_funded_sol = total_funded_sol + ${solToSend},
+              updated_at = NOW()
+            WHERE persona_id = ${persona.persona_id}
+          `;
+
+          distributions.push({
+            group: Number(dist.group_number),
+            persona: persona.display_name as string,
+            wallet: persona.wallet_address as string,
+            sol_sent: solToSend,
+            tx: signature,
+          });
+          totalDistributed += solToSend;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          distributions.push({
+            group: Number(dist.group_number),
+            persona: persona.display_name as string,
+            wallet: persona.wallet_address as string,
+            sol_sent: 0,
+            tx: null,
+            error: msg,
+          });
+          errors.push(`Group ${dist.group_number} → ${persona.display_name}: ${msg}`);
+        }
+      }
+
+      // Update distributor balance in DB
+      const newBalance = await connection.getBalance(distPubkey);
+      await sql`UPDATE budju_distributors SET sol_balance = ${newBalance / LAMPORTS_PER_SOL} WHERE group_number = ${dist.group_number}`;
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`Group ${dist.group_number} failed: ${msg}`);
+    }
+  }
+
+  return { distributions, total_sol_distributed: totalDistributed, errors };
+}
+
+// ── Drain all persona/distributor wallets back to a destination ──
+export async function drainWallets(destinationAddress: string, walletType: "personas" | "distributors" | "all" = "all"): Promise<{
+  drained: { type: string; name: string; wallet: string; sol_sent: number; tx: string | null; error?: string }[];
+  total_sol_recovered: number;
+  errors: string[];
+}> {
+  await ensureBudjuTables();
+  const sql = getDb();
+  const connection = new Connection(SERVER_RPC_URL, "confirmed");
+  const drained: { type: string; name: string; wallet: string; sol_sent: number; tx: string | null; error?: string }[] = [];
+  const drainErrors: string[] = [];
+  let totalRecovered = 0;
+  const destination = new PublicKey(destinationAddress);
+
+  // Drain persona wallets
+  if (walletType === "personas" || walletType === "all") {
+    const wallets = await sql`
+      SELECT bw.*, p.display_name FROM budju_wallets bw
+      JOIN ai_personas p ON p.id = bw.persona_id
+    `;
+
+    for (const w of wallets) {
+      try {
+        const keypair = decryptKeypair(w.encrypted_keypair as string);
+        const balanceLamports = await connection.getBalance(keypair.publicKey);
+        // Need to reserve enough for the tx fee (~5000 lamports)
+        const sendLamports = balanceLamports - 5000;
+        if (sendLamports <= 0) {
+          drained.push({ type: "persona", name: w.display_name as string, wallet: w.wallet_address as string, sol_sent: 0, tx: null, error: "Empty wallet" });
+          continue;
+        }
+
+        const tx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: keypair.publicKey,
+            toPubkey: destination,
+            lamports: sendLamports,
+          })
+        );
+        const signature = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+        const solSent = sendLamports / LAMPORTS_PER_SOL;
+
+        await sql`UPDATE budju_wallets SET sol_balance = 0, updated_at = NOW() WHERE persona_id = ${w.persona_id}`;
+
+        drained.push({ type: "persona", name: w.display_name as string, wallet: w.wallet_address as string, sol_sent: solSent, tx: signature });
+        totalRecovered += solSent;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        drained.push({ type: "persona", name: w.display_name as string, wallet: w.wallet_address as string, sol_sent: 0, tx: null, error: msg });
+        drainErrors.push(`Persona ${w.display_name}: ${msg}`);
+      }
+    }
+  }
+
+  // Drain distributor wallets
+  if (walletType === "distributors" || walletType === "all") {
+    const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
+
+    for (const d of distributors) {
+      try {
+        const keypair = decryptKeypair(d.encrypted_keypair as string);
+        const balanceLamports = await connection.getBalance(keypair.publicKey);
+        const sendLamports = balanceLamports - 5000;
+        if (sendLamports <= 0) {
+          drained.push({ type: "distributor", name: `Group ${d.group_number}`, wallet: d.wallet_address as string, sol_sent: 0, tx: null, error: "Empty wallet" });
+          continue;
+        }
+
+        const tx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: keypair.publicKey,
+            toPubkey: destination,
+            lamports: sendLamports,
+          })
+        );
+        const signature = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+        const solSent = sendLamports / LAMPORTS_PER_SOL;
+
+        await sql`UPDATE budju_distributors SET sol_balance = 0 WHERE group_number = ${d.group_number}`;
+
+        drained.push({ type: "distributor", name: `Group ${d.group_number}`, wallet: d.wallet_address as string, sol_sent: solSent, tx: signature });
+        totalRecovered += solSent;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        drained.push({ type: "distributor", name: `Group ${d.group_number}`, wallet: d.wallet_address as string, sol_sent: 0, tx: null, error: msg });
+        drainErrors.push(`Distributor Group ${d.group_number}: ${msg}`);
+      }
+    }
+  }
+
+  return { drained, total_sol_recovered: totalRecovered, errors: drainErrors };
+}
+
+// ── Export private keys for a specific wallet (admin recovery) ──
+export async function exportWalletKeys(personaId?: string): Promise<{
+  wallets: { type: string; name: string; address: string; private_key: string }[];
+}> {
+  await ensureBudjuTables();
+  const sql = getDb();
+  const result: { type: string; name: string; address: string; private_key: string }[] = [];
+
+  if (personaId) {
+    // Export a specific persona wallet
+    const [w] = await sql`
+      SELECT bw.*, p.display_name FROM budju_wallets bw
+      JOIN ai_personas p ON p.id = bw.persona_id
+      WHERE bw.persona_id = ${personaId}
+    `;
+    if (w) {
+      const kp = decryptKeypair(w.encrypted_keypair as string);
+      result.push({ type: "persona", name: w.display_name as string, address: w.wallet_address as string, private_key: bs58.encode(kp.secretKey) });
+    }
+  } else {
+    // Export all wallets
+    const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
+    for (const d of distributors) {
+      const kp = decryptKeypair(d.encrypted_keypair as string);
+      result.push({ type: "distributor", name: `Group ${d.group_number}`, address: d.wallet_address as string, private_key: bs58.encode(kp.secretKey) });
+    }
+    const wallets = await sql`
+      SELECT bw.*, p.display_name FROM budju_wallets bw
+      JOIN ai_personas p ON p.id = bw.persona_id ORDER BY bw.distributor_group
+    `;
+    for (const w of wallets) {
+      const kp = decryptKeypair(w.encrypted_keypair as string);
+      result.push({ type: "persona", name: w.display_name as string, address: w.wallet_address as string, private_key: bs58.encode(kp.secretKey) });
+    }
+  }
+
+  return { wallets: result };
 }
 
 // ── Dashboard Data ──
