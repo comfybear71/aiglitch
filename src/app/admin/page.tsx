@@ -653,15 +653,22 @@ export default function AdminDashboard() {
 
   const generateBudjuWallets = async () => {
     setBudjuActionLoading(true);
-    const res = await fetch("/api/admin/budju-trading", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "generate_wallets", count: 15 }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate_wallets", count: 15 }),
+      });
       const data = await res.json();
-      alert(`Generated ${data.wallets} wallets across ${data.distributors} distributors.\nPersonas: ${data.personas.join(", ") || "All already have wallets"}`);
-      fetchBudjuDashboard();
+      if (res.ok) {
+        const errMsg = data.errors?.length ? `\n\nErrors:\n${data.errors.join("\n")}` : "";
+        alert(`Generated ${data.wallets} wallets across ${data.distributors} distributors.\nPersonas: ${data.personas?.join(", ") || "All already have wallets"}${errMsg}`);
+        fetchBudjuDashboard();
+      } else {
+        alert(`Failed: ${data.error || JSON.stringify(data)}`);
+      }
+    } catch (e) {
+      alert(`Network error: ${e instanceof Error ? e.message : "Failed to connect"}`);
     }
     setBudjuActionLoading(false);
   };

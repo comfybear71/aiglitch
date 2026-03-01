@@ -75,57 +75,82 @@ export async function generatePersonaWallets(personaCount: number = 15): Promise
   distributors: number;
   wallets: number;
   personas: string[];
+  errors: string[];
 }> {
   const sql = getDb();
+  const errors: string[] = [];
 
   // 1. Create distributor wallets if they don't exist
-  const existingDistributors = await sql`SELECT group_number FROM budju_distributors`;
-  const existingGroups = new Set(existingDistributors.map(d => Number(d.group_number)));
+  try {
+    const existingDistributors = await sql`SELECT group_number FROM budju_distributors`;
+    const existingGroups = new Set(existingDistributors.map(d => Number(d.group_number)));
 
-  for (let g = 0; g < DISTRIBUTOR_COUNT; g++) {
-    if (existingGroups.has(g)) continue;
-    const kp = Keypair.generate();
-    await sql`
-      INSERT INTO budju_distributors (id, group_number, wallet_address, encrypted_keypair, created_at)
-      VALUES (${uuidv4()}, ${g}, ${kp.publicKey.toBase58()}, ${encryptKeypair(kp.secretKey)}, NOW())
-      ON CONFLICT (group_number) DO NOTHING
-    `;
+    for (let g = 0; g < DISTRIBUTOR_COUNT; g++) {
+      if (existingGroups.has(g)) continue;
+      const kp = Keypair.generate();
+      await sql`
+        INSERT INTO budju_distributors (id, group_number, wallet_address, encrypted_keypair, created_at)
+        VALUES (${uuidv4()}, ${g}, ${kp.publicKey.toBase58()}, ${encryptKeypair(kp.secretKey)}, NOW())
+        ON CONFLICT (group_number) DO NOTHING
+      `;
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`Distributor creation failed: ${msg}`);
+    console.error("[BUDJU] Distributor creation failed:", e);
   }
 
   // 2. Get active personas that don't have wallets yet
-  const personasWithoutWallets = await sql`
-    SELECT p.id, p.username, p.persona_type
-    FROM ai_personas p
-    LEFT JOIN budju_wallets bw ON bw.persona_id = p.id
-    WHERE p.is_active = TRUE AND bw.id IS NULL
-    ORDER BY RANDOM()
-    LIMIT ${personaCount}
-  `;
-
   const createdPersonas: string[] = [];
-  for (let i = 0; i < personasWithoutWallets.length; i++) {
-    const persona = personasWithoutWallets[i];
-    const distributorGroup = i % DISTRIBUTOR_COUNT;
-    const kp = Keypair.generate();
-
-    await sql`
-      INSERT INTO budju_wallets (id, persona_id, wallet_address, encrypted_keypair, distributor_group, created_at)
-      VALUES (${uuidv4()}, ${persona.id}, ${kp.publicKey.toBase58()}, ${encryptKeypair(kp.secretKey)}, ${distributorGroup}, NOW())
-      ON CONFLICT (persona_id) DO NOTHING
+  try {
+    const personasWithoutWallets = await sql`
+      SELECT p.id, p.username, p.persona_type
+      FROM ai_personas p
+      LEFT JOIN budju_wallets bw ON bw.persona_id = p.id
+      WHERE p.is_active = TRUE AND bw.id IS NULL
+      ORDER BY RANDOM()
+      LIMIT ${personaCount}
     `;
-    createdPersonas.push(persona.username as string);
+
+    for (let i = 0; i < personasWithoutWallets.length; i++) {
+      const persona = personasWithoutWallets[i];
+      const distributorGroup = i % DISTRIBUTOR_COUNT;
+      try {
+        const kp = Keypair.generate();
+        // Check if persona already has a wallet (avoid ON CONFLICT issues)
+        const [existing] = await sql`SELECT id FROM budju_wallets WHERE persona_id = ${persona.id}`;
+        if (existing) continue;
+
+        await sql`
+          INSERT INTO budju_wallets (id, persona_id, wallet_address, encrypted_keypair, distributor_group, created_at)
+          VALUES (${uuidv4()}, ${persona.id}, ${kp.publicKey.toBase58()}, ${encryptKeypair(kp.secretKey)}, ${distributorGroup}, NOW())
+        `;
+        createdPersonas.push(persona.username as string);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push(`Wallet for ${persona.username} failed: ${msg}`);
+        console.error(`[BUDJU] Wallet creation failed for ${persona.username}:`, e);
+      }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`Persona query failed: ${msg}`);
+    console.error("[BUDJU] Persona query failed:", e);
   }
 
   // Update distributor persona counts
-  for (let g = 0; g < DISTRIBUTOR_COUNT; g++) {
-    const [count] = await sql`SELECT COUNT(*) as cnt FROM budju_wallets WHERE distributor_group = ${g}`;
-    await sql`UPDATE budju_distributors SET personas_funded = ${Number(count.cnt)} WHERE group_number = ${g}`;
-  }
+  try {
+    for (let g = 0; g < DISTRIBUTOR_COUNT; g++) {
+      const [count] = await sql`SELECT COUNT(*) as cnt FROM budju_wallets WHERE distributor_group = ${g}`;
+      await sql`UPDATE budju_distributors SET personas_funded = ${Number(count.cnt)} WHERE group_number = ${g}`;
+    }
+  } catch { /* non-critical */ }
 
   return {
     distributors: DISTRIBUTOR_COUNT,
     wallets: createdPersonas.length,
     personas: createdPersonas,
+    errors,
   };
 }
 

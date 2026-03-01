@@ -810,7 +810,7 @@ export async function initializeDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
-  await safeMigrate("idx_budju_wallets_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_wallets_persona ON budju_wallets(persona_id)`);
+  await safeMigrate("idx_budju_wallets_persona", () => sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_budju_wallets_persona ON budju_wallets(persona_id)`);
   await safeMigrate("idx_budju_wallets_address", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_wallets_address ON budju_wallets(wallet_address)`);
   await safeMigrate("idx_budju_wallets_distributor", () => sql`CREATE INDEX IF NOT EXISTS idx_budju_wallets_distributor ON budju_wallets(distributor_group)`);
 
