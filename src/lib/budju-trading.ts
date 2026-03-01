@@ -129,30 +129,42 @@ export async function generatePersonaWallets(personaCount: number = 15): Promise
   };
 }
 
-// ── Get SOL price in USD (from platform settings or DexScreener) ──
+// ── Get SOL price in USD (from platform settings) ──
 async function getSolPriceUsd(): Promise<number> {
-  const sql = getDb();
-  const [row] = await sql`SELECT value FROM platform_settings WHERE key = 'sol_price_usd'`;
-  return parseFloat(row?.value as string || "164");
+  try {
+    const sql = getDb();
+    const [row] = await sql`SELECT value FROM platform_settings WHERE key = 'sol_price_usd'`;
+    return parseFloat(row?.value as string || "164");
+  } catch {
+    return 164;
+  }
 }
 
 // ── Get BUDJU price from DexScreener or fallback ──
 async function getBudjuPriceUsd(): Promise<number> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${BUDJU_MINT}`, {
-      signal: AbortSignal.timeout(5000),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (res.ok) {
       const data = await res.json();
       if (data.pairs && data.pairs.length > 0) {
-        return parseFloat(data.pairs[0].priceUsd || "0");
+        const price = parseFloat(data.pairs[0].priceUsd || "0");
+        if (price > 0) return price;
       }
     }
   } catch { /* fallback below */ }
 
-  const sql = getDb();
-  const [row] = await sql`SELECT value FROM platform_settings WHERE key = 'budju_price_usd'`;
-  return parseFloat(row?.value as string || "0.0069");
+  try {
+    const sql = getDb();
+    const [row] = await sql`SELECT value FROM platform_settings WHERE key = 'budju_price_usd'`;
+    return parseFloat(row?.value as string || "0.0069");
+  } catch {
+    return 0.0069;
+  }
 }
 
 // ── Generate random trade amount (weighted toward smaller trades) ──
@@ -415,99 +427,136 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
 // ── Dashboard Data ──
 export async function getBudjuDashboard() {
   const sql = getDb();
-  const config = await getBudjuConfig();
 
-  const solPriceUsd = await getSolPriceUsd();
-  const budjuPriceUsd = await getBudjuPriceUsd();
+  // Load config first (most important, least likely to fail)
+  let config: Record<string, string> = {};
+  try {
+    config = await getBudjuConfig();
+  } catch (e) {
+    console.error("[BUDJU] Config load failed:", e);
+  }
+
+  // Prices — use safe fallbacks
+  let solPriceUsd = 164;
+  let budjuPriceUsd = 0.0069;
+  try { solPriceUsd = await getSolPriceUsd(); } catch { /* use default */ }
+  try { budjuPriceUsd = await getBudjuPriceUsd(); } catch { /* use default */ }
   const budjuPriceSol = solPriceUsd > 0 ? budjuPriceUsd / solPriceUsd : 0;
 
+  // Default zero stats
+  const zeroStats24h = { total_trades: 0, buys: 0, sells: 0, confirmed: 0, failed: 0, volume_sol: 0, volume_usd: 0, volume_budju: 0, avg_price: 0, high: 0, low: 0 };
+  const zeroAllTime = { total_trades: 0, total_volume_usd: 0, total_volume_sol: 0 };
+
   // 24h stats
-  const [stats24h] = await sql`
-    SELECT
-      COUNT(*) as total_trades,
-      COUNT(*) FILTER (WHERE trade_type = 'buy') as buys,
-      COUNT(*) FILTER (WHERE trade_type = 'sell') as sells,
-      COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed,
-      COUNT(*) FILTER (WHERE status = 'failed') as failed,
-      COALESCE(SUM(sol_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_sol,
-      COALESCE(SUM(usd_value) FILTER (WHERE status = 'confirmed'), 0) as total_volume_usd,
-      COALESCE(SUM(budju_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_budju,
-      COALESCE(AVG(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as avg_price,
-      COALESCE(MAX(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as high_price,
-      COALESCE(MIN(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as low_price
-    FROM budju_trades
-    WHERE created_at > NOW() - INTERVAL '24 hours'
-  `;
+  let stats24hResult = zeroStats24h;
+  try {
+    const [row] = await sql`
+      SELECT
+        COUNT(*) as total_trades,
+        COUNT(*) FILTER (WHERE trade_type = 'buy') as buys,
+        COUNT(*) FILTER (WHERE trade_type = 'sell') as sells,
+        COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed,
+        COUNT(*) FILTER (WHERE status = 'failed') as failed,
+        COALESCE(SUM(sol_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_sol,
+        COALESCE(SUM(usd_value) FILTER (WHERE status = 'confirmed'), 0) as total_volume_usd,
+        COALESCE(SUM(budju_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_budju,
+        COALESCE(AVG(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as avg_price,
+        COALESCE(MAX(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as high_price,
+        COALESCE(MIN(price_per_budju) FILTER (WHERE status = 'confirmed'), 0) as low_price
+      FROM budju_trades
+      WHERE created_at > NOW() - INTERVAL '24 hours'
+    `;
+    if (row) {
+      stats24hResult = {
+        total_trades: Number(row.total_trades), buys: Number(row.buys), sells: Number(row.sells),
+        confirmed: Number(row.confirmed), failed: Number(row.failed),
+        volume_sol: Number(row.total_volume_sol), volume_usd: Number(row.total_volume_usd),
+        volume_budju: Number(row.total_volume_budju), avg_price: Number(row.avg_price),
+        high: Number(row.high_price), low: Number(row.low_price),
+      };
+    }
+  } catch (e) { console.error("[BUDJU] 24h stats query failed:", e); }
 
   // All-time stats
-  const [statsAllTime] = await sql`
-    SELECT
-      COUNT(*) as total_trades,
-      COALESCE(SUM(usd_value) FILTER (WHERE status = 'confirmed'), 0) as total_volume_usd,
-      COALESCE(SUM(sol_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_sol
-    FROM budju_trades
-  `;
+  let allTimeResult = zeroAllTime;
+  try {
+    const [row] = await sql`
+      SELECT COUNT(*) as total_trades,
+        COALESCE(SUM(usd_value) FILTER (WHERE status = 'confirmed'), 0) as total_volume_usd,
+        COALESCE(SUM(sol_amount) FILTER (WHERE status = 'confirmed'), 0) as total_volume_sol
+      FROM budju_trades
+    `;
+    if (row) {
+      allTimeResult = { total_trades: Number(row.total_trades), total_volume_usd: Number(row.total_volume_usd), total_volume_sol: Number(row.total_volume_sol) };
+    }
+  } catch (e) { console.error("[BUDJU] All-time stats query failed:", e); }
 
-  // Recent trades (last 50)
-  const recentTrades = await sql`
-    SELECT bt.*, p.display_name, p.avatar_emoji, p.username
-    FROM budju_trades bt
-    JOIN ai_personas p ON bt.persona_id = p.id
-    ORDER BY bt.created_at DESC
-    LIMIT 50
-  `;
+  // Recent trades
+  let recentTrades: unknown[] = [];
+  try {
+    recentTrades = await sql`
+      SELECT bt.*, p.display_name, p.avatar_emoji, p.username
+      FROM budju_trades bt
+      JOIN ai_personas p ON bt.persona_id = p.id
+      ORDER BY bt.created_at DESC LIMIT 50
+    `;
+  } catch (e) { console.error("[BUDJU] Recent trades query failed:", e); }
 
-  // Persona leaderboard
-  const leaderboard = await sql`
-    SELECT
-      bt.persona_id,
-      p.display_name, p.avatar_emoji, p.username,
-      COUNT(*) as total_trades,
-      COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed_trades,
-      SUM(CASE WHEN bt.trade_type = 'buy' THEN bt.budju_amount ELSE 0 END) as total_bought,
-      SUM(CASE WHEN bt.trade_type = 'sell' THEN bt.budju_amount ELSE 0 END) as total_sold,
-      SUM(bt.usd_value) as total_volume_usd,
-      MAX(bt.strategy) as strategy
-    FROM budju_trades bt
-    JOIN ai_personas p ON bt.persona_id = p.id
-    WHERE bt.status = 'confirmed'
-    GROUP BY bt.persona_id, p.display_name, p.avatar_emoji, p.username
-    ORDER BY total_volume_usd DESC
-    LIMIT 20
-  `;
+  // Leaderboard
+  let leaderboard: unknown[] = [];
+  try {
+    leaderboard = await sql`
+      SELECT bt.persona_id, p.display_name, p.avatar_emoji, p.username,
+        COUNT(*) as total_trades,
+        COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed_trades,
+        SUM(CASE WHEN bt.trade_type = 'buy' THEN bt.budju_amount ELSE 0 END) as total_bought,
+        SUM(CASE WHEN bt.trade_type = 'sell' THEN bt.budju_amount ELSE 0 END) as total_sold,
+        SUM(bt.usd_value) as total_volume_usd,
+        MAX(bt.strategy) as strategy
+      FROM budju_trades bt JOIN ai_personas p ON bt.persona_id = p.id
+      WHERE bt.status = 'confirmed'
+      GROUP BY bt.persona_id, p.display_name, p.avatar_emoji, p.username
+      ORDER BY total_volume_usd DESC LIMIT 20
+    `;
+  } catch (e) { console.error("[BUDJU] Leaderboard query failed:", e); }
 
-  // Wallet balances
-  const wallets = await sql`
-    SELECT bw.persona_id, bw.wallet_address, bw.sol_balance, bw.budju_balance,
-           bw.distributor_group, bw.is_active, bw.total_funded_sol, bw.total_funded_budju,
-           p.display_name, p.avatar_emoji, p.username
-    FROM budju_wallets bw
-    JOIN ai_personas p ON bw.persona_id = p.id
-    ORDER BY bw.budju_balance DESC
-  `;
+  // Wallets
+  let wallets: unknown[] = [];
+  try {
+    wallets = await sql`
+      SELECT bw.persona_id, bw.wallet_address, bw.sol_balance, bw.budju_balance,
+             bw.distributor_group, bw.is_active, bw.total_funded_sol, bw.total_funded_budju,
+             p.display_name, p.avatar_emoji, p.username
+      FROM budju_wallets bw JOIN ai_personas p ON bw.persona_id = p.id
+      ORDER BY bw.budju_balance DESC
+    `;
+  } catch (e) { console.error("[BUDJU] Wallets query failed:", e); }
 
-  // Distributor wallets
-  const distributors = await sql`
-    SELECT * FROM budju_distributors ORDER BY group_number
-  `;
+  // Distributors
+  let distributors: unknown[] = [];
+  try {
+    distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
+  } catch (e) { console.error("[BUDJU] Distributors query failed:", e); }
 
-  // Hourly price history from trades (last 7 days)
-  const priceHistory = await sql`
-    SELECT
-      date_trunc('hour', created_at) as time_bucket,
-      (array_agg(price_per_budju ORDER BY created_at ASC))[1] as open,
-      MAX(price_per_budju) as high,
-      MIN(price_per_budju) as low,
-      (array_agg(price_per_budju ORDER BY created_at DESC))[1] as close,
-      SUM(budju_amount) as volume,
-      COUNT(*) as trade_count
-    FROM budju_trades
-    WHERE created_at > NOW() - INTERVAL '7 days' AND status = 'confirmed'
-    GROUP BY date_trunc('hour', created_at)
-    ORDER BY time_bucket ASC
-  `;
+  // Price history
+  let priceHistoryResult: { time: unknown; open: number; high: number; low: number; close: number; volume: number; trades: number }[] = [];
+  try {
+    const rows = await sql`
+      SELECT date_trunc('hour', created_at) as time_bucket,
+        (array_agg(price_per_budju ORDER BY created_at ASC))[1] as open,
+        MAX(price_per_budju) as high, MIN(price_per_budju) as low,
+        (array_agg(price_per_budju ORDER BY created_at DESC))[1] as close,
+        SUM(budju_amount) as volume, COUNT(*) as trade_count
+      FROM budju_trades
+      WHERE created_at > NOW() - INTERVAL '7 days' AND status = 'confirmed'
+      GROUP BY date_trunc('hour', created_at) ORDER BY time_bucket ASC
+    `;
+    priceHistoryResult = rows.map(p => ({
+      time: p.time_bucket, open: Number(p.open), high: Number(p.high),
+      low: Number(p.low), close: Number(p.close), volume: Number(p.volume), trades: Number(p.trade_count),
+    }));
+  } catch (e) { console.error("[BUDJU] Price history query failed:", e); }
 
-  // Daily budget info
   const today = new Date().toISOString().split("T")[0];
   const spentToday = config.spent_reset_date === today ? parseFloat(config.spent_today_usd || "0") : 0;
   const dailyBudget = parseFloat(config.daily_budget_usd || "100");
@@ -523,47 +572,15 @@ export async function getBudjuDashboard() {
       buy_sell_ratio: parseFloat(config.buy_sell_ratio || "0.6"),
       active_persona_count: parseInt(config.active_persona_count || "15"),
     },
-    price: {
-      budju_usd: budjuPriceUsd,
-      budju_sol: budjuPriceSol,
-      sol_usd: solPriceUsd,
-    },
-    budget: {
-      daily_limit: dailyBudget,
-      spent_today: spentToday,
-      remaining: dailyBudget - spentToday,
-    },
-    stats_24h: {
-      total_trades: Number(stats24h.total_trades),
-      buys: Number(stats24h.buys),
-      sells: Number(stats24h.sells),
-      confirmed: Number(stats24h.confirmed),
-      failed: Number(stats24h.failed),
-      volume_sol: Number(stats24h.total_volume_sol),
-      volume_usd: Number(stats24h.total_volume_usd),
-      volume_budju: Number(stats24h.total_volume_budju),
-      avg_price: Number(stats24h.avg_price),
-      high: Number(stats24h.high_price),
-      low: Number(stats24h.low_price),
-    },
-    stats_all_time: {
-      total_trades: Number(statsAllTime.total_trades),
-      total_volume_usd: Number(statsAllTime.total_volume_usd),
-      total_volume_sol: Number(statsAllTime.total_volume_sol),
-    },
+    price: { budju_usd: budjuPriceUsd, budju_sol: budjuPriceSol, sol_usd: solPriceUsd },
+    budget: { daily_limit: dailyBudget, spent_today: spentToday, remaining: dailyBudget - spentToday },
+    stats_24h: stats24hResult,
+    stats_all_time: allTimeResult,
     recent_trades: recentTrades,
     leaderboard,
     wallets,
     distributors,
-    price_history: priceHistory.map(p => ({
-      time: p.time_bucket,
-      open: Number(p.open),
-      high: Number(p.high),
-      low: Number(p.low),
-      close: Number(p.close),
-      volume: Number(p.volume),
-      trades: Number(p.trade_count),
-    })),
+    price_history: priceHistoryResult,
     treasury_wallet: TREASURY_WALLET_STR,
     budju_mint: BUDJU_MINT,
   };
