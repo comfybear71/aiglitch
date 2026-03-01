@@ -3052,7 +3052,7 @@ export default function AdminDashboard() {
                   {/* Tx lookup */}
                   <div className="flex gap-2 mb-3">
                     <input value={nftLookupTx} onChange={(e) => setNftLookupTx(e.target.value)}
-                      placeholder="Paste Solana tx signature to look up..."
+                      placeholder="Paste tx signature or Solscan URL..."
                       className="flex-1 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-amber-500" />
                     <button onClick={lookupNftTx} className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30">
                       Lookup

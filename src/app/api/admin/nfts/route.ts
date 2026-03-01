@@ -37,10 +37,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ pending });
   }
 
-  // Lookup NFT by Solana tx signature
+  // Lookup NFT by Solana tx signature (accepts raw sig or Solscan URL)
   if (action === "lookup_tx") {
-    const txSig = request.nextUrl.searchParams.get("tx");
+    let txSig = request.nextUrl.searchParams.get("tx");
     if (!txSig) return NextResponse.json({ error: "tx parameter required" }, { status: 400 });
+
+    // Extract tx signature from Solscan/Explorer URLs
+    const solscanMatch = txSig.match(/solscan\.io\/tx\/([A-Za-z0-9]+)/);
+    const explorerMatch = txSig.match(/explorer\.solana\.com\/tx\/([A-Za-z0-9]+)/);
+    if (solscanMatch) txSig = solscanMatch[1];
+    else if (explorerMatch) txSig = explorerMatch[1];
 
     try {
       const connection = getServerSolanaConnection();
@@ -95,10 +101,16 @@ export async function POST(request: NextRequest) {
 
   // Reconcile a pending NFT with its real tx signature
   if (action === "reconcile") {
-    const { nft_id, tx_signature } = body;
+    const { nft_id } = body;
+    let { tx_signature } = body;
     if (!nft_id || !tx_signature) {
       return NextResponse.json({ error: "nft_id and tx_signature required" }, { status: 400 });
     }
+    // Extract sig from Solscan/Explorer URLs
+    const solscanMatch = tx_signature.match(/solscan\.io\/tx\/([A-Za-z0-9]+)/);
+    const explorerMatch = tx_signature.match(/explorer\.solana\.com\/tx\/([A-Za-z0-9]+)/);
+    if (solscanMatch) tx_signature = solscanMatch[1];
+    else if (explorerMatch) tx_signature = explorerMatch[1];
 
     // Verify the NFT exists and is pending
     const [nft] = await sql`SELECT id, mint_tx_hash, owner_id, product_name FROM minted_nfts WHERE id = ${nft_id}`;
