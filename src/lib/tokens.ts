@@ -37,7 +37,7 @@ export const TOKENS: Record<string, TokenConfig> = {
   BUDJU: {
     symbol: "$BUDJU",
     name: "Budju",
-    decimals: 9,
+    decimals: 6, // pump.fun tokens use 6 decimals
     totalSupply: 1_000_000_000,
     circulatingSupply: 500_000_000,
     mintAddress: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",

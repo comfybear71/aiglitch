@@ -23,6 +23,8 @@ import bs58 from "bs58";
 
 // ── Constants ──
 const BUDJU_MINT = BUDJU_TOKEN_MINT_STR;
+const BUDJU_DECIMALS = 6; // pump.fun tokens use 6 decimals
+const BUDJU_MULTIPLIER = 10 ** BUDJU_DECIMALS; // 1e6
 const SOL_MINT = "So11111111111111111111111111111111111111112"; // Wrapped SOL
 const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6/quote";
 const JUPITER_SWAP_API = "https://quote-api.jup.ag/v6/swap";
@@ -473,7 +475,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
         }
       } else {
         // Sell BUDJU for SOL
-        const budjuLamports = Math.floor(budjuAmount * 1e9);
+        const budjuLamports = Math.floor(budjuAmount * BUDJU_MULTIPLIER);
         const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);
         if (result) {
           txSignature = result.signature;
@@ -567,7 +569,7 @@ export async function distributeFundsFromDistributors(): Promise<{
       try {
         distBudjuAta = await getAssociatedTokenAddress(budjuMint, distPubkey);
         const account = await getAccount(connection, distBudjuAta);
-        budjuBalance = Number(account.amount) / 1e9; // BUDJU has 9 decimals
+        budjuBalance = Number(account.amount) / BUDJU_MULTIPLIER; // pump.fun = 6 decimals
       } catch { /* no BUDJU ATA yet */ }
 
       // Reserve SOL for fees: 0.005 base + 0.003 per persona for potential ATA creation
@@ -660,7 +662,7 @@ export async function distributeFundsFromDistributors(): Promise<{
 
         // Send BUDJU
         if (budjuAmounts[i] > 1 && distBudjuAta) {
-          const budjuLamports = BigInt(Math.floor(budjuAmounts[i] * 1e9));
+          const budjuLamports = BigInt(Math.floor(budjuAmounts[i] * BUDJU_MULTIPLIER));
           try {
             // Get or create persona's BUDJU ATA
             const personaAta = await getAssociatedTokenAddress(budjuMint, personaPubkey);
@@ -731,7 +733,7 @@ export async function distributeFundsFromDistributors(): Promise<{
       try {
         if (distBudjuAta) {
           const account = await getAccount(connection, distBudjuAta);
-          newBudjuBalance = Number(account.amount) / 1e9;
+          newBudjuBalance = Number(account.amount) / BUDJU_MULTIPLIER;
         }
       } catch { /* empty now */ }
       await sql`UPDATE budju_distributors SET sol_balance = ${newSolBalance / LAMPORTS_PER_SOL}, budju_balance = ${newBudjuBalance} WHERE group_number = ${dist.group_number}`;
@@ -1098,7 +1100,7 @@ export async function syncWalletBalances(): Promise<{ personas_synced: number; d
           const budjuMint = new PublicKey(BUDJU_MINT);
           const ata = await getAssociatedTokenAddress(budjuMint, pubkey);
           const account = await getAccount(connection, ata);
-          budjuBal = Number(account.amount) / 1e9;
+          budjuBal = Number(account.amount) / BUDJU_MULTIPLIER;
         } catch { /* no BUDJU ATA yet */ }
 
         await sql`
@@ -1126,7 +1128,7 @@ export async function syncWalletBalances(): Promise<{ personas_synced: number; d
         const budjuMint = new PublicKey(BUDJU_MINT);
         const ata = await getAssociatedTokenAddress(budjuMint, pubkey);
         const account = await getAccount(connection, ata);
-        budjuBal = Number(account.amount) / 1e9;
+        budjuBal = Number(account.amount) / BUDJU_MULTIPLIER;
       } catch { /* no BUDJU ATA yet */ }
 
       await sql`
