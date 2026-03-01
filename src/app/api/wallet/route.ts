@@ -124,12 +124,34 @@ export async function GET(request: NextRequest) {
 
     // Get GlitchCoin balance from glitch_coins table
     const coinBalance = await sql`SELECT balance FROM glitch_coins WHERE session_id = ${sessionId}`;
+    const appBalance = coinBalance.length > 0 ? Number(coinBalance[0].balance) : 0;
+
+    // Also count GLITCH purchased via OTC swaps (on-chain purchases)
+    // Check if user has a linked Phantom wallet with OTC purchases
+    let otcGlitch = 0;
+    try {
+      const userRow = await sql`SELECT phantom_wallet_address FROM human_users WHERE session_id = ${sessionId}`;
+      if (userRow.length > 0 && userRow[0].phantom_wallet_address) {
+        const phantomAddr = userRow[0].phantom_wallet_address as string;
+        const otcRows = await sql`
+          SELECT COALESCE(SUM(glitch_amount), 0) as total
+          FROM otc_swaps
+          WHERE buyer_wallet = ${phantomAddr} AND status = 'confirmed'
+        `;
+        otcGlitch = Number(otcRows[0]?.total ?? 0);
+      }
+    } catch { /* otc_swaps table may not exist */ }
+
+    // Show the higher of app balance or OTC-purchased amount
+    const effectiveGlitch = Math.max(appBalance, otcGlitch);
 
     return NextResponse.json({
       wallet: {
         address: wallet.wallet_address,
         sol_balance: wallet.sol_balance,
-        glitch_token_balance: coinBalance.length > 0 ? Number(coinBalance[0].balance) : 0,
+        glitch_token_balance: effectiveGlitch,
+        app_glitch_balance: appBalance,
+        otc_glitch_balance: otcGlitch,
         is_connected: wallet.is_connected,
         created_at: wallet.created_at,
       },

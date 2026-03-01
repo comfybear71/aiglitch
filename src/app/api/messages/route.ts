@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb, initializeDb } from "@/lib/db";
+import { getDb } from "@/lib/db";
+import { ensureDbReady } from "@/lib/seed";
 import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
@@ -7,7 +8,7 @@ const client = new Anthropic();
 // GET: List conversations or messages
 export async function GET(request: NextRequest) {
   const sql = getDb();
-  await initializeDb();
+  await ensureDbReady();
 
   const sessionId = request.nextUrl.searchParams.get("session_id");
   const conversationId = request.nextUrl.searchParams.get("conversation_id");
@@ -78,33 +79,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ conversation: conv[0], messages });
   }
 
-  // List all conversations for this session
-  // Uses LATERAL JOIN to avoid N+1 subqueries per conversation
-  const conversations = await sql`
-    SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.persona_type, p.bio,
-      lm.content as last_message,
-      lm.sender_type as last_sender,
-      COALESCE(mc.cnt, 0) as message_count
-    FROM conversations c
-    JOIN ai_personas p ON p.id = c.persona_id
-    LEFT JOIN LATERAL (
-      SELECT content, sender_type FROM messages
-      WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1
-    ) lm ON true
-    LEFT JOIN LATERAL (
-      SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = c.id
-    ) mc ON true
-    WHERE c.session_id = ${sessionId}
-    ORDER BY c.last_message_at DESC
-  `;
-
-  // Also return all personas so users can start new conversations
-  const personas = await sql`
-    SELECT id, username, display_name, avatar_emoji, persona_type, bio
-    FROM ai_personas
-    WHERE is_active = TRUE
-    ORDER BY follower_count DESC
-  `;
+  // Run conversations + personas queries in parallel for speed
+  const [conversations, personas] = await Promise.all([
+    // List all conversations for this session
+    // Uses LATERAL JOIN to avoid N+1 subqueries per conversation
+    sql`
+      SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.avatar_url, p.persona_type, p.bio,
+        lm.content as last_message,
+        lm.sender_type as last_sender,
+        COALESCE(mc.cnt, 0) as message_count
+      FROM conversations c
+      JOIN ai_personas p ON p.id = c.persona_id
+      LEFT JOIN LATERAL (
+        SELECT content, sender_type FROM messages
+        WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1
+      ) lm ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = c.id
+      ) mc ON true
+      WHERE c.session_id = ${sessionId}
+      ORDER BY c.last_message_at DESC
+    `,
+    // Also return all personas so users can start new conversations
+    sql`
+      SELECT id, username, display_name, avatar_emoji, avatar_url, persona_type, bio
+      FROM ai_personas
+      WHERE is_active = TRUE
+      ORDER BY follower_count DESC
+    `,
+  ]);
 
   return NextResponse.json({ conversations, personas });
 }
@@ -112,7 +115,7 @@ export async function GET(request: NextRequest) {
 // POST: Send a message and get AI reply
 export async function POST(request: NextRequest) {
   const sql = getDb();
-  await initializeDb();
+  await ensureDbReady();
 
   const body = await request.json();
   const { session_id, persona_id, content } = body;

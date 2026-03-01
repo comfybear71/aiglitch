@@ -298,9 +298,15 @@ async function executeJupiterSwap(
     // 1. Get quote
     const quoteUrl = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=${slippageBps}`;
     const quoteRes = await fetch(quoteUrl, { signal: AbortSignal.timeout(10000) });
-    if (!quoteRes.ok) return null;
+    if (!quoteRes.ok) {
+      console.error(`[BUDJU] Jupiter quote failed: HTTP ${quoteRes.status} for ${amountLamports} lamports ${inputMint.slice(0,8)}→${outputMint.slice(0,8)}`);
+      return null;
+    }
     const quoteData = await quoteRes.json();
-    if (!quoteData || quoteData.error) return null;
+    if (!quoteData || quoteData.error) {
+      console.error(`[BUDJU] Jupiter quote error:`, quoteData?.error || "empty response");
+      return null;
+    }
 
     // 2. Build swap transaction
     const swapRes = await fetch(JUPITER_SWAP_API, {
@@ -315,9 +321,15 @@ async function executeJupiterSwap(
       }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!swapRes.ok) return null;
+    if (!swapRes.ok) {
+      console.error(`[BUDJU] Jupiter swap build failed: HTTP ${swapRes.status}`);
+      return null;
+    }
     const swapData = await swapRes.json();
-    if (!swapData.swapTransaction) return null;
+    if (!swapData.swapTransaction) {
+      console.error(`[BUDJU] Jupiter swap returned no transaction:`, swapData.error || "unknown");
+      return null;
+    }
 
     // 3. Deserialize, sign, and send
     const connection = new Connection(SERVER_RPC_URL, "confirmed");
@@ -461,33 +473,53 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
 
     try {
       const keypair = decryptKeypair(wallet.encrypted_keypair as string);
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
 
       if (isBuy) {
-        // Buy BUDJU with SOL
+        // Buy BUDJU with SOL — check wallet has enough SOL first
         const lamports = Math.floor(solAmount * 1e9);
-        const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports);
-        if (result) {
-          txSignature = result.signature;
-          status = "confirmed";
-        } else {
+        const walletBalance = await connection.getBalance(keypair.publicKey).catch(() => 0);
+        const minRequired = lamports + 10_000; // trade amount + fee buffer
+
+        if (walletBalance < minRequired) {
           status = "failed";
-          errorMsg = "Jupiter swap returned null";
+          errorMsg = `Insufficient SOL: has ${(walletBalance / 1e9).toFixed(4)}, needs ${(minRequired / 1e9).toFixed(4)}`;
+          console.log(`[BUDJU] Skipping buy for ${wallet.username}: ${errorMsg}`);
+        } else {
+          const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports);
+          if (result) {
+            txSignature = result.signature;
+            status = "confirmed";
+          } else {
+            status = "failed";
+            errorMsg = "Jupiter swap returned null (quote/build/send failed)";
+          }
         }
       } else {
-        // Sell BUDJU for SOL
+        // Sell BUDJU for SOL — check wallet has BUDJU tokens
         const budjuLamports = Math.floor(budjuAmount * BUDJU_MULTIPLIER);
-        const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);
-        if (result) {
-          txSignature = result.signature;
-          status = "confirmed";
-        } else {
+
+        // Verify SOL for tx fees
+        const walletBalance = await connection.getBalance(keypair.publicKey).catch(() => 0);
+        if (walletBalance < 10_000) {
           status = "failed";
-          errorMsg = "Jupiter swap returned null";
+          errorMsg = `No SOL for tx fees: has ${(walletBalance / 1e9).toFixed(4)} SOL`;
+          console.log(`[BUDJU] Skipping sell for ${wallet.username}: ${errorMsg}`);
+        } else {
+          const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);
+          if (result) {
+            txSignature = result.signature;
+            status = "confirmed";
+          } else {
+            status = "failed";
+            errorMsg = "Jupiter swap returned null (quote/build/send failed)";
+          }
         }
       }
     } catch (err) {
       status = "failed";
       errorMsg = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[BUDJU] Trade error for ${wallet.username}:`, errorMsg);
     }
 
     // Record the trade in database
