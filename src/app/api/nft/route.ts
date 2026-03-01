@@ -58,6 +58,20 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Get minted counts per product (for "X remaining" display)
+  if (action === "supply") {
+    const counts = await sql`
+      SELECT product_id, COUNT(*) as minted
+      FROM minted_nfts
+      GROUP BY product_id
+    `;
+    const supply: Record<string, number> = {};
+    for (const row of counts) {
+      supply[row.product_id as string] = Number(row.minted);
+    }
+    return NextResponse.json({ supply, max_per_product: 100 });
+  }
+
   if (!sessionId) {
     return NextResponse.json({ nfts: [] });
   }

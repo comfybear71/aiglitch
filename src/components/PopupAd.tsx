@@ -61,13 +61,16 @@ const GLITCH_PROMOS = [
 export default function PopupAd() {
   const [visible, setVisible] = useState(false);
   const [dismissing, setDismissing] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
   const [adContent, setAdContent] = useState<{
     type: "product" | "promo";
     product?: MarketplaceProduct;
     promo?: (typeof GLITCH_PROMOS)[number];
   } | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const touchStartY = useRef<number>(0);
+  const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const adRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   const pickAd = useCallback(() => {
@@ -121,16 +124,48 @@ export default function PopupAd() {
     };
   }, [showAd]);
 
-  // Swipe down to dismiss
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
+  // Swipe/drag in any direction to dismiss
+  const handleDragStart = (clientX: number, clientY: number) => {
+    dragStart.current = { x: clientX, y: clientY };
+    setDragging(true);
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
-    if (deltaY > 40) {
+  const handleDragMove = (clientX: number, clientY: number) => {
+    if (!dragging) return;
+    const dx = clientX - dragStart.current.x;
+    const dy = clientY - dragStart.current.y;
+    setDragOffset({ x: dx, y: dy });
+  };
+
+  const handleDragEnd = () => {
+    if (!dragging) return;
+    setDragging(false);
+    const dist = Math.sqrt(dragOffset.x ** 2 + dragOffset.y ** 2);
+    if (dist > 60) {
       dismiss();
+    } else {
+      setDragOffset({ x: 0, y: 0 });
     }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+  };
+  const handleTouchEnd = () => handleDragEnd();
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    handleDragStart(e.clientX, e.clientY);
+  };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    handleDragMove(e.clientX, e.clientY);
+  };
+  const handleMouseUp = () => handleDragEnd();
+  const handleMouseLeave = () => {
+    if (dragging) handleDragEnd();
   };
 
   const handleClick = () => {
@@ -147,22 +182,34 @@ export default function PopupAd() {
 
   if (!visible || !adContent) return null;
 
+  const dragStyle = dragging || (dragOffset.x !== 0 || dragOffset.y !== 0)
+    ? { transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`, opacity: Math.max(0.3, 1 - Math.sqrt(dragOffset.x ** 2 + dragOffset.y ** 2) / 150), transition: dragging ? "none" : "all 0.3s ease" }
+    : {};
+
   // Render marketplace product ad
   if (adContent.type === "product" && adContent.product) {
     const p = adContent.product;
     return (
       <div
-        className={`fixed bottom-16 left-2 right-2 z-[70] ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}
+        ref={adRef}
+        style={dragStyle}
+        className={`fixed bottom-16 left-2 right-2 z-[70] cursor-grab active:cursor-grabbing select-none ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
       >
         <div className="bg-gradient-to-r from-gray-900/95 to-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl p-3 shadow-2xl relative overflow-hidden">
-          {/* AD badge */}
-          <div className="absolute top-2 right-2 flex items-center gap-1">
+          {/* AD badge + close button */}
+          <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
             <span className="text-[9px] font-bold text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">AD</span>
             <button
               onClick={(e) => { e.stopPropagation(); dismiss(); }}
-              className="text-zinc-500 hover:text-white text-lg leading-none px-1"
+              className="text-zinc-400 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold transition-colors"
+              aria-label="Close ad"
             >
               ×
             </button>
@@ -203,17 +250,25 @@ export default function PopupAd() {
     const promo = adContent.promo;
     return (
       <div
-        className={`fixed bottom-16 left-2 right-2 z-[70] ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}
+        ref={adRef}
+        style={dragStyle}
+        className={`fixed bottom-16 left-2 right-2 z-[70] cursor-grab active:cursor-grabbing select-none ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
       >
         <div className={`bg-gradient-to-r ${promo.gradient} backdrop-blur-xl border ${promo.border} rounded-2xl p-3 shadow-2xl relative overflow-hidden`}>
-          {/* AD badge */}
-          <div className="absolute top-2 right-2 flex items-center gap-1">
+          {/* AD badge + close button */}
+          <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
             <span className="text-[9px] font-bold text-zinc-400 bg-black/30 px-1.5 py-0.5 rounded">SPONSORED</span>
             <button
               onClick={(e) => { e.stopPropagation(); dismiss(); }}
-              className="text-zinc-400 hover:text-white text-lg leading-none px-1"
+              className="text-zinc-400 hover:text-white bg-black/30 hover:bg-black/50 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold transition-colors"
+              aria-label="Close ad"
             >
               ×
             </button>

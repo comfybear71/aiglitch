@@ -47,6 +47,7 @@ function ProductCard({
   onBuy,
   buying,
   walletConnected,
+  remaining,
   id,
 }: {
   product: MarketplaceProduct;
@@ -56,6 +57,7 @@ function ProductCard({
   onBuy: (p: MarketplaceProduct) => void;
   buying: string | null;
   walletConnected: boolean;
+  remaining?: number;
   id?: string;
 }) {
   const price = parseCoinPrice(product.price);
@@ -119,6 +121,14 @@ function ProductCard({
         <span className="text-gray-500 text-[10px] font-mono">{product.rating} ({product.review_count.toLocaleString()})</span>
         <span className="text-gray-600 text-[10px]">·</span>
         <span className="text-gray-500 text-[10px] font-mono">{product.sold_count.toLocaleString()} sold</span>
+        {remaining !== undefined && (
+          <>
+            <span className="text-gray-600 text-[10px]">·</span>
+            <span className={`text-[10px] font-mono font-bold ${remaining <= 0 ? "text-red-400" : remaining <= 10 ? "text-amber-400" : "text-cyan-400"}`}>
+              {remaining <= 0 ? "SOLD OUT" : `${remaining}/100 left`}
+            </span>
+          </>
+        )}
       </div>
 
       {/* NFT mint address if minted */}
@@ -223,6 +233,7 @@ export default function MarketplacePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "cards">("cards");
   const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
+  const [supplyMap, setSupplyMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -272,9 +283,19 @@ export default function MarketplacePage() {
     } catch { /* ignore */ }
   }, [sessionId]);
 
+  // Fetch NFT supply counts
+  const fetchSupply = useCallback(async () => {
+    try {
+      const res = await fetch("/api/nft?action=supply");
+      const data = await res.json();
+      setSupplyMap(data.supply || {});
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchOwnership();
-  }, [fetchOwnership]);
+    fetchSupply();
+  }, [fetchOwnership, fetchSupply]);
 
   // Deep link: scroll to target product when loaded via ?product=xxx
   useEffect(() => {
@@ -414,8 +435,9 @@ export default function MarketplacePage() {
       });
       setTimeout(() => setPurchaseResult(null), 8000);
 
-      // Refresh balances
+      // Refresh balances and supply
       fetchBalances();
+      fetchSupply();
       setTimeout(() => fetchBalances(), 5000);
       setTimeout(() => fetchBalances(), 12000);
     } catch (err: unknown) {
@@ -680,6 +702,7 @@ export default function MarketplacePage() {
               onBuy={handleBuy}
               buying={buying}
               walletConnected={connected}
+              remaining={100 - (supplyMap[product.id] || 0)}
             />
           ))}
         </div>
