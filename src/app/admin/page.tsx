@@ -181,6 +181,13 @@ const CATEGORY_ICONS: Record<string, string> = {
   economy: "💰", environment: "🌍", social: "👥", world: "🌐",
 };
 
+function formatBudjuAmount(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return Math.floor(n).toString();
+}
+
 export default function AdminDashboard() {
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
@@ -3429,7 +3436,7 @@ export default function AdminDashboard() {
                       <p className="text-sm font-bold">
                         <span className="text-cyan-400">{((budjuData as { total_system_sol?: number }).total_system_sol || 0).toFixed(4)} SOL</span>
                         {" | "}
-                        <span className="text-fuchsia-400">{((budjuData as { total_system_budju?: number }).total_system_budju || 0) >= 1000 ? `${(((budjuData as { total_system_budju?: number }).total_system_budju || 0) / 1000).toFixed(1)}K` : Math.floor((budjuData as { total_system_budju?: number }).total_system_budju || 0)} BUDJU</span>
+                        <span className="text-fuchsia-400">{formatBudjuAmount((budjuData as { total_system_budju?: number }).total_system_budju || 0)} BUDJU</span>
                       </p>
                       <p className="text-[10px] text-gray-500">Total Funds in Bot Wallets</p>
                     </div>
@@ -3485,7 +3492,7 @@ export default function AdminDashboard() {
                               <span className="text-gray-300 truncate text-[10px]">{trade.display_name}</span>
                             </span>
                             <span className="w-16 text-right font-mono text-fuchsia-400">${Number(trade.usd_value).toFixed(2)}</span>
-                            <span className="w-16 text-right font-mono text-gray-300">{Number(trade.budju_amount) >= 1000 ? `${(Number(trade.budju_amount) / 1000).toFixed(1)}K` : Math.floor(Number(trade.budju_amount))}</span>
+                            <span className="w-16 text-right font-mono text-gray-300">{formatBudjuAmount(Number(trade.budju_amount))}</span>
                             <span className="w-14 text-right font-mono text-cyan-400">{Number(trade.sol_amount).toFixed(4)}</span>
                             <span className="w-12 text-center text-[10px] text-gray-500">{trade.dex_used === "jupiter" ? "JUP" : "RAY"}</span>
                             <span className="flex-1 text-right text-gray-500 text-[10px]">{new Date(trade.created_at).toLocaleTimeString()}</span>
@@ -3524,7 +3531,7 @@ export default function AdminDashboard() {
                             <div className="text-right">
                               <p className="text-xs font-bold text-fuchsia-400">${Number(trader.total_volume_usd).toFixed(2)} volume</p>
                               <p className="text-[10px] text-gray-500">
-                                {Number(trader.confirmed_trades)} trades | Bought: {Number(trader.total_bought) >= 1000 ? `${(Number(trader.total_bought) / 1000).toFixed(0)}K` : Math.floor(Number(trader.total_bought))} | Sold: {Number(trader.total_sold) >= 1000 ? `${(Number(trader.total_sold) / 1000).toFixed(0)}K` : Math.floor(Number(trader.total_sold))}
+                                {Number(trader.confirmed_trades)} trades | Bought: {formatBudjuAmount(Number(trader.total_bought))} | Sold: {formatBudjuAmount(Number(trader.total_sold))}
                               </p>
                             </div>
                           </div>
@@ -3550,7 +3557,7 @@ export default function AdminDashboard() {
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] text-gray-500 font-bold">TOTAL BUDJU</p>
-                            <p className="text-lg font-bold text-fuchsia-400">{((budjuData as { total_system_budju?: number }).total_system_budju || 0) >= 1000 ? `${(((budjuData as { total_system_budju?: number }).total_system_budju || 0) / 1000).toFixed(1)}K` : Math.floor((budjuData as { total_system_budju?: number }).total_system_budju || 0)}</p>
+                            <p className="text-lg font-bold text-fuchsia-400">{formatBudjuAmount((budjuData as { total_system_budju?: number }).total_system_budju || 0)}</p>
                           </div>
                         </div>
                       )}
@@ -3615,7 +3622,7 @@ export default function AdminDashboard() {
                               <div className="flex items-center gap-3 shrink-0">
                                 <div className="text-right">
                                   <p className="text-[10px] text-cyan-400">{Number(w.sol_balance).toFixed(4)} SOL</p>
-                                  <p className="text-[10px] text-fuchsia-400">{Number(w.budju_balance) >= 1000 ? `${(Number(w.budju_balance) / 1000).toFixed(1)}K` : Math.floor(Number(w.budju_balance))} BUDJU</p>
+                                  <p className="text-[10px] text-fuchsia-400">{formatBudjuAmount(Number(w.budju_balance))} BUDJU</p>
                                 </div>
                                 <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${w.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
                                   G{w.distributor_group}
