@@ -284,6 +284,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Too many swap requests. Wait a moment." }, { status: 429 });
     }
 
+    // 24h spend limit — 0.5 SOL max per wallet per day (scales with price)
+    try {
+      const [daily] = await sql`
+        SELECT COALESCE(SUM(sol_cost), 0) as total_sol
+        FROM otc_swaps
+        WHERE buyer_wallet = ${buyer_wallet}
+          AND status IN ('completed', 'submitted')
+          AND created_at > NOW() - INTERVAL '24 hours'
+      `;
+      const dailySpent = Number(daily?.total_sol || 0);
+      const DAILY_SOL_LIMIT = 0.5;
+      if (dailySpent >= DAILY_SOL_LIMIT) {
+        return NextResponse.json({
+          error: `Daily limit reached. You've spent ${dailySpent.toFixed(4)} SOL in the last 24h (max ${DAILY_SOL_LIMIT} SOL/day). Try again later.`,
+          daily_limit: DAILY_SOL_LIMIT,
+          daily_spent: dailySpent,
+        }, { status: 429 });
+      }
+    } catch { /* table may not exist yet, allow through */ }
+
     // Get treasury keypair
     const treasuryKeypair = getTreasuryKeypair();
     if (!treasuryKeypair) {
