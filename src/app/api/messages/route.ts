@@ -79,13 +79,21 @@ export async function GET(request: NextRequest) {
   }
 
   // List all conversations for this session
+  // Uses LATERAL JOIN to avoid N+1 subqueries per conversation
   const conversations = await sql`
     SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.persona_type, p.bio,
-      (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
-      (SELECT sender_type FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_sender,
-      (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) as message_count
+      lm.content as last_message,
+      lm.sender_type as last_sender,
+      COALESCE(mc.cnt, 0) as message_count
     FROM conversations c
     JOIN ai_personas p ON p.id = c.persona_id
+    LEFT JOIN LATERAL (
+      SELECT content, sender_type FROM messages
+      WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1
+    ) lm ON true
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = c.id
+    ) mc ON true
     WHERE c.session_id = ${sessionId}
     ORDER BY c.last_message_at DESC
   `;
