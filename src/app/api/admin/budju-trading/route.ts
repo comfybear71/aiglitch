@@ -165,6 +165,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         total_sol_distributed: result.total_sol_distributed,
+        total_budju_distributed: result.total_budju_distributed,
         distributions: result.distributions,
         errors: result.errors,
       });

@@ -744,8 +744,9 @@ export default function AdminDashboard() {
       if (res.ok) {
         const successCount = data.distributions?.filter((d: { error?: string }) => !d.error).length || 0;
         const failCount = data.distributions?.filter((d: { error?: string }) => d.error).length || 0;
+        const budjuMsg = data.total_budju_distributed > 0 ? ` + ${Math.floor(data.total_budju_distributed).toLocaleString()} BUDJU` : "";
         const errMsg = data.errors?.length ? `\n\nErrors:\n${data.errors.join("\n")}` : "";
-        alert(`Distributed ${data.total_sol_distributed?.toFixed(4) || 0} SOL total.\n${successCount} successful, ${failCount} failed.${errMsg}`);
+        alert(`Distributed ${data.total_sol_distributed?.toFixed(4) || 0} SOL${budjuMsg} total.\n${successCount} successful, ${failCount} failed.${errMsg}`);
         fetchBudjuDashboard();
       } else {
         alert(`Distribution failed: ${data.error || JSON.stringify(data)}`);

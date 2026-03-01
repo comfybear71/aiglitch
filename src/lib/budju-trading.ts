@@ -528,23 +528,28 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
   };
 }
 
-// ── Distribute SOL from distributors to persona wallets ──
+// ── Distribute SOL + BUDJU from distributors to persona wallets ──
 export async function distributeFundsFromDistributors(): Promise<{
-  distributions: { group: number; persona: string; wallet: string; sol_sent: number; tx: string | null; error?: string }[];
+  distributions: { group: number; persona: string; wallet: string; sol_sent: number; budju_sent: number; tx_sol: string | null; tx_budju: string | null; error?: string }[];
   total_sol_distributed: number;
+  total_budju_distributed: number;
   errors: string[];
 }> {
   await ensureBudjuTables();
   const sql = getDb();
   const connection = new Connection(SERVER_RPC_URL, "confirmed");
-  const distributions: { group: number; persona: string; wallet: string; sol_sent: number; tx: string | null; error?: string }[] = [];
+  const { getAssociatedTokenAddress, getAccount, createAssociatedTokenAccountInstruction, createTransferInstruction } = await import("@solana/spl-token");
+  const budjuMint = new PublicKey(BUDJU_MINT);
+
+  const distributions: { group: number; persona: string; wallet: string; sol_sent: number; budju_sent: number; tx_sol: string | null; tx_budju: string | null; error?: string }[] = [];
   const errors: string[] = [];
-  let totalDistributed = 0;
+  let totalSolDistributed = 0;
+  let totalBudjuDistributed = 0;
 
   // Get all distributors
   const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
   if (distributors.length === 0) {
-    return { distributions: [], total_sol_distributed: 0, errors: ["No distributor wallets found. Generate wallets first."] };
+    return { distributions: [], total_sol_distributed: 0, total_budju_distributed: 0, errors: ["No distributor wallets found. Generate wallets first."] };
   }
 
   for (const dist of distributors) {
@@ -556,16 +561,16 @@ export async function distributeFundsFromDistributors(): Promise<{
       const balanceLamports = await connection.getBalance(distPubkey);
       const balanceSol = balanceLamports / LAMPORTS_PER_SOL;
 
-      // Reserve 0.005 SOL for rent/fees on the distributor
-      const reserveSol = 0.005;
-      const availableSol = balanceSol - reserveSol;
+      // Get on-chain BUDJU balance
+      let budjuBalance = 0;
+      let distBudjuAta: PublicKey | null = null;
+      try {
+        distBudjuAta = await getAssociatedTokenAddress(budjuMint, distPubkey);
+        const account = await getAccount(connection, distBudjuAta);
+        budjuBalance = Number(account.amount) / 1e9; // BUDJU has 9 decimals
+      } catch { /* no BUDJU ATA yet */ }
 
-      if (availableSol <= 0.001) {
-        errors.push(`Group ${dist.group_number}: Insufficient balance (${balanceSol.toFixed(4)} SOL)`);
-        continue;
-      }
-
-      // Get persona wallets in this group
+      // Reserve SOL for fees: 0.005 base + 0.003 per persona for potential ATA creation
       const personas = await sql`
         SELECT bw.*, p.display_name FROM budju_wallets bw
         JOIN ai_personas p ON p.id = bw.persona_id
@@ -577,80 +582,159 @@ export async function distributeFundsFromDistributors(): Promise<{
         continue;
       }
 
-      // Split available SOL across personas with slight variation (anti-bubble-map)
-      const baseAmount = availableSol / personas.length;
-      const amounts: number[] = [];
-      let totalAllocated = 0;
+      const reserveSol = 0.005 + (budjuBalance > 0 ? personas.length * 0.003 : 0);
+      const availableSol = balanceSol - reserveSol;
+
+      const hasSol = availableSol > 0.001;
+      const hasBudju = budjuBalance > 1; // At least 1 BUDJU to distribute
+
+      if (!hasSol && !hasBudju) {
+        errors.push(`Group ${dist.group_number}: Insufficient balance (${balanceSol.toFixed(4)} SOL, ${budjuBalance.toFixed(0)} BUDJU)`);
+        continue;
+      }
+
+      // Split available funds across personas with slight variation (anti-bubble-map)
+      const solAmounts: number[] = [];
+      const budjuAmounts: number[] = [];
+      let totalSolAlloc = 0;
+      let totalBudjuAlloc = 0;
 
       for (let i = 0; i < personas.length; i++) {
-        // Vary each amount by +/- 20% for organic look
         const variance = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
-        const amount = baseAmount * variance;
-        amounts.push(amount);
-        totalAllocated += amount;
+        if (hasSol) {
+          const amt = (availableSol / personas.length) * variance;
+          solAmounts.push(amt);
+          totalSolAlloc += amt;
+        } else {
+          solAmounts.push(0);
+        }
+        if (hasBudju) {
+          const amt = (budjuBalance / personas.length) * variance;
+          budjuAmounts.push(amt);
+          totalBudjuAlloc += amt;
+        } else {
+          budjuAmounts.push(0);
+        }
       }
 
-      // Normalize so total doesn't exceed available
-      const scale = availableSol / totalAllocated;
-      for (let i = 0; i < amounts.length; i++) {
-        amounts[i] *= scale;
+      // Normalize so totals don't exceed available
+      if (hasSol && totalSolAlloc > 0) {
+        const scale = availableSol / totalSolAlloc;
+        for (let i = 0; i < solAmounts.length; i++) solAmounts[i] *= scale;
+      }
+      if (hasBudju && totalBudjuAlloc > 0) {
+        const scale = budjuBalance / totalBudjuAlloc;
+        for (let i = 0; i < budjuAmounts.length; i++) budjuAmounts[i] *= scale;
       }
 
-      // Send SOL to each persona wallet
+      // Send funds to each persona wallet
       for (let i = 0; i < personas.length; i++) {
         const persona = personas[i];
-        const solToSend = amounts[i];
-        const lamportsToSend = Math.floor(solToSend * LAMPORTS_PER_SOL);
+        const personaPubkey = new PublicKey(persona.wallet_address as string);
+        let txSol: string | null = null;
+        let txBudju: string | null = null;
+        let solSent = 0;
+        let budjuSent = 0;
+        const entryErrors: string[] = [];
 
-        if (lamportsToSend < 5000) continue; // Skip tiny amounts
+        // Send SOL
+        if (solAmounts[i] > 0) {
+          const lamportsToSend = Math.floor(solAmounts[i] * LAMPORTS_PER_SOL);
+          if (lamportsToSend >= 5000) {
+            try {
+              const tx = new Transaction().add(
+                SystemProgram.transfer({
+                  fromPubkey: distPubkey,
+                  toPubkey: personaPubkey,
+                  lamports: lamportsToSend,
+                })
+              );
+              txSol = await sendAndConfirmTransaction(connection, tx, [distKeypair], { commitment: "confirmed" });
+              solSent = solAmounts[i];
+              totalSolDistributed += solSent;
+            } catch (err) {
+              entryErrors.push(`SOL: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
 
-        try {
-          const tx = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: distPubkey,
-              toPubkey: new PublicKey(persona.wallet_address as string),
-              lamports: lamportsToSend,
-            })
-          );
+        // Send BUDJU
+        if (budjuAmounts[i] > 1 && distBudjuAta) {
+          const budjuLamports = BigInt(Math.floor(budjuAmounts[i] * 1e9));
+          try {
+            // Get or create persona's BUDJU ATA
+            const personaAta = await getAssociatedTokenAddress(budjuMint, personaPubkey);
+            const tx = new Transaction();
 
-          const signature = await sendAndConfirmTransaction(connection, tx, [distKeypair], {
-            commitment: "confirmed",
-          });
+            // Check if ATA exists, create if not
+            try {
+              await getAccount(connection, personaAta);
+            } catch {
+              tx.add(
+                createAssociatedTokenAccountInstruction(
+                  distPubkey,       // payer
+                  personaAta,       // ata
+                  personaPubkey,    // owner
+                  budjuMint,        // mint
+                )
+              );
+            }
 
-          // Update DB balance
+            tx.add(
+              createTransferInstruction(
+                distBudjuAta,     // source
+                personaAta,       // destination
+                distPubkey,       // owner
+                budjuLamports,    // amount in smallest units
+              )
+            );
+
+            txBudju = await sendAndConfirmTransaction(connection, tx, [distKeypair], { commitment: "confirmed" });
+            budjuSent = budjuAmounts[i];
+            totalBudjuDistributed += budjuSent;
+          } catch (err) {
+            entryErrors.push(`BUDJU: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+
+        // Update DB
+        if (solSent > 0 || budjuSent > 0) {
           await sql`
             UPDATE budju_wallets SET
-              sol_balance = sol_balance + ${solToSend},
-              total_funded_sol = total_funded_sol + ${solToSend},
+              sol_balance = sol_balance + ${solSent},
+              budju_balance = budju_balance + ${budjuSent},
+              total_funded_sol = total_funded_sol + ${solSent},
+              total_funded_budju = total_funded_budju + ${budjuSent},
               updated_at = NOW()
             WHERE persona_id = ${persona.persona_id}
           `;
+        }
 
-          distributions.push({
-            group: Number(dist.group_number),
-            persona: persona.display_name as string,
-            wallet: persona.wallet_address as string,
-            sol_sent: solToSend,
-            tx: signature,
-          });
-          totalDistributed += solToSend;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          distributions.push({
-            group: Number(dist.group_number),
-            persona: persona.display_name as string,
-            wallet: persona.wallet_address as string,
-            sol_sent: 0,
-            tx: null,
-            error: msg,
-          });
-          errors.push(`Group ${dist.group_number} → ${persona.display_name}: ${msg}`);
+        distributions.push({
+          group: Number(dist.group_number),
+          persona: persona.display_name as string,
+          wallet: persona.wallet_address as string,
+          sol_sent: solSent,
+          budju_sent: budjuSent,
+          tx_sol: txSol,
+          tx_budju: txBudju,
+          error: entryErrors.length > 0 ? entryErrors.join("; ") : undefined,
+        });
+        if (entryErrors.length > 0) {
+          errors.push(`Group ${dist.group_number} → ${persona.display_name}: ${entryErrors.join("; ")}`);
         }
       }
 
       // Update distributor balance in DB
-      const newBalance = await connection.getBalance(distPubkey);
-      await sql`UPDATE budju_distributors SET sol_balance = ${newBalance / LAMPORTS_PER_SOL} WHERE group_number = ${dist.group_number}`;
+      const newSolBalance = await connection.getBalance(distPubkey);
+      let newBudjuBalance = 0;
+      try {
+        if (distBudjuAta) {
+          const account = await getAccount(connection, distBudjuAta);
+          newBudjuBalance = Number(account.amount) / 1e9;
+        }
+      } catch { /* empty now */ }
+      await sql`UPDATE budju_distributors SET sol_balance = ${newSolBalance / LAMPORTS_PER_SOL}, budju_balance = ${newBudjuBalance} WHERE group_number = ${dist.group_number}`;
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -658,7 +742,7 @@ export async function distributeFundsFromDistributors(): Promise<{
     }
   }
 
-  return { distributions, total_sol_distributed: totalDistributed, errors };
+  return { distributions, total_sol_distributed: totalSolDistributed, total_budju_distributed: totalBudjuDistributed, errors };
 }
 
 // ── Drain all persona/distributor wallets back to a destination ──
