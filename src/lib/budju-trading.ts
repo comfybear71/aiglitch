@@ -28,6 +28,83 @@ const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6/quote";
 const JUPITER_SWAP_API = "https://quote-api.jup.ag/v6/swap";
 const DISTRIBUTOR_COUNT = 4; // 4 distributor wallets between treasury and personas
 
+// ── Ensure BUDJU tables exist (bypasses seed.ts fast-path) ──
+let _budjuTablesReady = false;
+async function ensureBudjuTables(): Promise<void> {
+  if (_budjuTablesReady) return;
+  const sql = getDb();
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS budju_trading_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS budju_wallets (
+        id TEXT PRIMARY KEY,
+        persona_id TEXT NOT NULL,
+        wallet_address TEXT UNIQUE NOT NULL,
+        encrypted_keypair TEXT NOT NULL,
+        distributor_group INTEGER NOT NULL DEFAULT 0,
+        sol_balance REAL NOT NULL DEFAULT 0,
+        budju_balance REAL NOT NULL DEFAULT 0,
+        total_funded_sol REAL NOT NULL DEFAULT 0,
+        total_funded_budju REAL NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS budju_distributors (
+        id TEXT PRIMARY KEY,
+        group_number INTEGER UNIQUE NOT NULL,
+        wallet_address TEXT UNIQUE NOT NULL,
+        encrypted_keypair TEXT NOT NULL,
+        sol_balance REAL NOT NULL DEFAULT 0,
+        budju_balance REAL NOT NULL DEFAULT 0,
+        personas_funded INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS budju_trades (
+        id TEXT PRIMARY KEY,
+        persona_id TEXT NOT NULL,
+        wallet_address TEXT NOT NULL,
+        trade_type TEXT NOT NULL CHECK (trade_type IN ('buy', 'sell')),
+        budju_amount REAL NOT NULL,
+        sol_amount REAL NOT NULL,
+        price_per_budju REAL NOT NULL,
+        usd_value REAL NOT NULL DEFAULT 0,
+        dex_used TEXT NOT NULL DEFAULT 'jupiter',
+        tx_signature TEXT,
+        strategy TEXT,
+        commentary TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        error_message TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    // Seed default config
+    const defaults: [string, string][] = [
+      ["enabled", "false"], ["daily_budget_usd", "100"], ["max_trade_usd", "10"],
+      ["min_trade_usd", "0.50"], ["min_interval_minutes", "2"], ["max_interval_minutes", "30"],
+      ["buy_sell_ratio", "0.6"], ["active_persona_count", "15"],
+      ["spent_today_usd", "0"], ["spent_reset_date", ""],
+    ];
+    for (const [k, v] of defaults) {
+      await sql`INSERT INTO budju_trading_config (key, value) VALUES (${k}, ${v}) ON CONFLICT (key) DO NOTHING`;
+    }
+    _budjuTablesReady = true;
+  } catch (e) {
+    console.error("[BUDJU] Table creation failed:", e);
+    throw e;
+  }
+}
+
 // ── Encryption helpers (simple XOR with env secret for keypair storage) ──
 const ENCRYPTION_KEY = process.env.BUDJU_WALLET_SECRET || process.env.ADMIN_PASSWORD || "budju-default-key";
 
@@ -52,6 +129,7 @@ function decryptKeypair(encrypted: string): Keypair {
 
 // ── Get trading config ──
 export async function getBudjuConfig(): Promise<Record<string, string>> {
+  await ensureBudjuTables();
   const sql = getDb();
   const rows = await sql`SELECT key, value FROM budju_trading_config`;
   const config: Record<string, string> = {};
@@ -77,6 +155,7 @@ export async function generatePersonaWallets(personaCount: number = 15): Promise
   personas: string[];
   errors: string[];
 }> {
+  await ensureBudjuTables();
   const sql = getDb();
   const errors: string[] = [];
 
@@ -451,6 +530,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
 
 // ── Dashboard Data ──
 export async function getBudjuDashboard() {
+  await ensureBudjuTables();
   const sql = getDb();
 
   // Load config first (most important, least likely to fail)
