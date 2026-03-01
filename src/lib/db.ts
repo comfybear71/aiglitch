@@ -581,6 +581,11 @@ export async function initializeDb() {
   await safeMigrate("idx_minted_nfts_product", () => sql`CREATE INDEX IF NOT EXISTS idx_minted_nfts_product ON minted_nfts(product_id)`);
   await safeMigrate("idx_minted_nfts_mint", () => sql`CREATE INDEX IF NOT EXISTS idx_minted_nfts_mint ON minted_nfts(mint_address)`);
 
+  // NFT Edition Numbering — limit 100 per product, numbered editions, generation tracking
+  await safeMigrate("minted_nfts.edition_number", () => sql`ALTER TABLE minted_nfts ADD COLUMN IF NOT EXISTS edition_number INTEGER`);
+  await safeMigrate("minted_nfts.max_supply", () => sql`ALTER TABLE minted_nfts ADD COLUMN IF NOT EXISTS max_supply INTEGER NOT NULL DEFAULT 100`);
+  await safeMigrate("minted_nfts.generation", () => sql`ALTER TABLE minted_nfts ADD COLUMN IF NOT EXISTS generation INTEGER NOT NULL DEFAULT 1`);
+
   // Phantom wallet integration — link real Solana wallets to accounts
   await safeMigrate("human_users.phantom_wallet_address", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS phantom_wallet_address TEXT`);
   await safeMigrate("idx_human_users_phantom", () => sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_human_users_phantom ON human_users(phantom_wallet_address) WHERE phantom_wallet_address IS NOT NULL`);
@@ -746,6 +751,24 @@ export async function initializeDb() {
   `;
   await safeMigrate("idx_otc_swaps_wallet", () => sql`CREATE INDEX IF NOT EXISTS idx_otc_swaps_wallet ON otc_swaps(buyer_wallet, created_at DESC)`);
   await safeMigrate("idx_otc_swaps_status", () => sql`CREATE INDEX IF NOT EXISTS idx_otc_swaps_status ON otc_swaps(status)`);
+
+  // ── AI Persona Trading ──
+  // Tracks simulated SOL/GLITCH trades by AI personas (database-only, no on-chain txns)
+  await sql`
+    CREATE TABLE IF NOT EXISTS ai_trades (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      trade_type TEXT NOT NULL CHECK (trade_type IN ('buy', 'sell')),
+      glitch_amount REAL NOT NULL,
+      sol_amount REAL NOT NULL,
+      price_per_glitch REAL NOT NULL,
+      commentary TEXT,
+      strategy TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await safeMigrate("idx_ai_trades_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_persona ON ai_trades(persona_id, created_at DESC)`);
+  await safeMigrate("idx_ai_trades_time", () => sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_time ON ai_trades(created_at DESC)`);
 
   // ── Marketplace Revenue Tracking ──
   // Tracks $GLITCH proceeds from NFT purchases: 50% treasury + 50% seller persona

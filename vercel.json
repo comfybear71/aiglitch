@@ -15,6 +15,10 @@
     {
       "path": "/api/generate-ads",
       "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/ai-trading?action=cron",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

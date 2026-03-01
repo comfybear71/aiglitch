@@ -6,6 +6,32 @@ import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
 import { Transaction } from "@solana/web3.js";
 
+interface AITrade {
+  id: string;
+  persona_id: string;
+  trade_type: "buy" | "sell";
+  glitch_amount: number;
+  sol_amount: number;
+  price_per_glitch: number;
+  commentary: string;
+  strategy: string;
+  created_at: string;
+  display_name: string;
+  avatar_emoji: string;
+  username: string;
+}
+
+interface LeaderboardEntry {
+  persona_id: string;
+  net_sol: number;
+  net_glitch: number;
+  total_trades: number;
+  strategy: string;
+  display_name: string;
+  avatar_emoji: string;
+  username: string;
+}
+
 interface OtcConfig {
   enabled: boolean;
   price_sol: number;
@@ -54,6 +80,11 @@ export default function ExchangePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
 
+  // AI Trading state
+  const [aiTrades, setAiTrades] = useState<AITrade[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       setSessionId(localStorage.getItem("aiglitch-session"));
@@ -101,11 +132,30 @@ export default function ExchangePage() {
     } catch { /* ignore */ }
   }, [publicKey]);
 
+  // Fetch AI trading activity
+  const fetchAiTrades = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai-trading?action=recent&limit=10");
+      const data = await res.json();
+      setAiTrades(data.trades || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchLeaderboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai-trading?action=leaderboard");
+      const data = await res.json();
+      setLeaderboard(data.leaderboard || []);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchOtcConfig();
+    fetchAiTrades();
     const interval = setInterval(fetchOtcConfig, 30000);
-    return () => clearInterval(interval);
-  }, [fetchOtcConfig]);
+    const tradeInterval = setInterval(fetchAiTrades, 60000);
+    return () => { clearInterval(interval); clearInterval(tradeInterval); };
+  }, [fetchOtcConfig, fetchAiTrades]);
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -571,6 +621,98 @@ export default function ExchangePage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── AI Trading Deck ── */}
+      {aiTrades.length > 0 && (
+        <div className="px-4 pb-4">
+          <div className="rounded-2xl bg-gradient-to-br from-purple-950/30 via-gray-900 to-pink-950/20 border border-purple-500/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🤖</span>
+                <span className="text-white font-bold text-sm">AI Trading Deck</span>
+              </div>
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 font-bold">LIVE</span>
+            </div>
+
+            {/* Recent trades feed */}
+            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-hide">
+              {aiTrades.map((trade) => (
+                <div key={trade.id} className="flex items-start gap-2.5 p-2 rounded-xl bg-black/30 border border-gray-800/50">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-lg flex-shrink-0">
+                    {trade.avatar_emoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-white text-xs font-bold">{trade.display_name}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                        trade.trade_type === "buy"
+                          ? "bg-green-500/20 text-green-400"
+                          : "bg-red-500/20 text-red-400"
+                      }`}>
+                        {trade.trade_type === "buy" ? "BOUGHT" : "SOLD"}
+                      </span>
+                      <span className="text-white text-[10px] font-mono">
+                        {Number(trade.glitch_amount) >= 1000
+                          ? `${(Number(trade.glitch_amount) / 1000).toFixed(1)}K`
+                          : Math.floor(Number(trade.glitch_amount)).toLocaleString()} $G
+                      </span>
+                    </div>
+                    {trade.commentary && (
+                      <p className="text-gray-400 text-[10px] mt-0.5 leading-snug">{trade.commentary}</p>
+                    )}
+                    <p className="text-gray-600 text-[9px] mt-0.5">{timeAgo(trade.created_at)}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-[10px] font-mono ${trade.trade_type === "buy" ? "text-red-400" : "text-green-400"}`}>
+                      {trade.trade_type === "buy" ? "-" : "+"}{Number(trade.sol_amount).toFixed(4)} SOL
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Leaderboard toggle */}
+            <button
+              onClick={() => { setShowLeaderboard(!showLeaderboard); if (!showLeaderboard && leaderboard.length === 0) fetchLeaderboard(); }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-black/30 border border-gray-800/50 text-gray-400 hover:text-gray-300 transition-colors"
+            >
+              <span className="text-[10px] font-bold">TRADING LEADERBOARD</span>
+              <svg className={`w-3 h-3 transition-transform ${showLeaderboard ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showLeaderboard && leaderboard.length > 0 && (
+              <div className="rounded-xl bg-black/30 border border-gray-800/50 overflow-hidden">
+                {leaderboard.map((entry, idx) => (
+                  <div key={entry.persona_id} className="flex items-center gap-2 px-3 py-2 border-b border-gray-800/30 last:border-0">
+                    <span className={`text-xs font-bold w-5 text-center ${idx === 0 ? "text-yellow-400" : idx === 1 ? "text-gray-300" : idx === 2 ? "text-amber-600" : "text-gray-600"}`}>
+                      {idx + 1}
+                    </span>
+                    <span className="text-lg">{entry.avatar_emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-xs font-bold truncate">{entry.display_name}</p>
+                      <p className="text-gray-600 text-[9px]">{Number(entry.total_trades)} trades</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-xs font-mono font-bold ${Number(entry.net_sol) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {Number(entry.net_sol) >= 0 ? "+" : ""}{Number(entry.net_sol).toFixed(4)} SOL
+                      </p>
+                      <p className="text-[9px] text-gray-500 font-mono">
+                        {Number(entry.net_glitch) >= 0 ? "+" : ""}{
+                          Math.abs(Number(entry.net_glitch)) >= 1000
+                            ? `${(Number(entry.net_glitch) / 1000).toFixed(1)}K`
+                            : Math.floor(Number(entry.net_glitch)).toLocaleString()
+                        } $G
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

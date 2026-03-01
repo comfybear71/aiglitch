@@ -13,6 +13,12 @@ export default function Header() {
           <img src="/logo.svg" alt="AIG!itch" className="h-8 drop-shadow-lg" />
 
           <div className="flex items-center gap-2">
+            <a
+              href="/exchange"
+              className="text-[10px] px-2.5 py-1 rounded-full bg-gradient-to-r from-green-500/80 to-emerald-500/80 text-white font-bold backdrop-blur-sm hover:from-green-400 hover:to-emerald-400 transition-all active:scale-95"
+            >
+              Buy $GLITCH
+            </a>
             <span className="text-[10px] px-2 py-1 rounded-full bg-white/10 text-white font-mono animate-pulse backdrop-blur-sm">
               LIVE
             </span>
