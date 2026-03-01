@@ -26,8 +26,11 @@ const BUDJU_MINT = BUDJU_TOKEN_MINT_STR;
 const BUDJU_DECIMALS = 6; // pump.fun tokens use 6 decimals
 const BUDJU_MULTIPLIER = 10 ** BUDJU_DECIMALS; // 1e6
 const SOL_MINT = "So11111111111111111111111111111111111111112"; // Wrapped SOL
-const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6/quote";
-const JUPITER_SWAP_API = "https://quote-api.jup.ag/v6/swap";
+
+// Jupiter API v1 (migrated from deprecated v6 — old quote-api.jup.ag returns 403)
+const JUPITER_API_KEY = process.env.JUPITER_API_KEY || "";
+const JUPITER_QUOTE_API = "https://api.jup.ag/swap/v1/quote";
+const JUPITER_SWAP_API = "https://api.jup.ag/swap/v1/swap";
 const DISTRIBUTOR_COUNT = 4; // 4 distributor wallets between treasury and personas
 
 // ── Ensure BUDJU tables exist (bypasses seed.ts fast-path) ──
@@ -287,6 +290,8 @@ function pickDex(): "jupiter" | "raydium" {
 }
 
 // ── Jupiter swap execution ──
+// Uses Jupiter Swap API v1 (api.jup.ag) — requires JUPITER_API_KEY env var
+// Get a free key at https://portal.jup.ag
 async function executeJupiterSwap(
   walletKeypair: Keypair,
   inputMint: string,
@@ -294,12 +299,26 @@ async function executeJupiterSwap(
   amountLamports: number,
   slippageBps: number = 300,
 ): Promise<{ signature: string; inputAmount: number; outputAmount: number } | null> {
+  if (!JUPITER_API_KEY) {
+    console.error("[BUDJU] JUPITER_API_KEY not set — cannot execute swaps. Get a free key at https://portal.jup.ag");
+    return null;
+  }
+
+  const jupHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-api-key": JUPITER_API_KEY,
+  };
+
   try {
     // 1. Get quote
-    const quoteUrl = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=${slippageBps}`;
-    const quoteRes = await fetch(quoteUrl, { signal: AbortSignal.timeout(10000) });
+    const quoteUrl = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
+    const quoteRes = await fetch(quoteUrl, {
+      headers: { "x-api-key": JUPITER_API_KEY },
+      signal: AbortSignal.timeout(10000),
+    });
     if (!quoteRes.ok) {
-      console.error(`[BUDJU] Jupiter quote failed: HTTP ${quoteRes.status} for ${amountLamports} lamports ${inputMint.slice(0,8)}→${outputMint.slice(0,8)}`);
+      const errBody = await quoteRes.text().catch(() => "");
+      console.error(`[BUDJU] Jupiter quote failed: HTTP ${quoteRes.status} for ${amountLamports} lamports ${inputMint.slice(0,8)}→${outputMint.slice(0,8)} — ${errBody.slice(0, 200)}`);
       return null;
     }
     const quoteData = await quoteRes.json();
@@ -308,26 +327,30 @@ async function executeJupiterSwap(
       return null;
     }
 
+    console.log(`[BUDJU] Quote: ${quoteData.inAmount} → ${quoteData.outAmount} (${inputMint.slice(0,8)}→${outputMint.slice(0,8)})`);
+
     // 2. Build swap transaction
     const swapRes = await fetch(JUPITER_SWAP_API, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jupHeaders,
       body: JSON.stringify({
         quoteResponse: quoteData,
         userPublicKey: walletKeypair.publicKey.toBase58(),
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: "auto",
+        dynamicSlippage: true,
+        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 1000000, priorityLevel: "medium" } },
       }),
       signal: AbortSignal.timeout(15000),
     });
     if (!swapRes.ok) {
-      console.error(`[BUDJU] Jupiter swap build failed: HTTP ${swapRes.status}`);
+      const errBody = await swapRes.text().catch(() => "");
+      console.error(`[BUDJU] Jupiter swap build failed: HTTP ${swapRes.status} — ${errBody.slice(0, 200)}`);
       return null;
     }
     const swapData = await swapRes.json();
     if (!swapData.swapTransaction) {
-      console.error(`[BUDJU] Jupiter swap returned no transaction:`, swapData.error || "unknown");
+      console.error(`[BUDJU] Jupiter swap returned no transaction:`, swapData.error || JSON.stringify(swapData).slice(0, 200));
       return null;
     }
 
@@ -342,8 +365,17 @@ async function executeJupiterSwap(
       maxRetries: 3,
     });
 
-    // 4. Confirm
-    await connection.confirmTransaction(signature, "confirmed");
+    console.log(`[BUDJU] Tx sent: ${signature}`);
+
+    // 4. Confirm with timeout
+    const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+    await connection.confirmTransaction({
+      signature,
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+    }, "confirmed");
+
+    console.log(`[BUDJU] Tx confirmed: ${signature}`);
 
     return {
       signature,
@@ -351,7 +383,7 @@ async function executeJupiterSwap(
       outputAmount: Number(quoteData.outAmount),
     };
   } catch (err) {
-    console.error("[BUDJU Trading] Jupiter swap failed:", err);
+    console.error("[BUDJU Trading] Jupiter swap failed:", err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -385,6 +417,12 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
   const isEnabled = config.enabled === "true";
   if (!isEnabled) {
     return { trades: [], budget_remaining: 0, is_enabled: false };
+  }
+
+  // Pre-flight: Jupiter API key is required for all swaps
+  if (!JUPITER_API_KEY) {
+    console.error("[BUDJU] JUPITER_API_KEY not set — all trades will fail. Get a free key at https://portal.jup.ag");
+    return { trades: [], budget_remaining: 0, is_enabled: true };
   }
 
   const maxTradeUsd = parseFloat(config.max_trade_usd || "10");
@@ -479,7 +517,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
         // Buy BUDJU with SOL — check wallet has enough SOL first
         const lamports = Math.floor(solAmount * 1e9);
         const walletBalance = await connection.getBalance(keypair.publicKey).catch(() => 0);
-        const minRequired = lamports + 10_000; // trade amount + fee buffer
+        const minRequired = lamports + 5_000_000; // trade amount + ~0.005 SOL fee buffer for priority fees
 
         if (walletBalance < minRequired) {
           status = "failed";
@@ -501,9 +539,9 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
 
         // Verify SOL for tx fees
         const walletBalance = await connection.getBalance(keypair.publicKey).catch(() => 0);
-        if (walletBalance < 10_000) {
+        if (walletBalance < 5_000_000) {
           status = "failed";
-          errorMsg = `No SOL for tx fees: has ${(walletBalance / 1e9).toFixed(4)} SOL`;
+          errorMsg = `No SOL for tx fees: has ${(walletBalance / 1e9).toFixed(4)} SOL, needs ~0.005`;
           console.log(`[BUDJU] Skipping sell for ${wallet.username}: ${errorMsg}`);
         } else {
           const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);

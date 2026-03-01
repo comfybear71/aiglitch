@@ -86,7 +86,7 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
     return {
       sol_balance: heliusData.nativeBalance / 1_000_000_000,
       glitch_balance: tokenBalance(GLITCH_TOKEN_MINT_STR, 9),
-      budju_balance: tokenBalance(BUDJU_TOKEN_MINT_STR, 9),
+      budju_balance: tokenBalance(BUDJU_TOKEN_MINT_STR, 6), // pump.fun tokens use 6 decimals
       usdc_balance: tokenBalance(USDC_MINT, 6),
     };
   }
@@ -111,7 +111,7 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
       Promise.all([
         connection.getBalance(walletPubkey).catch(() => 0),
         getSplBalance(GLITCH_TOKEN_MINT_STR, 9),
-        getSplBalance(BUDJU_TOKEN_MINT_STR, 9),
+        getSplBalance(BUDJU_TOKEN_MINT_STR, 6), // pump.fun tokens use 6 decimals
         getSplBalance(USDC_MINT, 6),
       ]),
       10000,

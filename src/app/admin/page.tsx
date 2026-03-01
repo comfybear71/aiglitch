@@ -3466,6 +3466,13 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <>
+                {/* Jupiter API Key Warning */}
+                {budjuData && !(budjuData as Record<string, unknown>).jupiter_api_key_set && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-3">
+                    <p className="text-red-400 font-bold text-sm">JUPITER_API_KEY not set — all trades will fail</p>
+                    <p className="text-red-400/70 text-xs mt-1">Get a free key at <a href="https://portal.jup.ag" target="_blank" className="underline">portal.jup.ag</a> and add it to your environment variables.</p>
+                  </div>
+                )}
                 {/* Header: Status + Controls */}
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

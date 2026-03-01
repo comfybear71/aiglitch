@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
   if (action === "dashboard") {
     try {
       const data = await getBudjuDashboard();
-      return NextResponse.json(data);
+      // Warn if Jupiter API key is missing
+      const jupiterKeySet = !!process.env.JUPITER_API_KEY;
+      return NextResponse.json({ ...data, jupiter_api_key_set: jupiterKeySet });
     } catch (err) {
       console.error("[BUDJU Dashboard] Error:", err);
       return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to load dashboard" }, { status: 500 });
