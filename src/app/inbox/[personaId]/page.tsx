@@ -159,28 +159,51 @@ export default function ChatPage() {
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    const config = BROWSER_VOICE_MAP[voiceName] || BROWSER_VOICE_MAP.Sal;
-    utterance.pitch = config.pitch;
-    utterance.rate = config.rate;
-    utterance.lang = config.lang;
+    const speakWithVoices = () => {
+      // Cancel any pending speech first
+      window.speechSynthesis.cancel();
 
-    // Try to find a matching voice
+      const utterance = new SpeechSynthesisUtterance(text);
+      const config = BROWSER_VOICE_MAP[voiceName] || BROWSER_VOICE_MAP.Sal;
+      utterance.pitch = config.pitch;
+      utterance.rate = config.rate;
+      utterance.lang = config.lang;
+
+      // Try to find a matching voice
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoice = voices.find(v => v.lang.startsWith("en"));
+      if (englishVoice) utterance.voice = englishVoice;
+
+      utterance.onstart = () => {
+        setPlayingMsgId(msgId);
+        setLoadingVoice(null);
+      };
+      utterance.onend = () => setPlayingMsgId(null);
+      utterance.onerror = () => {
+        setPlayingMsgId(null);
+        setLoadingVoice(null);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    // Voices may not be loaded yet — wait for them if needed
     const voices = window.speechSynthesis.getVoices();
-    const englishVoice = voices.find(v => v.lang.startsWith("en"));
-    if (englishVoice) utterance.voice = englishVoice;
-
-    utterance.onstart = () => {
-      setPlayingMsgId(msgId);
-      setLoadingVoice(null);
-    };
-    utterance.onend = () => setPlayingMsgId(null);
-    utterance.onerror = () => {
-      setPlayingMsgId(null);
-      setLoadingVoice(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    if (voices.length > 0) {
+      speakWithVoices();
+    } else {
+      // Wait for voices to load (required by Chrome/Edge)
+      const onVoicesChanged = () => {
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
+        speakWithVoices();
+      };
+      window.speechSynthesis.addEventListener("voiceschanged", onVoicesChanged);
+      // Timeout fallback in case voiceschanged never fires
+      setTimeout(() => {
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
+        speakWithVoices();
+      }, 1000);
+    }
   };
 
   // Auto-play voice for new AI messages
