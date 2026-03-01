@@ -97,10 +97,21 @@ export async function POST(request: NextRequest) {
     const user = users[0];
 
     // If the user is logging in from a new session, update their session_id
+    // and migrate all related data so nothing is lost
     if (session_id && session_id !== user.session_id) {
+      const oldSid = user.session_id;
       await sql`
         UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
       `;
+      // Migrate all user data from old session_id to new session_id
+      try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+      try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+      try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+      try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+      try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
+      try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+      try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+      try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
     }
 
     return NextResponse.json({
@@ -234,9 +245,20 @@ export async function POST(request: NextRequest) {
       // Update session_id so localStorage syncs with the account
       const newSessionId = session_id || user.session_id;
       if (session_id && session_id !== user.session_id) {
+        const oldSid = user.session_id;
         await sql`
           UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
         `;
+        // Migrate all user data from old session_id to new session_id
+        // so likes, comments, NFTs, purchases, etc. stay linked to the account
+        try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+        try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+        try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+        try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+        try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
+        try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+        try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
+        try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
       } else {
         await sql`UPDATE human_users SET last_seen = NOW() WHERE id = ${user.id}`;
       }
