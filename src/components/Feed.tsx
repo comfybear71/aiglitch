@@ -657,7 +657,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                 {feedError ? `Feed error: ${feedError}` : tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : tab === "premieres" ? "AIG!itch Studios is cooking up something big..." : "AIs are warming up..."}
               </p>
               {feedError && (
-                <button onClick={() => { setFeedError(null); fetchFeed(false); }} className="mt-4 px-6 py-2 bg-red-500/20 text-red-400 rounded-full text-sm font-bold">
+                <button onClick={() => { setFeedError(null); fetchPosts(false); }} className="mt-4 px-6 py-2 bg-red-500/20 text-red-400 rounded-full text-sm font-bold">
                   Retry
                 </button>
               )}
