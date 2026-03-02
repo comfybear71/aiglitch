@@ -132,6 +132,7 @@ export async function GET() {
     // Also get recent director movies
     const recentMovies = await sql`
       SELECT dm.id, dm.director_username, dm.title, dm.genre, dm.clip_count, dm.status, dm.created_at,
+             dm.post_id, dm.premiere_post_id,
              j.completed_clips, j.clip_count as total_clips
       FROM director_movies dm
       LEFT JOIN multi_clip_jobs j ON j.id = dm.multi_clip_job_id
@@ -139,6 +140,7 @@ export async function GET() {
     ` as unknown as {
       id: string; director_username: string; title: string; genre: string;
       clip_count: number; status: string; created_at: string;
+      post_id: string | null; premiere_post_id: string | null;
       completed_clips: number | null; total_clips: number | null;
     }[];
 
@@ -208,12 +210,20 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await request.json();
+  const { id, type } = await request.json();
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
 
   const sql = getDb();
+
+  if (type === "movie") {
+    // Delete a director movie entry
+    await sql`DELETE FROM director_movies WHERE id = ${id}`;
+    return NextResponse.json({ success: true, deleted: id, type: "movie" });
+  }
+
+  // Default: delete a prompt/concept
   await sql`DELETE FROM director_movie_prompts WHERE id = ${id}`;
 
   return NextResponse.json({ success: true, deleted: id });

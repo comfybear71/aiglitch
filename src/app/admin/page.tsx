@@ -354,7 +354,7 @@ export default function AdminDashboard() {
 
   // Director movie prompts state
   const [directorPrompts, setDirectorPrompts] = useState<{ id: string; title: string; concept: string; genre: string; is_used: boolean; created_at: string }[]>([]);
-  const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string; completed_clips: number | null; total_clips: number | null }[]>([]);
+  const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string; post_id: string | null; premiere_post_id: string | null; completed_clips: number | null; total_clips: number | null }[]>([]);
   const [directorLoading, setDirectorLoading] = useState(false);
   const [directorNewPrompt, setDirectorNewPrompt] = useState({ title: "", concept: "", genre: "any", director: "auto" });
   const [directorSubmitting, setDirectorSubmitting] = useState(false);
@@ -767,6 +767,19 @@ export default function AdminDashboard() {
       fetchDirectorData();
     } catch (err) {
       console.error("[directors] Delete error:", err);
+    }
+  };
+
+  const deleteDirectorMovie = async (id: string) => {
+    try {
+      await fetch("/api/admin/director-prompts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, type: "movie" }),
+      });
+      fetchDirectorData();
+    } catch (err) {
+      console.error("[directors] Delete movie error:", err);
     }
   };
 
@@ -4270,16 +4283,29 @@ export default function AdminDashboard() {
                         const isGenerating = movie.status === "generating";
                         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                         const elapsedMin = isGenerating ? Math.round((Date.now() - new Date(movie.created_at).getTime()) / 60000) : 0;
+                        const moviePostId = movie.post_id || movie.premiere_post_id;
 
                         return (
                           <div key={movie.id} className="bg-gray-800/50 rounded-lg p-3">
                             <div className="flex items-center gap-3">
-                              <div className="text-2xl">
-                                {movie.status === "completed" ? "🎬" : isGenerating ? "⏳" : "📝"}
-                              </div>
+                              {moviePostId ? (
+                                <a href={`/post/${moviePostId}`} className="text-2xl hover:scale-110 transition-transform" title="View movie">
+                                  🎬
+                                </a>
+                              ) : (
+                                <div className="text-2xl">
+                                  {isGenerating ? "⏳" : "📝"}
+                                </div>
+                              )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm font-bold text-white truncate">{movie.title}</span>
+                                  {moviePostId ? (
+                                    <a href={`/post/${moviePostId}`} className="text-sm font-bold text-white truncate hover:text-amber-400 transition-colors">
+                                      {movie.title}
+                                    </a>
+                                  ) : (
+                                    <span className="text-sm font-bold text-white truncate">{movie.title}</span>
+                                  )}
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
                                     movie.status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
                                     isGenerating ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30 animate-pulse" :
@@ -4300,6 +4326,11 @@ export default function AdminDashboard() {
                                   )}
                                 </div>
                               </div>
+                              <button onClick={() => deleteDirectorMovie(movie.id)}
+                                className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition-colors flex-shrink-0"
+                                title="Remove movie">
+                                Remove
+                              </button>
                             </div>
                             {/* Progress bar for generating movies */}
                             {isGenerating && total > 0 && (
@@ -4328,10 +4359,16 @@ export default function AdminDashboard() {
                     <h3 className="text-sm font-bold text-gray-500 mb-3">Used Concepts</h3>
                     <div className="space-y-1">
                       {directorPrompts.filter(p => p.is_used).map(prompt => (
-                        <div key={prompt.id} className="flex items-center gap-2 text-xs text-gray-600">
-                          <span className="text-green-400/50">&#10003;</span>
-                          <span>{prompt.title}</span>
-                          <span className="text-gray-700">({prompt.genre})</span>
+                        <div key={prompt.id} className="flex items-center justify-between gap-2 text-xs text-gray-600">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-green-400/50 flex-shrink-0">&#10003;</span>
+                            <span className="truncate">{prompt.title}</span>
+                            <span className="text-gray-700 flex-shrink-0">({prompt.genre})</span>
+                          </div>
+                          <button onClick={() => deleteDirectorPrompt(prompt.id)}
+                            className="text-red-400/50 hover:text-red-300 text-[10px] px-1.5 py-0.5 rounded hover:bg-red-500/10 transition-colors flex-shrink-0">
+                            Remove
+                          </button>
                         </div>
                       ))}
                     </div>
