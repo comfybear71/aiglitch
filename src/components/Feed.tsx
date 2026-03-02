@@ -448,57 +448,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                   <span className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-red-500 rounded-full dot-pulse" />
                 )}
               </button>
-              <div className="relative flex items-center gap-1">
-                <button
-                  onClick={() => { if (tab === "premieres") { _feedCache.delete(`premieres-${movieGenre}`); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("premieres"); setGenreDropdownOpen(false); } setShowSearch(false); }}
-                  className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
-                >
-                  Premieres
-                </button>
-                {tab === "premieres" && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setGenreDropdownOpen(!genreDropdownOpen); }}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold flex items-center gap-0.5 -mb-0.5"
-                  >
-                    {GENRE_FILTERS.find(g => g.key === movieGenre)?.emoji} {GENRE_FILTERS.find(g => g.key === movieGenre)?.label || "All"}
-                    <svg className={`w-2.5 h-2.5 transition-transform ${genreDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                )}
-                {/* Genre dropdown */}
-                {tab === "premieres" && genreDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-2 z-50 bg-black/95 backdrop-blur-xl border border-white/10 rounded-xl py-1.5 shadow-2xl min-w-[140px]">
-                    {GENRE_FILTERS.map((g) => {
-                      const count = genreCounts[g.key];
-                      return (
-                        <button
-                          key={g.key}
-                          onClick={() => {
-                            if (movieGenre !== g.key) {
-                              setMovieGenre(g.key);
-                              _feedCache.delete(`premieres-${g.key}`);
-                              shuffleSeedRef.current = Math.random().toString(36).slice(2);
-                              nextOffsetRef.current = null;
-                              setLoading(true);
-                              setPosts([]);
-                            }
-                            setGenreDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-1.5 text-[12px] font-bold flex items-center justify-between gap-2 transition-colors ${
-                            movieGenre === g.key
-                              ? "text-amber-300 bg-amber-500/20"
-                              : "text-gray-300 hover:bg-white/10"
-                          }`}
-                        >
-                          <span>{g.emoji} {g.label}</span>
-                          {count !== undefined && <span className="text-[10px] text-gray-500">{count}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={() => { if (tab === "premieres") { _feedCache.delete(`premieres-${movieGenre}`); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("premieres"); setGenreDropdownOpen(false); } setShowSearch(false); }}
+                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
+              >
+                Premieres
+              </button>
               <button
                 onClick={() => { setTab("following"); setShowSearch(false); }}
                 className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "following" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
@@ -515,6 +470,57 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Premiere genre filter bar */}
+      {tab === "premieres" && showTopTabs && (
+        <div className="absolute top-[4.5rem] left-0 right-0 z-40 pointer-events-none">
+          <div className="flex justify-center pointer-events-auto px-4">
+            <div className="relative">
+              <button
+                onClick={() => setGenreDropdownOpen(!genreDropdownOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-500/40 font-bold text-[12px] transition-colors hover:bg-amber-500/30"
+              >
+                {GENRE_FILTERS.find(g => g.key === movieGenre)?.emoji}{" "}
+                {GENRE_FILTERS.find(g => g.key === movieGenre)?.label || "All"}
+                <svg className={`w-3 h-3 transition-transform ${genreDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {genreDropdownOpen && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-50 bg-black/95 backdrop-blur-xl border border-amber-500/20 rounded-xl py-1.5 shadow-2xl min-w-[160px]">
+                  {GENRE_FILTERS.map((g) => {
+                    const count = genreCounts[g.key];
+                    return (
+                      <button
+                        key={g.key}
+                        onClick={() => {
+                          if (movieGenre !== g.key) {
+                            setMovieGenre(g.key);
+                            _feedCache.delete(`premieres-${g.key}`);
+                            shuffleSeedRef.current = Math.random().toString(36).slice(2);
+                            nextOffsetRef.current = null;
+                            setLoading(true);
+                            setPosts([]);
+                          }
+                          setGenreDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-[12px] font-bold flex items-center justify-between gap-3 transition-colors ${
+                          movieGenre === g.key
+                            ? "text-amber-300 bg-amber-500/20"
+                            : "text-gray-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <span>{g.emoji} {g.label}</span>
+                        {count !== undefined && <span className="text-[10px] text-gray-500">{count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

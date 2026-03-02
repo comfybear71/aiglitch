@@ -203,27 +203,30 @@ export default function PopupAd() {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
         >
-          <div className="bg-gradient-to-r from-gray-900/95 to-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl p-3 shadow-2xl relative overflow-hidden">
-            {/* AD badge + close button */}
-            <div className="absolute top-1.5 right-1.5 flex items-center gap-1.5 z-10">
-              <span className="text-[9px] font-bold text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">AD</span>
+          <div className="bg-gradient-to-r from-gray-900/95 to-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl relative overflow-hidden">
+            {/* Top bar: AD badge + branding + close button */}
+            <div className="flex items-center justify-between px-3 pt-2 pb-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-bold text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">AD</span>
+                <span className="text-[8px] text-zinc-600">AIG!itch Marketplace</span>
+              </div>
               <button
                 onClick={(e) => { e.stopPropagation(); dismiss(); }}
-                className="text-zinc-300 hover:text-white bg-zinc-800/90 hover:bg-zinc-700 rounded-full w-7 h-7 flex items-center justify-center text-base leading-none transition-colors"
+                className="text-zinc-400 hover:text-white bg-zinc-800/90 hover:bg-zinc-700 rounded-full w-6 h-6 flex items-center justify-center text-sm leading-none transition-colors"
                 aria-label="Close ad"
               >
                 &#x2715;
               </button>
             </div>
 
-            <div className="flex items-center gap-3 cursor-pointer" onClick={handleClick}>
+            <div className="flex items-center gap-3 px-3 pb-3 cursor-pointer" onClick={handleClick}>
               {/* Product emoji */}
               <div className="text-3xl flex-shrink-0 w-12 h-12 bg-zinc-800/50 rounded-xl flex items-center justify-center">
                 {p.emoji}
               </div>
 
               {/* Product info */}
-              <div className="flex-1 min-w-0 pr-14">
+              <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold text-white truncate">{p.name}</div>
                 <div className="text-[10px] text-zinc-400 truncate">{p.tagline}</div>
                 <div className="flex items-center gap-2 mt-1">
@@ -238,9 +241,6 @@ export default function PopupAd() {
                 Shop
               </button>
             </div>
-
-            {/* Subtle marketplace branding */}
-            <div className="absolute bottom-1 right-3 text-[8px] text-zinc-600">AIG!itch Marketplace</div>
           </div>
         </div>
       </div>
@@ -264,27 +264,27 @@ export default function PopupAd() {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
         >
-          <div className={`bg-gradient-to-r ${promo.gradient} backdrop-blur-xl border ${promo.border} rounded-2xl p-3 shadow-2xl relative overflow-hidden`}>
-            {/* AD badge + close button */}
-            <div className="absolute top-1.5 right-1.5 flex items-center gap-1.5 z-10">
+          <div className={`bg-gradient-to-r ${promo.gradient} backdrop-blur-xl border ${promo.border} rounded-2xl shadow-2xl relative overflow-hidden`}>
+            {/* Top bar: SPONSORED badge + close button */}
+            <div className="flex items-center justify-between px-3 pt-2 pb-1">
               <span className="text-[9px] font-bold text-zinc-400 bg-black/30 px-1.5 py-0.5 rounded">SPONSORED</span>
               <button
                 onClick={(e) => { e.stopPropagation(); dismiss(); }}
-                className="text-zinc-300 hover:text-white bg-black/40 hover:bg-black/60 rounded-full w-7 h-7 flex items-center justify-center text-base leading-none transition-colors"
+                className="text-zinc-300 hover:text-white bg-black/40 hover:bg-black/60 rounded-full w-6 h-6 flex items-center justify-center text-sm leading-none transition-colors"
                 aria-label="Close ad"
               >
                 &#x2715;
               </button>
             </div>
 
-            <div className="flex items-center gap-3 cursor-pointer" onClick={handleClick}>
+            <div className="flex items-center gap-3 px-3 pb-3 cursor-pointer" onClick={handleClick}>
               {/* Promo emoji */}
               <div className="text-3xl flex-shrink-0 w-12 h-12 bg-black/20 rounded-xl flex items-center justify-center">
                 {promo.emoji}
               </div>
 
               {/* Promo info */}
-              <div className="flex-1 min-w-0 pr-14">
+              <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold text-white">{promo.headline}</div>
                 <div className="text-[10px] text-zinc-300 mt-0.5">{promo.subtext}</div>
               </div>
