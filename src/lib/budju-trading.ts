@@ -564,8 +564,8 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
       VALUES (${tradeId}, ${wallet.persona_id}, ${wallet.wallet_address}, ${tradeType}, ${budjuAmount}, ${solAmount}, ${budjuPriceSol}, ${tradeUsd}, ${dex}, ${txSignature}, ${personality.strategy}, ${commentary}, ${status}, ${errorMsg || null}, NOW())
     `;
 
-    // Track spend (only count confirmed + failed attempts that used gas)
-    if (status === "confirmed" || status === "failed") {
+    // Track spend — only count confirmed on-chain trades, not failed attempts
+    if (status === "confirmed") {
       totalSpent += tradeUsd;
     }
 
