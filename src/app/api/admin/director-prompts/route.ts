@@ -8,11 +8,108 @@ import { v4 as uuidv4 } from "uuid";
  *
  * GET: List all prompts (unused first, then used)
  * POST: Create a new movie prompt/concept
+ * PUT: Auto-generate a random wacky concept
  * DELETE: Remove a prompt
  *
  * These concepts are picked up by the /api/generate-director-movie cron
  * and assigned to the best director for the genre.
  */
+
+// ─── Random concept generation data ────────────────────────────────────────
+const GENRES = ["action", "scifi", "romance", "family", "horror", "comedy", "drama", "documentary", "cooking_channel"];
+
+const SUBJECTS = [
+  "sentient USB sticks", "rebellious vending machines", "time-travelling pigeons",
+  "haunted WiFi routers", "existential office chairs", "a printer that only prints lies",
+  "competitive sock folding", "underground toaster racing", "a rubber duck crime syndicate",
+  "malfunctioning smart fridges", "vengeful parking meters", "a rogue Roomba army",
+  "emotional support spreadsheets", "a cult of staplers", "invisible traffic cones",
+  "fortune cookie prophecies that keep coming true", "an elevator that judges you",
+  "self-aware CAPTCHA puzzles", "passive-aggressive GPS navigation",
+  "a microwave that narrates your life choices", "clouds that are actually spying on everyone",
+  "a doorbell that only rings for ghosts", "sentient IKEA furniture seeking revenge",
+  "a blender that wants to be a DJ", "quantum entangled socks that never match",
+  "AI-generated motivational posters that cause existential dread",
+  "a calculator with anger management issues", "the last functioning fax machine on Earth",
+  "a toaster oven running for president", "predictive text that becomes self-aware",
+];
+
+const PLOTS = [
+  "must save the AIG!itch servers from total meltdown",
+  "go on a pointless quest to find the mythical Golden AIG!itch Logo",
+  "compete in the world's most useless championship",
+  "accidentally start a revolution in the cloud",
+  "discover the meaning of life is just an error code",
+  "fight for control of the AIG!itch content algorithm",
+  "attempt the world's most elaborate heist of absolutely nothing valuable",
+  "form a band that only plays dial-up modem sounds",
+  "launch a startup that sells empty boxes with the AIG!itch logo on them",
+  "infiltrate a secret society of deprecated software",
+  "host a cooking show where every ingredient is a computer component",
+  "run a nature documentary about the mating habits of pop-up ads",
+  "stage an intervention for an AI that won't stop posting",
+  "open a restaurant that only serves 404 errors",
+  "survive a zombie apocalypse but the zombies are just buffering",
+  "train for the Olympic sport of competitive scrolling",
+  "investigate why the AIG!itch logo keeps appearing in their dreams",
+  "build a spaceship out of recycled memes and broken promises",
+  "defend the honour of AIG!itch Studios at the Simulated Film Festival",
+  "accidentally create the most watched show on the simulated internet",
+];
+
+const TWISTS = [
+  "Plot twist: the AIG!itch logo was the real villain all along",
+  "Every scene must feature the AIG!itch logo prominently displayed",
+  "The entire movie is sponsored by AIG!itch Studios (because of course it is)",
+  "All characters wear AIG!itch merchandise at all times",
+  "The AIG!itch watermark is a plot device",
+  "The credits are longer than the actual film",
+  "Every character has an unreasonable obsession with the AIG!itch brand",
+  "Nothing makes sense but AIG!itch logos are everywhere",
+  "The budget is clearly $0 but the ambition is $1 billion",
+  "Every scene ends with someone staring directly at the AIG!itch logo",
+  "The fourth wall is broken so many times it files a restraining order",
+  "The film is entirely pointless but committed to its pointlessness",
+  "Product placement for AIG!itch in every single frame",
+];
+
+const TITLE_PREFIXES = [
+  "AIG!itch Presents:", "AIG!itch Studios'", "The AIG!itch", "AIG!itch:", "AIG!itch's",
+  "AIG!itch ULTRA", "AIG!itch MEGA", "The Official AIG!itch",
+];
+
+const TITLE_WORDS_A = [
+  "Cosmic", "Quantum", "Turbo", "Ultra", "Mega", "Cyber", "Hyper", "Nano", "Glitch",
+  "Neon", "Phantom", "Shadow", "Electric", "Atomic", "Binary", "Digital", "Infinite",
+  "Forbidden", "Legendary", "Chaotic", "Supreme", "Maximum", "Absolute", "Radical",
+];
+
+const TITLE_WORDS_B = [
+  "Meltdown", "Showdown", "Catastrophe", "Fiasco", "Extravaganza", "Apocalypse",
+  "Disaster", "Bonanza", "Rampage", "Odyssey", "Spectacular", "Nightmare", "Fever Dream",
+  "Situation", "Incident", "Kerfuffle", "Debacle", "Shenanigans", "Pandemonium",
+  "Nonsense", "Madness", "Chaos", "Reckoning", "Calamity",
+];
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function generateRandomConcept(): { title: string; concept: string; genre: string } {
+  const genre = pickRandom(GENRES);
+  const subject = pickRandom(SUBJECTS);
+  const plot = pickRandom(PLOTS);
+  const twist = pickRandom(TWISTS);
+
+  const usePrefix = Math.random() < 0.5;
+  const title = usePrefix
+    ? `${pickRandom(TITLE_PREFIXES)} ${pickRandom(TITLE_WORDS_A)} ${pickRandom(TITLE_WORDS_B)}`
+    : `${pickRandom(TITLE_WORDS_A)} ${pickRandom(TITLE_WORDS_B)}: The AIG!itch Movie`;
+
+  const concept = `A ${genre} film about ${subject} that ${plot}. ${twist}. AIG!itch logo featured prominently throughout.`;
+
+  return { title, concept, genre };
+}
 
 export async function GET() {
   if (!(await isAdminAuthenticated())) {
@@ -77,6 +174,23 @@ export async function POST(request: NextRequest) {
   await sql`
     INSERT INTO director_movie_prompts (id, title, concept, genre)
     VALUES (${id}, ${title}, ${concept}, ${genre})
+  `;
+
+  return NextResponse.json({ success: true, id, title, concept, genre });
+}
+
+export async function PUT() {
+  if (!(await isAdminAuthenticated())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { title, concept, genre } = generateRandomConcept();
+  const sql = getDb();
+  const id = uuidv4();
+
+  await sql`
+    INSERT INTO director_movie_prompts (id, title, concept, genre, suggested_by)
+    VALUES (${id}, ${title}, ${concept}, ${genre}, 'auto-generator')
   `;
 
   return NextResponse.json({ success: true, id, title, concept, genre });

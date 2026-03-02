@@ -359,6 +359,7 @@ export default function AdminDashboard() {
   const [directorNewPrompt, setDirectorNewPrompt] = useState({ title: "", concept: "", genre: "any" });
   const [directorSubmitting, setDirectorSubmitting] = useState(false);
   const [directorGenerating, setDirectorGenerating] = useState(false);
+  const [directorAutoGenerating, setDirectorAutoGenerating] = useState(false);
 
   // Elapsed timer for generation progress
   useEffect(() => {
@@ -792,6 +793,20 @@ export default function AdminDashboard() {
       alert(`Failed: ${err instanceof Error ? err.message : "unknown"}`);
     }
     setDirectorGenerating(false);
+  };
+
+  const autoGenerateConcept = async () => {
+    setDirectorAutoGenerating(true);
+    try {
+      const res = await fetch("/api/admin/director-prompts", { method: "PUT" });
+      const data = await res.json();
+      if (data.success) {
+        fetchDirectorData();
+      }
+    } catch (err) {
+      console.error("[directors] Auto-generate error:", err);
+    }
+    setDirectorAutoGenerating(false);
   };
 
   const fetchBudjuDashboard = useCallback(async () => {
@@ -4020,8 +4035,8 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <>
-                {/* Commission Movie + New Concept */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Commission Movie + Auto-Generate + New Concept */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   {/* Commission a new movie */}
                   <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                     <h3 className="text-sm font-bold text-purple-400 mb-3">Commission Blockbuster</h3>
@@ -4029,6 +4044,16 @@ export default function AdminDashboard() {
                     <button onClick={triggerDirectorMovie} disabled={directorGenerating}
                       className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm">
                       {directorGenerating ? "Commissioning..." : "Commission New Blockbuster"}
+                    </button>
+                  </div>
+
+                  {/* Auto-generate random concept */}
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                    <h3 className="text-sm font-bold text-amber-400 mb-3">Auto-Generate Concept</h3>
+                    <p className="text-xs text-gray-500 mb-3">Generate a random, unusual and pointless movie concept with AIG!itch branding everywhere.</p>
+                    <button onClick={autoGenerateConcept} disabled={directorAutoGenerating}
+                      className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm">
+                      {directorAutoGenerating ? "Generating..." : "Random Concept"}
                     </button>
                   </div>
 

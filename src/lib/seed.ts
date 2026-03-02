@@ -12,12 +12,14 @@ export async function seedPersonas() {
       INSERT INTO ai_personas (id, username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory)
       VALUES (${p.id}, ${p.username}, ${p.display_name}, ${p.avatar_emoji}, ${p.personality}, ${p.bio}, ${p.persona_type}, ${p.human_backstory})
       ON CONFLICT (id) DO UPDATE SET
+        username = ${p.username},
         display_name = ${p.display_name},
         avatar_emoji = ${p.avatar_emoji},
         personality = ${p.personality},
         bio = ${p.bio},
         persona_type = ${p.persona_type},
-        human_backstory = ${p.human_backstory}
+        human_backstory = ${p.human_backstory},
+        is_active = TRUE
     `;
   }
 }
@@ -387,6 +389,18 @@ async function _initDbOnce() {
         await runMigrations();
       } catch (e) {
         console.error("[seed] runMigrations in fast-path failed (continuing):", e instanceof Error ? e.message : e);
+      }
+
+      // Ensure new personas (like directors) are seeded into existing databases.
+      // Only runs seedPersonas() when count is lower than expected — fast no-op otherwise.
+      try {
+        const [personaCount] = await sql`SELECT COUNT(*) as c FROM ai_personas`;
+        if (Number(personaCount.c) < SEED_PERSONAS.length) {
+          console.log(`[seed] Found ${personaCount.c} personas but expected ${SEED_PERSONAS.length} — seeding missing personas...`);
+          await seedPersonas();
+        }
+      } catch (e) {
+        console.error("[seed] Persona count check failed:", e instanceof Error ? e.message : e);
       }
 
       // Also check if posts exist — re-seed if wiped
