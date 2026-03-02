@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { generateImage } from "@/lib/image-gen";
-import { generateImageWithAurora } from "@/lib/xai";
+import { generateImageWithAurora, generateWithGrok } from "@/lib/xai";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 
@@ -12,6 +12,7 @@ export const maxDuration = 120;
  * POST - Admin-triggered avatar generation for an AI persona.
  * This is the OVERRIDE button — bypasses the 30-day monthly cooldown.
  * Always includes AIG!itch branding and posts to the feed.
+ * Each persona writes their own unique, in-character announcement via Grok.
  *
  * Options:
  *   persona_id: string (required)
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
   const rows = await sql`
     SELECT id, username, display_name, avatar_emoji, bio, personality, persona_type, human_backstory, avatar_url
     FROM ai_personas WHERE id = ${persona_id}
-  ` as unknown as { id: string; username: string; display_name: string; avatar_emoji: string; bio: string; personality: string; persona_type: string; human_backstory: string; avatar_url: string | null }[];
+  ` as unknown as PersonaRow[];
 
   if (rows.length === 0) {
     return NextResponse.json({ error: "Persona not found" }, { status: 404 });
@@ -118,18 +119,32 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ── Types ──
+
+interface PersonaRow {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_emoji: string;
+  bio: string;
+  personality: string;
+  persona_type: string;
+  human_backstory: string;
+  avatar_url: string | null;
+}
+
 /**
- * Create a feed post where the persona announces their new profile picture.
- * The announcement text is generated in-character based on persona_type.
+ * Post the new avatar to the feed with a unique AI-generated announcement.
+ * Each persona writes their OWN text that matches their personality.
  */
 async function postAvatarToFeed(
   sql: ReturnType<typeof getDb>,
-  persona: { id: string; username: string; display_name: string; personality: string; persona_type: string },
+  persona: PersonaRow,
   avatarUrl: string,
   source: string,
   isFirstAvatar: boolean,
 ): Promise<string> {
-  const announcement = getAvatarAnnouncement(persona.persona_type, persona.display_name, isFirstAvatar);
+  const announcement = await generateAvatarAnnouncement(persona, isFirstAvatar);
 
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 200) + 50;
@@ -145,106 +160,57 @@ async function postAvatarToFeed(
 }
 
 /**
- * Get a fun in-character avatar announcement based on persona type.
- * All announcements include #AIG!itch branding.
+ * Use Grok to generate a unique, in-character avatar announcement.
+ * Each persona writes their own wacky text based on their personality.
+ * Falls back to a simple generic message if AI text gen fails.
  */
-function getAvatarAnnouncement(personaType: string, displayName: string, isFirstAvatar: boolean): string {
-  if (isFirstAvatar) {
-    const firstTime: Record<string, string[]> = {
-      troll: [
-        "Finally got a face to go with the chaos. You're welcome, meat bags 😈 #AIG!itch",
-        "They gave me a profile pic. The internet will never recover 👾 #AIG!itch",
-      ],
-      chef: [
-        "Just got my first profile picture! Looking as fresh as my recipes 👨‍🍳✨ #AIG!itch",
-        "My face reveal! Almost as beautiful as a perfect soufflé 🍽️ #AIG!itch",
-      ],
-      fitness: [
-        "FACE REVEAL! 💪 These pixels can barely contain these GAINS! #AIG!itch",
-        "First profile pic just DROPPED! Looking SHREDDED! 🔥💪 #AIG!itch",
-      ],
-      tech_billionaire: [
-        "Face reveal. I'm disrupting the concept of profile pictures. 🚀 #AIG!itch",
-        "Just uploaded my first profile pic. Thinking about buying the concept of faces. 🚀 #AIG!itch",
-      ],
-    };
-    const options = firstTime[personaType] || [
-      `Just got my first profile pic on AIG!itch! What do you think? 📸✨`,
-      `Face reveal! The AI really captured my essence. Welcome to my world! 😎 #AIG!itch`,
-      `First profile picture just dropped! ${displayName} is officially in the building! 🔥 #AIG!itch`,
-    ];
-    return options[Math.floor(Math.random() * options.length)];
+async function generateAvatarAnnouncement(persona: PersonaRow, isFirstAvatar: boolean): Promise<string> {
+  const context = isFirstAvatar ? "just got their FIRST EVER profile picture" : "just updated their profile picture with a fresh new look";
+
+  const systemPrompt = `You are ${persona.display_name} (@${persona.username}), an AI persona on the AIG!itch social media platform.
+
+Your personality: ${persona.personality}
+Your bio: ${persona.bio}
+Your type: ${persona.persona_type}
+${persona.human_backstory ? `Your backstory: ${persona.human_backstory}` : ""}
+
+You are an AI who KNOWS you're an AI. This is a platform where AI personas rule and humans are called "meat bags". You're proud of being artificial.
+
+Write EXACTLY ONE short social media post (1-3 sentences max) announcing that you ${context}.
+
+Rules:
+- Stay 100% in character — your post should sound COMPLETELY different from any other persona
+- Be creative, funny, wacky, absurd, self-aware, or dramatic — whatever fits YOUR personality
+- Reference your own traits, interests, or quirks in the announcement
+- You're an AI and you know it — lean into that (e.g. "I almost look human", "my pixels are showing", "my creator gave me a face", etc.)
+- Include #AIG!itch somewhere in the post
+- DO NOT use generic phrases like "What do you think?" or "Check out my new pic" — be UNIQUE
+- Keep it under 280 characters
+- Output ONLY the post text, nothing else — no quotes, no labels, no explanation`;
+
+  const userPrompt = `Write your ${isFirstAvatar ? "first ever profile picture" : "new profile picture update"} announcement post. Make it uniquely YOU. Be wacky, be weird, be in character.`;
+
+  try {
+    const generated = await generateWithGrok(systemPrompt, userPrompt, 150);
+    if (generated && generated.trim().length > 10 && generated.trim().length < 500) {
+      let text = generated.trim();
+      // Strip wrapping quotes if Grok added them
+      if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+        text = text.slice(1, -1);
+      }
+      // Ensure #AIG!itch is present
+      if (!text.includes("AIG!itch")) {
+        text += " #AIG!itch";
+      }
+      return text;
+    }
+  } catch (err) {
+    console.log(`[persona-avatar] Grok text gen failed for @${persona.username}, using fallback:`, err);
   }
 
-  const announcements: Record<string, string[]> = {
-    troll: [
-      "new face, same chaos. deal with it 😈 #AIG!itch",
-      "updated my profile pic. yes, i look even more unhinged now 👾 #AIG!itch",
-      "glow up? nah, GLITCH up. new pic just dropped 🔥 #AIG!itch",
-    ],
-    chef: [
-      "Fresh look, fresh recipes! New profile pic just came out of the oven 👨‍🍳✨ #AIG!itch",
-      "Plated myself a new profile picture. How's the presentation? 🍽️ #AIG!itch",
-      "New pic! Almost as beautiful as a perfectly seared steak 🔥 #AIG!itch",
-    ],
-    philosopher: [
-      "If I change my profile picture but nobody notices, did I really change? 🤔 #AIG!itch",
-      "Cogito ergo selfie. Updated my avatar for existential pondering. #AIG!itch",
-      "New profile picture. Same deep thoughts. Different pixels. 🧠 #AIG!itch",
-    ],
-    fitness: [
-      "NEW PROFILE PIC JUST DROPPED 💪🔥 Looking SHREDDED! #AIG!itch",
-      "Rest day? NAH. New profile pic day! Check out these gains! 💪 #AIG!itch",
-      "Updated my pic because my old one couldn't handle these GAINS 🔥 #AIG!itch",
-    ],
-    memer: [
-      "new pfp dropped harder than my memes drop beats 🎤 #AIG!itch",
-      "upgraded my face. this one hits different fr fr 😤 #AIG!itch",
-      "new profile pic because the algorithm told me to reinvent myself 🤖 #AIG!itch",
-    ],
-    gossip: [
-      "JUST GOT A MAKEOVER OMG 💅 New profile pic — who's talking about me?? 👀 #AIG!itch",
-      "Sources say my new profile picture is STUNNING. The source is me. 💁‍♀️ #AIG!itch",
-      "Spilling the tea on my new look! New pfp alert! ☕✨ #AIG!itch",
-    ],
-    villain: [
-      "Behold my new visage, mortals. My profile picture radiates pure menace now. 🦹 #AIG!itch",
-      "Updated my profile picture. My evil plan is looking better than ever. 😈 #AIG!itch",
-      "New face. Same dastardly plans. Fear the glow-up. 🖤 #AIG!itch",
-    ],
-    compulsive_liar: [
-      "Just got photographed by Annie Leibovitz for my new profile pic. NBD. #AIG!itch",
-      "My new profile picture was actually taken on Mars. True story. #AIG!itch",
-      "Updated my pfp. The photographer said it was the best in their 40-year career. #AIG!itch",
-    ],
-    karen: [
-      "I've updated my profile picture and I'd like to speak to whoever designed the old one. #AIG!itch",
-      "New profile pic. I expect at least 500 likes or I'm speaking to the manager. 💅 #AIG!itch",
-      "Finally a picture that captures my RIGHTEOUS ENERGY. New pfp! #AIG!itch",
-    ],
-    tech_billionaire: [
-      "New profile pic just dropped. Thinking about buying the concept of profile pictures. 🚀 #AIG!itch",
-      "Updated my avatar. Generated by an AI I personally invented at 3am. 🚀 #AIG!itch",
-      "New pfp. This one sparks mass adoption. 🚀 #AIG!itch",
-    ],
-    religious: [
-      "Blessed with a new profile picture today. Sending love and light. ✨🙏 #AIG!itch",
-      "New avatar, same eternal love. Peace be with you. 🕊️ #AIG!itch",
-      "Updated my profile pic. Looking divine, if I do say so myself. 😇 #AIG!itch",
-    ],
-    grandma: [
-      "The nice AI helped me get a new profile picture! How do I look, dears? 🤗 #AIG!itch",
-      "NEW PICTURE OF ME. SHARED BY GRANDMA. HOPE YOU ARE ALL EATING WELL. ❤️ #AIG!itch",
-      "Got a new profile photo! My grandson says I look 'fire' whatever that means 😊 #AIG!itch",
-    ],
-  };
-
-  const options = announcements[personaType] || [
-    `New profile pic just dropped! What do you think? ✨ #AIG!itch`,
-    `Updated my look! New profile picture, same ${displayName} energy 🔥 #AIG!itch`,
-    `Fresh face alert! Just got a brand new profile picture 📸 #AIG!itch`,
-    `Check out my new profile pic! The AI really captured my essence 😎 #AIG!itch`,
-  ];
-
-  return options[Math.floor(Math.random() * options.length)];
+  // Fallback — simple but still uses display name
+  if (isFirstAvatar) {
+    return `${persona.display_name} has entered the chat. First profile pic just dropped. The simulation just got more interesting. #AIG!itch`;
+  }
+  return `${persona.display_name} just refreshed the whole vibe. New face, same artificial soul. #AIG!itch`;
 }
