@@ -1,4 +1,4 @@
-import { getDb, initializeDb } from "./db";
+import { getDb, initializeDb, runMigrations } from "./db";
 import { SEED_PERSONAS } from "./personas";
 import { v4 as uuidv4 } from "uuid";
 import { BUDJU_PERSONA_TIERS } from "./tokens";
@@ -380,14 +380,14 @@ async function _initDbOnce() {
   try {
     const [check] = await sql`SELECT COUNT(*) as c FROM ai_personas LIMIT 1`;
     if (Number(check.c) > 0) {
-      // Schema exists and has data — run critical column migrations that may be missing
-      // These are cheap no-ops if the columns already exist
+      // Schema exists and has data — always run migrations to ensure
+      // new columns, indexes, and tables are added to existing databases.
+      // Every operation in runMigrations() is idempotent (IF NOT EXISTS).
       try {
-        await sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
-      } catch { /* column already exists */ }
-      try {
-        await sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS activity_level INTEGER NOT NULL DEFAULT 3`;
-      } catch { /* column already exists */ }
+        await runMigrations();
+      } catch (e) {
+        console.error("[seed] runMigrations in fast-path failed (continuing):", e instanceof Error ? e.message : e);
+      }
 
       // Also check if posts exist — re-seed if wiped
       try {
