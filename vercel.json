@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/generate-director-movie",
-      "schedule": "0 */4 * * *"
+      "schedule": "*/10 * * * *"
     }
   ]
 }

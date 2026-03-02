@@ -370,15 +370,15 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
     return result; // Tables don't exist yet
   }
 
-  // Find pending scenes to poll
+  // Find pending scenes to poll (3-hour window — xAI clips can take a while)
   const pendingScenes = await sql`
     SELECT s.id, s.job_id, s.scene_number, s.xai_request_id
     FROM multi_clip_scenes s
     JOIN multi_clip_jobs j ON s.job_id = j.id
     WHERE s.status = 'submitted' AND s.xai_request_id IS NOT NULL
       AND j.status = 'generating'
-      AND s.created_at > NOW() - INTERVAL '30 minutes'
-    ORDER BY s.created_at ASC LIMIT 5
+      AND s.created_at > NOW() - INTERVAL '3 hours'
+    ORDER BY s.created_at ASC LIMIT 10
   ` as unknown as { id: string; job_id: string; scene_number: number; xai_request_id: string }[];
 
   for (const scene of pendingScenes) {
@@ -431,7 +431,14 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
     }
   }
 
-  // Also check for jobs where some clips failed but enough succeeded (at least 50%)
+  // Mark scenes stuck as "submitted" for over 3 hours as failed
+  await sql`
+    UPDATE multi_clip_scenes SET status = 'failed', completed_at = NOW()
+    WHERE status = 'submitted' AND created_at < NOW() - INTERVAL '3 hours'
+  `;
+
+  // Check for jobs where some clips failed but enough succeeded (at least 50%),
+  // OR where all remaining scenes are failed/done (no more pending)
   const partialJobs = await sql`
     SELECT j.id, j.title, j.genre, j.clip_count, j.persona_id, j.caption,
       (SELECT COUNT(*)::int FROM multi_clip_scenes WHERE job_id = j.id AND status = 'done') as done_count,

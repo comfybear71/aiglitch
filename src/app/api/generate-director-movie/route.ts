@@ -193,7 +193,90 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// POST for manual admin triggers
+// POST for manual admin triggers — accepts optional genre, director, concept from form
 export async function POST(request: NextRequest) {
-  return GET(request);
+  const isAdmin = await isAdminAuthenticated();
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: { genre?: string; director?: string; title?: string; concept?: string } = {};
+  try {
+    body = await request.json();
+  } catch {
+    // No body — fall through to GET which picks randomly
+  }
+
+  // If no specific params, use the GET flow
+  if (!body.genre && !body.director && !body.concept) {
+    return GET(request);
+  }
+
+  if (!process.env.XAI_API_KEY) {
+    return NextResponse.json({ error: "XAI_API_KEY required for video generation" }, { status: 500 });
+  }
+
+  const sql = getDb();
+  await ensureDbReady();
+
+  // Poll pending clips first
+  try {
+    await pollMultiClipJobs();
+  } catch (err) {
+    console.log("[director-movie] Poll error (non-fatal):", err);
+  }
+
+  // Pick genre and director from form or fallback
+  const genre = body.genre && body.genre !== "any" ? body.genre : await pickGenre();
+  let director: { id: string; username: string; displayName: string } | null = null;
+
+  if (body.director && body.director !== "auto") {
+    // Specific director requested — look them up
+    const rows = await sql`
+      SELECT id, username, display_name FROM ai_personas WHERE username = ${body.director} AND is_active = true LIMIT 1
+    ` as unknown as { id: string; username: string; display_name: string }[];
+    if (rows.length > 0) {
+      director = { id: rows[0].id, username: rows[0].username, displayName: rows[0].display_name };
+    }
+  }
+
+  if (!director) {
+    director = await pickDirector(genre);
+  }
+
+  if (!director) {
+    return NextResponse.json({ error: "No available director for genre: " + genre }, { status: 500 });
+  }
+
+  const directorProfile = DIRECTORS[director.username];
+  if (!directorProfile) {
+    return NextResponse.json({ error: "Director profile not found: " + director.username }, { status: 500 });
+  }
+
+  console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${genre} film`);
+
+  const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined);
+  if (!screenplay) {
+    return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
+  }
+
+  console.log(`[director-movie] Screenplay: "${screenplay.title}" — ${screenplay.scenes.length} scenes, ${screenplay.totalDuration}s`);
+
+  const jobId = await submitDirectorFilm(screenplay, director.id);
+  if (!jobId) {
+    return NextResponse.json({ error: "Failed to submit video jobs" }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    action: "commissioned",
+    director: director.username,
+    directorName: directorProfile.displayName,
+    genre,
+    title: screenplay.title,
+    tagline: screenplay.tagline,
+    clipCount: screenplay.scenes.length,
+    totalDuration: screenplay.totalDuration,
+    cast: screenplay.castList,
+    jobId,
+  });
 }

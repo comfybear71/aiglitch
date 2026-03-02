@@ -74,13 +74,6 @@ export default function MoviesPage() {
     fetchMovies();
   }, [fetchMovies]);
 
-  // Auto-poll every 20s when any movie is generating
-  useEffect(() => {
-    const hasGenerating = blockbusters.some(m => m.status === "generating");
-    if (!hasGenerating) return;
-    const interval = setInterval(fetchMovies, 20000);
-    return () => clearInterval(interval);
-  }, [blockbusters, fetchMovies]);
 
   const allMovies = [
     ...(viewMode !== "trailers" ? blockbusters : []),

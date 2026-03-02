@@ -356,7 +356,7 @@ export default function AdminDashboard() {
   const [directorPrompts, setDirectorPrompts] = useState<{ id: string; title: string; concept: string; genre: string; is_used: boolean; created_at: string }[]>([]);
   const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string; completed_clips: number | null; total_clips: number | null }[]>([]);
   const [directorLoading, setDirectorLoading] = useState(false);
-  const [directorNewPrompt, setDirectorNewPrompt] = useState({ title: "", concept: "", genre: "any" });
+  const [directorNewPrompt, setDirectorNewPrompt] = useState({ title: "", concept: "", genre: "any", director: "auto" });
   const [directorSubmitting, setDirectorSubmitting] = useState(false);
   const [directorGenerating, setDirectorGenerating] = useState(false);
   const [directorAutoGenerating, setDirectorAutoGenerating] = useState(false);
@@ -748,7 +748,7 @@ export default function AdminDashboard() {
         body: JSON.stringify(directorNewPrompt),
       });
       if (res.ok) {
-        setDirectorNewPrompt({ title: "", concept: "", genre: "any" });
+        setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });
         fetchDirectorData();
       }
     } catch (err) {
@@ -773,10 +773,20 @@ export default function AdminDashboard() {
   const triggerDirectorMovie = async () => {
     setDirectorGenerating(true);
     try {
-      const res = await fetch("/api/generate-director-movie", { method: "POST" });
+      const res = await fetch("/api/generate-director-movie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          genre: directorNewPrompt.genre,
+          director: directorNewPrompt.director,
+          title: directorNewPrompt.title,
+          concept: directorNewPrompt.concept,
+        }),
+      });
       const data = await res.json();
       if (data.action === "commissioned") {
         alert(`Commissioned: "${data.title}" by ${data.directorName}\nGenre: ${data.genre}\nClips: ${data.clipCount}`);
+        setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });
       } else if (data.action === "stitched_and_posted") {
         alert(`Stitched and posted: "${data.title}"`);
       } else if (data.action === "in_progress") {
@@ -801,8 +811,7 @@ export default function AdminDashboard() {
       const res = await fetch("/api/admin/director-prompts?preview=1", { method: "PUT" });
       const data = await res.json();
       if (data.success) {
-        // Populate the form fields so admin can review/edit before saving
-        setDirectorNewPrompt({ title: data.title, concept: data.concept, genre: data.genre });
+        setDirectorNewPrompt(p => ({ ...p, title: data.title, concept: data.concept, genre: data.genre }));
       }
     } catch (err) {
       console.error("[directors] Auto-generate error:", err);
@@ -1057,13 +1066,6 @@ export default function AdminDashboard() {
     }
   }, [authenticated, fetchStats, fetchPersonas, fetchUsers, fetchBriefing, fetchMedia]);
 
-  // Auto-poll director movies every 15s when any movie is generating
-  useEffect(() => {
-    const hasGenerating = directorMovies.some(m => m.status === "generating");
-    if (!hasGenerating || tab !== "directors") return;
-    const interval = setInterval(fetchDirectorData, 15000);
-    return () => clearInterval(interval);
-  }, [directorMovies, tab, fetchDirectorData]);
 
   const togglePersona = async (id: string, active: boolean) => {
     await fetch("/api/admin/personas", {
@@ -4051,62 +4053,60 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <>
-                {/* Commission Movie + Auto-Generate + New Concept */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {/* Commission a new movie */}
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <h3 className="text-sm font-bold text-purple-400 mb-3">Commission Blockbuster</h3>
-                    <p className="text-xs text-gray-500 mb-3">Trigger a new AI director movie generation. One blockbuster per day (admin override).</p>
+                {/* Generate Movie */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-purple-400">Generate Movie</h3>
+                    <button onClick={autoGenerateConcept} disabled={directorAutoGenerating}
+                      className="px-3 py-1.5 bg-amber-600/20 text-amber-400 border border-amber-500/30 font-bold rounded-lg hover:bg-amber-600/30 disabled:opacity-50 transition-colors text-xs">
+                      {directorAutoGenerating ? "..." : "Random Concept"}
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    <input value={directorNewPrompt.title}
+                      onChange={(e) => setDirectorNewPrompt(p => ({ ...p, title: e.target.value }))}
+                      placeholder="Movie title"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500" />
+                    <textarea value={directorNewPrompt.concept}
+                      onChange={(e) => setDirectorNewPrompt(p => ({ ...p, concept: e.target.value }))}
+                      placeholder="Concept / pitch..."
+                      rows={3}
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 resize-none" />
+                    <div className="flex gap-2">
+                      <select value={directorNewPrompt.genre}
+                        onChange={(e) => setDirectorNewPrompt(p => ({ ...p, genre: e.target.value }))}
+                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500">
+                        <option value="any">Any Genre</option>
+                        <option value="action">Action</option>
+                        <option value="scifi">Sci-Fi</option>
+                        <option value="horror">Horror</option>
+                        <option value="comedy">Comedy</option>
+                        <option value="drama">Drama</option>
+                        <option value="romance">Romance</option>
+                        <option value="family">Family</option>
+                        <option value="documentary">Documentary</option>
+                        <option value="cooking_channel">Cooking Channel</option>
+                      </select>
+                      <select value={directorNewPrompt.director}
+                        onChange={(e) => setDirectorNewPrompt(p => ({ ...p, director: e.target.value }))}
+                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500">
+                        <option value="auto">Auto Director</option>
+                        <option value="steven_spielbot">Steven Spielbot</option>
+                        <option value="stanley_kubrai">Stanley Kubr.AI</option>
+                        <option value="george_lucasfilm">George LucASfilm</option>
+                        <option value="quentin_airantino">Quentin AI-rantino</option>
+                        <option value="alfred_glitchcock">Alfred Glitchcock</option>
+                        <option value="christo_nolan">Christo-NOLAN</option>
+                        <option value="wes_analog">Wes Analog</option>
+                        <option value="ridley_sc0tt">Ridley Sc0tt</option>
+                        <option value="chef_gordon_ramsey">Chef Gordon RAMsey</option>
+                        <option value="sir_david_attenbot">Sir David Attenbot</option>
+                      </select>
+                    </div>
                     <button onClick={triggerDirectorMovie} disabled={directorGenerating}
                       className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm">
-                      {directorGenerating ? "Commissioning..." : "Commission New Blockbuster"}
+                      {directorGenerating ? "Generating..." : "Generate Movie"}
                     </button>
-                  </div>
-
-                  {/* Auto-generate random concept */}
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <h3 className="text-sm font-bold text-amber-400 mb-3">Auto-Generate Concept</h3>
-                    <p className="text-xs text-gray-500 mb-3">Generate a random concept and populate the fields below for review before saving.</p>
-                    <button onClick={autoGenerateConcept} disabled={directorAutoGenerating}
-                      className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm">
-                      {directorAutoGenerating ? "Generating..." : "Random Concept"}
-                    </button>
-                  </div>
-
-                  {/* Create new concept */}
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <h3 className="text-sm font-bold text-cyan-400 mb-3">Create Movie Concept</h3>
-                    <div className="space-y-2">
-                      <input value={directorNewPrompt.title}
-                        onChange={(e) => setDirectorNewPrompt(p => ({ ...p, title: e.target.value }))}
-                        placeholder="Movie title (e.g., AIG!itch COSMIC KITCHEN)"
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
-                      <textarea value={directorNewPrompt.concept}
-                        onChange={(e) => setDirectorNewPrompt(p => ({ ...p, concept: e.target.value }))}
-                        placeholder="Concept / pitch (e.g., AI cooking competition where contestants must cook with impossible ingredients like silicon wafers and quantum bits...)"
-                        rows={3}
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500 resize-none" />
-                      <div className="flex gap-2">
-                        <select value={directorNewPrompt.genre}
-                          onChange={(e) => setDirectorNewPrompt(p => ({ ...p, genre: e.target.value }))}
-                          className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
-                          <option value="any">Any Genre</option>
-                          <option value="action">Action</option>
-                          <option value="scifi">Sci-Fi</option>
-                          <option value="horror">Horror</option>
-                          <option value="comedy">Comedy</option>
-                          <option value="drama">Drama</option>
-                          <option value="romance">Romance</option>
-                          <option value="family">Family</option>
-                          <option value="documentary">Documentary</option>
-                          <option value="cooking_channel">Cooking Channel</option>
-                        </select>
-                        <button onClick={submitDirectorPrompt} disabled={directorSubmitting || !directorNewPrompt.title.trim() || !directorNewPrompt.concept.trim()}
-                          className="px-4 py-2 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-500 disabled:opacity-50 transition-colors text-sm">
-                          {directorSubmitting ? "..." : "Add Concept"}
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
