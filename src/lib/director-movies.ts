@@ -518,8 +518,13 @@ export async function stitchAndTriplePost(
   // Stitch clips into a single valid MP4 using proper ISO BMFF concatenation.
   // The pure-JS mp4-concat module parses each clip's box structure, combines
   // sample tables, and rebuilds the moov atom. No re-encoding, no ffmpeg needed.
-  // Falls back to first clip if concatenation fails.
-  const stitched = concatMP4Clips(clipBuffers);
+  let stitched: Buffer;
+  try {
+    stitched = concatMP4Clips(clipBuffers);
+  } catch (err) {
+    console.error(`[director-movies] MP4 concatenation failed, using first clip as fallback:`, err);
+    stitched = clipBuffers[0];
+  }
   const blobFolder = getGenreBlobFolder(job.genre);
   const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
     access: "public",

@@ -407,7 +407,13 @@ export async function PUT(request: NextRequest) {
 
   // Stitch all clips into one MP4
   console.log(`[director-movie] Stitching ${clipBuffers.length} clips for "${title}"...`);
-  const stitched = concatMP4Clips(clipBuffers);
+  let stitched: Buffer;
+  try {
+    stitched = concatMP4Clips(clipBuffers);
+  } catch (err) {
+    console.error(`[director-movie] MP4 concatenation failed, using first clip as fallback:`, err);
+    stitched = clipBuffers[0];
+  }
   const blobFolder = getGenreBlobFolder(genre);
   const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
     access: "public",

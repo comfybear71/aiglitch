@@ -405,6 +405,12 @@ function rebuildMoov(
           parts.push(patchDuration(buf, child, totalMovieDuration, "tkhd"));
         } else if (child.type === "mdhd") {
           parts.push(patchDuration(buf, child, totalMediaDuration, "mdhd"));
+        } else if (child.type === "edts") {
+          // CRITICAL: Drop the edit list (elst) from the stitched file.
+          // The original elst limits playback to the first clip's duration (~10s).
+          // Without edts, the player uses the full duration from tkhd/mdhd,
+          // which we've already patched to the combined total duration.
+          continue;
         } else if (child.children) {
           const inner = rebuildChildren(child.children);
           const header = Buffer.alloc(8);
@@ -446,19 +452,37 @@ export function concatMP4Clips(buffers: Buffer[]): Buffer {
   if (buffers.length === 1) return buffers[0];
 
   try {
-    return concatMP4ClipsUnsafe(buffers);
+    const result = concatMP4ClipsUnsafe(buffers);
+
+    // Sanity check: stitched output should be larger than any single input
+    const maxInputSize = Math.max(...buffers.map(b => b.length));
+    if (result.length <= maxInputSize) {
+      console.warn(`[mp4-concat] WARNING: Stitched output (${result.length}) is not larger than largest input (${maxInputSize}). Stitching may have failed silently.`);
+    }
+
+    return result;
   } catch (err) {
-    console.error("[mp4-concat] Concatenation failed, falling back to first clip:", err);
-    return buffers[0];
+    console.error("[mp4-concat] Concatenation FAILED:", err);
+    console.error("[mp4-concat] Input details:", buffers.map((b, i) => `clip${i}: ${(b.length / 1024 / 1024).toFixed(1)}MB`).join(", "));
+    // Re-throw so callers know stitching failed — don't silently return first clip
+    throw err;
   }
 }
 
 function concatMP4ClipsUnsafe(buffers: Buffer[]): Buffer {
+  console.log(`[mp4-concat] Starting concatenation of ${buffers.length} clips (${buffers.map(b => (b.length / 1024 / 1024).toFixed(1) + "MB").join(" + ")})`);
+
   // Parse all clips
   const clips: ClipInfo[] = [];
-  for (const buf of buffers) {
+  for (let idx = 0; idx < buffers.length; idx++) {
+    const buf = buffers[idx];
     const boxes = parseBoxes(buf, 0, buf.length);
-    clips.push(extractClipInfo(buf, boxes));
+    try {
+      clips.push(extractClipInfo(buf, boxes));
+    } catch (err) {
+      console.error(`[mp4-concat] Failed to parse clip ${idx} (${(buf.length / 1024 / 1024).toFixed(1)}MB, boxes: ${boxes.map(b => b.type).join(",")}):`, err);
+      throw err;
+    }
   }
 
   // Template from first clip

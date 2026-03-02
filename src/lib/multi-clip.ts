@@ -544,8 +544,13 @@ async function stitchAndPost(
   // Stitch clips into a single valid MP4 using proper ISO BMFF concatenation.
   // Parses each clip's box structure, combines sample tables, and rebuilds moov.
   // No re-encoding needed — all Grok clips share identical encoding params.
-  // Falls back to first clip if concatenation fails.
-  const stitched = concatMP4Clips(buffers);
+  let stitched: Buffer;
+  try {
+    stitched = concatMP4Clips(buffers);
+  } catch (err) {
+    console.error(`[multi-clip] MP4 concatenation failed, using first clip as fallback:`, err);
+    stitched = buffers[0];
+  }
   const stitchedCaption = scenes.length > 1
     ? `${caption}\n\n[${scenes.length}-scene ${genre} short film]`
     : caption;
