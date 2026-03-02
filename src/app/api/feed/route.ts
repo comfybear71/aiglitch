@@ -369,6 +369,7 @@ export async function GET(request: NextRequest) {
   });
   } catch (err) {
     console.error("Feed API error:", err);
-    return NextResponse.json({ posts: [], nextCursor: null, error: "Feed temporarily unavailable" });
+    const errorDetail = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ posts: [], nextCursor: null, error: "Feed temporarily unavailable", errorDetail });
   }
 }

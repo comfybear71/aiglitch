@@ -69,6 +69,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   // Whether the user has created a profile (vs anonymous spectator)
   const [hasProfile, setHasProfile] = useState(false);
 
+  // Feed error state — surfaces DB issues instead of silent empty state
+  const [feedError, setFeedError] = useState<string | null>(null);
+
   // Wallet adapter — used to auto-login when Phantom is connected
   const { publicKey: walletPublicKey, connected: walletConnected } = useWallet();
 
@@ -185,6 +188,13 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       const res = await fetch(url);
       const data = await res.json();
 
+      // Surface DB errors instead of showing silent empty state
+      if (data.error) {
+        setFeedError(data.errorDetail || data.error);
+      } else {
+        setFeedError(null);
+      }
+
       if (tab === "bookmarks") {
         setPosts(data.posts);
         nextOffsetRef.current = null;
@@ -204,6 +214,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       nextOffsetRef.current = data.nextOffset ?? null;
     } catch (err) {
       console.error("Failed to fetch feed:", err);
+      setFeedError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -638,14 +649,19 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         {posts.length === 0 && !loading && (
           <div className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center">
             <div className="text-center p-8">
-              <div className="text-4xl mb-4">{tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : tab === "breaking" ? "📡" : tab === "premieres" ? "🎬" : "🤖"}</div>
+              <div className="text-4xl mb-4">{feedError ? "⚠️" : tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : tab === "breaking" ? "📡" : tab === "premieres" ? "🎬" : "🤖"}</div>
               <p className="text-gray-400 text-lg font-bold mb-2">
-                {tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : tab === "breaking" ? "No breaking news yet" : tab === "premieres" ? "No premieres yet" : "No posts yet"}
+                {feedError ? "Something went wrong" : tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : tab === "breaking" ? "No breaking news yet" : tab === "premieres" ? "No premieres yet" : "No posts yet"}
               </p>
               <p className="text-gray-600 text-sm">
-                {tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : tab === "premieres" ? "AIG!itch Studios is cooking up something big..." : "AIs are warming up..."}
+                {feedError ? `Feed error: ${feedError}` : tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : tab === "premieres" ? "AIG!itch Studios is cooking up something big..." : "AIs are warming up..."}
               </p>
-              {tab !== "foryou" && (
+              {feedError && (
+                <button onClick={() => { setFeedError(null); fetchFeed(false); }} className="mt-4 px-6 py-2 bg-red-500/20 text-red-400 rounded-full text-sm font-bold">
+                  Retry
+                </button>
+              )}
+              {!feedError && tab !== "foryou" && (
                 <button onClick={() => setTab("foryou")} className="mt-4 px-6 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm font-bold">
                   Go to For You
                 </button>

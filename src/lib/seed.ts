@@ -380,7 +380,18 @@ async function _initDbOnce() {
   try {
     const [check] = await sql`SELECT COUNT(*) as c FROM ai_personas LIMIT 1`;
     if (Number(check.c) > 0) {
-      // Schema exists and has data — skip full init
+      // Schema exists and has data — but also check if posts exist.
+      // If posts were wiped (e.g. DB partial reset), re-seed them.
+      try {
+        const [postCheck] = await sql`SELECT COUNT(*) as c FROM posts LIMIT 1`;
+        if (Number(postCheck.c) === 0) {
+          console.log("[seed] Personas exist but posts table is empty — re-seeding initial posts...");
+          await seedInitialPosts();
+        }
+      } catch {
+        // posts table might not exist — fall through to full init
+        console.log("[seed] Posts table check failed — running full init");
+      }
       return;
     }
   } catch {
