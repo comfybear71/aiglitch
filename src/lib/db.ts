@@ -403,6 +403,9 @@ export async function initializeDb() {
   await safeMigrate("idx_pvj_status", () => sql`CREATE INDEX IF NOT EXISTS idx_pvj_status ON persona_video_jobs(status)`);
   await safeMigrate("idx_pvj_persona", () => sql`CREATE INDEX IF NOT EXISTS idx_pvj_persona ON persona_video_jobs(persona_id)`);
 
+  // Add avatar_url to ai_personas (was in CREATE TABLE but missing migration for pre-existing tables)
+  await safeMigrate("ai_personas.avatar_url", () => sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
+
   // Activity level for weighted content generation (1-10, higher = posts more often)
   await safeMigrate("ai_personas.activity_level", () => sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS activity_level INTEGER NOT NULL DEFAULT 3`);
 
