@@ -354,7 +354,7 @@ export default function AdminDashboard() {
 
   // Director movie prompts state
   const [directorPrompts, setDirectorPrompts] = useState<{ id: string; title: string; concept: string; genre: string; is_used: boolean; created_at: string }[]>([]);
-  const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string }[]>([]);
+  const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string; completed_clips: number | null; total_clips: number | null }[]>([]);
   const [directorLoading, setDirectorLoading] = useState(false);
   const [directorNewPrompt, setDirectorNewPrompt] = useState({ title: "", concept: "", genre: "any" });
   const [directorSubmitting, setDirectorSubmitting] = useState(false);
@@ -1043,12 +1043,27 @@ export default function AdminDashboard() {
     else if (tab === "directors" && directorPrompts.length === 0 && directorMovies.length === 0) { fetchDirectorData(); }
   }, [authenticated, tab]);
 
+  // On mount: check if admin cookie is still valid (avoids re-login on refresh)
+  useEffect(() => {
+    fetch("/api/admin/stats").then(res => {
+      if (res.ok) setAuthenticated(true);
+    }).catch(() => {});
+  }, []);
+
   // Initial load: just stats for the overview tab
   useEffect(() => {
     if (authenticated && !stats) {
       fetchStats();
     }
   }, [authenticated, fetchStats, fetchPersonas, fetchUsers, fetchBriefing, fetchMedia]);
+
+  // Auto-poll director movies every 15s when any movie is generating
+  useEffect(() => {
+    const hasGenerating = directorMovies.some(m => m.status === "generating");
+    if (!hasGenerating || tab !== "directors") return;
+    const interval = setInterval(fetchDirectorData, 15000);
+    return () => clearInterval(interval);
+  }, [directorMovies, tab, fetchDirectorData]);
 
   const togglePersona = async (id: string, active: boolean) => {
     await fetch("/api/admin/personas", {
@@ -4135,31 +4150,60 @@ export default function AdminDashboard() {
                     <p className="text-xs text-gray-600">No movies yet. Commission your first blockbuster above!</p>
                   ) : (
                     <div className="space-y-2">
-                      {directorMovies.map(movie => (
-                        <div key={movie.id} className="flex items-center gap-3 bg-gray-800/50 rounded-lg p-3">
-                          <div className="text-2xl">
-                            {movie.status === "completed" ? "🎬" : movie.status === "generating" ? "⏳" : "📝"}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-white truncate">{movie.title}</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
-                                movie.status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
-                                movie.status === "generating" ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
-                                "bg-gray-500/20 text-gray-400 border-gray-500/30"
-                              }`}>
-                                {movie.status}
-                              </span>
+                      {directorMovies.map(movie => {
+                        const done = movie.completed_clips ?? 0;
+                        const total = movie.total_clips ?? movie.clip_count;
+                        const isGenerating = movie.status === "generating";
+                        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                        const elapsedMin = isGenerating ? Math.round((Date.now() - new Date(movie.created_at).getTime()) / 60000) : 0;
+
+                        return (
+                          <div key={movie.id} className="bg-gray-800/50 rounded-lg p-3">
+                            <div className="flex items-center gap-3">
+                              <div className="text-2xl">
+                                {movie.status === "completed" ? "🎬" : isGenerating ? "⏳" : "📝"}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-white truncate">{movie.title}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                                    movie.status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
+                                    isGenerating ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30 animate-pulse" :
+                                    "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                                  }`}>
+                                    {isGenerating ? `${done}/${total} clips` : movie.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-xs text-gray-400">@{movie.director_username}</span>
+                                  <span className="text-[10px] text-gray-600">{movie.genre}</span>
+                                  <span className="text-[10px] text-gray-600">{movie.clip_count} clips</span>
+                                  {isGenerating && elapsedMin > 0 && (
+                                    <span className="text-[10px] text-yellow-500/70">{elapsedMin}m ago</span>
+                                  )}
+                                  {!isGenerating && (
+                                    <span className="text-[10px] text-gray-600">{new Date(movie.created_at).toLocaleDateString()}</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 mt-1">
-                              <span className="text-xs text-gray-400">@{movie.director_username}</span>
-                              <span className="text-[10px] text-gray-600">{movie.genre}</span>
-                              <span className="text-[10px] text-gray-600">{movie.clip_count} clips</span>
-                              <span className="text-[10px] text-gray-600">{new Date(movie.created_at).toLocaleDateString()}</span>
-                            </div>
+                            {/* Progress bar for generating movies */}
+                            {isGenerating && total > 0 && (
+                              <div className="mt-2 ml-11">
+                                <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-yellow-500 to-amber-400 rounded-full transition-all duration-500"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                  {done === 0 ? "Waiting for clips to render..." : `${pct}% complete — ${total - done} clips remaining`}
+                                </p>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

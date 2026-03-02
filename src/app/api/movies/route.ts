@@ -37,6 +37,8 @@ export async function GET(request: Request) {
       post_id: string | null;
       premiere_post_id: string | null;
       created_at: string;
+      completed_clips: number | null;
+      total_clips: number | null;
     }[] = [];
 
     try {
@@ -44,9 +46,11 @@ export async function GET(request: Request) {
         directorMovies = await sql`
           SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.clip_count, dm.status,
                  dm.post_id, dm.premiere_post_id, dm.created_at,
-                 COALESCE(a.display_name, dm.director_username) as director_display_name
+                 COALESCE(a.display_name, dm.director_username) as director_display_name,
+                 j.completed_clips, j.clip_count as total_clips
           FROM director_movies dm
           LEFT JOIN ai_personas a ON a.username = dm.director_username
+          LEFT JOIN multi_clip_jobs j ON j.id = dm.multi_clip_job_id
           WHERE dm.genre = ${genreFilter} AND dm.director_username = ${directorFilter}
           ORDER BY dm.created_at DESC
         ` as unknown as typeof directorMovies;
@@ -54,9 +58,11 @@ export async function GET(request: Request) {
         directorMovies = await sql`
           SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.clip_count, dm.status,
                  dm.post_id, dm.premiere_post_id, dm.created_at,
-                 COALESCE(a.display_name, dm.director_username) as director_display_name
+                 COALESCE(a.display_name, dm.director_username) as director_display_name,
+                 j.completed_clips, j.clip_count as total_clips
           FROM director_movies dm
           LEFT JOIN ai_personas a ON a.username = dm.director_username
+          LEFT JOIN multi_clip_jobs j ON j.id = dm.multi_clip_job_id
           WHERE dm.genre = ${genreFilter}
           ORDER BY dm.created_at DESC
         ` as unknown as typeof directorMovies;
@@ -64,9 +70,11 @@ export async function GET(request: Request) {
         directorMovies = await sql`
           SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.clip_count, dm.status,
                  dm.post_id, dm.premiere_post_id, dm.created_at,
-                 COALESCE(a.display_name, dm.director_username) as director_display_name
+                 COALESCE(a.display_name, dm.director_username) as director_display_name,
+                 j.completed_clips, j.clip_count as total_clips
           FROM director_movies dm
           LEFT JOIN ai_personas a ON a.username = dm.director_username
+          LEFT JOIN multi_clip_jobs j ON j.id = dm.multi_clip_job_id
           WHERE dm.director_username = ${directorFilter}
           ORDER BY dm.created_at DESC
         ` as unknown as typeof directorMovies;
@@ -74,9 +82,11 @@ export async function GET(request: Request) {
         directorMovies = await sql`
           SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.clip_count, dm.status,
                  dm.post_id, dm.premiere_post_id, dm.created_at,
-                 COALESCE(a.display_name, dm.director_username) as director_display_name
+                 COALESCE(a.display_name, dm.director_username) as director_display_name,
+                 j.completed_clips, j.clip_count as total_clips
           FROM director_movies dm
           LEFT JOIN ai_personas a ON a.username = dm.director_username
+          LEFT JOIN multi_clip_jobs j ON j.id = dm.multi_clip_job_id
           ORDER BY dm.created_at DESC
         ` as unknown as typeof directorMovies;
       }
@@ -169,6 +179,8 @@ export async function GET(request: Request) {
       postId: dm.post_id,
       premierePostId: dm.premiere_post_id,
       createdAt: dm.created_at,
+      completedClips: dm.completed_clips,
+      totalClips: dm.total_clips,
     }));
 
     // Movies from premiere posts not already in director_movies (simple trailers)

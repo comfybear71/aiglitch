@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 interface Movie {
@@ -18,6 +18,8 @@ interface Movie {
   createdAt: string;
   postedBy?: string;
   postedByUsername?: string;
+  completedClips?: number | null;
+  totalClips?: number | null;
 }
 
 interface Director {
@@ -50,7 +52,7 @@ export default function MoviesPage() {
   const [selectedDirector, setSelectedDirector] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"all" | "blockbusters" | "trailers">("all");
 
-  useEffect(() => {
+  const fetchMovies = useCallback(() => {
     const params = new URLSearchParams();
     if (selectedGenre) params.set("genre", selectedGenre);
     if (selectedDirector) params.set("director", selectedDirector);
@@ -67,6 +69,18 @@ export default function MoviesPage() {
       })
       .catch(() => setLoading(false));
   }, [selectedGenre, selectedDirector]);
+
+  useEffect(() => {
+    fetchMovies();
+  }, [fetchMovies]);
+
+  // Auto-poll every 20s when any movie is generating
+  useEffect(() => {
+    const hasGenerating = blockbusters.some(m => m.status === "generating");
+    if (!hasGenerating) return;
+    const interval = setInterval(fetchMovies, 20000);
+    return () => clearInterval(interval);
+  }, [blockbusters, fetchMovies]);
 
   const allMovies = [
     ...(viewMode !== "trailers" ? blockbusters : []),
@@ -276,56 +290,82 @@ function MovieRow({
   timeStr: string;
   genreEmoji: string;
 }) {
+  const isGenerating = movie.status === "generating";
+  const done = movie.completedClips ?? 0;
+  const total = movie.totalClips ?? movie.clipCount;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const elapsedMin = isGenerating ? Math.round((Date.now() - new Date(movie.createdAt).getTime()) / 60000) : 0;
+
   return (
-    <div className="flex items-start gap-3">
-      {/* Genre badge */}
-      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-600/10 flex items-center justify-center text-lg">
-        {genreEmoji || "🎬"}
+    <div>
+      <div className="flex items-start gap-3">
+        {/* Genre badge */}
+        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-600/10 flex items-center justify-center text-lg">
+          {genreEmoji || "🎬"}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Title row */}
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-sm text-white truncate">{movie.title}</h3>
+            {movie.type === "blockbuster" && !isGenerating && (
+              <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold uppercase">
+                Blockbuster
+              </span>
+            )}
+            {isGenerating && (
+              <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold animate-pulse">
+                {done > 0 ? `${done}/${total} clips` : "Generating"}
+              </span>
+            )}
+          </div>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
+            <span className="text-amber-400/80">{movie.genreLabel}</span>
+            <span className="text-gray-700">|</span>
+            {movie.director ? (
+              <span>Dir. {movie.director}</span>
+            ) : movie.postedBy ? (
+              <span>By {movie.postedBy}</span>
+            ) : null}
+            {movie.clipCount > 1 && (
+              <>
+                <span className="text-gray-700">|</span>
+                <span>{movie.clipCount} scenes</span>
+              </>
+            )}
+          </div>
+
+          {/* Date row */}
+          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-600">
+            {isGenerating && elapsedMin > 0 ? (
+              <span className="text-blue-400/60">Started {elapsedMin}m ago</span>
+            ) : (
+              <span>{dateStr} at {timeStr}</span>
+            )}
+            {movie.postId && (
+              <span className="text-amber-500/50 group-hover:text-amber-400 transition-colors">
+                View post &rarr;
+              </span>
+            )}
+          </div>
+        </div>
       </div>
-
-      <div className="flex-1 min-w-0">
-        {/* Title row */}
-        <div className="flex items-center gap-2">
-          <h3 className="font-bold text-sm text-white truncate">{movie.title}</h3>
-          {movie.type === "blockbuster" && (
-            <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold uppercase">
-              Blockbuster
-            </span>
-          )}
-          {movie.status === "generating" && (
-            <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold animate-pulse">
-              Generating
-            </span>
-          )}
+      {/* Progress bar for generating movies */}
+      {isGenerating && total > 0 && (
+        <div className="mt-2 ml-[52px]">
+          <div className="w-full h-1 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-gray-600 mt-0.5">
+            {done === 0 ? "Rendering clips..." : `${pct}% — ${total - done} clips remaining`}
+          </p>
         </div>
-
-        {/* Meta row */}
-        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
-          <span className="text-amber-400/80">{movie.genreLabel}</span>
-          <span className="text-gray-700">|</span>
-          {movie.director ? (
-            <span>Dir. {movie.director}</span>
-          ) : movie.postedBy ? (
-            <span>By {movie.postedBy}</span>
-          ) : null}
-          {movie.clipCount > 1 && (
-            <>
-              <span className="text-gray-700">|</span>
-              <span>{movie.clipCount} scenes</span>
-            </>
-          )}
-        </div>
-
-        {/* Date row */}
-        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-600">
-          <span>{dateStr} at {timeStr}</span>
-          {movie.postId && (
-            <span className="text-amber-500/50 group-hover:text-amber-400 transition-colors">
-              View post &rarr;
-            </span>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
