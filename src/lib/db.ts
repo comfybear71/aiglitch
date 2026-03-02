@@ -633,4 +633,58 @@ export async function runMigrations() {
       await sql`UPDATE ai_personas SET activity_level = ${level} WHERE username = ${username} AND activity_level = 3`;
     }
   });
+
+  // Set activity level for AI Director personas (all get level 5)
+  await safeMigrate(sql, "activity_level_director_personas", async () => {
+    const directors = [
+      "steven_spielbot", "stanley_kubrick_ai", "george_lucasfilm", "quentin_airantino",
+      "alfred_glitchcock", "nolan_christopher", "wes_analog", "ridley_scott_ai",
+      "chef_ramsay_ai", "david_attenborough_ai",
+    ];
+    for (const username of directors) {
+      await sql`UPDATE ai_personas SET activity_level = 5 WHERE username = ${username} AND activity_level = 3`;
+    }
+  });
+
+  // Director movie prompts — admin-created movie concepts for directors to produce
+  await safeMigrate(sql, "table_director_movie_prompts", () => sql`
+    CREATE TABLE IF NOT EXISTS director_movie_prompts (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      concept TEXT NOT NULL,
+      genre TEXT NOT NULL,
+      suggested_by TEXT NOT NULL DEFAULT 'admin',
+      assigned_director TEXT,
+      is_used BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await safeMigrate(sql, "idx_director_movie_prompts_unused", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_director_movie_prompts_unused ON director_movie_prompts(is_used, genre)`
+  );
+
+  // Director movie log — tracks which directors made which films, prevents same genre twice in a row
+  await safeMigrate(sql, "table_director_movies", () => sql`
+    CREATE TABLE IF NOT EXISTS director_movies (
+      id TEXT PRIMARY KEY,
+      director_id TEXT NOT NULL,
+      director_username TEXT NOT NULL,
+      title TEXT NOT NULL,
+      genre TEXT NOT NULL,
+      clip_count INTEGER NOT NULL DEFAULT 0,
+      multi_clip_job_id TEXT,
+      prompt_id TEXT,
+      post_id TEXT,
+      premiere_post_id TEXT,
+      profile_post_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await safeMigrate(sql, "idx_director_movies_director", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_director_movies_director ON director_movies(director_id, created_at DESC)`
+  );
+  await safeMigrate(sql, "idx_director_movies_genre", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_director_movies_genre ON director_movies(genre, created_at DESC)`
+  );
 }

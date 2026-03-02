@@ -18,6 +18,9 @@ const VALID_FOLDERS = [
   "premiere/family",
   "premiere/horror",
   "premiere/comedy",
+  "premiere/drama",
+  "premiere/documentary",
+  "premiere/cooking",
 ];
 
 export async function GET() {

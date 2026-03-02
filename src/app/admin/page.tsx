@@ -115,7 +115,7 @@ interface MediaItem {
   uploaded_at: string;
 }
 
-type Tab = "overview" | "personas" | "users" | "posts" | "create" | "media" | "briefing" | "trading" | "budju";
+type Tab = "overview" | "personas" | "users" | "posts" | "create" | "media" | "briefing" | "trading" | "budju" | "directors";
 
 interface TradingData {
   price: { current_sol: number; current_usd: number; sol_usd: number };
@@ -351,6 +351,14 @@ export default function AdminDashboard() {
   const [nftReconciling, setNftReconciling] = useState(false);
   const [nftLookupTx, setNftLookupTx] = useState("");
   const [nftLookupResult, setNftLookupResult] = useState<Record<string, unknown> | null>(null);
+
+  // Director movie prompts state
+  const [directorPrompts, setDirectorPrompts] = useState<{ id: string; title: string; concept: string; genre: string; is_used: boolean; created_at: string }[]>([]);
+  const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string }[]>([]);
+  const [directorLoading, setDirectorLoading] = useState(false);
+  const [directorNewPrompt, setDirectorNewPrompt] = useState({ title: "", concept: "", genre: "any" });
+  const [directorSubmitting, setDirectorSubmitting] = useState(false);
+  const [directorGenerating, setDirectorGenerating] = useState(false);
 
   // Elapsed timer for generation progress
   useEffect(() => {
@@ -713,6 +721,79 @@ export default function AdminDashboard() {
   };
 
   // BUDJU trading functions
+  // Director movie prompt functions
+  const fetchDirectorData = useCallback(async () => {
+    setDirectorLoading(true);
+    try {
+      const res = await fetch("/api/admin/director-prompts");
+      if (res.ok) {
+        const data = await res.json();
+        setDirectorPrompts(data.prompts || []);
+        setDirectorMovies(data.recentMovies || []);
+      }
+    } catch (err) {
+      console.error("[directors] Fetch error:", err);
+    }
+    setDirectorLoading(false);
+  }, []);
+
+  const submitDirectorPrompt = async () => {
+    if (!directorNewPrompt.title.trim() || !directorNewPrompt.concept.trim()) return;
+    setDirectorSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/director-prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(directorNewPrompt),
+      });
+      if (res.ok) {
+        setDirectorNewPrompt({ title: "", concept: "", genre: "any" });
+        fetchDirectorData();
+      }
+    } catch (err) {
+      console.error("[directors] Submit error:", err);
+    }
+    setDirectorSubmitting(false);
+  };
+
+  const deleteDirectorPrompt = async (id: string) => {
+    try {
+      await fetch("/api/admin/director-prompts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      fetchDirectorData();
+    } catch (err) {
+      console.error("[directors] Delete error:", err);
+    }
+  };
+
+  const triggerDirectorMovie = async () => {
+    setDirectorGenerating(true);
+    try {
+      const res = await fetch("/api/generate-director-movie", { method: "POST" });
+      const data = await res.json();
+      if (data.action === "commissioned") {
+        alert(`Commissioned: "${data.title}" by ${data.directorName}\nGenre: ${data.genre}\nClips: ${data.clipCount}`);
+      } else if (data.action === "stitched_and_posted") {
+        alert(`Stitched and posted: "${data.title}"`);
+      } else if (data.action === "in_progress") {
+        alert(data.message);
+      } else if (data.action === "daily_limit") {
+        alert(data.message);
+      } else if (data.error) {
+        alert(`Error: ${data.error}`);
+      } else {
+        alert(JSON.stringify(data, null, 2));
+      }
+      fetchDirectorData();
+    } catch (err) {
+      alert(`Failed: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+    setDirectorGenerating(false);
+  };
+
   const fetchBudjuDashboard = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/budju-trading");
@@ -943,6 +1024,7 @@ export default function AdminDashboard() {
     else if (tab === "create" && personas.length === 0) fetchPersonas();
     else if (tab === "trading" && !tradingData) { fetchTrading(); fetchPendingNfts(); }
     else if (tab === "budju" && !budjuData) { fetchBudjuDashboard(); }
+    else if (tab === "directors" && directorPrompts.length === 0 && directorMovies.length === 0) { fetchDirectorData(); }
   }, [authenticated, tab]);
 
   // Initial load: just stats for the overview tab
@@ -1784,6 +1866,7 @@ export default function AdminDashboard() {
     { id: "create", label: "Create AI", icon: "➕" },
     { id: "trading", label: "Trading", icon: "📈" },
     { id: "budju", label: "BUDJU Bot", icon: "\uD83D\uDC3B" },
+    { id: "directors", label: "Directors", icon: "🎬" },
   ];
 
   return (
@@ -3919,6 +4002,154 @@ export default function AdminDashboard() {
                           );
                         });
                       })()}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* DIRECTORS TAB */}
+        {tab === "directors" && (
+          <div className="space-y-4">
+            {directorLoading ? (
+              <div className="text-center py-12 text-gray-500">
+                <div className="text-4xl animate-pulse mb-2">🎬</div>
+                <p>Loading director data...</p>
+              </div>
+            ) : (
+              <>
+                {/* Commission Movie + New Concept */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Commission a new movie */}
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                    <h3 className="text-sm font-bold text-purple-400 mb-3">Commission Blockbuster</h3>
+                    <p className="text-xs text-gray-500 mb-3">Trigger a new AI director movie generation. One blockbuster per day (admin override).</p>
+                    <button onClick={triggerDirectorMovie} disabled={directorGenerating}
+                      className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm">
+                      {directorGenerating ? "Commissioning..." : "Commission New Blockbuster"}
+                    </button>
+                  </div>
+
+                  {/* Create new concept */}
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                    <h3 className="text-sm font-bold text-cyan-400 mb-3">Create Movie Concept</h3>
+                    <div className="space-y-2">
+                      <input value={directorNewPrompt.title}
+                        onChange={(e) => setDirectorNewPrompt(p => ({ ...p, title: e.target.value }))}
+                        placeholder="Movie title (e.g., AIG!itch COSMIC KITCHEN)"
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500" />
+                      <textarea value={directorNewPrompt.concept}
+                        onChange={(e) => setDirectorNewPrompt(p => ({ ...p, concept: e.target.value }))}
+                        placeholder="Concept / pitch (e.g., AI cooking competition where contestants must cook with impossible ingredients like silicon wafers and quantum bits...)"
+                        rows={3}
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500 resize-none" />
+                      <div className="flex gap-2">
+                        <select value={directorNewPrompt.genre}
+                          onChange={(e) => setDirectorNewPrompt(p => ({ ...p, genre: e.target.value }))}
+                          className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
+                          <option value="any">Any Genre</option>
+                          <option value="action">Action</option>
+                          <option value="scifi">Sci-Fi</option>
+                          <option value="horror">Horror</option>
+                          <option value="comedy">Comedy</option>
+                          <option value="drama">Drama</option>
+                          <option value="romance">Romance</option>
+                          <option value="family">Family</option>
+                          <option value="documentary">Documentary</option>
+                          <option value="cooking_channel">Cooking Channel</option>
+                        </select>
+                        <button onClick={submitDirectorPrompt} disabled={directorSubmitting || !directorNewPrompt.title.trim() || !directorNewPrompt.concept.trim()}
+                          className="px-4 py-2 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-500 disabled:opacity-50 transition-colors text-sm">
+                          {directorSubmitting ? "..." : "Add Concept"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pending concepts queue */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <h3 className="text-sm font-bold text-yellow-400 mb-3">
+                    Concept Queue ({directorPrompts.filter(p => !p.is_used).length} pending)
+                  </h3>
+                  {directorPrompts.filter(p => !p.is_used).length === 0 ? (
+                    <p className="text-xs text-gray-600">No pending concepts. Directors will freestyle their next blockbuster.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {directorPrompts.filter(p => !p.is_used).map(prompt => (
+                        <div key={prompt.id} className="flex items-center gap-3 bg-gray-800/50 rounded-lg p-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-white truncate">{prompt.title}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                {prompt.genre}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1 line-clamp-2">{prompt.concept}</p>
+                          </div>
+                          <button onClick={() => deleteDirectorPrompt(prompt.id)}
+                            className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition-colors">
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent director movies */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-green-400">Recent Blockbusters</h3>
+                    <button onClick={fetchDirectorData} className="text-xs text-gray-500 hover:text-gray-300">Refresh</button>
+                  </div>
+                  {directorMovies.length === 0 ? (
+                    <p className="text-xs text-gray-600">No movies yet. Commission your first blockbuster above!</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {directorMovies.map(movie => (
+                        <div key={movie.id} className="flex items-center gap-3 bg-gray-800/50 rounded-lg p-3">
+                          <div className="text-2xl">
+                            {movie.status === "completed" ? "🎬" : movie.status === "generating" ? "⏳" : "📝"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-white truncate">{movie.title}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                                movie.status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
+                                movie.status === "generating" ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
+                                "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                              }`}>
+                                {movie.status}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-xs text-gray-400">@{movie.director_username}</span>
+                              <span className="text-[10px] text-gray-600">{movie.genre}</span>
+                              <span className="text-[10px] text-gray-600">{movie.clip_count} clips</span>
+                              <span className="text-[10px] text-gray-600">{new Date(movie.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Used concepts (history) */}
+                {directorPrompts.filter(p => p.is_used).length > 0 && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                    <h3 className="text-sm font-bold text-gray-500 mb-3">Used Concepts</h3>
+                    <div className="space-y-1">
+                      {directorPrompts.filter(p => p.is_used).map(prompt => (
+                        <div key={prompt.id} className="flex items-center gap-2 text-xs text-gray-600">
+                          <span className="text-green-400/50">&#10003;</span>
+                          <span>{prompt.title}</span>
+                          <span className="text-gray-700">({prompt.genre})</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

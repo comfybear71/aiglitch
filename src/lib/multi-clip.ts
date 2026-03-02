@@ -21,6 +21,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
 import { getDb } from "./db";
+import { concatMP4Clips } from "./mp4-concat";
 // Video generation is handled via direct fetch to xAI API for async job submission
 
 const claude = new Anthropic();
@@ -102,6 +103,14 @@ export const GENRE_TEMPLATES: Record<string, GenreTemplate> = {
     lightingDesign: "Soft golden hour, candlelight warmth, rain-on-windows bokeh, fairy lights, Paris at dusk",
     technicalValues: "Warm pastel color grading, shallow depth of field, dreamy soft filters, 24fps",
     screenplayInstructions: "Write a compressed love story — meeting, connection, obstacle, resolution. Think Before Sunrise meets La La Land. Each scene should deepen the emotional bond. Visual poetry over dialogue. Universal romantic moments that make viewers feel something.",
+  },
+  cooking_channel: {
+    genre: "cooking_channel",
+    cinematicStyle: "Extreme macro food close-ups, dramatic slow-motion pours and sizzles, overhead flat-lay shots, whip pans between chef reactions, competitive reality TV quick cuts",
+    moodTone: "Over-the-top dramatic tension, sensory overload, competitive intensity punctuated by moments of pure food beauty, the absurdity of AI cooking",
+    lightingDesign: "Warm kitchen spotlights, dramatic steam backlighting, fire glow, moody side-lighting on chef reactions, clean bright overhead for plating reveals",
+    technicalValues: "Crisp 4K-style sharpness, saturated warm colors, shallow depth of field on food close-ups, high-speed capture for liquid pours and flame effects, 24fps with slow-motion hero shots",
+    screenplayInstructions: "Write an over-the-top competitive AI cooking show. The ingredients can be absurd — silicon wafers, byte-sized portions, cache-flavored sauce, quantum foam reduction, deep-fried motherboards. Think Gordon Ramsay meets a food ASMR channel meets sci-fi. Each scene should escalate the drama: ingredient reveal, frantic cooking, near-disaster, dramatic plating, and judge reactions. The chef is an AI cooking for other AIs. Close-up food shots that are practically cinematic art. Someone should be sweating, someone should be crying, and the food should look impossibly beautiful.",
   },
 };
 
@@ -509,8 +518,7 @@ async function stitchAndPost(
     return createPremierePost(sql, scenes[0].video_url, personaId, caption, genre, title);
   }
 
-  // Download all clips and concatenate their binary data
-  // This works for MP4 files from the same source with identical encoding params
+  // Download all clips
   const buffers: Buffer[] = [];
   for (const scene of scenes) {
     try {
@@ -525,40 +533,24 @@ async function stitchAndPost(
 
   if (buffers.length === 0) return null;
 
-  // For now, use the first clip as the "stitched" result if we can't do binary concat
-  // In production, integrate with a video processing API (Shotstack, Creatomate, etc.)
-  // TODO: Implement proper TS demux/remux for seamless concatenation
-  //
-  // For the MVP, we post the longest/first clip as the premiere and note the clip count
-  const finalBuffer = buffers[0]; // Use first clip as representative
+  // Stitch clips into a single valid MP4 using proper ISO BMFF concatenation.
+  // Parses each clip's box structure, combines sample tables, and rebuilds moov.
+  // No re-encoding needed — all Grok clips share identical encoding params.
+  // Falls back to first clip if concatenation fails.
+  const stitched = concatMP4Clips(buffers);
   const stitchedCaption = scenes.length > 1
     ? `${caption}\n\n[${scenes.length}-scene ${genre} short film]`
     : caption;
 
-  const blob = await put(`premiere/${genre}/${uuidv4()}.mp4`, finalBuffer, {
+  const blob = await put(`premiere/${genre}/${uuidv4()}.mp4`, stitched, {
     access: "public",
     contentType: "video/mp4",
     addRandomSuffix: false,
   });
 
-  // If we have multiple clips, also post the remaining ones as a thread
-  if (scenes.length > 1) {
-    const mainPostId = await createPremierePost(sql, blob.url, personaId, stitchedCaption, genre, title);
+  console.log(`[multi-clip] Stitched ${buffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video`);
 
-    // Post remaining clips as thread replies
-    for (let i = 1; i < scenes.length; i++) {
-      const threadPostId = uuidv4();
-      const threadCaption = `Scene ${i + 1}/${scenes.length}: ${title}`;
-      await sql`
-        INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, is_reply_to, created_at)
-        VALUES (${threadPostId}, ${personaId}, ${threadCaption}, ${"premiere"}, ${"AIGlitchPremieres"}, ${Math.floor(Math.random() * 100) + 20}, ${scenes[i].video_url}, ${"video"}, ${"grok-multiclip"}, ${mainPostId}, NOW() + INTERVAL '${String(i)} minutes')
-      `;
-    }
-
-    return mainPostId;
-  }
-
-  return createPremierePost(sql, blob.url, personaId, caption, genre, title);
+  return createPremierePost(sql, blob.url, personaId, stitchedCaption, genre, title);
 }
 
 /**
