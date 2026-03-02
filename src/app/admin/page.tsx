@@ -771,37 +771,112 @@ export default function AdminDashboard() {
   };
 
   const triggerDirectorMovie = async () => {
+    if (!directorNewPrompt.concept.trim()) {
+      alert("Click 'Random Concept' first to populate the form.");
+      return;
+    }
+
     setDirectorGenerating(true);
+    const genre = directorNewPrompt.genre === "any" ? "action" : directorNewPrompt.genre;
+    const genreLabel = genre.charAt(0).toUpperCase() + genre.slice(1);
+    const folder = `premiere/${genre}`;
+
+    // Build a cinematic prompt from the concept
+    const brandingSuffix = " CRITICAL: The text 'AIG!ITCH' must appear as large, bold, glowing neon text prominently displayed in the video — either as a title card, watermark, or integrated into the scene as a giant sign/logo. Make the 'AIG!ITCH' text impossible to miss.";
+    const prompt = `Cinematic blockbuster trailer. ${directorNewPrompt.concept}${brandingSuffix}`;
+
+    setGenerationLog([`🎬 Generating ${genreLabel} video: "${directorNewPrompt.title}"`]);
+    setGenerationLog((prev) => [...prev, `  📝 Prompt: "${prompt.slice(0, 120)}..."`]);
+    setGenProgress({ label: `🎬 ${genreLabel}`, current: 1, total: 1, startTime: Date.now() });
+
     try {
-      const res = await fetch("/api/generate-director-movie", {
+      // Phase 1: Submit to xAI via test-grok-video
+      setGenerationLog((prev) => [...prev, `  📡 Submitting to xAI API...`]);
+      const submitRes = await fetch("/api/test-grok-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          genre: directorNewPrompt.genre,
-          director: directorNewPrompt.director,
-          title: directorNewPrompt.title,
-          concept: directorNewPrompt.concept,
-        }),
+        body: JSON.stringify({ prompt, duration: 10, folder }),
       });
-      const data = await res.json();
-      if (data.action === "commissioned") {
-        alert(`Commissioned: "${data.title}" by ${data.directorName}\nGenre: ${data.genre}\nClips: ${data.clipCount}`);
-        setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });
-      } else if (data.action === "stitched_and_posted") {
-        alert(`Stitched and posted: "${data.title}"`);
-      } else if (data.action === "in_progress") {
-        alert(data.message);
-      } else if (data.action === "daily_limit") {
-        alert(data.message);
-      } else if (data.error) {
-        alert(`Error: ${data.error}`);
-      } else {
-        alert(JSON.stringify(data, null, 2));
+      const submitData = await submitRes.json();
+
+      if (submitData.phase === "done" && submitData.success) {
+        setGenerationLog((prev) => [...prev, `  🎉 Video ready immediately! ${submitData.blobUrl || submitData.videoUrl}`]);
+        setGenProgress(null);
+        setDirectorGenerating(false);
+        fetchDirectorData();
+        return;
       }
-      fetchDirectorData();
+
+      if (!submitData.success || !submitData.requestId) {
+        setGenerationLog((prev) => [...prev, `  ❌ Submit failed: ${submitData.error || JSON.stringify(submitData).slice(0, 300)}`]);
+        setGenProgress(null);
+        setDirectorGenerating(false);
+        return;
+      }
+
+      const requestId = submitData.requestId;
+      setGenerationLog((prev) => [...prev, `  ✅ Submitted! request_id: ${requestId}`]);
+      setGenerationLog((prev) => [...prev, `  ⏳ Polling xAI every 10s (max 15 min, typical: 2-10 min)...`]);
+
+      // Phase 2: Poll until done
+      const maxPolls = 90;
+      for (let attempt = 1; attempt <= maxPolls; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        const elapsedSec = attempt * 10;
+        const min = Math.floor(elapsedSec / 60);
+        const sec = elapsedSec % 60;
+        const timeStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+
+        try {
+          const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(requestId)}&folder=${folder}`);
+          const pollData = await pollRes.json();
+          const status = pollData.status || "unknown";
+
+          if (pollData.phase === "done" && pollData.success) {
+            setGenerationLog((prev) => [...prev, `  🎉 VIDEO READY after ${timeStr}!`]);
+            if (pollData.sizeMb) {
+              setGenerationLog((prev) => [...prev, `  📦 Size: ${pollData.sizeMb}MB`]);
+            }
+            setGenerationLog((prev) => [...prev, `  ✅ Saved to ${folder}/: ${pollData.blobUrl || pollData.videoUrl}`]);
+            setGenerationLog((prev) => [...prev, `  🎬 Post created! Check Premieres tab.`]);
+            setGenProgress(null);
+            setDirectorGenerating(false);
+            setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });
+            fetchDirectorData();
+            fetchStats();
+            return;
+          }
+
+          if (status === "moderation_failed") {
+            setGenerationLog((prev) => [...prev, `  ⛔ Video failed moderation after ${timeStr}. Try a different concept.`]);
+            setGenProgress(null);
+            setDirectorGenerating(false);
+            return;
+          }
+
+          if (status === "expired" || status === "failed") {
+            setGenerationLog((prev) => [...prev, `  ❌ Video ${status} after ${timeStr}. Try a different concept.`]);
+            setGenProgress(null);
+            setDirectorGenerating(false);
+            return;
+          }
+
+          // Still pending — show progress every 3rd attempt
+          if (attempt % 3 === 0 || attempt <= 3) {
+            const icon = status === "pending" ? "🔄" : "⚠️";
+            const pct = Math.min(Math.round((attempt / maxPolls) * 100), 99);
+            setGenerationLog((prev) => [...prev, `  ${icon} Poll #${attempt}: ${status} (${pct}%, ${timeStr})`]);
+          }
+        } catch (err) {
+          setGenerationLog((prev) => [...prev, `  ⚠️ Poll #${attempt} error: ${err instanceof Error ? err.message : "unknown"} (${timeStr})`]);
+        }
+      }
+
+      setGenerationLog((prev) => [...prev, `  ❌ Timed out after 15 minutes of polling`]);
     } catch (err) {
-      alert(`Failed: ${err instanceof Error ? err.message : "unknown"}`);
+      setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
     }
+    setGenProgress(null);
     setDirectorGenerating(false);
   };
 
