@@ -389,6 +389,22 @@ export default function MePage() {
     });
   }, [user, sessionId]);
 
+  // Fetch real on-chain GLITCH balance when user has a linked Phantom wallet.
+  // This ensures the profile matches what Phantom shows (not just the internal DB).
+  useEffect(() => {
+    if (!linkedWallet || !sessionId) return;
+    const sid = encodeURIComponent(sessionId);
+    fetch(`/api/solana?action=balance&wallet_address=${linkedWallet}&session_id=${sid}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.glitch_balance !== undefined) {
+          // Use the effective balance (max of on-chain and app) — same logic as wallet page
+          setGlitchBalance(prev => Math.max(prev, data.glitch_balance || 0));
+        }
+      })
+      .catch(() => {});
+  }, [linkedWallet, sessionId]);
+
   // Claim signup bonus
   useEffect(() => {
     if (!user) return;

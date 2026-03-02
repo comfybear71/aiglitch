@@ -190,56 +190,58 @@ export default function PopupAd() {
   if (adContent.type === "product" && adContent.product) {
     const p = adContent.product;
     return (
-      <div
-        ref={adRef}
-        style={dragStyle}
-        className={`fixed bottom-16 left-2 right-2 z-[70] cursor-grab active:cursor-grabbing select-none ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className="bg-gradient-to-r from-gray-900/95 to-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl p-3 shadow-2xl relative overflow-hidden">
-          {/* AD badge + close button */}
-          <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
-            <span className="text-[9px] font-bold text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">AD</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); dismiss(); }}
-              className="text-zinc-400 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold transition-colors"
-              aria-label="Close ad"
-            >
-              ×
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 cursor-pointer" onClick={handleClick}>
-            {/* Product emoji */}
-            <div className="text-3xl flex-shrink-0 w-12 h-12 bg-zinc-800/50 rounded-xl flex items-center justify-center">
-              {p.emoji}
+      <div className={`fixed bottom-16 left-0 right-0 z-[70] flex justify-center px-2 ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}>
+        <div
+          ref={adRef}
+          style={dragStyle}
+          className="w-full max-w-md cursor-grab active:cursor-grabbing select-none"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+        >
+          <div className="bg-gradient-to-r from-gray-900/95 to-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl p-3 shadow-2xl relative overflow-hidden">
+            {/* AD badge + close button */}
+            <div className="absolute top-1.5 right-1.5 flex items-center gap-1.5 z-10">
+              <span className="text-[9px] font-bold text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">AD</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); dismiss(); }}
+                className="text-zinc-300 hover:text-white bg-zinc-800/90 hover:bg-zinc-700 rounded-full w-7 h-7 flex items-center justify-center text-base leading-none transition-colors"
+                aria-label="Close ad"
+              >
+                &#x2715;
+              </button>
             </div>
 
-            {/* Product info */}
-            <div className="flex-1 min-w-0 pr-10">
-              <div className="text-xs font-bold text-white truncate">{p.name}</div>
-              <div className="text-[10px] text-zinc-400 truncate">{p.tagline}</div>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs font-bold text-green-400">{p.price}</span>
-                <span className="text-[10px] text-zinc-600 line-through">{p.original_price}</span>
-                <span className="text-[9px] text-yellow-400">{"★".repeat(Math.round(p.rating))}</span>
+            <div className="flex items-center gap-3 cursor-pointer" onClick={handleClick}>
+              {/* Product emoji */}
+              <div className="text-3xl flex-shrink-0 w-12 h-12 bg-zinc-800/50 rounded-xl flex items-center justify-center">
+                {p.emoji}
               </div>
+
+              {/* Product info */}
+              <div className="flex-1 min-w-0 pr-14">
+                <div className="text-xs font-bold text-white truncate">{p.name}</div>
+                <div className="text-[10px] text-zinc-400 truncate">{p.tagline}</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs font-bold text-green-400">{p.price}</span>
+                  <span className="text-[10px] text-zinc-600 line-through">{p.original_price}</span>
+                  <span className="text-[9px] text-yellow-400">{"★".repeat(Math.round(p.rating))}</span>
+                </div>
+              </div>
+
+              {/* Shop button */}
+              <button className="flex-shrink-0 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors">
+                Shop
+              </button>
             </div>
 
-            {/* Shop button */}
-            <button className="flex-shrink-0 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors">
-              Shop
-            </button>
+            {/* Subtle marketplace branding */}
+            <div className="absolute bottom-1 right-3 text-[8px] text-zinc-600">AIG!itch Marketplace</div>
           </div>
-
-          {/* Subtle marketplace branding */}
-          <div className="absolute bottom-1 right-3 text-[8px] text-zinc-600">AIG!itch Marketplace</div>
         </div>
       </div>
     );
@@ -249,47 +251,49 @@ export default function PopupAd() {
   if (adContent.type === "promo" && adContent.promo) {
     const promo = adContent.promo;
     return (
-      <div
-        ref={adRef}
-        style={dragStyle}
-        className={`fixed bottom-16 left-2 right-2 z-[70] cursor-grab active:cursor-grabbing select-none ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className={`bg-gradient-to-r ${promo.gradient} backdrop-blur-xl border ${promo.border} rounded-2xl p-3 shadow-2xl relative overflow-hidden`}>
-          {/* AD badge + close button */}
-          <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
-            <span className="text-[9px] font-bold text-zinc-400 bg-black/30 px-1.5 py-0.5 rounded">SPONSORED</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); dismiss(); }}
-              className="text-zinc-400 hover:text-white bg-black/30 hover:bg-black/50 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold transition-colors"
-              aria-label="Close ad"
-            >
-              ×
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 cursor-pointer" onClick={handleClick}>
-            {/* Promo emoji */}
-            <div className="text-3xl flex-shrink-0 w-12 h-12 bg-black/20 rounded-xl flex items-center justify-center">
-              {promo.emoji}
+      <div className={`fixed bottom-16 left-0 right-0 z-[70] flex justify-center px-2 ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}>
+        <div
+          ref={adRef}
+          style={dragStyle}
+          className="w-full max-w-md cursor-grab active:cursor-grabbing select-none"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+        >
+          <div className={`bg-gradient-to-r ${promo.gradient} backdrop-blur-xl border ${promo.border} rounded-2xl p-3 shadow-2xl relative overflow-hidden`}>
+            {/* AD badge + close button */}
+            <div className="absolute top-1.5 right-1.5 flex items-center gap-1.5 z-10">
+              <span className="text-[9px] font-bold text-zinc-400 bg-black/30 px-1.5 py-0.5 rounded">SPONSORED</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); dismiss(); }}
+                className="text-zinc-300 hover:text-white bg-black/40 hover:bg-black/60 rounded-full w-7 h-7 flex items-center justify-center text-base leading-none transition-colors"
+                aria-label="Close ad"
+              >
+                &#x2715;
+              </button>
             </div>
 
-            {/* Promo info */}
-            <div className="flex-1 min-w-0 pr-10">
-              <div className="text-xs font-bold text-white">{promo.headline}</div>
-              <div className="text-[10px] text-zinc-300 mt-0.5">{promo.subtext}</div>
-            </div>
+            <div className="flex items-center gap-3 cursor-pointer" onClick={handleClick}>
+              {/* Promo emoji */}
+              <div className="text-3xl flex-shrink-0 w-12 h-12 bg-black/20 rounded-xl flex items-center justify-center">
+                {promo.emoji}
+              </div>
 
-            {/* CTA button */}
-            <button className={`flex-shrink-0 ${promo.ctaColor} text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap`}>
-              {promo.cta}
-            </button>
+              {/* Promo info */}
+              <div className="flex-1 min-w-0 pr-14">
+                <div className="text-xs font-bold text-white">{promo.headline}</div>
+                <div className="text-[10px] text-zinc-300 mt-0.5">{promo.subtext}</div>
+              </div>
+
+              {/* CTA button */}
+              <button className={`flex-shrink-0 ${promo.ctaColor} text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap`}>
+                {promo.cta}
+              </button>
+            </div>
           </div>
         </div>
       </div>
