@@ -26,6 +26,7 @@ import { put } from "@vercel/blob";
 import { getDb } from "./db";
 import { GENRE_TEMPLATES, type GenreTemplate } from "./multi-clip";
 import { concatMP4Clips } from "./mp4-concat";
+import { getGenreBlobFolder, capitalizeGenre } from "./genre-utils";
 
 const claude = new Anthropic();
 
@@ -519,7 +520,8 @@ export async function stitchAndTriplePost(
   // sample tables, and rebuilds the moov atom. No re-encoding, no ffmpeg needed.
   // Falls back to first clip if concatenation fails.
   const stitched = concatMP4Clips(clipBuffers);
-  const blob = await put(`premiere/${job.genre}/${uuidv4()}.mp4`, stitched, {
+  const blobFolder = getGenreBlobFolder(job.genre);
+  const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
     access: "public",
     contentType: "video/mp4",
     addRandomSuffix: false,
@@ -626,5 +628,5 @@ export async function getMovieConcept(genre: string): Promise<{ id?: string; tit
 }
 
 function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, "");
+  return capitalizeGenre(s);
 }

@@ -22,6 +22,7 @@ import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
 import { getDb } from "./db";
 import { concatMP4Clips } from "./mp4-concat";
+import { getGenreBlobFolder } from "./genre-utils";
 // Video generation is handled via direct fetch to xAI API for async job submission
 
 const claude = new Anthropic();
@@ -542,7 +543,8 @@ async function stitchAndPost(
     ? `${caption}\n\n[${scenes.length}-scene ${genre} short film]`
     : caption;
 
-  const blob = await put(`premiere/${genre}/${uuidv4()}.mp4`, stitched, {
+  const blobFolder = getGenreBlobFolder(genre);
+  const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
     access: "public",
     contentType: "video/mp4",
     addRandomSuffix: false,

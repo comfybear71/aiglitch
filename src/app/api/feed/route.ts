@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
+import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,14 +44,32 @@ export async function GET(request: NextRequest) {
     ` as unknown as { id: string; media_url: string; hashtags: string }[];
 
     if (untagged.length > 0) {
-      for (const post of untagged) {
-        // Detect genre from the blob URL path
-        const url = (post.media_url || "").toLowerCase();
-        let genre = "action"; // default
-        for (const g of genres) {
-          if (url.includes(`/${g}/`) || url.includes(`/${g}-`)) { genre = g; break; }
+      // Also try to look up genres from director_movies/multi_clip_jobs for posts missing genre in URL
+      let dbGenreMap = new Map<string, string>();
+      try {
+        const dbGenres = await sql`
+          SELECT p.id as post_id, COALESCE(dm.genre, j.genre) as genre
+          FROM posts p
+          LEFT JOIN director_movies dm ON (dm.post_id = p.id OR dm.premiere_post_id = p.id OR dm.profile_post_id = p.id)
+          LEFT JOIN multi_clip_jobs j ON j.final_video_url = p.media_url
+          WHERE p.id = ANY(${untagged.map(u => u.id)})
+            AND COALESCE(dm.genre, j.genre) IS NOT NULL
+        ` as unknown as { post_id: string; genre: string }[];
+        for (const row of dbGenres) {
+          dbGenreMap.set(row.post_id, row.genre);
         }
-        const genreTag = `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}`;
+      } catch {
+        // Tables might not exist yet
+      }
+
+      for (const post of untagged) {
+        // 1. Try centralized genre detection from blob URL path (handles cooking_show -> cooking_channel etc.)
+        let genre = detectGenreFromPath(post.media_url || "");
+        // 2. Fallback: check director_movies / multi_clip_jobs tables
+        if (!genre) genre = dbGenreMap.get(post.id) || null;
+        // 3. Final fallback
+        if (!genre) genre = "action";
+        const genreTag = `AIGlitch${capitalizeGenre(genre)}`;
         const newHashtags = post.hashtags
           ? `${post.hashtags},${genreTag}`
           : `AIGlitchPremieres,${genreTag}`;

@@ -6,6 +6,7 @@ import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } fro
 import { generateWithKie } from "./free-video-gen";
 import { getStockVideo } from "./stock-video";
 import { generateImageWithAurora, generateVideoWithGrok, generateVideoFromImage } from "./xai";
+import { getGenreBlobFolder } from "./genre-utils";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -482,7 +483,8 @@ export async function generateMovieTrailerVideo(
     const grokUrl = await generateVideoWithGrok(fullPrompt, 10, "9:16");
     if (grokUrl) {
       console.log(`Grok movie trailer video generated for "${movieTitle}", persisting...`);
-      const url = await persistToBlob(grokUrl, `premiere/${genre}/${uuidv4()}.mp4`, "video/mp4");
+      const blobFolder = getGenreBlobFolder(genre);
+      const url = await persistToBlob(grokUrl, `${blobFolder}/${uuidv4()}.mp4`, "video/mp4");
       return { url, source: "grok-video" };
     }
   } catch (err) {
@@ -497,7 +499,8 @@ export async function generateMovieTrailerVideo(
       const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
       const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
       if (videoUrl) {
-        const url = await persistToBlob(videoUrl, `premiere/${genre}/${uuidv4()}.mp4`, "video/mp4");
+        const blobFolder2 = getGenreBlobFolder(genre);
+        const url = await persistToBlob(videoUrl, `${blobFolder2}/${uuidv4()}.mp4`, "video/mp4");
         return { url, source: "grok-img2vid" };
       }
     }
