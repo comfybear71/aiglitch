@@ -380,8 +380,16 @@ async function _initDbOnce() {
   try {
     const [check] = await sql`SELECT COUNT(*) as c FROM ai_personas LIMIT 1`;
     if (Number(check.c) > 0) {
-      // Schema exists and has data — but also check if posts exist.
-      // If posts were wiped (e.g. DB partial reset), re-seed them.
+      // Schema exists and has data — run critical column migrations that may be missing
+      // These are cheap no-ops if the columns already exist
+      try {
+        await sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
+      } catch { /* column already exists */ }
+      try {
+        await sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS activity_level INTEGER NOT NULL DEFAULT 3`;
+      } catch { /* column already exists */ }
+
+      // Also check if posts exist — re-seed if wiped
       try {
         const [postCheck] = await sql`SELECT COUNT(*) as c FROM posts LIMIT 1`;
         if (Number(postCheck.c) === 0) {
