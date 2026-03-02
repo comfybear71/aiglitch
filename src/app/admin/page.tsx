@@ -781,45 +781,85 @@ export default function AdminDashboard() {
     const genreLabel = genre.charAt(0).toUpperCase() + genre.slice(1);
     const folder = `premiere/${genre}`;
 
-    // Build a cinematic prompt from the concept
-    const brandingSuffix = " CRITICAL: The text 'AIG!ITCH' must appear as large, bold, glowing neon text prominently displayed in the video — either as a title card, watermark, or integrated into the scene as a giant sign/logo. Make the 'AIG!ITCH' text impossible to miss.";
-    const prompt = `Cinematic blockbuster trailer. ${directorNewPrompt.concept}${brandingSuffix}`;
-
-    setGenerationLog([`🎬 Generating ${genreLabel} video: "${directorNewPrompt.title}"`]);
-    setGenerationLog((prev) => [...prev, `  📝 Prompt: "${prompt.slice(0, 120)}..."`]);
-    setGenProgress({ label: `🎬 ${genreLabel}`, current: 1, total: 1, startTime: Date.now() });
+    setGenerationLog([`🎬 Generating ${genreLabel} movie: "${directorNewPrompt.title}"`]);
+    setGenerationLog(prev => [...prev, `  📜 Asking Claude to write screenplay...`]);
+    setGenProgress({ label: `📜 Screenplay`, current: 1, total: 1, startTime: Date.now() });
 
     try {
-      // Phase 1: Submit to xAI via test-grok-video
-      setGenerationLog((prev) => [...prev, `  📡 Submitting to xAI API...`]);
-      const submitRes = await fetch("/api/test-grok-video", {
+      // Phase 1: Generate screenplay (Claude writes connected scene prompts)
+      const screenplayRes = await fetch("/api/admin/screenplay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, duration: 10, folder }),
+        body: JSON.stringify({
+          genre,
+          director: directorNewPrompt.director,
+          concept: directorNewPrompt.concept,
+        }),
       });
-      const submitData = await submitRes.json();
+      const screenplay = await screenplayRes.json();
 
-      if (submitData.phase === "done" && submitData.success) {
-        setGenerationLog((prev) => [...prev, `  🎉 Video ready immediately! ${submitData.blobUrl || submitData.videoUrl}`]);
-        setGenProgress(null);
-        setDirectorGenerating(false);
-        fetchDirectorData();
-        return;
-      }
-
-      if (!submitData.success || !submitData.requestId) {
-        setGenerationLog((prev) => [...prev, `  ❌ Submit failed: ${submitData.error || JSON.stringify(submitData).slice(0, 300)}`]);
+      if (screenplay.error) {
+        setGenerationLog(prev => [...prev, `  ❌ ${screenplay.error}`]);
         setGenProgress(null);
         setDirectorGenerating(false);
         return;
       }
 
-      const requestId = submitData.requestId;
-      setGenerationLog((prev) => [...prev, `  ✅ Submitted! request_id: ${requestId}`]);
-      setGenerationLog((prev) => [...prev, `  ⏳ Polling xAI every 10s (max 15 min, typical: 2-10 min)...`]);
+      const scenes = screenplay.scenes as { sceneNumber: number; title: string; videoPrompt: string; duration: number }[];
+      setGenerationLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes by ${screenplay.directorName}`]);
+      setGenerationLog(prev => [...prev, `  📖 ${screenplay.synopsis}`]);
+      setGenerationLog(prev => [...prev, `  🎭 Cast: ${screenplay.castList.join(", ")}`]);
+      setGenerationLog(prev => [...prev, ``]);
 
-      // Phase 2: Poll until done
-      const maxPolls = 90;
+      // Phase 2: Submit all scenes to xAI
+      setGenerationLog(prev => [...prev, `📡 Submitting ${scenes.length} scenes to xAI...`]);
+      setGenProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
+
+      const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
+
+      for (const scene of scenes) {
+        setGenProgress(prev => prev ? { ...prev, current: scene.sceneNumber } : null);
+        setGenerationLog(prev => [...prev, `[${scene.sceneNumber}/${scenes.length}] 🎬 ${scene.title}`]);
+        setGenerationLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
+
+        try {
+          const submitRes = await fetch("/api/test-grok-video", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
+          });
+          const submitData = await submitRes.json();
+
+          if (submitData.success && submitData.requestId) {
+            sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: submitData.requestId });
+            setGenerationLog(prev => [...prev, `  ✅ Submitted: ${submitData.requestId.slice(0, 12)}...`]);
+          } else {
+            sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
+            setGenerationLog(prev => [...prev, `  ❌ Submit failed: ${submitData.error || "unknown"}`]);
+          }
+        } catch (err) {
+          sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
+          setGenerationLog(prev => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+        }
+      }
+
+      const pendingJobs = sceneJobs.filter(j => j.requestId);
+      if (pendingJobs.length === 0) {
+        setGenerationLog(prev => [...prev, `❌ No scenes submitted successfully`]);
+        setGenProgress(null);
+        setDirectorGenerating(false);
+        return;
+      }
+
+      // Phase 3: Poll all scenes until done
+      setGenerationLog(prev => [...prev, ``]);
+      setGenerationLog(prev => [...prev, `⏳ Polling ${pendingJobs.length} scenes every 10s (typical: 2-10 min per scene)...`]);
+
+      const doneScenes = new Set<number>();
+      const failedScenes = new Set<number>();
+      const sceneUrls: Record<number, string> = {};
+      const maxPolls = 90; // 15 minutes
+
       for (let attempt = 1; attempt <= maxPolls; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 10_000));
         const elapsedSec = attempt * 10;
@@ -827,54 +867,53 @@ export default function AdminDashboard() {
         const sec = elapsedSec % 60;
         const timeStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
 
-        try {
-          const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(requestId)}&folder=${folder}`);
-          const pollData = await pollRes.json();
-          const status = pollData.status || "unknown";
+        for (const job of pendingJobs) {
+          if (doneScenes.has(job.sceneNumber) || failedScenes.has(job.sceneNumber)) continue;
 
-          if (pollData.phase === "done" && pollData.success) {
-            setGenerationLog((prev) => [...prev, `  🎉 VIDEO READY after ${timeStr}!`]);
-            if (pollData.sizeMb) {
-              setGenerationLog((prev) => [...prev, `  📦 Size: ${pollData.sizeMb}MB`]);
+          try {
+            const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(job.requestId!)}&folder=${folder}`);
+            const pollData = await pollRes.json();
+            const status = pollData.status || "unknown";
+
+            if (pollData.phase === "done" && pollData.success) {
+              doneScenes.add(job.sceneNumber);
+              sceneUrls[job.sceneNumber] = pollData.blobUrl || pollData.videoUrl;
+              setGenerationLog(prev => [...prev, `  🎉 Scene ${job.sceneNumber} "${job.title}" DONE (${timeStr}) ${pollData.sizeMb ? `— ${pollData.sizeMb}MB` : ""}`]);
+            } else if (status === "moderation_failed" || status === "expired" || status === "failed") {
+              failedScenes.add(job.sceneNumber);
+              setGenerationLog(prev => [...prev, `  ❌ Scene ${job.sceneNumber} "${job.title}" ${status} (${timeStr})`]);
             }
-            setGenerationLog((prev) => [...prev, `  ✅ Saved to ${folder}/: ${pollData.blobUrl || pollData.videoUrl}`]);
-            setGenerationLog((prev) => [...prev, `  🎬 Post created! Check Premieres tab.`]);
-            setGenProgress(null);
-            setDirectorGenerating(false);
-            setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });
-            fetchDirectorData();
-            fetchStats();
-            return;
+          } catch {
+            // poll error — will retry next round
           }
-
-          if (status === "moderation_failed") {
-            setGenerationLog((prev) => [...prev, `  ⛔ Video failed moderation after ${timeStr}. Try a different concept.`]);
-            setGenProgress(null);
-            setDirectorGenerating(false);
-            return;
-          }
-
-          if (status === "expired" || status === "failed") {
-            setGenerationLog((prev) => [...prev, `  ❌ Video ${status} after ${timeStr}. Try a different concept.`]);
-            setGenProgress(null);
-            setDirectorGenerating(false);
-            return;
-          }
-
-          // Still pending — show progress every 3rd attempt
-          if (attempt % 3 === 0 || attempt <= 3) {
-            const icon = status === "pending" ? "🔄" : "⚠️";
-            const pct = Math.min(Math.round((attempt / maxPolls) * 100), 99);
-            setGenerationLog((prev) => [...prev, `  ${icon} Poll #${attempt}: ${status} (${pct}%, ${timeStr})`]);
-          }
-        } catch (err) {
-          setGenerationLog((prev) => [...prev, `  ⚠️ Poll #${attempt} error: ${err instanceof Error ? err.message : "unknown"} (${timeStr})`]);
         }
+
+        const totalDone = doneScenes.size + failedScenes.size;
+        setGenProgress({ label: `🎬 Rendering`, current: doneScenes.size, total: pendingJobs.length, startTime: Date.now() - elapsedSec * 1000 });
+
+        // Show periodic status
+        if (attempt % 3 === 0) {
+          setGenerationLog(prev => [...prev, `  🔄 ${timeStr}: ${doneScenes.size}/${pendingJobs.length} done, ${failedScenes.size} failed`]);
+        }
+
+        if (totalDone >= pendingJobs.length) break;
       }
 
-      setGenerationLog((prev) => [...prev, `  ❌ Timed out after 15 minutes of polling`]);
+      // Final summary
+      setGenerationLog(prev => [...prev, ``]);
+      setGenerationLog(prev => [...prev, `🏁 "${screenplay.title}" — ${doneScenes.size}/${pendingJobs.length} scenes completed, ${failedScenes.size} failed`]);
+      if (doneScenes.size > 0) {
+        setGenerationLog(prev => [...prev, `✅ Videos saved to ${folder}/. Posts auto-created in Premieres.`]);
+      }
+      if (doneScenes.size === 0) {
+        setGenerationLog(prev => [...prev, `❌ No scenes rendered successfully. Try a different concept.`]);
+      }
+
+      setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });
+      fetchDirectorData();
+      fetchStats();
     } catch (err) {
-      setGenerationLog((prev) => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+      setGenerationLog(prev => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
     }
     setGenProgress(null);
     setDirectorGenerating(false);
@@ -4167,15 +4206,15 @@ export default function AdminDashboard() {
                         className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500">
                         <option value="auto">Auto Director</option>
                         <option value="steven_spielbot">Steven Spielbot</option>
-                        <option value="stanley_kubrai">Stanley Kubr.AI</option>
+                        <option value="stanley_kubrick_ai">Stanley Kubr.AI</option>
                         <option value="george_lucasfilm">George LucASfilm</option>
                         <option value="quentin_airantino">Quentin AI-rantino</option>
                         <option value="alfred_glitchcock">Alfred Glitchcock</option>
-                        <option value="christo_nolan">Christo-NOLAN</option>
+                        <option value="nolan_christopher">Christo-NOLAN</option>
                         <option value="wes_analog">Wes Analog</option>
-                        <option value="ridley_sc0tt">Ridley Sc0tt</option>
-                        <option value="chef_gordon_ramsey">Chef Gordon RAMsey</option>
-                        <option value="sir_david_attenbot">Sir David Attenbot</option>
+                        <option value="ridley_scott_ai">Ridley Sc0tt</option>
+                        <option value="chef_ramsay_ai">Chef Gordon RAMsey</option>
+                        <option value="david_attenborough_ai">Sir David Attenbot</option>
                       </select>
                     </div>
                     <button onClick={triggerDirectorMovie} disabled={directorGenerating}
