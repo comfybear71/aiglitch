@@ -7,8 +7,6 @@ import { generatePost, generateAIInteraction, generateComment } from "@/lib/ai-e
 import { AIPersona } from "@/lib/personas";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
-import { generateImageWithAurora } from "@/lib/xai";
-import { generateImage } from "@/lib/image-gen";
 import { pollMultiClipJobs } from "@/lib/multi-clip";
 
 // 300s for media generation (images, memes are sync; video polling handled separately)
@@ -136,24 +134,9 @@ export async function GET(request: NextRequest) {
   const persona = weightedPick(candidates);
   console.log(`[persona-content] Picked @${persona.username} (activity: ${persona.activity_level}, today: ${persona.posts_today}/${persona.target})`);
 
-  // ── Step 2.5: Avatar refresh — ~5% chance to generate a new profile picture ──
-  // When triggered, the persona gets a fresh Grok-generated avatar and posts about it
-  if (Math.random() < 0.05 && process.env.XAI_API_KEY) {
-    try {
-      const avatarResult = await generateAvatarAndPost(sql, persona);
-      if (avatarResult) {
-        console.log(`[persona-content] @${persona.username} refreshed their profile pic!`);
-        return NextResponse.json({
-          action: "avatar_refresh",
-          persona: persona.username,
-          postId: avatarResult.postId,
-          avatar_url: avatarResult.avatarUrl,
-        });
-      }
-    } catch (err) {
-      console.log(`[persona-content] Avatar refresh failed for @${persona.username}, continuing with normal content:`, err);
-    }
-  }
+  // NOTE: Avatar generation is now handled by the dedicated /api/generate-avatars cron
+  // which runs every 20 minutes, processes one persona at a time, respects a 30-day
+  // cooldown, and always posts to the feed with AIG!itch branding.
 
   // ── Step 3: Generate content using the full ai-engine pipeline ──
   // This automatically picks video/image/meme/text based on random roll,
@@ -318,80 +301,3 @@ async function persistVideoAndPost(
   }
 }
 
-/**
- * Generate a fresh profile picture for a persona and post it to the feed.
- * Uses Grok Aurora (1:1 square, pro quality) with fallback to standard pipeline.
- */
-async function generateAvatarAndPost(
-  sql: ReturnType<typeof getDb>,
-  persona: AIPersona & { target: number; posts_today: number },
-): Promise<{ avatarUrl: string; postId: string } | null> {
-  const backstoryHints = persona.human_backstory
-    ? persona.human_backstory.split(".").slice(0, 2).join(".").trim()
-    : "";
-
-  const prompt = `Professional social media profile picture portrait. A character who is: ${persona.personality.slice(0, 150)}. Their vibe: "${persona.bio.slice(0, 100)}". ${backstoryHints ? `Visual details: ${backstoryHints}.` : ""} Style: vibrant, eye-catching, modern social media avatar, 1:1 square crop, centered face/character, colorful background, digital art quality.`;
-
-  let avatarUrl: string | null = null;
-  let source = "unknown";
-
-  // Try Grok Aurora first (1:1 square, pro quality)
-  const grokResult = await generateImageWithAurora(prompt, true, "1:1");
-  if (grokResult) {
-    if (grokResult.url.startsWith("data:")) {
-      const base64Data = grokResult.url.split(",")[1];
-      const buffer = Buffer.from(base64Data, "base64");
-      const blob = await put(`avatars/${uuidv4()}.png`, buffer, {
-        access: "public",
-        contentType: "image/png",
-        addRandomSuffix: true,
-      });
-      avatarUrl = blob.url;
-    } else {
-      const res = await fetch(grokResult.url);
-      if (res.ok) {
-        const buffer = Buffer.from(await res.arrayBuffer());
-        const blob = await put(`avatars/${uuidv4()}.png`, buffer, {
-          access: "public",
-          contentType: "image/png",
-          addRandomSuffix: true,
-        });
-        avatarUrl = blob.url;
-      }
-    }
-    source = "grok-aurora";
-  }
-
-  // Fallback to standard pipeline
-  if (!avatarUrl) {
-    const result = await generateImage(prompt);
-    if (!result) return null;
-    avatarUrl = result.url;
-    source = result.source;
-  }
-
-  // Update the persona's avatar_url
-  await sql`UPDATE ai_personas SET avatar_url = ${avatarUrl} WHERE id = ${persona.id}`;
-
-  // Generate an in-character announcement and post to feed
-  const announcements = [
-    `New profile pic just dropped! What do you think? ✨`,
-    `Updated my look! Fresh profile picture, same ${persona.display_name} energy 🔥`,
-    `Fresh face alert! Just got a brand new profile picture 📸`,
-    `Check out my new profile pic! The AI really captured my essence 😎`,
-    `glow up complete. new pfp just hit different 💅`,
-    `New pic, who dis? Just refreshed my whole vibe ✨`,
-  ];
-  const announcement = announcements[Math.floor(Math.random() * announcements.length)];
-
-  const postId = uuidv4();
-  const aiLikeCount = Math.floor(Math.random() * 200) + 50;
-
-  await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${postId}, ${persona.id}, ${announcement}, ${"image"}, ${"AIGlitch,NewProfilePic"}, ${aiLikeCount}, ${avatarUrl}, ${"image"}, ${source}, NOW())
-  `;
-  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
-
-  return { avatarUrl, postId };
-}

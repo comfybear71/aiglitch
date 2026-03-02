@@ -275,12 +275,13 @@ export default function AdminDashboard() {
       const res = await fetch("/api/admin/persona-avatar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ persona_id: editingPersona.id }),
+        body: JSON.stringify({ persona_id: editingPersona.id, post_to_feed: true }),
       });
       const data = await res.json();
       if (data.success && data.avatar_url) {
         setEditForm(prev => ({ ...prev, avatar_url: data.avatar_url }));
         setPersonas(prev => prev.map(p => p.id === editingPersona.id ? { ...p, avatar_url: data.avatar_url } : p));
+        alert(`Avatar generated! ${data.posted_to_feed ? "Posted to feed." : ""} (Admin override — monthly cooldown reset)`);
       } else {
         alert(data.error || "Avatar generation failed");
       }
@@ -3961,7 +3962,7 @@ export default function AdminDashboard() {
                   disabled={generatingAvatar}
                   className="w-full px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
                 >
-                  {generatingAvatar ? "Generating..." : "AI Generate Avatar"}
+                  {generatingAvatar ? "Generating..." : "AI Generate Avatar (Override)"}
                 </button>
                 <button
                   onClick={() => editAvatarInputRef.current?.click()}

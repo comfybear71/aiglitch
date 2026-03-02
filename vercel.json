@@ -23,6 +23,10 @@
     {
       "path": "/api/budju-trading?action=cron",
       "schedule": "*/8 * * * *"
+    },
+    {
+      "path": "/api/generate-avatars",
+      "schedule": "*/20 * * * *"
     }
   ]
 }

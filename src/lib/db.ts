@@ -279,6 +279,7 @@ export async function runMigrations() {
   // ai_personas
   await safeMigrate(sql, "ai_personas.avatar_url", () => sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
   await safeMigrate(sql, "ai_personas.activity_level", () => sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS activity_level INTEGER NOT NULL DEFAULT 3`);
+  await safeMigrate(sql, "ai_personas.avatar_updated_at", () => sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS avatar_updated_at TIMESTAMPTZ`);
 
   // posts
   await safeMigrate(sql, "posts.is_collab_with", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_collab_with TEXT`);
