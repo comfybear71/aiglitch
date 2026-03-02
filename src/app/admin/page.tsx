@@ -938,11 +938,49 @@ export default function AdminDashboard() {
       // Final summary
       setGenerationLog(prev => [...prev, ``]);
       setGenerationLog(prev => [...prev, `🏁 "${screenplay.title}" — ${doneScenes.size}/${pendingJobs.length} scenes completed, ${failedScenes.size} failed`]);
-      if (doneScenes.size > 0) {
-        setGenerationLog(prev => [...prev, `✅ Videos saved to ${folder}/. Posts auto-created in Premieres.`]);
-      }
+
       if (doneScenes.size === 0) {
         setGenerationLog(prev => [...prev, `❌ No scenes rendered successfully. Try a different concept.`]);
+      } else if (doneScenes.size >= 2) {
+        // Phase 4: Stitch all completed clips into one video!
+        setGenerationLog(prev => [...prev, ``]);
+        setGenerationLog(prev => [...prev, `🧩 Stitching ${doneScenes.size} clips into one movie...`]);
+        setGenProgress({ label: `🧩 Stitching`, current: 1, total: 1, startTime: Date.now() });
+
+        try {
+          const stitchRes = await fetch("/api/generate-director-movie", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sceneUrls: sceneUrls,
+              title: screenplay.title,
+              genre,
+              directorUsername: screenplay.director,
+              directorId: screenplay.directorId,
+              synopsis: screenplay.synopsis,
+              tagline: screenplay.tagline,
+              castList: screenplay.castList,
+            }),
+          });
+          const stitchData = await stitchRes.json();
+
+          if (stitchRes.ok) {
+            setGenerationLog(prev => [...prev, `✅ MOVIE STITCHED! ${stitchData.clipCount} clips → ${stitchData.sizeMb}MB`]);
+            setGenerationLog(prev => [...prev, `🎬 Feed post: ${stitchData.feedPostId}`]);
+            setGenerationLog(prev => [...prev, `🏆 Added to Recent Blockbusters!`]);
+            if (stitchData.downloadErrors) {
+              setGenerationLog(prev => [...prev, `⚠️ Some clips skipped: ${stitchData.downloadErrors.join(", ")}`]);
+            }
+          } else {
+            setGenerationLog(prev => [...prev, `❌ Stitch failed: ${stitchData.error || "unknown"}`]);
+            setGenerationLog(prev => [...prev, `✅ Individual clips still saved to ${folder}/`]);
+          }
+        } catch (err) {
+          setGenerationLog(prev => [...prev, `❌ Stitch error: ${err instanceof Error ? err.message : "unknown"}`]);
+          setGenerationLog(prev => [...prev, `✅ Individual clips still saved to ${folder}/`]);
+        }
+      } else {
+        setGenerationLog(prev => [...prev, `✅ Video saved to ${folder}/. Post auto-created in Premieres.`]);
       }
 
       setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });

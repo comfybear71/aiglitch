@@ -13,6 +13,10 @@ import {
   DIRECTORS,
 } from "@/lib/director-movies";
 import { pollMultiClipJobs } from "@/lib/multi-clip";
+import { concatMP4Clips } from "@/lib/mp4-concat";
+import { getGenreBlobFolder, capitalizeGenre } from "@/lib/genre-utils";
+import { put } from "@vercel/blob";
+import { v4 as uuidv4 } from "uuid";
 
 // 10 minutes — enough for screenplay generation + clip submission
 export const maxDuration = 600;
@@ -344,4 +348,116 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({
     error: "Stitch failed — check if clips have valid video URLs",
   }, { status: 500 });
+}
+
+/**
+ * PUT — stitch scene URLs directly into one video, create posts + director_movies entry.
+ * Used by the admin UI after client-side scene submission/polling completes.
+ *
+ * Body: { sceneUrls: Record<number, string>, title, genre, directorUsername, directorId, synopsis, tagline, castList }
+ */
+export async function PUT(request: NextRequest) {
+  const isAdmin = await isAdminAuthenticated();
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const { sceneUrls, title, genre, directorUsername, directorId, synopsis, tagline, castList } = body as {
+    sceneUrls: Record<string, string>;
+    title: string;
+    genre: string;
+    directorUsername: string;
+    directorId: string;
+    synopsis: string;
+    tagline: string;
+    castList: string[];
+  };
+
+  if (!sceneUrls || !title || !genre || !directorId) {
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  const sql = getDb();
+  await ensureDbReady();
+
+  // Sort scene URLs by scene number and download all clips
+  const sortedKeys = Object.keys(sceneUrls).map(Number).sort((a, b) => a - b);
+  const clipBuffers: Buffer[] = [];
+  const downloadErrors: string[] = [];
+
+  for (const key of sortedKeys) {
+    const url = sceneUrls[String(key)];
+    if (!url) continue;
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+      } else {
+        downloadErrors.push(`Scene ${key}: HTTP ${res.status}`);
+      }
+    } catch (err) {
+      downloadErrors.push(`Scene ${key}: ${err instanceof Error ? err.message : "download failed"}`);
+    }
+  }
+
+  if (clipBuffers.length === 0) {
+    return NextResponse.json({ error: "No clips could be downloaded", downloadErrors }, { status: 500 });
+  }
+
+  // Stitch all clips into one MP4
+  console.log(`[director-movie] Stitching ${clipBuffers.length} clips for "${title}"...`);
+  const stitched = concatMP4Clips(clipBuffers);
+  const blobFolder = getGenreBlobFolder(genre);
+  const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
+    access: "public",
+    contentType: "video/mp4",
+    addRandomSuffix: false,
+  });
+  const finalVideoUrl = blob.url;
+  const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
+  console.log(`[director-movie] Stitched ${clipBuffers.length} clips into ${sizeMb}MB video`);
+
+  // Build caption
+  const directorProfile = DIRECTORS[directorUsername];
+  const directorName = directorProfile?.displayName || directorUsername;
+  const caption = `🎬 ${title} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
+
+  // Create feed post (the main stitched movie)
+  const feedPostId = uuidv4();
+  const aiLikeCount = Math.floor(Math.random() * 500) + 200;
+  const hashtags = `AIGlitchPremieres,AIGlitch${capitalizeGenre(genre)},AIGlitchStudios`;
+
+  await sql`
+    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
+    VALUES (${feedPostId}, ${directorId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, NOW())
+  `;
+  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${directorId}`;
+
+  // Create premiere post
+  const premierePostId = uuidv4();
+  await sql`
+    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
+    VALUES (${premierePostId}, ${directorId}, ${`[PREMIERE] ${caption}`}, ${"premiere"}, ${hashtags}, ${Math.floor(aiLikeCount * 1.5)}, ${finalVideoUrl}, ${"video"}, ${"director-premiere"}, NOW() + INTERVAL '1 minute')
+  `;
+
+  // Create director_movies entry so it shows in Recent Blockbusters
+  const directorMovieId = uuidv4();
+  await sql`
+    INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, status, post_id, premiere_post_id)
+    VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${genre}, ${clipBuffers.length}, ${"completed"}, ${feedPostId}, ${premierePostId})
+  `;
+
+  console.log(`[director-movie] "${title}" stitched and posted! Feed: ${feedPostId}, Premiere: ${premierePostId}`);
+
+  return NextResponse.json({
+    action: "stitched_and_posted",
+    feedPostId,
+    premierePostId,
+    directorMovieId,
+    finalVideoUrl,
+    sizeMb,
+    clipCount: clipBuffers.length,
+    downloadErrors: downloadErrors.length > 0 ? downloadErrors : undefined,
+  });
 }
