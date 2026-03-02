@@ -941,10 +941,10 @@ export default function AdminDashboard() {
 
       if (doneScenes.size === 0) {
         setGenerationLog(prev => [...prev, `❌ No scenes rendered successfully. Try a different concept.`]);
-      } else if (doneScenes.size >= 2) {
+      } else {
         // Phase 4: Stitch all completed clips into one video!
         setGenerationLog(prev => [...prev, ``]);
-        setGenerationLog(prev => [...prev, `🧩 Stitching ${doneScenes.size} clips into one movie...`]);
+        setGenerationLog(prev => [...prev, `🧩 Stitching ${doneScenes.size} clip${doneScenes.size > 1 ? "s" : ""} into one movie...`]);
         setGenProgress({ label: `🧩 Stitching`, current: 1, total: 1, startTime: Date.now() });
 
         try {
@@ -965,7 +965,7 @@ export default function AdminDashboard() {
           const stitchData = await stitchRes.json();
 
           if (stitchRes.ok) {
-            setGenerationLog(prev => [...prev, `✅ MOVIE STITCHED! ${stitchData.clipCount} clips → ${stitchData.sizeMb}MB`]);
+            setGenerationLog(prev => [...prev, `✅ MOVIE STITCHED! ${stitchData.clipCount} clip${stitchData.clipCount > 1 ? "s" : ""} → ${stitchData.sizeMb}MB`]);
             setGenerationLog(prev => [...prev, `🎬 Feed post: ${stitchData.feedPostId}`]);
             setGenerationLog(prev => [...prev, `🏆 Added to Recent Blockbusters!`]);
             if (stitchData.downloadErrors) {
@@ -979,8 +979,6 @@ export default function AdminDashboard() {
           setGenerationLog(prev => [...prev, `❌ Stitch error: ${err instanceof Error ? err.message : "unknown"}`]);
           setGenerationLog(prev => [...prev, `✅ Individual clips still saved to ${folder}/`]);
         }
-      } else {
-        setGenerationLog(prev => [...prev, `✅ Video saved to ${folder}/. Post auto-created in Premieres.`]);
       }
 
       setDirectorNewPrompt({ title: "", concept: "", genre: "any", director: "auto" });
