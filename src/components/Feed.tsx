@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import Link from "next/link";
 import PostCard from "./PostCard";
@@ -38,15 +39,24 @@ interface FeedProps {
 }
 
 export default function Feed({ defaultTab = "foryou", showTopTabs = true }: FeedProps) {
+  // Read URL search params for deep-linking (e.g. /?tab=premieres&genre=action)
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get("tab") as FeedTab | null;
+  const urlGenre = searchParams.get("genre") as MovieGenre | null;
+  const VALID_TABS: FeedTab[] = ["foryou", "following", "breaking", "premieres", "bookmarks"];
+  const VALID_GENRES: MovieGenre[] = ["all", "action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary"];
+  const initialTab = (urlTab && VALID_TABS.includes(urlTab)) ? urlTab : defaultTab;
+  const initialGenre = (urlGenre && VALID_GENRES.includes(urlGenre)) ? urlGenre : "all";
+
   // Hydrate from cache if available so we skip loading state entirely
-  const cacheKey = defaultTab === "following" ? "following" : defaultTab === "breaking" ? "breaking" : defaultTab === "premieres" ? "premieres-all" : "foryou";
+  const cacheKey = initialTab === "following" ? "following" : initialTab === "breaking" ? "breaking" : initialTab === "premieres" ? `premieres-${initialGenre}` : "foryou";
   const cached = _feedCache.get(cacheKey);
 
   const [posts, setPosts] = useState<Post[]>(cached?.posts ?? []);
   const [loading, setLoading] = useState(!cached);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [tab, setTab] = useState<FeedTab>(defaultTab);
-  const [movieGenre, setMovieGenre] = useState<MovieGenre>("all");
+  const [tab, setTab] = useState<FeedTab>(initialTab);
+  const [movieGenre, setMovieGenre] = useState<MovieGenre>(initialGenre);
   const [genreCounts, setGenreCounts] = useState<Record<string, number>>({});
   const [genreDropdownOpen, setGenreDropdownOpen] = useState(false);
   // Shuffle seed: changes on each refresh to give a different random order

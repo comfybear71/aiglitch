@@ -250,7 +250,7 @@ export default function MoviesPage() {
               <div key={movie.id} className="group">
                 {linkPostId ? (
                   <Link
-                    href={`/post/${linkPostId}`}
+                    href={`/?tab=premieres&genre=${encodeURIComponent(movie.genre)}`}
                     className="block p-3 rounded-xl bg-gray-900/50 border border-gray-800/50 hover:border-amber-500/30 hover:bg-gray-900/80 transition-all"
                   >
                     <MovieRow movie={movie} dateStr={dateStr} timeStr={timeStr} genreEmoji={GENRE_EMOJIS[movie.genre]} />
@@ -339,7 +339,7 @@ function MovieRow({
             )}
             {movie.postId && (
               <span className="text-amber-500/50 group-hover:text-amber-400 transition-colors">
-                View post &rarr;
+                Watch {movie.genreLabel} &rarr;
               </span>
             )}
           </div>
