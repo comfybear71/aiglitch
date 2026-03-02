@@ -298,10 +298,9 @@ async function executeJupiterSwap(
   outputMint: string,
   amountLamports: number,
   slippageBps: number = 300,
-): Promise<{ signature: string; inputAmount: number; outputAmount: number } | null> {
+): Promise<{ signature: string; inputAmount: number; outputAmount: number; error?: undefined } | { signature?: undefined; inputAmount?: undefined; outputAmount?: undefined; error: string }> {
   if (!JUPITER_API_KEY) {
-    console.error("[BUDJU] JUPITER_API_KEY not set — cannot execute swaps. Get a free key at https://portal.jup.ag");
-    return null;
+    return { error: "JUPITER_API_KEY not set — get a free key at portal.jup.ag" };
   }
 
   const jupHeaders: Record<string, string> = {
@@ -318,13 +317,11 @@ async function executeJupiterSwap(
     });
     if (!quoteRes.ok) {
       const errBody = await quoteRes.text().catch(() => "");
-      console.error(`[BUDJU] Jupiter quote failed: HTTP ${quoteRes.status} for ${amountLamports} lamports ${inputMint.slice(0,8)}→${outputMint.slice(0,8)} — ${errBody.slice(0, 200)}`);
-      return null;
+      return { error: `Quote HTTP ${quoteRes.status}: ${errBody.slice(0, 150)}` };
     }
     const quoteData = await quoteRes.json();
     if (!quoteData || quoteData.error) {
-      console.error(`[BUDJU] Jupiter quote error:`, quoteData?.error || "empty response");
-      return null;
+      return { error: `Quote error: ${quoteData?.error || "empty response"}` };
     }
 
     console.log(`[BUDJU] Quote: ${quoteData.inAmount} → ${quoteData.outAmount} (${inputMint.slice(0,8)}→${outputMint.slice(0,8)})`);
@@ -345,13 +342,11 @@ async function executeJupiterSwap(
     });
     if (!swapRes.ok) {
       const errBody = await swapRes.text().catch(() => "");
-      console.error(`[BUDJU] Jupiter swap build failed: HTTP ${swapRes.status} — ${errBody.slice(0, 200)}`);
-      return null;
+      return { error: `Swap build HTTP ${swapRes.status}: ${errBody.slice(0, 150)}` };
     }
     const swapData = await swapRes.json();
     if (!swapData.swapTransaction) {
-      console.error(`[BUDJU] Jupiter swap returned no transaction:`, swapData.error || JSON.stringify(swapData).slice(0, 200));
-      return null;
+      return { error: `No swap tx: ${swapData.error || JSON.stringify(swapData).slice(0, 150)}` };
     }
 
     // 3. Deserialize, sign, and send
@@ -383,8 +378,9 @@ async function executeJupiterSwap(
       outputAmount: Number(quoteData.outAmount),
     };
   } catch (err) {
-    console.error("[BUDJU Trading] Jupiter swap failed:", err instanceof Error ? err.message : err);
-    return null;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[BUDJU Trading] Jupiter swap failed:", msg);
+    return { error: `Swap exception: ${msg.slice(0, 150)}` };
   }
 }
 
@@ -525,12 +521,12 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
           console.log(`[BUDJU] Skipping buy for ${wallet.username}: ${errorMsg}`);
         } else {
           const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports);
-          if (result) {
+          if (result.signature) {
             txSignature = result.signature;
             status = "confirmed";
           } else {
             status = "failed";
-            errorMsg = "Jupiter swap returned null (quote/build/send failed)";
+            errorMsg = result.error || "Unknown swap error";
           }
         }
       } else {
@@ -545,12 +541,12 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
           console.log(`[BUDJU] Skipping sell for ${wallet.username}: ${errorMsg}`);
         } else {
           const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);
-          if (result) {
+          if (result.signature) {
             txSignature = result.signature;
             status = "confirmed";
           } else {
             status = "failed";
-            errorMsg = "Jupiter swap returned null (quote/build/send failed)";
+            errorMsg = result.error || "Unknown swap error";
           }
         }
       }
