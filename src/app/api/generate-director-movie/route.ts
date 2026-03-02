@@ -280,3 +280,68 @@ export async function POST(request: NextRequest) {
     jobId,
   });
 }
+
+// PATCH — manually trigger stitching for a specific job
+export async function PATCH(request: NextRequest) {
+  const isAdmin = await isAdminAuthenticated();
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: { jobId?: string } = {};
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
+  }
+
+  if (!body.jobId) {
+    return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
+  }
+
+  const sql = getDb();
+
+  // First, poll any pending clips to make sure completed_clips is up to date
+  try {
+    await pollMultiClipJobs();
+  } catch (err) {
+    console.log("[director-movie] Poll error (non-fatal):", err);
+  }
+
+  // Force-update completed_clips count from actual done scenes
+  try {
+    await sql`
+      UPDATE multi_clip_jobs SET completed_clips = (
+        SELECT COUNT(*)::int FROM multi_clip_scenes
+        WHERE job_id = ${body.jobId} AND status = 'done'
+      ) WHERE id = ${body.jobId}
+    `;
+  } catch (err) {
+    console.log("[director-movie] Count sync error:", err);
+  }
+
+  // Reset status to 'generating' if it was stuck on something else
+  try {
+    await sql`
+      UPDATE multi_clip_jobs SET status = 'generating'
+      WHERE id = ${body.jobId} AND status NOT IN ('done')
+    `;
+  } catch (err) {
+    console.log("[director-movie] Status reset error:", err);
+  }
+
+  // Attempt the stitch
+  console.log(`[director-movie] Manual stitch requested for job ${body.jobId}`);
+  const result = await stitchAndTriplePost(body.jobId);
+
+  if (result) {
+    return NextResponse.json({
+      action: "stitched_and_posted",
+      ...result,
+    });
+  }
+
+  return NextResponse.json({
+    error: "Stitch failed — check if clips have valid video URLs",
+  }, { status: 500 });
+}

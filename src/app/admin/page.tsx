@@ -354,8 +354,9 @@ export default function AdminDashboard() {
 
   // Director movie prompts state
   const [directorPrompts, setDirectorPrompts] = useState<{ id: string; title: string; concept: string; genre: string; is_used: boolean; created_at: string }[]>([]);
-  const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string; post_id: string | null; premiere_post_id: string | null; completed_clips: number | null; total_clips: number | null }[]>([]);
+  const [directorMovies, setDirectorMovies] = useState<{ id: string; title: string; genre: string; director_username: string; status: string; clip_count: number; created_at: string; post_id: string | null; premiere_post_id: string | null; multi_clip_job_id: string | null; job_status: string | null; completed_clips: number | null; total_clips: number | null }[]>([]);
   const [directorLoading, setDirectorLoading] = useState(false);
+  const [stitchingJobId, setStitchingJobId] = useState<string | null>(null);
   const [directorNewPrompt, setDirectorNewPrompt] = useState({ title: "", concept: "", genre: "any", director: "auto" });
   const [directorSubmitting, setDirectorSubmitting] = useState(false);
   const [directorGenerating, setDirectorGenerating] = useState(false);
@@ -781,6 +782,28 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error("[directors] Delete movie error:", err);
     }
+  };
+
+  const stitchDirectorMovie = async (jobId: string) => {
+    setStitchingJobId(jobId);
+    try {
+      const res = await fetch("/api/generate-director-movie", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Stitched and posted! Feed: ${data.feedPostId}`);
+      } else {
+        alert(`Stitch failed: ${data.error || "Unknown error"}`);
+      }
+      fetchDirectorData();
+    } catch (err) {
+      console.error("[directors] Stitch error:", err);
+      alert("Stitch request failed — check console");
+    }
+    setStitchingJobId(null);
   };
 
   const triggerDirectorMovie = async () => {
@@ -4284,6 +4307,8 @@ export default function AdminDashboard() {
                         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                         const elapsedMin = isGenerating ? Math.round((Date.now() - new Date(movie.created_at).getTime()) / 60000) : 0;
                         const moviePostId = movie.post_id || movie.premiere_post_id;
+                        const readyToStitch = !moviePostId && movie.multi_clip_job_id && done > 0 && done >= total && movie.status !== "completed";
+                        const isStitching = stitchingJobId === movie.multi_clip_job_id;
 
                         return (
                           <div key={movie.id} className="bg-gray-800/50 rounded-lg p-3">
@@ -4294,7 +4319,7 @@ export default function AdminDashboard() {
                                 </a>
                               ) : (
                                 <div className="text-2xl">
-                                  {isGenerating ? "⏳" : "📝"}
+                                  {readyToStitch ? "🧩" : isGenerating ? "⏳" : "📝"}
                                 </div>
                               )}
                               <div className="flex-1 min-w-0">
@@ -4308,10 +4333,11 @@ export default function AdminDashboard() {
                                   )}
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
                                     movie.status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
+                                    readyToStitch ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" :
                                     isGenerating ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30 animate-pulse" :
                                     "bg-gray-500/20 text-gray-400 border-gray-500/30"
                                   }`}>
-                                    {isGenerating ? `${done}/${total} clips` : movie.status}
+                                    {readyToStitch ? "Ready to stitch" : isGenerating ? `${done}/${total} clips` : movie.status}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 mt-1">
@@ -4326,14 +4352,26 @@ export default function AdminDashboard() {
                                   )}
                                 </div>
                               </div>
-                              <button onClick={() => deleteDirectorMovie(movie.id)}
-                                className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition-colors flex-shrink-0"
-                                title="Remove movie">
-                                Remove
-                              </button>
+                              <div className="flex flex-col gap-1 flex-shrink-0">
+                                {readyToStitch && movie.multi_clip_job_id && (
+                                  <button
+                                    onClick={() => stitchDirectorMovie(movie.multi_clip_job_id!)}
+                                    disabled={isStitching}
+                                    className="text-cyan-400 hover:text-cyan-300 text-xs px-2 py-1 rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-colors font-bold disabled:opacity-50"
+                                    title="Join all clips into one video and post it"
+                                  >
+                                    {isStitching ? "Stitching..." : "Stitch Now"}
+                                  </button>
+                                )}
+                                <button onClick={() => deleteDirectorMovie(movie.id)}
+                                  className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
+                                  title="Remove movie">
+                                  Remove
+                                </button>
+                              </div>
                             </div>
                             {/* Progress bar for generating movies */}
-                            {isGenerating && total > 0 && (
+                            {isGenerating && !readyToStitch && total > 0 && (
                               <div className="mt-2 ml-11">
                                 <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
                                   <div

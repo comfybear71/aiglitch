@@ -132,8 +132,8 @@ export async function GET() {
     // Also get recent director movies
     const recentMovies = await sql`
       SELECT dm.id, dm.director_username, dm.title, dm.genre, dm.clip_count, dm.status, dm.created_at,
-             dm.post_id, dm.premiere_post_id,
-             j.completed_clips, j.clip_count as total_clips
+             dm.post_id, dm.premiere_post_id, dm.multi_clip_job_id,
+             j.completed_clips, j.clip_count as total_clips, j.status as job_status
       FROM director_movies dm
       LEFT JOIN multi_clip_jobs j ON j.id = dm.multi_clip_job_id
       ORDER BY dm.created_at DESC LIMIT 10
@@ -141,6 +141,7 @@ export async function GET() {
       id: string; director_username: string; title: string; genre: string;
       clip_count: number; status: string; created_at: string;
       post_id: string | null; premiere_post_id: string | null;
+      multi_clip_job_id: string | null; job_status: string | null;
       completed_clips: number | null; total_clips: number | null;
     }[];
 
