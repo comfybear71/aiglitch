@@ -179,12 +179,19 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, id, title, concept, genre });
 }
 
-export async function PUT() {
+export async function PUT(request: NextRequest) {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const preview = request.nextUrl.searchParams.get("preview") === "1";
   const { title, concept, genre } = generateRandomConcept();
+
+  // Preview mode: return the concept without saving to DB (populate form fields)
+  if (preview) {
+    return NextResponse.json({ success: true, title, concept, genre, preview: true });
+  }
+
   const sql = getDb();
   const id = uuidv4();
 

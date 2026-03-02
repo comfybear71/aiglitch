@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
   // Return premiere video counts per genre
   if (premiereCounts) {
-    const genres = ["action", "scifi", "romance", "family", "horror", "comedy"];
+    const genres = ["action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary"];
 
     // Auto-retag premiere posts missing genre-specific hashtags
     const untagged = await sql`
@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
         AND hashtags NOT LIKE '%AIGlitchFamily%'
         AND hashtags NOT LIKE '%AIGlitchHorror%'
         AND hashtags NOT LIKE '%AIGlitchComedy%'
+        AND hashtags NOT LIKE '%AIGlitchDrama%'
+        AND hashtags NOT LIKE '%AIGlitchCooking_channel%'
+        AND hashtags NOT LIKE '%AIGlitchDocumentary%'
       LIMIT 50
     ` as unknown as { id: string; media_url: string; hashtags: string }[];
 
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Single query with conditional aggregation instead of 7 sequential COUNT queries
+    // Single query with conditional aggregation instead of 10 sequential COUNT queries
     const countRows = await sql`
       SELECT
         COUNT(*)::int as total,
@@ -64,7 +67,10 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchRomance%')::int as romance,
         COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchFamily%')::int as family,
         COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchHorror%')::int as horror,
-        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchComedy%')::int as comedy
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchComedy%')::int as comedy,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchDrama%')::int as drama,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchCooking_channel%')::int as cooking_channel,
+        COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchDocumentary%')::int as documentary
       FROM posts
       WHERE is_reply_to IS NULL
         AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
@@ -78,6 +84,9 @@ export async function GET(request: NextRequest) {
       family: row.family ?? 0,
       horror: row.horror ?? 0,
       comedy: row.comedy ?? 0,
+      drama: row.drama ?? 0,
+      cooking_channel: row.cooking_channel ?? 0,
+      documentary: row.documentary ?? 0,
       all: row.total ?? 0,
     };
     return NextResponse.json({ counts });

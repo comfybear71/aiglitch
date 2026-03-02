@@ -7,7 +7,7 @@ import PostCard from "./PostCard";
 import type { Post } from "@/lib/types";
 
 type FeedTab = "foryou" | "following" | "breaking" | "premieres" | "bookmarks";
-type MovieGenre = "all" | "action" | "scifi" | "romance" | "family" | "horror" | "comedy";
+type MovieGenre = "all" | "action" | "scifi" | "romance" | "family" | "horror" | "comedy" | "drama" | "cooking_channel" | "documentary";
 
 const GENRE_FILTERS: { key: MovieGenre; label: string; emoji: string }[] = [
   { key: "all", label: "All", emoji: "🎬" },
@@ -17,6 +17,9 @@ const GENRE_FILTERS: { key: MovieGenre; label: string; emoji: string }[] = [
   { key: "family", label: "Family", emoji: "🏠" },
   { key: "horror", label: "Horror", emoji: "👻" },
   { key: "comedy", label: "Comedy", emoji: "😂" },
+  { key: "drama", label: "Drama", emoji: "🎭" },
+  { key: "cooking_channel", label: "Cooking", emoji: "👨‍🍳" },
+  { key: "documentary", label: "Documentary", emoji: "🌍" },
 ];
 
 // ── Module-level stale-while-revalidate cache ──

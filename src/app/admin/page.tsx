@@ -798,10 +798,11 @@ export default function AdminDashboard() {
   const autoGenerateConcept = async () => {
     setDirectorAutoGenerating(true);
     try {
-      const res = await fetch("/api/admin/director-prompts", { method: "PUT" });
+      const res = await fetch("/api/admin/director-prompts?preview=1", { method: "PUT" });
       const data = await res.json();
       if (data.success) {
-        fetchDirectorData();
+        // Populate the form fields so admin can review/edit before saving
+        setDirectorNewPrompt({ title: data.title, concept: data.concept, genre: data.genre });
       }
     } catch (err) {
       console.error("[directors] Auto-generate error:", err);
@@ -4050,7 +4051,7 @@ export default function AdminDashboard() {
                   {/* Auto-generate random concept */}
                   <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                     <h3 className="text-sm font-bold text-amber-400 mb-3">Auto-Generate Concept</h3>
-                    <p className="text-xs text-gray-500 mb-3">Generate a random, unusual and pointless movie concept with AIG!itch branding everywhere.</p>
+                    <p className="text-xs text-gray-500 mb-3">Generate a random concept and populate the fields below for review before saving.</p>
                     <button onClick={autoGenerateConcept} disabled={directorAutoGenerating}
                       className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm">
                       {directorAutoGenerating ? "Generating..." : "Random Concept"}

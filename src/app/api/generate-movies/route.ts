@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 
 export const maxDuration = 660; // 11 min — must exceed 10 min polling timeout
 
-const VALID_GENRES: MovieGenre[] = ["action", "scifi", "romance", "family", "horror", "comedy"];
+const VALID_GENRES: MovieGenre[] = ["action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary"];
 
 export async function POST(request: NextRequest) {
   const isAdmin = await isAdminAuthenticated();

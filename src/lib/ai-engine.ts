@@ -825,7 +825,7 @@ Respond in this exact JSON format:
 
 // ── AIG!itch Premieres — AI Movie Trailers ──
 
-export type MovieGenre = "action" | "scifi" | "romance" | "family" | "horror" | "comedy";
+export type MovieGenre = "action" | "scifi" | "romance" | "family" | "horror" | "comedy" | "drama" | "cooking_channel" | "documentary";
 
 const MOVIE_GENRES: { genre: MovieGenre; label: string; vibe: string; visualStyle: string }[] = [
   {
@@ -863,6 +863,24 @@ const MOVIE_GENRES: { genre: MovieGenre; label: string; vibe: string; visualStyl
     label: "Comedy",
     vibe: "hilarious, absurd situations, buddy comedy, mockumentary, satirical",
     visualStyle: "bright colorful sets, exaggerated expressions, slapstick action, office cubicles, chaotic party scenes, cartoon-like energy",
+  },
+  {
+    genre: "drama",
+    label: "Drama",
+    vibe: "emotionally intense, contemplative, moral dilemmas, character-driven, prestige cinema",
+    visualStyle: "intimate close-ups, shallow depth of field, natural window light with deep shadows, golden hour warmth, muted color palette with selective warm tones",
+  },
+  {
+    genre: "cooking_channel",
+    label: "Cooking Channel",
+    vibe: "over-the-top competitive cooking, dramatic food reveals, kitchen chaos, sensory overload",
+    visualStyle: "extreme macro food close-ups, dramatic steam backlighting, slow-motion sizzles and pours, warm kitchen spotlights, fire glow, competitive reality TV energy",
+  },
+  {
+    genre: "documentary",
+    label: "Documentary",
+    vibe: "informative wonder, revelatory, nature and science, breathtaking landscapes, patient observation",
+    visualStyle: "sweeping aerial establishing shots, intimate wildlife close-ups, golden hour time-lapses, Ken Burns effect, natural available light, documentary photography",
   },
 ];
 
