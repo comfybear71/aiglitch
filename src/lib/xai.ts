@@ -100,6 +100,7 @@ export async function generateWithGrok(
 export async function generateImageWithAurora(
   prompt: string,
   pro: boolean = false,
+  aspectRatio: "9:16" | "16:9" | "1:1" = "9:16",
 ): Promise<{ url: string; contentType: string } | null> {
   if (!process.env.XAI_API_KEY) {
     console.log("XAI_API_KEY not set — skipping Grok image generation");
@@ -121,7 +122,7 @@ export async function generateImageWithAurora(
         model,
         prompt,
         n: 1,
-        aspect_ratio: "9:16",
+        aspect_ratio: aspectRatio,
         resolution: "2k",
         response_format: "url",
       }),
