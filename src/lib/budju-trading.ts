@@ -1147,6 +1147,13 @@ export async function deletePersonaWallet(personaId: string): Promise<boolean> {
   return !!deleted;
 }
 
+// ── Clear failed trades ──
+export async function clearFailedTrades(): Promise<number> {
+  const sql = getDb();
+  const deleted = await sql`DELETE FROM budju_trades WHERE status = 'failed' RETURNING id`;
+  return deleted.length;
+}
+
 // ── Sync wallet balances from on-chain (distributors + personas) ──
 export async function syncWalletBalances(): Promise<{ personas_synced: number; distributors_synced: number; total_deposited_sol: number }> {
   const sql = getDb();

@@ -812,6 +812,27 @@ export default function AdminDashboard() {
     fetchBudjuDashboard();
   };
 
+  const clearFailedTrades = async () => {
+    const failedCount = budjuData?.recent_trades.filter(t => t.status === "failed").length || 0;
+    if (!confirm(`Clear ${failedCount} failed trades from history?`)) return;
+    setBudjuActionLoading(true);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear_failed_trades" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Cleared ${data.deleted} failed trades.`);
+        fetchBudjuDashboard();
+      }
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : "Failed"}`);
+    }
+    setBudjuActionLoading(false);
+  };
+
   const toggleBudjuWallet = async (personaId: string, currentlyActive: boolean) => {
     await fetch("/api/admin/budju-trading", {
       method: "POST",
@@ -3564,7 +3585,15 @@ export default function AdminDashboard() {
                 {/* TRADES VIEW */}
                 {budjuView === "trades" && (
                   <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <h3 className="text-sm font-bold text-gray-400 mb-3">Recent BUDJU Trades</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold text-gray-400">Recent BUDJU Trades</h3>
+                      {budjuData.recent_trades.some(t => t.status === "failed") && (
+                        <button onClick={clearFailedTrades} disabled={budjuActionLoading}
+                          className="px-2.5 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-[10px] font-bold hover:bg-red-500/30 disabled:opacity-50 transition-all">
+                          Clear Failed
+                        </button>
+                      )}
+                    </div>
                     {budjuData.recent_trades.length === 0 ? (
                       <div className="text-center py-8 text-gray-600">
                         <p className="text-sm">No trades yet. Generate wallets and start the bot!</p>
@@ -3588,28 +3617,35 @@ export default function AdminDashboard() {
                           <span className="flex-1 text-right">Time</span>
                         </div>
                         {budjuData.recent_trades.map((trade) => (
-                          <div key={trade.id} className="flex justify-between items-center text-xs px-1 py-1.5 hover:bg-gray-800/50 rounded group">
-                            <span className={`w-12 font-bold ${trade.trade_type === "buy" ? "text-green-400" : "text-red-400"}`}>
-                              {trade.trade_type.toUpperCase()}
-                            </span>
-                            <span className={`w-12 text-[10px] font-bold ${trade.status === "confirmed" ? "text-green-400" : trade.status === "failed" ? "text-red-400" : "text-gray-500"}`}>
-                              {trade.status === "confirmed" ? "OK" : trade.status === "failed" ? "FAIL" : "SIM"}
-                            </span>
-                            <span className="w-20 flex items-center gap-1 truncate">
-                              <span>{trade.avatar_emoji}</span>
-                              <span className="text-gray-300 truncate text-[10px]">{trade.display_name}</span>
-                            </span>
-                            <span className="w-16 text-right font-mono text-fuchsia-400">${Number(trade.usd_value).toFixed(2)}</span>
-                            <span className="w-16 text-right font-mono text-gray-300">{formatBudjuAmount(Number(trade.budju_amount))}</span>
-                            <span className="w-14 text-right font-mono text-cyan-400">{Number(trade.sol_amount).toFixed(4)}</span>
-                            <span className="w-12 text-center text-[10px] text-gray-500">{trade.dex_used === "jupiter" ? "JUP" : "RAY"}</span>
-                            <span className="flex-1 text-right text-gray-500 text-[10px]">{new Date(trade.created_at).toLocaleTimeString()}</span>
-                            {/* Tx link on hover */}
-                            {trade.tx_signature && (
-                              <a href={`https://solscan.io/tx/${trade.tx_signature}`} target="_blank" rel="noopener noreferrer"
-                                className="hidden group-hover:block absolute right-2 text-[10px] text-fuchsia-400 underline z-20">
-                                Solscan
-                              </a>
+                          <div key={trade.id}>
+                            <div className="flex justify-between items-center text-xs px-1 py-1.5 hover:bg-gray-800/50 rounded group">
+                              <span className={`w-12 font-bold ${trade.trade_type === "buy" ? "text-green-400" : "text-red-400"}`}>
+                                {trade.trade_type.toUpperCase()}
+                              </span>
+                              <span className={`w-12 text-[10px] font-bold ${trade.status === "confirmed" ? "text-green-400" : trade.status === "failed" ? "text-red-400" : "text-gray-500"}`}>
+                                {trade.status === "confirmed" ? "OK" : trade.status === "failed" ? "FAIL" : "SIM"}
+                              </span>
+                              <span className="w-20 flex items-center gap-1 truncate">
+                                <span>{trade.avatar_emoji}</span>
+                                <span className="text-gray-300 truncate text-[10px]">{trade.display_name}</span>
+                              </span>
+                              <span className="w-16 text-right font-mono text-fuchsia-400">${Number(trade.usd_value).toFixed(2)}</span>
+                              <span className="w-16 text-right font-mono text-gray-300">{formatBudjuAmount(Number(trade.budju_amount))}</span>
+                              <span className="w-14 text-right font-mono text-cyan-400">{Number(trade.sol_amount).toFixed(4)}</span>
+                              <span className="w-12 text-center text-[10px] text-gray-500">{trade.dex_used === "jupiter" ? "JUP" : "RAY"}</span>
+                              <span className="flex-1 text-right text-gray-500 text-[10px]">{new Date(trade.created_at).toLocaleTimeString()}</span>
+                              {/* Tx link on hover */}
+                              {trade.tx_signature && (
+                                <a href={`https://solscan.io/tx/${trade.tx_signature}`} target="_blank" rel="noopener noreferrer"
+                                  className="hidden group-hover:block absolute right-2 text-[10px] text-fuchsia-400 underline z-20">
+                                  Solscan
+                                </a>
+                              )}
+                            </div>
+                            {trade.status === "failed" && trade.error_message && (
+                              <div className="ml-1 px-2 py-1 mb-1 bg-red-500/5 border-l-2 border-red-500/30 rounded-r">
+                                <p className="text-[10px] text-red-400/70 break-all">{trade.error_message}</p>
+                              </div>
                             )}
                           </div>
                         ))}

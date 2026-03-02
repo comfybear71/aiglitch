@@ -14,6 +14,7 @@ import {
   distributeFundsFromDistributors,
   drainWallets,
   exportWalletKeys,
+  clearFailedTrades,
 } from "@/lib/budju-trading";
 
 // ── GET: Dashboard data ──
@@ -201,6 +202,12 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Export failed" }, { status: 500 });
     }
+  }
+
+  // Clear all failed trades from history
+  if (action === "clear_failed_trades") {
+    const deleted = await clearFailedTrades();
+    return NextResponse.json({ success: true, deleted });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
