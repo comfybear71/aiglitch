@@ -748,16 +748,16 @@ export default function WalletPage() {
             </div>
 
             <div className="text-center">
-              <button
-                onClick={() => {
-                  const targetUrl = encodeURIComponent(window.location.origin + "/wallet");
-                  const ref = encodeURIComponent(window.location.origin);
-                  window.location.href = `https://phantom.app/ul/browse/${targetUrl}?ref=${ref}`;
-                }}
+              <a
+                href={(() => {
+                  const targetUrl = encodeURIComponent((typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app") + "/wallet");
+                  const ref = encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app");
+                  return `https://phantom.app/ul/browse/${targetUrl}?ref=${ref}`;
+                })()}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
               >
                 &#128241; Open in Phantom App
-              </button>
+              </a>
               <p className="text-gray-600 text-[10px] mt-1.5">On mobile? This opens your Phantom app.</p>
             </div>
           </div>

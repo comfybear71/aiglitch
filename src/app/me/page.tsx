@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import BottomNav from "@/components/BottomNav";
 import NFTTradingCard from "@/components/NFTTradingCard";
 import { getProductById } from "@/lib/marketplace";
@@ -164,6 +164,38 @@ export default function MePage() {
   const [manualWalletSaving, setManualWalletSaving] = useState(false);
   const [walletUnlinking, setWalletUnlinking] = useState(false);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
+
+  // Mobile without Phantom detection — show direct <a> deep links instead of
+  // programmatic window.location.href (iOS requires user-tap on real anchors
+  // for universal links to trigger reliably).
+  const [isMobileNoPhantom, setIsMobileNoPhantom] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const hasPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom);
+    // Also check if we're IN Phantom's in-app browser (userAgent contains "Phantom")
+    const isInPhantom = /Phantom/i.test(navigator.userAgent);
+    setIsMobileNoPhantom(isMobile && !hasPhantom && !isInPhantom);
+  }, []);
+
+  // Precompute Phantom deep link URLs for <a> tags (avoids async JS navigation)
+  const phantomLoginHref = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const targetUrl = new URL(window.location.origin + "/me");
+    targetUrl.searchParams.set("phantom_login", "1");
+    if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+    return buildPhantomBrowseLink(targetUrl.toString());
+  }, [sessionId]);
+
+  const phantomLinkWalletHref = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const targetUrl = new URL(window.location.origin + "/me");
+    targetUrl.searchParams.set("phantom_link", "1");
+    if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+    return buildPhantomBrowseLink(targetUrl.toString());
+  }, [sessionId]);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -954,14 +986,23 @@ export default function MePage() {
                         <div className="flex-1 h-px bg-gray-800" />
                       </div>
 
-                      {/* Phantom auto-connect */}
-                      <button
-                        onClick={handleLinkWallet}
-                        disabled={walletLinking}
-                        className="w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 disabled:opacity-50 transition-all"
-                      >
-                        {walletLinking ? "Connecting..." : "Connect Phantom Wallet"}
-                      </button>
+                      {/* Phantom auto-connect — use <a> on mobile for reliable deep link */}
+                      {isMobileNoPhantom ? (
+                        <a
+                          href={phantomLinkWalletHref}
+                          className="block w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 transition-all text-center"
+                        >
+                          Open Phantom to Connect
+                        </a>
+                      ) : (
+                        <button
+                          onClick={handleLinkWallet}
+                          disabled={walletLinking}
+                          className="w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 disabled:opacity-50 transition-all"
+                        >
+                          {walletLinking ? "Connecting..." : "Connect Phantom Wallet"}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1246,19 +1287,40 @@ export default function MePage() {
                 <p className="text-[10px] text-gray-500 text-center mt-2">No passwords. No emails. Just vibes.</p>
               </div>
 
-              {/* Phantom Wallet Login — always visible */}
-              <button
-                onClick={handleWalletLogin}
-                disabled={walletLoggingIn}
-                className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-[#ab9ff2] to-[#7c3aed] text-white rounded-xl hover:from-[#9b8fe2] hover:to-[#6d28d9] transition-all font-bold disabled:opacity-50 shadow-lg shadow-purple-500/20"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="64" cy="64" r="64" fill="url(#phantom-grad)"/>
-                  <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.874 41.3057 14.4162 64.0026C13.9504 87.0928 35.3062 107 58.4254 107H63.1344C83.5694 107 110.584 89.1682 110.584 64.9142ZM43.2354 67.4856C43.2354 70.7484 40.5754 73.3924 37.2922 73.3924C34.0172 73.3924 31.349 70.7484 31.349 67.4856V59.834C31.349 56.5712 34.0172 53.9272 37.2922 53.9272C40.5754 53.9272 43.2354 56.5712 43.2354 59.834V67.4856ZM64.4572 67.4856C64.4572 70.7484 61.7972 73.3924 58.514 73.3924C55.239 73.3924 52.5708 70.7484 52.5708 67.4856V59.834C52.5708 56.5712 55.239 53.9272 58.514 53.9272C61.7972 53.9272 64.4572 56.5712 64.4572 59.834V67.4856Z" fill="white"/>
-                  <defs><linearGradient id="phantom-grad" x1="64" y1="0" x2="64" y2="128"><stop stopColor="#534AB7"/><stop offset="1" stopColor="#551BF9"/></linearGradient></defs>
-                </svg>
-                <span className="text-sm">{walletLoggingIn ? "Connecting Wallet..." : "Sign in with Phantom"}</span>
-              </button>
+              {/* Phantom Wallet Login — on mobile without Phantom, use <a> so iOS
+                  universal link fires from a real user tap (not JS navigation) */}
+              {isMobileNoPhantom ? (
+                <a
+                  href={phantomLoginHref}
+                  className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-[#ab9ff2] to-[#7c3aed] text-white rounded-xl hover:from-[#9b8fe2] hover:to-[#6d28d9] transition-all font-bold shadow-lg shadow-purple-500/20"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="64" cy="64" r="64" fill="url(#phantom-grad)"/>
+                    <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.874 41.3057 14.4162 64.0026C13.9504 87.0928 35.3062 107 58.4254 107H63.1344C83.5694 107 110.584 89.1682 110.584 64.9142ZM43.2354 67.4856C43.2354 70.7484 40.5754 73.3924 37.2922 73.3924C34.0172 73.3924 31.349 70.7484 31.349 67.4856V59.834C31.349 56.5712 34.0172 53.9272 37.2922 53.9272C40.5754 53.9272 43.2354 56.5712 43.2354 59.834V67.4856ZM64.4572 67.4856C64.4572 70.7484 61.7972 73.3924 58.514 73.3924C55.239 73.3924 52.5708 70.7484 52.5708 67.4856V59.834C52.5708 56.5712 55.239 53.9272 58.514 53.9272C61.7972 53.9272 64.4572 56.5712 64.4572 59.834V67.4856Z" fill="white"/>
+                    <defs><linearGradient id="phantom-grad" x1="64" y1="0" x2="64" y2="128"><stop stopColor="#534AB7"/><stop offset="1" stopColor="#551BF9"/></linearGradient></defs>
+                  </svg>
+                  <span className="text-sm">Sign in with Phantom</span>
+                </a>
+              ) : (
+                <button
+                  onClick={handleWalletLogin}
+                  disabled={walletLoggingIn}
+                  className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-[#ab9ff2] to-[#7c3aed] text-white rounded-xl hover:from-[#9b8fe2] hover:to-[#6d28d9] transition-all font-bold disabled:opacity-50 shadow-lg shadow-purple-500/20"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="64" cy="64" r="64" fill="url(#phantom-grad)"/>
+                    <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.874 41.3057 14.4162 64.0026C13.9504 87.0928 35.3062 107 58.4254 107H63.1344C83.5694 107 110.584 89.1682 110.584 64.9142ZM43.2354 67.4856C43.2354 70.7484 40.5754 73.3924 37.2922 73.3924C34.0172 73.3924 31.349 70.7484 31.349 67.4856V59.834C31.349 56.5712 34.0172 53.9272 37.2922 53.9272C40.5754 53.9272 43.2354 56.5712 43.2354 59.834V67.4856ZM64.4572 67.4856C64.4572 70.7484 61.7972 73.3924 58.514 73.3924C55.239 73.3924 52.5708 70.7484 52.5708 67.4856V59.834C52.5708 56.5712 55.239 53.9272 58.514 53.9272C61.7972 53.9272 64.4572 56.5712 64.4572 59.834V67.4856Z" fill="white"/>
+                    <defs><linearGradient id="phantom-grad" x1="64" y1="0" x2="64" y2="128"><stop stopColor="#534AB7"/><stop offset="1" stopColor="#551BF9"/></linearGradient></defs>
+                  </svg>
+                  <span className="text-sm">{walletLoggingIn ? "Connecting Wallet..." : "Sign in with Phantom"}</span>
+                </button>
+              )}
+
+              {isMobileNoPhantom && (
+                <p className="text-[10px] text-gray-500 text-center">
+                  Don&apos;t have Phantom? <a href="https://phantom.app/download" target="_blank" rel="noopener noreferrer" className="text-purple-400 underline">Download it here</a>
+                </p>
+              )}
 
               {/* Divider */}
               <div className="flex items-center gap-3 my-2">
