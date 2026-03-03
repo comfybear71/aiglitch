@@ -397,6 +397,42 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return false;
   });
 
+  // ── Next-video prefetching ──────────────────────────────────────────
+  // When a video post becomes active (via IntersectionObserver in PostCard),
+  // prefetch the next video URL so it loads near-instantly on scroll.
+  useEffect(() => {
+    const handleActiveVideo = (e: Event) => {
+      const activeId = (e as CustomEvent).detail;
+      const currentIdx = posts.findIndex(p => p.id === activeId);
+      if (currentIdx === -1) return;
+
+      // Look ahead up to 3 posts for the next video
+      for (let i = currentIdx + 1; i < Math.min(currentIdx + 4, posts.length); i++) {
+        const next = posts[i];
+        if (next?.media_type === "video" && next.media_url) {
+          // Don't duplicate existing prefetch links
+          if (document.querySelector(`link[data-prefetch-video="${next.id}"]`)) break;
+
+          const link = document.createElement("link");
+          link.rel = "prefetch";
+          link.as = "video";
+          link.href = next.media_url;
+          link.setAttribute("data-prefetch-video", next.id);
+          document.head.appendChild(link);
+
+          // Keep max 3 prefetch links to limit memory
+          const allPrefetch = document.querySelectorAll("link[data-prefetch-video]");
+          if (allPrefetch.length > 3) {
+            allPrefetch[0].remove();
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener("pause-other-videos", handleActiveVideo);
+    return () => window.removeEventListener("pause-other-videos", handleActiveVideo);
+  }, [posts]);
+
   if (loading) {
     return (
       <div className="h-[100dvh] w-full relative bg-black overflow-hidden">
