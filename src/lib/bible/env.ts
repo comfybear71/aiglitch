@@ -63,6 +63,10 @@ const envSchema = z.object({
   JUPITER_API_KEY:      z.string().default(""),
   BLOB_READ_WRITE_TOKEN:z.string().optional(),
 
+  // ── Redis / Persistent Cache (optional — degrades to in-memory) ──
+  UPSTASH_REDIS_REST_URL:   z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
   // ── OAuth (all optional) ──
   GITHUB_CLIENT_ID:     z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
