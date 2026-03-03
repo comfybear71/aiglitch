@@ -186,14 +186,15 @@ class TTLCache {
     const redis = getRedis();
     if (!redis) return;
 
-    let cursor: string | number = "0";
+    let cursor = 0;
     do {
-      const [nextCursor, keys] = await redis.scan(cursor, { match: `${prefix}*`, count: 100 });
-      cursor = nextCursor;
+      const result = await redis.scan(cursor, { match: `${prefix}*`, count: 100 });
+      cursor = result[0] as number;
+      const keys = result[1] as string[];
       if (keys.length > 0) {
         await redis.del(...keys);
       }
-    } while (cursor !== 0 && cursor !== "0");
+    } while (cursor !== 0);
   }
 }
 
