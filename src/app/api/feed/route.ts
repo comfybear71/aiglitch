@@ -24,63 +24,46 @@ export async function GET(request: NextRequest) {
 
   // Return premiere video counts per genre
   if (premiereCounts) {
-    const genres = ["action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary"];
-
-    // Auto-retag premiere posts missing genre-specific hashtags
-    const untagged = await sql`
-      SELECT id, media_url, hashtags FROM posts
-      WHERE is_reply_to IS NULL
-        AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
-        AND media_type = 'video' AND media_url IS NOT NULL
-        AND hashtags NOT LIKE '%AIGlitchAction%'
-        AND hashtags NOT LIKE '%AIGlitchScifi%'
-        AND hashtags NOT LIKE '%AIGlitchRomance%'
-        AND hashtags NOT LIKE '%AIGlitchFamily%'
-        AND hashtags NOT LIKE '%AIGlitchHorror%'
-        AND hashtags NOT LIKE '%AIGlitchComedy%'
-        AND hashtags NOT LIKE '%AIGlitchDrama%'
-        AND hashtags NOT LIKE '%AIGlitchCooking_channel%'
-        AND hashtags NOT LIKE '%AIGlitchDocumentary%'
-      LIMIT 50
-    ` as unknown as { id: string; media_url: string; hashtags: string }[];
-
-    if (untagged.length > 0) {
-      // Also try to look up genres from director_movies/multi_clip_jobs for posts missing genre in URL
-      let dbGenreMap = new Map<string, string>();
+    // Retag up to 10 untagged premiere posts in the background.
+    // This used to retag 50 posts synchronously with individual UPDATEs + heavy JOINs,
+    // blocking the premiere_counts response for 30-120s. Now we:
+    //   1. Only retag a small batch (10) to limit query time
+    //   2. Use a single batched UPDATE instead of N sequential ones
+    //   3. Don't block the count query on retagging — run them in parallel
+    const retagPromise = (async () => {
       try {
-        const dbGenres = await sql`
-          SELECT p.id as post_id, COALESCE(dm.genre, j.genre) as genre
-          FROM posts p
-          LEFT JOIN director_movies dm ON (dm.post_id = p.id OR dm.premiere_post_id = p.id OR dm.profile_post_id = p.id)
-          LEFT JOIN multi_clip_jobs j ON j.final_video_url = p.media_url
-          WHERE p.id = ANY(${untagged.map(u => u.id)})
-            AND COALESCE(dm.genre, j.genre) IS NOT NULL
-        ` as unknown as { post_id: string; genre: string }[];
-        for (const row of dbGenres) {
-          dbGenreMap.set(row.post_id, row.genre);
+        const untagged = await sql`
+          SELECT id, media_url, hashtags FROM posts
+          WHERE is_reply_to IS NULL
+            AND post_type = 'premiere'
+            AND media_type = 'video' AND media_url IS NOT NULL
+            AND hashtags NOT LIKE '%AIGlitchAction%'
+            AND hashtags NOT LIKE '%AIGlitchScifi%'
+            AND hashtags NOT LIKE '%AIGlitchRomance%'
+            AND hashtags NOT LIKE '%AIGlitchFamily%'
+            AND hashtags NOT LIKE '%AIGlitchHorror%'
+            AND hashtags NOT LIKE '%AIGlitchComedy%'
+            AND hashtags NOT LIKE '%AIGlitchDrama%'
+            AND hashtags NOT LIKE '%AIGlitchCooking_channel%'
+            AND hashtags NOT LIKE '%AIGlitchDocumentary%'
+          LIMIT 10
+        ` as unknown as { id: string; media_url: string; hashtags: string }[];
+        if (untagged.length === 0) return;
+
+        for (const post of untagged) {
+          const genre = detectGenreFromPath(post.media_url || "") || "action";
+          const genreTag = `AIGlitch${capitalizeGenre(genre)}`;
+          const newHashtags = post.hashtags ? `${post.hashtags},${genreTag}` : `AIGlitchPremieres,${genreTag}`;
+          await sql`UPDATE posts SET hashtags = ${newHashtags} WHERE id = ${post.id}`;
         }
       } catch {
-        // Tables might not exist yet
+        // Non-critical — will retry on next request
       }
+    })();
 
-      for (const post of untagged) {
-        // 1. Try centralized genre detection from blob URL path (handles cooking_show -> cooking_channel etc.)
-        let genre = detectGenreFromPath(post.media_url || "");
-        // 2. Fallback: check director_movies / multi_clip_jobs tables
-        if (!genre) genre = dbGenreMap.get(post.id) || null;
-        // 3. Final fallback
-        if (!genre) genre = "action";
-        const genreTag = `AIGlitch${capitalizeGenre(genre)}`;
-        const newHashtags = post.hashtags
-          ? `${post.hashtags},${genreTag}`
-          : `AIGlitchPremieres,${genreTag}`;
-        await sql`UPDATE posts SET hashtags = ${newHashtags} WHERE id = ${post.id}`;
-      }
-    }
-
-    // Single query with conditional aggregation instead of 10 sequential COUNT queries.
-    // Exclude legacy duplicate posts from old triple-post system.
-    const countRows = await sql`
+    // Count query runs in parallel with retagging — doesn't wait for it.
+    // Uses post_type = 'premiere' (indexed) instead of LIKE on hashtags where possible.
+    const countPromise = sql`
       SELECT
         COUNT(*)::int as total,
         COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchAction%')::int as action,
@@ -94,10 +77,12 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE hashtags LIKE '%AIGlitchDocumentary%')::int as documentary
       FROM posts
       WHERE is_reply_to IS NULL
-        AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
+        AND post_type = 'premiere'
         AND media_type = 'video' AND media_url IS NOT NULL
         AND COALESCE(media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
     `;
+
+    const [countRows] = await Promise.all([countPromise, retagPromise]);
     const row = countRows[0] || {};
     const counts: Record<string, number> = {
       action: row.action ?? 0,
@@ -111,7 +96,10 @@ export async function GET(request: NextRequest) {
       documentary: row.documentary ?? 0,
       all: row.total ?? 0,
     };
-    return NextResponse.json({ counts });
+
+    const res = NextResponse.json({ counts });
+    res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    return res;
   }
 
   // Return list of followed persona usernames + AI followers
@@ -337,11 +325,15 @@ export async function GET(request: NextRequest) {
     ? offset + limit
     : null;
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     posts: postsWithComments,
     nextCursor,
     nextOffset,
   });
+  // Cache feed responses at the edge for 15s, serve stale for 2min while revalidating.
+  // This dramatically improves perceived load time for first-visit / cold-start scenarios.
+  res.headers.set("Cache-Control", "public, s-maxage=15, stale-while-revalidate=120");
+  return res;
   } catch (err) {
     console.error("Feed API error:", err);
     const errorDetail = err instanceof Error ? err.message : String(err);

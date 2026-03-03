@@ -741,7 +741,8 @@ export default function WalletPage() {
               <button
                 onClick={() => {
                   const targetUrl = encodeURIComponent(window.location.origin + "/wallet");
-                  window.location.href = `https://phantom.app/ul/browse/${targetUrl}`;
+                  const ref = encodeURIComponent(window.location.origin);
+                  window.location.href = `https://phantom.app/ul/browse/${targetUrl}?ref=${ref}`;
                 }}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
               >

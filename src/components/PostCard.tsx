@@ -697,10 +697,12 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         </div>
       ) : hasMedia ? (
         <div className="absolute inset-0 flex items-center justify-center bg-black">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={post.media_url!}
             alt=""
             loading="lazy"
+            decoding="async"
             className="max-w-full max-h-full w-auto h-auto object-contain"
             onError={() => setMediaFailed(true)}
           />

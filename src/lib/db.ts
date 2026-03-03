@@ -500,7 +500,7 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post_time ON human_comments(post_id, created_at ASC)`),
   ]);
 
-  // ── Batch 5B: Indexes on director tables (depend on tables from batch 5) ──
+  // ── Batch 5B: Indexes on director tables + premiere query optimization ──
   await Promise.allSettled([
     safeMigrate(sql, "idx_director_movie_prompts_unused", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_director_movie_prompts_unused ON director_movie_prompts(is_used, genre)`),
@@ -508,5 +508,12 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_director_movies_director ON director_movies(director_id, created_at DESC)`),
     safeMigrate(sql, "idx_director_movies_genre", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_director_movies_genre ON director_movies(genre, created_at DESC)`),
+    // Premiere queries filter by post_type + media_type — critical for Premieres page.
+    // Without this, every premiere query does a full table scan.
+    safeMigrate(sql, "idx_posts_premiere_video", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_posts_premiere_video ON posts(created_at DESC) WHERE post_type = 'premiere' AND media_type = 'video' AND media_url IS NOT NULL AND is_reply_to IS NULL`),
+    // media_source filter used in all feed queries to exclude legacy duplicates
+    safeMigrate(sql, "idx_posts_media_source", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_posts_media_source ON posts(media_source) WHERE media_source IS NOT NULL`),
   ]);
 }

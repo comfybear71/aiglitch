@@ -190,10 +190,13 @@ export default function MePage() {
     }
   }, [sessionId]);
 
-  // Build Phantom browse deep link with proper encoding
+  // Build Phantom browse deep link with proper encoding.
+  // The ref parameter is REQUIRED by Phantom's deep link spec — without it,
+  // Phantom opens its home screen instead of navigating into the target URL.
   const buildPhantomBrowseLink = (targetUrl: string): string => {
     const encoded = encodeURIComponent(targetUrl);
-    return `https://phantom.app/ul/browse/${encoded}`;
+    const ref = encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app");
+    return `https://phantom.app/ul/browse/${encoded}?ref=${ref}`;
   };
 
   // Auto-trigger wallet linking when arriving from Phantom deep link
