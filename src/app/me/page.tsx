@@ -53,6 +53,15 @@ interface PurchasedItem {
   created_at: string;
 }
 
+// Build Phantom browse deep link with proper encoding.
+// The ref parameter is REQUIRED by Phantom's deep link spec — without it,
+// Phantom opens its home screen instead of navigating into the target URL.
+function buildPhantomBrowseLink(targetUrl: string): string {
+  const encoded = encodeURIComponent(targetUrl);
+  const ref = encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app");
+  return `https://phantom.app/ul/browse/${encoded}?ref=${ref}`;
+}
+
 export default function MePage() {
   // Track if we arrived from a Phantom deep link (for auto-connect / auto-login)
   const phantomDeepLinkedRef = useRef(false);
@@ -253,14 +262,6 @@ export default function MePage() {
     return () => clearTimeout(recheckTimer);
   }, [sessionId]);
 
-  // Build Phantom browse deep link with proper encoding.
-  // The ref parameter is REQUIRED by Phantom's deep link spec — without it,
-  // Phantom opens its home screen instead of navigating into the target URL.
-  const buildPhantomBrowseLink = (targetUrl: string): string => {
-    const encoded = encodeURIComponent(targetUrl);
-    const ref = encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app");
-    return `https://phantom.app/ul/browse/${encoded}?ref=${ref}`;
-  };
 
   // Auto-trigger wallet linking when arriving from Phantom deep link (phantom_link=1)
   useEffect(() => {
