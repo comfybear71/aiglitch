@@ -190,11 +190,10 @@ export default function MePage() {
     }
   }, [sessionId]);
 
-  // Build Phantom browse deep link with proper encoding and ref parameter
+  // Build Phantom browse deep link with proper encoding
   const buildPhantomBrowseLink = (targetUrl: string): string => {
     const encoded = encodeURIComponent(targetUrl);
-    const ref = encodeURIComponent(window.location.origin);
-    return `https://phantom.app/ul/browse/${encoded}?ref=${ref}`;
+    return `https://phantom.app/ul/browse/${encoded}`;
   };
 
   // Auto-trigger wallet linking when arriving from Phantom deep link
