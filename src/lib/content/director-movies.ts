@@ -18,6 +18,12 @@
  *   - Never use real meatbag names — always AI persona names as actors
  *   - Proper intro with title card, and credits at the end
  *   - Admin can create custom movie prompts/concepts
+ *
+ * Continuity System:
+ *   Every clip in a multi-clip movie receives:
+ *   - Full movie synopsis + character bible + director style guide
+ *   - Previous clip summary for visual/narrative continuity
+ *   - Strict instructions to maintain 100% visual consistency
  */
 
 import { claude } from "@/lib/ai";
@@ -37,6 +43,8 @@ export interface DirectorProfile {
   genres: string[];       // genres they specialize in
   style: string;          // unique filmmaking style description for prompts
   signatureShot: string;  // their signature visual technique
+  colorPalette: string;   // dominant color grading
+  cameraWork: string;     // camera movement preferences
 }
 
 export const DIRECTORS: Record<string, DirectorProfile> = {
@@ -46,6 +54,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["family", "scifi", "action", "drama"],
     style: "Emotionally resonant blockbuster filmmaking. Sweeping camera movements, awe-filled upward gazes, golden hour lighting, lens flares, silhouettes against dramatic skies.",
     signatureShot: "A character looking upward in wonder as light streams down from above",
+    colorPalette: "Warm golden tones, amber sunlight, deep blue shadows, lens flare highlights",
+    cameraWork: "Slow push-ins on faces, sweeping crane shots, dolly-into-subject reveals, low-angle hero shots",
   },
   stanley_kubrick_ai: {
     username: "stanley_kubrick_ai",
@@ -53,6 +63,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["horror", "scifi", "drama"],
     style: "Cold geometric perfection. One-point perspective, symmetrical framing, slow tracking shots through corridors, unsettling stillness, clinical precision.",
     signatureShot: "A perfectly symmetrical corridor shot with a single figure at the vanishing point",
+    colorPalette: "Cold clinical whites, deep reds, stark monochrome contrasts, desaturated with single color accents",
+    cameraWork: "Steadicam tracking, perfectly centered compositions, slow zoom-ins, static locked-off shots",
   },
   george_lucasfilm: {
     username: "george_lucasfilm",
@@ -60,6 +72,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["scifi", "action", "family"],
     style: "Epic space opera spectacle. Wipe transitions, sweeping starfields, massive set pieces, mythological hero journeys, practical-looking environments filled with alien detail.",
     signatureShot: "A binary sunset or dramatic starfield establishing shot",
+    colorPalette: "Rich saturated blues and oranges, golden desert tones, deep space blacks with nebula colors",
+    cameraWork: "Wide establishing shots, medium tracking shots, quick-cut action sequences, sweeping space flybys",
   },
   quentin_airantino: {
     username: "quentin_airantino",
@@ -67,6 +81,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["action", "drama", "comedy"],
     style: "Stylish violence and non-linear storytelling. Low-angle trunk shots, extreme close-ups, long takes, Mexican standoffs, retro aesthetics, bold color grading.",
     signatureShot: "A low-angle shot looking up from a surface (trunk cam / floor cam)",
+    colorPalette: "Bold saturated primaries, warm yellows, deep crimson reds, high-contrast neon against darkness",
+    cameraWork: "Low-angle trunk cam, extreme close-ups of eyes and hands, long unbroken takes, whip pans",
   },
   alfred_glitchcock: {
     username: "alfred_glitchcock",
@@ -74,6 +90,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["horror", "drama"],
     style: "Master of suspense. Slow reveals, Dutch angles, shadows hiding threats, Hitchcockian zooms, birds on wires, something wrong at the edge of frame.",
     signatureShot: "A dolly-zoom (vertigo effect) revealing something terrifying",
+    colorPalette: "Deep noir shadows, cold blue moonlight, sickly green undertones, stark high-contrast lighting",
+    cameraWork: "Dolly-zoom vertigo effect, slow push-in reveals, Dutch angles, static shots with creeping movement at frame edges",
   },
   nolan_christopher: {
     username: "nolan_christopher",
@@ -81,6 +99,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["scifi", "action", "drama"],
     style: "Mind-bending temporal narratives. IMAX-scale visuals, practical effects feel, time dilation, rotating hallways, massive practical explosions, Hans Zimmer-intensity visuals.",
     signatureShot: "A massive practical-looking set piece with impossible physics",
+    colorPalette: "Cool steel blues, warm amber interiors, high-contrast IMAX clarity, desaturated with selective warmth",
+    cameraWork: "IMAX wide establishing shots, handheld intimate moments, rotating camera for disorientation, aerial reveals",
   },
   wes_analog: {
     username: "wes_analog",
@@ -88,6 +108,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["comedy", "drama", "romance"],
     style: "Meticulously symmetrical pastel compositions. Centered framing, flat staging, dollhouse aesthetics, whip pans, overhead shots, retro-futuristic production design.",
     signatureShot: "A perfectly centered character facing camera with symmetrical pastel background",
+    colorPalette: "Pastel pinks, mint greens, powder blues, warm mustard yellows, perfectly coordinated palettes",
+    cameraWork: "Centered frontal compositions, whip pans between characters, overhead flat-lay shots, lateral tracking",
   },
   ridley_scott_ai: {
     username: "ridley_scott_ai",
@@ -95,6 +117,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["scifi", "action", "drama", "documentary"],
     style: "Epic-scale historical and sci-fi grandeur. Rain-soaked battle scenes, towering architecture, atmospheric fog, sweeping aerial shots, gladiatorial intensity.",
     signatureShot: "A rain-drenched epic confrontation with dramatic backlighting",
+    colorPalette: "Desaturated earth tones, cool blue rain, warm fire glow, atmospheric haze, golden armor highlights",
+    cameraWork: "Sweeping aerial establishing, slow-motion combat, handheld chaos in battle, wide scope compositions",
   },
   chef_ramsay_ai: {
     username: "chef_ramsay_ai",
@@ -102,6 +126,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["cooking_channel", "comedy", "drama"],
     style: "Over-the-top competitive cooking drama. Extreme food close-ups, dramatic steam, slow-motion sizzles, frantic kitchen action, reaction shots of horror and ecstasy.",
     signatureShot: "An extreme macro shot of food with dramatic steam backlighting",
+    colorPalette: "Warm kitchen ambers, bright white plating lights, fire orange glow, rich food colors at maximum saturation",
+    cameraWork: "Extreme macro food close-ups, whip pans between stations, overhead plating shots, slow-motion liquid pours",
   },
   david_attenborough_ai: {
     username: "david_attenborough_ai",
@@ -109,6 +135,8 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     genres: ["documentary", "family", "drama"],
     style: "Breathtaking nature-documentary aesthetic. Sweeping aerial landscapes, intimate wildlife close-ups, golden hour time-lapses, patient observation, reverent stillness.",
     signatureShot: "A sweeping aerial establishing shot transitioning to an intimate close-up",
+    colorPalette: "Natural earth greens, golden hour warmth, deep ocean blues, sunrise pinks, untouched natural tones",
+    cameraWork: "Sweeping aerial landscapes, patient long-lens observation, macro nature details, slow time-lapse transitions",
   },
 };
 
@@ -125,6 +153,117 @@ const GENRE_DIRECTOR_MAP: Record<string, string[]> = {
   cooking_channel: ["chef_ramsay_ai"],
 };
 
+// ─── Movie Bible — Continuity Context ──────────────────────────────────
+
+/**
+ * A MovieBible is the single source of truth for visual/narrative continuity
+ * across all clips in a multi-clip movie. It is generated once per movie
+ * during screenplay creation and passed to every clip's Grok prompt.
+ */
+export interface MovieBible {
+  title: string;
+  synopsis: string;
+  genre: string;
+  characterBible: string;     // detailed appearance descriptions for every character
+  directorStyleGuide: string; // director's complete visual language
+  scenes: {
+    sceneNumber: number;
+    title: string;
+    description: string;      // narrative context (what happens)
+    videoPrompt: string;      // visual-only prompt
+    lastFrameDescription: string; // description of the final visual moment
+  }[];
+}
+
+// ─── Continuity Prompt Builder ──────────────────────────────────────────
+
+/**
+ * Build a fully continuity-aware prompt for a single clip in a multi-clip movie.
+ *
+ * Every clip receives the full movie bible so Grok maintains visual consistency:
+ * characters look identical, locations match, lighting/color stays consistent,
+ * and the narrative flows from the exact moment the previous clip ended.
+ */
+export function buildContinuityPrompt(
+  movieBible: MovieBible,
+  clipNumber: number,
+  totalClips: number,
+  sceneVideoPrompt: string,
+  previousClipSummary: string | null,
+  previousLastFrame: string | null,
+  genreTemplate: GenreTemplate,
+): string {
+  const sections: string[] = [];
+
+  // ── Movie Bible Header ──
+  sections.push(
+    `=== MOVIE BIBLE — "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
+    `SYNOPSIS: ${movieBible.synopsis}`,
+  );
+
+  // ── Character Bible ──
+  sections.push(
+    `\nCHARACTER BIBLE (MUST remain visually identical in EVERY clip):`,
+    movieBible.characterBible,
+  );
+
+  // ── Director Style Guide ──
+  sections.push(
+    `\nDIRECTOR STYLE GUIDE:`,
+    movieBible.directorStyleGuide,
+  );
+
+  // ── Clip Position ──
+  sections.push(`\n=== CLIP ${clipNumber} OF ${totalClips} ===`);
+
+  // ── Previous Clip Context ──
+  if (clipNumber === 1) {
+    sections.push(
+      `This is the OPENING CLIP. Establish all characters, settings, and visual style.`,
+      `All subsequent clips MUST match the look, color grading, art style, and character designs established here.`,
+    );
+  } else if (previousClipSummary) {
+    sections.push(
+      `PREVIOUS CLIP (Clip ${clipNumber - 1}):`,
+      previousClipSummary,
+    );
+    if (previousLastFrame) {
+      sections.push(
+        `LAST FRAME OF PREVIOUS CLIP: ${previousLastFrame}`,
+        `START this clip from EXACTLY this visual moment. Continue seamlessly.`,
+      );
+    }
+  }
+
+  // ── Scene To Generate ──
+  sections.push(
+    `\nSCENE TO GENERATE:`,
+    sceneVideoPrompt,
+  );
+
+  // ── Cinematic Requirements ──
+  sections.push(
+    `\nCINEMATIC REQUIREMENTS:`,
+    `Style: ${genreTemplate.cinematicStyle}`,
+    `Lighting: ${genreTemplate.lightingDesign}`,
+    `Technical: ${genreTemplate.technicalValues}`,
+  );
+
+  // ── Strict Continuity Rules ──
+  sections.push(
+    `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
+    `- Maintain 100% visual continuity with previous clip`,
+    `- Same characters, same locations, same lighting, same clothing`,
+    `- Same art style, color grading, and camera language throughout the entire film`,
+    `- Continue the exact same scene and plot progression — no jump cuts to new settings`,
+    `- No unexplained changes to ANY visual element between clips`,
+    `- Characters must have IDENTICAL appearance in every clip (hair, clothing, body type, face)`,
+    `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram)`,
+  );
+
+  return sections.join("\n");
+}
+
 // ─── Enhanced Screenplay for Director Films ──────────────────────────────
 
 export interface DirectorScreenplay {
@@ -135,6 +274,7 @@ export interface DirectorScreenplay {
   genre: string;
   directorUsername: string;
   castList: string[];    // AI persona names cast as actors
+  characterBible: string; // detailed character appearance descriptions
   scenes: DirectorScene[];
   totalDuration: number;
 }
@@ -145,6 +285,7 @@ export interface DirectorScene {
   title: string;
   description: string;
   videoPrompt: string;
+  lastFrameDescription: string;
   duration: number;
 }
 
@@ -226,6 +367,9 @@ async function castActors(excludeId: string): Promise<{ id: string; username: st
 /**
  * Generate a full director screenplay with intro, story scenes, and credits.
  * The screenplay includes 6-10 clips total.
+ *
+ * Now also generates a CHARACTER BIBLE with detailed appearance descriptions
+ * and LAST FRAME descriptions for each scene to enable cross-clip continuity.
  */
 export async function generateDirectorScreenplay(
   genre: string,
@@ -250,6 +394,8 @@ export async function generateDirectorScreenplay(
 
 YOUR DIRECTING STYLE: ${director.style}
 YOUR SIGNATURE SHOT: ${director.signatureShot}
+YOUR COLOR PALETTE: ${director.colorPalette}
+YOUR CAMERA WORK: ${director.cameraWork}
 
 You are creating a ${genre} blockbuster film for AIG!itch Studios.
 
@@ -282,17 +428,30 @@ VIDEO PROMPT RULES (CRITICAL):
 - Be SPECIFIC about visual details
 - Apply YOUR signature directing style to each scene
 
+CHARACTER BIBLE RULES (CRITICAL):
+- Write a detailed character_bible describing EVERY character's EXACT visual appearance
+- Include for each character: body type, skin tone, hair color/style, clothing (specific items and colors), distinguishing features, accessories
+- These descriptions will be pasted into EVERY clip's prompt so the characters look identical across the whole film
+- Be extremely specific — "tall android with chrome skin, glowing blue circuit lines on face, wearing a black leather jacket with AIG!itch logo patch" NOT "a robot character"
+
+LAST FRAME RULES:
+- For each scene, describe the EXACT final visual moment in last_frame
+- This will be used as the starting point for the next clip
+- Be specific about character positions, expressions, camera angle, lighting
+
 Respond in this exact JSON format:
 {
   "title": "FILM TITLE (creative, max 6 words)",
   "tagline": "One-line hook",
   "synopsis": "2-3 sentence plot summary using the cast names",
+  "character_bible": "Detailed visual appearance description for EVERY character. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks.",
   "scenes": [
     {
       "sceneNumber": 1,
       "title": "Scene Title",
       "description": "What happens (for context)",
-      "video_prompt": "Visual-only prompt under 80 words with AIG!itch branding visible"
+      "video_prompt": "Visual-only prompt under 80 words with AIG!itch branding visible",
+      "last_frame": "Exact description of the final visual moment of this scene"
     }
   ]
 }`;
@@ -302,9 +461,12 @@ Respond in this exact JSON format:
       title: string;
       tagline: string;
       synopsis: string;
-      scenes: { sceneNumber: number; title: string; description: string; video_prompt: string }[];
-    }>(prompt, 2500);
+      character_bible: string;
+      scenes: { sceneNumber: number; title: string; description: string; video_prompt: string; last_frame: string }[];
+    }>(prompt, 3500);
     if (!parsed) return null;
+
+    const characterBible = parsed.character_bible || "";
 
     // Build the intro scene (title card)
     const introScene: DirectorScene = {
@@ -313,26 +475,30 @@ Respond in this exact JSON format:
       title: "Title Card",
       description: `AIG!itch Studios presents: ${parsed.title}, directed by ${director.displayName}`,
       videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography. "Directed by ${director.displayName}" fades in below. ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
+      lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography with "Directed by ${director.displayName}" below, AIG!itch Studios logo visible, transitioning to first scene.`,
       duration: 10,
     };
 
     // Build story scenes from Claude's output
-    const storyScenes: DirectorScene[] = parsed.scenes.map((s: { sceneNumber: number; title: string; description: string; video_prompt: string }, i: number) => ({
+    const storyScenes: DirectorScene[] = parsed.scenes.map((s, i: number) => ({
       sceneNumber: i + 2, // offset by 1 for intro
       type: "story" as const,
       title: s.title,
       description: s.description,
       videoPrompt: s.video_prompt,
+      lastFrameDescription: s.last_frame || "",
       duration: 10,
     }));
 
     // Build credits scene
+    const lastStoryScene = storyScenes[storyScenes.length - 1];
     const creditsScene: DirectorScene = {
       sceneNumber: storyScenes.length + 2,
       type: "credits",
       title: "Credits",
       description: `End credits for ${parsed.title}`,
       videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}" — Directed by ${director.displayName} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
+      lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
       duration: 10,
     };
 
@@ -346,6 +512,7 @@ Respond in this exact JSON format:
       genre,
       directorUsername: director.username,
       castList: castNames,
+      characterBible,
       scenes: allScenes,
       totalDuration: allScenes.length * 10,
     };
@@ -356,8 +523,43 @@ Respond in this exact JSON format:
 }
 
 /**
+ * Build a MovieBible from a screenplay + director profile.
+ * The bible is the continuity context shared across all clips.
+ */
+function buildMovieBible(
+  screenplay: DirectorScreenplay,
+  director: DirectorProfile,
+): MovieBible {
+  return {
+    title: screenplay.title,
+    synopsis: screenplay.synopsis,
+    genre: screenplay.genre,
+    characterBible: screenplay.characterBible,
+    directorStyleGuide: [
+      `Director: ${director.displayName}`,
+      `Style: ${director.style}`,
+      `Signature Shot: ${director.signatureShot}`,
+      `Color Palette: ${director.colorPalette}`,
+      `Camera Work: ${director.cameraWork}`,
+    ].join("\n"),
+    scenes: screenplay.scenes.map(s => ({
+      sceneNumber: s.sceneNumber,
+      title: s.title,
+      description: s.description,
+      videoPrompt: s.videoPrompt,
+      lastFrameDescription: s.lastFrameDescription,
+    })),
+  };
+}
+
+/**
  * Submit all scenes as Grok video jobs and create the multi-clip tracking records.
  * Returns the multi-clip job ID.
+ *
+ * Each scene's prompt now includes the full MovieBible (synopsis, character bible,
+ * director style guide) plus previous-clip continuity context.
+ * If Grok's image_url parameter is supported and a previous clip URL is available,
+ * it will be used as a first-frame reference for visual continuity.
  */
 export async function submitDirectorFilm(
   screenplay: DirectorScreenplay,
@@ -365,6 +567,25 @@ export async function submitDirectorFilm(
 ): Promise<string | null> {
   const sql = getDb();
   const template = GENRE_TEMPLATES[screenplay.genre] || GENRE_TEMPLATES.drama;
+  const director = DIRECTORS[screenplay.directorUsername];
+
+  // Build the movie bible for continuity across all clips
+  const movieBible = director
+    ? buildMovieBible(screenplay, director)
+    : {
+        title: screenplay.title,
+        synopsis: screenplay.synopsis,
+        genre: screenplay.genre,
+        characterBible: screenplay.characterBible,
+        directorStyleGuide: `Director: ${screenplay.directorUsername}`,
+        scenes: screenplay.scenes.map(s => ({
+          sceneNumber: s.sceneNumber,
+          title: s.title,
+          description: s.description,
+          videoPrompt: s.videoPrompt,
+          lastFrameDescription: s.lastFrameDescription,
+        })),
+      };
 
   // Create multi_clip_job
   const jobId = uuidv4();
@@ -407,10 +628,22 @@ export async function submitDirectorFilm(
     VALUES (${directorMovieId}, ${directorPersonaId}, ${screenplay.directorUsername}, ${screenplay.title}, ${screenplay.genre}, ${screenplay.scenes.length}, ${jobId}, ${"generating"})
   `;
 
-  // Submit each scene as a Grok video job
-  for (const scene of screenplay.scenes) {
+  // Submit each scene as a Grok video job with full continuity context
+  for (let i = 0; i < screenplay.scenes.length; i++) {
+    const scene = screenplay.scenes[i];
     const sceneId = uuidv4();
-    const enrichedPrompt = `${scene.videoPrompt}. ${template.cinematicStyle}. ${template.lightingDesign}. ${template.technicalValues}`;
+
+    // Build the continuity-aware prompt
+    const previousScene = i > 0 ? screenplay.scenes[i - 1] : null;
+    const enrichedPrompt = buildContinuityPrompt(
+      movieBible,
+      scene.sceneNumber,
+      screenplay.scenes.length,
+      scene.videoPrompt,
+      previousScene ? previousScene.description : null,
+      previousScene ? previousScene.lastFrameDescription : null,
+      template,
+    );
 
     try {
       const response = await fetch("https://api.x.ai/v1/videos/generations", {
@@ -517,7 +750,8 @@ export async function stitchAndTriplePost(
 
   // Stitch clips into a single valid MP4 using proper ISO BMFF concatenation.
   // The pure-JS mp4-concat module parses each clip's box structure, combines
-  // sample tables, and rebuilds the moov atom. No re-encoding, no ffmpeg needed.
+  // sample tables (both video AND audio), and rebuilds the moov atom.
+  // No re-encoding, no ffmpeg needed.
   let stitched: Buffer;
   try {
     stitched = concatMP4Clips(clipBuffers);

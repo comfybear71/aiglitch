@@ -4,12 +4,15 @@
  * Concatenates multiple MP4 files with identical encoding (same codec,
  * resolution, framerate) into a single valid MP4 file WITHOUT re-encoding.
  *
+ * Handles BOTH video and audio tracks — extracts sample tables from each,
+ * combines them, and rebuilds the moov atom with correct offsets/durations.
+ *
  * Designed for Grok-generated clips from xAI's API which all share
- * identical H.264/H.265 encoding parameters.
+ * identical H.264/H.265 + AAC encoding parameters.
  *
  * Algorithm:
  *   1. Parse each MP4's ISO BMFF box structure
- *   2. Extract mdat (media data) and sample tables from each clip
+ *   2. Extract mdat (media data) and sample tables from BOTH tracks per clip
  *   3. Use the first clip's moov as a structural template (preserving codec config)
  *   4. Rebuild moov with combined sample tables and updated durations
  *   5. Output: ftyp + combined mdat + rebuilt moov
@@ -27,9 +30,8 @@ interface Box {
   children?: Box[];
 }
 
-interface ClipInfo {
-  mdatData: Buffer;
-  mdatOffset: number;
+/** Per-track sample table info extracted from a single clip. */
+interface TrackInfo {
   sampleSizes: number[];
   chunkOffsets: number[];
   sttsEntries: { count: number; delta: number }[];
@@ -38,7 +40,15 @@ interface ClipInfo {
   cttsEntries: { count: number; offset: number }[] | null;
   cttsVersion: number;
   mediaDuration: number;
+}
+
+/** Per-clip info: mdat data + per-track sample tables. */
+interface ClipInfo {
+  mdatData: Buffer;
+  mdatOffset: number;
   movieDuration: number;
+  video: TrackInfo;
+  audio: TrackInfo | null;
 }
 
 // Container boxes that have child boxes
@@ -191,39 +201,26 @@ function readTimescaleAndDuration(buf: Buffer, box: Box): { timescale: number; d
   }
 }
 
-// Find the video trak (checks hdlr handler_type for 'vide')
-function findVideoTrak(moovBox: Box, buf: Buffer): Box | undefined {
+// Find a trak by handler type ('vide' for video, 'soun' for audio)
+function findTrakByHandler(moovBox: Box, buf: Buffer, handlerType: string): Box | undefined {
   const traks = (moovBox.children || []).filter(b => b.type === "trak");
   for (const trak of traks) {
     const hdlr = findBox(trak.children || [], "mdia", "hdlr");
     if (hdlr) {
-      const handlerType = buf.toString("ascii", hdlr.offset + hdlr.headerSize + 8, hdlr.offset + hdlr.headerSize + 12);
-      if (handlerType === "vide") return trak;
+      const ht = buf.toString("ascii", hdlr.offset + hdlr.headerSize + 8, hdlr.offset + hdlr.headerSize + 12);
+      if (ht === handlerType) return trak;
     }
   }
-  return traks[0]; // Fallback to first trak
+  // Fallback for video only: use first trak if no handler match
+  if (handlerType === "vide") return traks[0];
+  return undefined;
 }
 
-// ── Clip Info Extraction ────────────────────────────────────────────────
+// ── Track Info Extraction ───────────────────────────────────────────────
 
-function extractClipInfo(buf: Buffer, boxes: Box[]): ClipInfo {
-  // Find and combine all mdat boxes
-  const mdatBoxes = boxes.filter(b => b.type === "mdat");
-  if (mdatBoxes.length === 0) throw new Error("No mdat box found");
-
-  // For clips with a single mdat (the common case)
-  const mdatBox = mdatBoxes[0];
-  const mdatDataStart = mdatBox.offset + mdatBox.headerSize;
-  const mdatData = buf.subarray(mdatDataStart, mdatBox.offset + mdatBox.size);
-
-  const moovBox = boxes.find(b => b.type === "moov");
-  if (!moovBox?.children) throw new Error("No moov box found");
-
-  const trak = findVideoTrak(moovBox, buf);
-  if (!trak?.children) throw new Error("No video trak found");
-
-  const stbl = findBox(trak.children, "mdia", "minf", "stbl");
-  if (!stbl?.children) throw new Error("No stbl box found");
+function extractTrackInfo(buf: Buffer, trak: Box): TrackInfo {
+  const stbl = findBox(trak.children || [], "mdia", "minf", "stbl");
+  if (!stbl?.children) throw new Error("No stbl box found in track");
 
   const sttsBox = stbl.children.find(b => b.type === "stts");
   const stscBox = stbl.children.find(b => b.type === "stsc");
@@ -236,13 +233,9 @@ function extractClipInfo(buf: Buffer, boxes: Box[]): ClipInfo {
     throw new Error("Missing required sample table boxes (stts/stsc/stsz/stco)");
   }
 
-  const mdhdBox = findBox(trak.children, "mdia", "mdhd");
-  if (!mdhdBox) throw new Error("No mdhd box found");
+  const mdhdBox = findBox(trak.children || [], "mdia", "mdhd");
+  if (!mdhdBox) throw new Error("No mdhd box found in track");
   const mdhd = readTimescaleAndDuration(buf, mdhdBox);
-
-  const mvhdBox = moovBox.children.find(b => b.type === "mvhd");
-  if (!mvhdBox) throw new Error("No mvhd box found");
-  const mvhd = readTimescaleAndDuration(buf, mvhdBox);
 
   let cttsEntries: { count: number; offset: number }[] | null = null;
   let cttsVersion = 0;
@@ -253,8 +246,6 @@ function extractClipInfo(buf: Buffer, boxes: Box[]): ClipInfo {
   }
 
   return {
-    mdatData,
-    mdatOffset: mdatDataStart,
     sampleSizes: readSTSZ(buf, stszBox),
     chunkOffsets: readChunkOffsets(buf, stcoBox),
     sttsEntries: readSTTS(buf, sttsBox),
@@ -263,7 +254,48 @@ function extractClipInfo(buf: Buffer, boxes: Box[]): ClipInfo {
     cttsEntries,
     cttsVersion,
     mediaDuration: mdhd.duration,
+  };
+}
+
+// ── Clip Info Extraction ────────────────────────────────────────────────
+
+function extractClipInfo(buf: Buffer, boxes: Box[]): ClipInfo {
+  const mdatBoxes = boxes.filter(b => b.type === "mdat");
+  if (mdatBoxes.length === 0) throw new Error("No mdat box found");
+
+  const mdatBox = mdatBoxes[0];
+  const mdatDataStart = mdatBox.offset + mdatBox.headerSize;
+  const mdatData = buf.subarray(mdatDataStart, mdatBox.offset + mdatBox.size);
+
+  const moovBox = boxes.find(b => b.type === "moov");
+  if (!moovBox?.children) throw new Error("No moov box found");
+
+  // Extract video track (required)
+  const videoTrak = findTrakByHandler(moovBox, buf, "vide");
+  if (!videoTrak?.children) throw new Error("No video trak found");
+  const videoInfo = extractTrackInfo(buf, videoTrak);
+
+  // Extract audio track (optional — some clips may be silent)
+  let audioInfo: TrackInfo | null = null;
+  const audioTrak = findTrakByHandler(moovBox, buf, "soun");
+  if (audioTrak?.children) {
+    try {
+      audioInfo = extractTrackInfo(buf, audioTrak);
+    } catch (err) {
+      console.warn("[mp4-concat] Could not extract audio track info, treating as silent:", err);
+    }
+  }
+
+  const mvhdBox = moovBox.children.find(b => b.type === "mvhd");
+  if (!mvhdBox) throw new Error("No mvhd box found");
+  const mvhd = readTimescaleAndDuration(buf, mvhdBox);
+
+  return {
+    mdatData,
+    mdatOffset: mdatDataStart,
     movieDuration: mvhd.duration,
+    video: videoInfo,
+    audio: audioInfo,
   };
 }
 
@@ -366,45 +398,29 @@ function patchDuration(buf: Buffer, box: Box, newDuration: number, boxType: stri
   return data;
 }
 
+interface TrackRebuildInfo {
+  trak: Box;
+  newStbl: Buffer;
+  totalMediaDuration: number;
+}
+
 function rebuildMoov(
   buf: Buffer,
   moovBox: Box,
-  videoTrak: Box,
-  newStbl: Buffer,
-  totalMediaDuration: number,
+  videoTrack: TrackRebuildInfo,
+  audioTrack: TrackRebuildInfo | null,
   totalMovieDuration: number,
 ): Buffer {
-  function rebuild(children: Box[]): Buffer {
-    const parts: Buffer[] = [];
-    for (const child of children) {
-      if (child === videoTrak) {
-        // Rebuild this trak with new stbl and durations
-        parts.push(rebuildTrak(child));
-      } else if (child.type === "mvhd") {
-        parts.push(patchDuration(buf, child, totalMovieDuration, "mvhd"));
-      } else if (child.children) {
-        const inner = rebuild(child.children);
-        const header = Buffer.alloc(8);
-        header.writeUInt32BE(8 + inner.length, 0);
-        header.write(child.type, 4, "ascii");
-        parts.push(Buffer.concat([header, inner]));
-      } else {
-        parts.push(buf.subarray(child.offset, child.offset + child.size));
-      }
-    }
-    return Buffer.concat(parts);
-  }
-
-  function rebuildTrak(trak: Box): Buffer {
+  function rebuildTrak(trak: Box, trackStbl: Buffer, trackMediaDuration: number): Buffer {
     function rebuildChildren(children: Box[]): Buffer {
       const parts: Buffer[] = [];
       for (const child of children) {
         if (child.type === "stbl") {
-          parts.push(newStbl);
+          parts.push(trackStbl);
         } else if (child.type === "tkhd") {
           parts.push(patchDuration(buf, child, totalMovieDuration, "tkhd"));
         } else if (child.type === "mdhd") {
-          parts.push(patchDuration(buf, child, totalMediaDuration, "mdhd"));
+          parts.push(patchDuration(buf, child, trackMediaDuration, "mdhd"));
         } else if (child.type === "edts") {
           // CRITICAL: Drop the edit list (elst) from the stitched file.
           // The original elst limits playback to the first clip's duration (~10s).
@@ -430,11 +446,140 @@ function rebuildMoov(
     return Buffer.concat([header, inner]);
   }
 
+  function rebuild(children: Box[]): Buffer {
+    const parts: Buffer[] = [];
+    for (const child of children) {
+      if (child === videoTrack.trak) {
+        parts.push(rebuildTrak(child, videoTrack.newStbl, videoTrack.totalMediaDuration));
+      } else if (audioTrack && child === audioTrack.trak) {
+        parts.push(rebuildTrak(child, audioTrack.newStbl, audioTrack.totalMediaDuration));
+      } else if (child.type === "mvhd") {
+        parts.push(patchDuration(buf, child, totalMovieDuration, "mvhd"));
+      } else if (child.children) {
+        const inner = rebuild(child.children);
+        const header = Buffer.alloc(8);
+        header.writeUInt32BE(8 + inner.length, 0);
+        header.write(child.type, 4, "ascii");
+        parts.push(Buffer.concat([header, inner]));
+      } else {
+        parts.push(buf.subarray(child.offset, child.offset + child.size));
+      }
+    }
+    return Buffer.concat(parts);
+  }
+
   const moovContent = rebuild(moovBox.children || []);
   const header = Buffer.alloc(8);
   header.writeUInt32BE(8 + moovContent.length, 0);
   header.write("moov", 4, "ascii");
   return Buffer.concat([header, moovContent]);
+}
+
+// ── Track Sample Table Combiner ─────────────────────────────────────────
+
+interface CombinedTrackTables {
+  allSampleSizes: number[];
+  allChunkOffsets: number[];
+  allSTTS: { count: number; delta: number }[];
+  allSTSC: { firstChunk: number; samplesPerChunk: number; sdi: number }[];
+  allSyncSamples: number[] | null;
+  allCTTS: { count: number; offset: number }[] | null;
+  cttsVersion: number;
+  totalMediaDuration: number;
+}
+
+function combineTrackTables(
+  clips: ClipInfo[],
+  getTrack: (clip: ClipInfo) => TrackInfo | null,
+  ftypSize: number,
+  mdatHeaderSize: number,
+): CombinedTrackTables | null {
+  const firstTrack = getTrack(clips[0]);
+  if (!firstTrack) return null;
+  for (const clip of clips) {
+    if (!getTrack(clip)) return null;
+  }
+
+  let allSampleSizes: number[] = [];
+  let allChunkOffsets: number[] = [];
+  let allSTTS: { count: number; delta: number }[] = [];
+  let allSTSC: { firstChunk: number; samplesPerChunk: number; sdi: number }[] = [];
+  let allSyncSamples: number[] | null = firstTrack.syncSamples !== null ? [] : null;
+  let allCTTS: { count: number; offset: number }[] | null = firstTrack.cttsEntries !== null ? [] : null;
+  const cttsVersion = firstTrack.cttsVersion;
+
+  let totalSamples = 0;
+  let totalChunks = 0;
+  let mdatDataAccumulated = 0;
+
+  for (const clip of clips) {
+    const track = getTrack(clip)!;
+
+    allSampleSizes = allSampleSizes.concat(track.sampleSizes);
+
+    for (const origOffset of track.chunkOffsets) {
+      const relativeInMdat = origOffset - clip.mdatOffset;
+      const newOffset = ftypSize + mdatHeaderSize + mdatDataAccumulated + relativeInMdat;
+      allChunkOffsets.push(newOffset);
+    }
+
+    allSTTS = allSTTS.concat(track.sttsEntries);
+
+    for (const entry of track.stscEntries) {
+      allSTSC.push({
+        firstChunk: entry.firstChunk + totalChunks,
+        samplesPerChunk: entry.samplesPerChunk,
+        sdi: entry.sdi,
+      });
+    }
+
+    if (allSyncSamples !== null && track.syncSamples) {
+      for (const s of track.syncSamples) {
+        allSyncSamples.push(s + totalSamples);
+      }
+    }
+
+    if (allCTTS !== null && track.cttsEntries) {
+      allCTTS = allCTTS.concat(track.cttsEntries);
+    }
+
+    totalSamples += track.sampleSizes.length;
+    totalChunks += track.chunkOffsets.length;
+    mdatDataAccumulated += clip.mdatData.length;
+  }
+
+  const totalMediaDuration = clips.reduce((sum, c) => {
+    const t = getTrack(c);
+    return sum + (t ? t.mediaDuration : 0);
+  }, 0);
+
+  return {
+    allSampleSizes,
+    allChunkOffsets,
+    allSTTS,
+    allSTSC,
+    allSyncSamples,
+    allCTTS,
+    cttsVersion,
+    totalMediaDuration,
+  };
+}
+
+function buildStblFromTables(tables: CombinedTrackTables, stsdBuf: Buffer): Buffer {
+  const stblChildren: Buffer[] = [
+    stsdBuf,
+    writeSTTS(tables.allSTTS),
+    writeSTSC(tables.allSTSC),
+    writeSTSZ(tables.allSampleSizes),
+    writeCO64(tables.allChunkOffsets),
+  ];
+  if (tables.allSyncSamples && tables.allSyncSamples.length > 0) {
+    stblChildren.push(writeSTSS(tables.allSyncSamples));
+  }
+  if (tables.allCTTS && tables.allCTTS.length > 0) {
+    stblChildren.push(writeCTTS(tables.allCTTS, tables.cttsVersion));
+  }
+  return makeBox("stbl", Buffer.concat(stblChildren));
 }
 
 // ── Main Concatenation ──────────────────────────────────────────────────
@@ -444,6 +589,9 @@ function rebuildMoov(
  *
  * All input clips must have identical video encoding parameters
  * (same codec, resolution, framerate). This is the case for Grok API clips.
+ *
+ * Handles both video and audio tracks — audio sample tables are properly
+ * combined so the stitched output plays audio across all clips.
  *
  * Falls back to returning the first buffer if concatenation fails.
  */
@@ -489,7 +637,8 @@ function concatMP4ClipsUnsafe(buffers: Buffer[]): Buffer {
   const templateBuf = buffers[0];
   const templateBoxes = parseBoxes(templateBuf, 0, templateBuf.length);
   const templateMoov = templateBoxes.find(b => b.type === "moov")!;
-  const templateVideoTrak = findVideoTrak(templateMoov, templateBuf)!;
+  const templateVideoTrak = findTrakByHandler(templateMoov, templateBuf, "vide")!;
+  const templateAudioTrak = findTrakByHandler(templateMoov, templateBuf, "soun");
 
   // Get ftyp from first clip
   const ftypBox = templateBoxes.find(b => b.type === "ftyp");
@@ -500,85 +649,38 @@ function concatMP4ClipsUnsafe(buffers: Buffer[]): Buffer {
   const combinedMdatData = Buffer.concat(clips.map(c => c.mdatData));
   const mdatHeaderSize = 8;
 
-  // Combine sample tables
-  let allSampleSizes: number[] = [];
-  let allChunkOffsets: number[] = [];
-  let allSTTS: { count: number; delta: number }[] = [];
-  let allSTSC: { firstChunk: number; samplesPerChunk: number; sdi: number }[] = [];
-  let allSyncSamples: number[] | null = clips[0].syncSamples !== null ? [] : null;
-  let allCTTS: { count: number; offset: number }[] | null = clips[0].cttsEntries !== null ? [] : null;
-  const cttsVersion = clips[0].cttsVersion;
+  // ── Combine VIDEO track sample tables ──
+  const videoTables = combineTrackTables(clips, c => c.video, ftypSize, mdatHeaderSize)!;
+  const videoStsdBuf = findStsdBox(templateBuf, templateVideoTrak);
+  const newVideoStbl = buildStblFromTables(videoTables, videoStsdBuf);
 
-  let totalSamples = 0;
-  let totalChunks = 0;
-  let mdatDataAccumulated = 0;
-
-  for (const clip of clips) {
-    // Sample sizes — just concatenate
-    allSampleSizes = allSampleSizes.concat(clip.sampleSizes);
-
-    // Chunk offsets — recalculate for new file layout
-    // Original offset pointed into the clip's mdat; now points into combined mdat
-    for (const origOffset of clip.chunkOffsets) {
-      const relativeInMdat = origOffset - clip.mdatOffset;
-      const newOffset = ftypSize + mdatHeaderSize + mdatDataAccumulated + relativeInMdat;
-      allChunkOffsets.push(newOffset);
+  // ── Combine AUDIO track sample tables (if all clips have audio) ──
+  let audioRebuildInfo: TrackRebuildInfo | null = null;
+  if (templateAudioTrak) {
+    const audioTables = combineTrackTables(clips, c => c.audio, ftypSize, mdatHeaderSize);
+    if (audioTables) {
+      const audioStsdBuf = findStsdBox(templateBuf, templateAudioTrak);
+      const newAudioStbl = buildStblFromTables(audioTables, audioStsdBuf);
+      audioRebuildInfo = {
+        trak: templateAudioTrak,
+        newStbl: newAudioStbl,
+        totalMediaDuration: audioTables.totalMediaDuration,
+      };
+      console.log(`[mp4-concat] Audio track: ${audioTables.allSampleSizes.length} samples combined`);
+    } else {
+      console.warn("[mp4-concat] Template has audio but some clips lack audio — audio metadata from template only");
     }
-
-    // STTS — concatenate entries
-    allSTTS = allSTTS.concat(clip.sttsEntries);
-
-    // STSC — offset chunk numbers for subsequent clips
-    for (const entry of clip.stscEntries) {
-      allSTSC.push({
-        firstChunk: entry.firstChunk + totalChunks,
-        samplesPerChunk: entry.samplesPerChunk,
-        sdi: entry.sdi,
-      });
-    }
-
-    // Sync samples — offset sample numbers
-    if (allSyncSamples !== null && clip.syncSamples) {
-      for (const s of clip.syncSamples) {
-        allSyncSamples.push(s + totalSamples);
-      }
-    }
-
-    // CTTS — concatenate
-    if (allCTTS !== null && clip.cttsEntries) {
-      allCTTS = allCTTS.concat(clip.cttsEntries);
-    }
-
-    totalSamples += clip.sampleSizes.length;
-    totalChunks += clip.chunkOffsets.length;
-    mdatDataAccumulated += clip.mdatData.length;
   }
 
-  // Calculate total durations (sum of all clips)
-  const totalMediaDuration = clips.reduce((sum, c) => sum + c.mediaDuration, 0);
+  // Calculate total durations
   const totalMovieDuration = clips.reduce((sum, c) => sum + c.movieDuration, 0);
 
-  // Build new stbl box
-  const stsdBox = findStsdBox(templateBuf, templateVideoTrak);
-  const stblChildren: Buffer[] = [
-    stsdBox,
-    writeSTTS(allSTTS),
-    writeSTSC(allSTSC),
-    writeSTSZ(allSampleSizes),
-    writeCO64(allChunkOffsets),
-  ];
-  if (allSyncSamples && allSyncSamples.length > 0) stblChildren.push(writeSTSS(allSyncSamples));
-  if (allCTTS && allCTTS.length > 0) stblChildren.push(writeCTTS(allCTTS, cttsVersion));
-
-  const newStbl = makeBox("stbl", Buffer.concat(stblChildren));
-
-  // Rebuild moov with new stbl and updated durations
+  // Rebuild moov with combined video + audio tables and updated durations
   const newMoov = rebuildMoov(
     templateBuf,
     templateMoov,
-    templateVideoTrak,
-    newStbl,
-    totalMediaDuration,
+    { trak: templateVideoTrak, newStbl: newVideoStbl, totalMediaDuration: videoTables.totalMediaDuration },
+    audioRebuildInfo,
     totalMovieDuration,
   );
 
@@ -587,7 +689,9 @@ function concatMP4ClipsUnsafe(buffers: Buffer[]): Buffer {
   mdatHeader.writeUInt32BE(mdatHeaderSize + combinedMdatData.length, 0);
   mdatHeader.write("mdat", 4, "ascii");
 
-  console.log(`[mp4-concat] Stitched ${buffers.length} clips: ${totalSamples} samples, ${totalChunks} chunks, ${(combinedMdatData.length / 1024 / 1024).toFixed(1)}MB`);
+  const totalVideoSamples = videoTables.allSampleSizes.length;
+  const totalAudioSamples = audioRebuildInfo ? clips.reduce((sum, c) => sum + (c.audio?.sampleSizes.length || 0), 0) : 0;
+  console.log(`[mp4-concat] Stitched ${buffers.length} clips: ${totalVideoSamples} video samples, ${totalAudioSamples} audio samples, ${(combinedMdatData.length / 1024 / 1024).toFixed(1)}MB`);
 
   return Buffer.concat([ftyp, mdatHeader, combinedMdatData, newMoov]);
 }
@@ -595,6 +699,6 @@ function concatMP4ClipsUnsafe(buffers: Buffer[]): Buffer {
 function findStsdBox(buf: Buffer, trak: Box): Buffer {
   const stbl = findBox(trak.children || [], "mdia", "minf", "stbl");
   const stsd = stbl?.children?.find(b => b.type === "stsd");
-  if (!stsd) throw new Error("No stsd box found in video track");
+  if (!stsd) throw new Error("No stsd box found in track");
   return buf.subarray(stsd.offset, stsd.offset + stsd.size);
 }
