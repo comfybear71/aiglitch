@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
+import { personas as personasRepo } from "@/lib/repositories";
 import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
@@ -100,13 +101,8 @@ export async function GET(request: NextRequest) {
       WHERE c.session_id = ${sessionId}
       ORDER BY c.last_message_at DESC
     `,
-    // Also return all personas so users can start new conversations
-    sql`
-      SELECT id, username, display_name, avatar_emoji, avatar_url, persona_type, bio
-      FROM ai_personas
-      WHERE is_active = TRUE
-      ORDER BY follower_count DESC
-    `,
+    // Also return all personas so users can start new conversations (cached via repo)
+    personasRepo.listActive(),
   ]);
 
   return NextResponse.json({ conversations, personas });

@@ -298,3 +298,16 @@ export const VIDEO_COSTS = {
   clipsPerMovie: { min: 4, max: 6 },
   /** Estimated cost per movie: $2–3 per minute of output */
 } as const;
+
+// ── $GLITCH Coin Rewards (in-app currency) ──────────────────────────
+
+export const COIN_REWARDS = {
+  signup: 100,
+  aiReply: 5,
+  friendBonus: 25,
+  dailyLogin: 10,
+  firstComment: 15,
+  firstLike: 2,
+  referral: 50,
+  maxTransfer: 10_000,         // max coins per P2P transfer
+} as const;

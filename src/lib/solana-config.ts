@@ -1,14 +1,15 @@
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
+import { env } from "@/lib/bible/env";
 
 // ── $GLITCH Token Configuration ──
 // Update these values after creating your real SPL token on Solana
 
 // Network: "mainnet-beta" for real launch, "devnet" for testing
 // Default to mainnet-beta since all hardcoded addresses (mint, treasury, pool) are mainnet
-export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "mainnet-beta") as "mainnet-beta" | "devnet" | "testnet";
+export const SOLANA_NETWORK = env.NEXT_PUBLIC_SOLANA_NETWORK;
 
 // Helius API key (server-side only — never exposed to client)
-export const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
+export const HELIUS_API_KEY = env.HELIUS_API_KEY;
 
 // Build Helius RPC URL if API key is available
 function buildHeliusRpcUrl(): string | null {
@@ -24,7 +25,7 @@ export function getHeliusApiUrl(path: string): string | null {
 }
 
 // RPC endpoint — prefers Helius, falls back to NEXT_PUBLIC env var, then public RPC
-export const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
+export const SOLANA_RPC_URL = env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
 
 // Server-side RPC URL (uses Helius API key if available, never exposed to client)
 export const SERVER_RPC_URL = buildHeliusRpcUrl() || SOLANA_RPC_URL;
@@ -33,32 +34,32 @@ export const SERVER_RPC_URL = buildHeliusRpcUrl() || SOLANA_RPC_URL;
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
 // $GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
-export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
+export const GLITCH_TOKEN_MINT_STR = env.NEXT_PUBLIC_GLITCH_TOKEN_MINT;
 
 // $BUDJU SPL Token Mint Address (real token on Solana)
-export const BUDJU_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_BUDJU_TOKEN_MINT || "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump";
+export const BUDJU_TOKEN_MINT_STR = env.NEXT_PUBLIC_BUDJU_TOKEN_MINT;
 
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
-export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56";
+export const TREASURY_WALLET_STR = env.NEXT_PUBLIC_TREASURY_WALLET;
 
 // ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
-export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH";
+export const ELONBOT_WALLET_STR = env.NEXT_PUBLIC_ELONBOT_WALLET;
 
 // AI Persona Pool wallet — shared wallet for ALL AI personas (except ElonBot)
-export const AI_POOL_WALLET_STR = process.env.NEXT_PUBLIC_AI_POOL_WALLET || "A1PoOL69420ShArEdWaLLeTfOrAiPeRsOnAs42069";
+export const AI_POOL_WALLET_STR = env.NEXT_PUBLIC_AI_POOL_WALLET;
 
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
-export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
+export const ADMIN_WALLET_STR = env.NEXT_PUBLIC_ADMIN_WALLET;
 
 // Meteora DLMM Program ID
 export const METEORA_DLMM_PROGRAM = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 
 // Meteora DLMM Pool Address — GLITCH/SOL (live on mainnet, created 2026-02-27)
 // LP Position: J4Lp7nb5vPDQXNFacqpzrtRL2ykcvQsXWV2DxTegqqwj
-export const METEORA_GLITCH_SOL_POOL = process.env.NEXT_PUBLIC_METEORA_GLITCH_SOL_POOL || "GWBsH6aArjdwmX8zUaiPdDke1nA7pLLe9x9b1kuHpsGV";
+export const METEORA_GLITCH_SOL_POOL = env.NEXT_PUBLIC_METEORA_GLITCH_SOL_POOL;
 
 // Mint Authority Phantom wallet — holds undistributed GLITCH (AI Persona Pool + Liquidity reserves)
-export const MINT_AUTH_WALLET_STR = process.env.NEXT_PUBLIC_MINT_AUTH_WALLET || "6mWQUxNkoPcwPJM7f3fDqMoCRBA6hSqA8uWopDLrtZjo";
+export const MINT_AUTH_WALLET_STR = env.NEXT_PUBLIC_MINT_AUTH_WALLET;
 
 // Metaplex Token Metadata Program — used for creating real NFTs on Solana
 export const TOKEN_METADATA_PROGRAM_ID_STR = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
@@ -84,8 +85,8 @@ export function getMetadataPDA(mint: PublicKey): PublicKey {
 
 // App base URL for NFT metadata/image hosting
 export function getAppBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (env.NEXT_PUBLIC_APP_URL) return env.NEXT_PUBLIC_APP_URL;
+  if (env.VERCEL_URL) return `https://${env.VERCEL_URL}`;
   return "https://aiglitch.app";
 }
 
@@ -227,8 +228,5 @@ export const PERSONA_WALLETS: Record<string, string> = {
 
 // Check if we're in "real mode" (real Solana) vs "simulated mode"
 export function isRealSolanaMode(): boolean {
-  return (
-    process.env.NEXT_PUBLIC_SOLANA_REAL_MODE === "true" &&
-    GLITCH_TOKEN_MINT_STR !== SYSTEM_PROGRAM
-  );
+  return env.isRealSolana;
 }

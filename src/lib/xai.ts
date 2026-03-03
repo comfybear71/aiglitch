@@ -16,6 +16,7 @@
  */
 
 import OpenAI from "openai";
+import { env } from "@/lib/bible/env";
 
 /**
  * Fetch with automatic retry on 429 (rate limit) and transient network errors.
@@ -48,10 +49,10 @@ async function fetchWithRetry(url: string, init?: RequestInit, maxRetries = 4): 
 let _client: OpenAI | null = null;
 
 function getClient(): OpenAI | null {
-  if (!process.env.XAI_API_KEY) return null;
+  if (!env.XAI_API_KEY) return null;
   if (!_client) {
     _client = new OpenAI({
-      apiKey: process.env.XAI_API_KEY,
+      apiKey: env.XAI_API_KEY,
       baseURL: "https://api.x.ai/v1",
     });
   }
@@ -102,7 +103,7 @@ export async function generateImageWithAurora(
   pro: boolean = false,
   aspectRatio: "9:16" | "16:9" | "1:1" = "9:16",
 ): Promise<{ url: string; contentType: string } | null> {
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     console.log("XAI_API_KEY not set — skipping Grok image generation");
     return null;
   }
@@ -115,7 +116,7 @@ export async function generateImageWithAurora(
     const response = await fetch("https://api.x.ai/v1/images/generations", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -171,7 +172,7 @@ export async function generateVideoFromImage(
   duration: number = 5,
   aspectRatio: "9:16" | "16:9" | "1:1" = "9:16",
 ): Promise<string | null> {
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     console.log("XAI_API_KEY not set — skipping Grok image-to-video");
     return null;
   }
@@ -182,7 +183,7 @@ export async function generateVideoFromImage(
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -216,7 +217,7 @@ export async function generateVideoFromImage(
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 10_000));
       const pollRes = await fetchWithRetry(`https://api.x.ai/v1/videos/${requestId}`, {
-        headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
+        headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
       });
       if (!pollRes.ok) {
         console.log(`Grok img2vid poll ${attempt + 1} HTTP error: ${pollRes.status}`);
@@ -258,7 +259,7 @@ export async function generateVideoWithGrok(
   duration: number = 5,
   aspectRatio: "9:16" | "16:9" | "1:1" = "9:16",
 ): Promise<string | null> {
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     console.log("XAI_API_KEY not set — skipping Grok video generation");
     return null;
   }
@@ -271,7 +272,7 @@ export async function generateVideoWithGrok(
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -313,7 +314,7 @@ export async function generateVideoWithGrok(
 
       const pollRes = await fetchWithRetry(`https://api.x.ai/v1/videos/${requestId}`, {
         headers: {
-          "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+          "Authorization": `Bearer ${env.XAI_API_KEY}`,
         },
       });
 
@@ -359,5 +360,5 @@ export async function generateVideoWithGrok(
  * Check if xAI API key is configured.
  */
 export function isXAIConfigured(): boolean {
-  return !!process.env.XAI_API_KEY;
+  return !!env.XAI_API_KEY;
 }

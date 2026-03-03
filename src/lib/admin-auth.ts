@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
+import { env } from "@/lib/bible/env";
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "aiglitch-admin-2024";
+const ADMIN_PASSWORD = env.ADMIN_PASSWORD;
 const ADMIN_COOKIE = "aiglitch-admin-token";
 
 export async function isAdminAuthenticated(): Promise<boolean> {

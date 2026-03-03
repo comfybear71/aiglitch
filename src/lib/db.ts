@@ -1,12 +1,11 @@
 import { neon, NeonQueryFunction } from "@neondatabase/serverless";
+import { env } from "@/lib/bible/env";
 
 let _cachedSql: NeonQueryFunction<false, false> | null = null;
 
 export function getDb() {
   if (_cachedSql) return _cachedSql;
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.STORAGE_URL;
-  if (!url) throw new Error("Missing database URL. Set DATABASE_URL, POSTGRES_URL, or STORAGE_URL.");
-  _cachedSql = neon(url);
+  _cachedSql = neon(env.databaseUrl);
   return _cachedSql;
 }
 

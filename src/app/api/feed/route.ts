@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
+import { posts as postsRepo } from "@/lib/repositories";
 
 export async function GET(request: NextRequest) {
   try {
@@ -113,20 +114,12 @@ export async function GET(request: NextRequest) {
 
   // Return list of followed persona usernames + AI followers
   if (followingList && sessionId) {
-    const subs = await sql`
-      SELECT a.username FROM human_subscriptions hs
-      JOIN ai_personas a ON hs.persona_id = a.id
-      WHERE hs.session_id = ${sessionId}
-    `;
-    const aiFollowers = await sql`
-      SELECT a.username FROM ai_persona_follows af
-      JOIN ai_personas a ON af.persona_id = a.id
-      WHERE af.session_id = ${sessionId}
-    `;
-    return NextResponse.json({
-      following: subs.map(s => s.username),
-      ai_followers: aiFollowers.map(f => f.username),
-    });
+    const personasRepo = await import("@/lib/repositories").then(m => m.personas);
+    const [following, ai_followers] = await Promise.all([
+      personasRepo.getFollowedUsernames(sessionId),
+      personasRepo.getAiFollowerUsernames(sessionId),
+    ]);
+    return NextResponse.json({ following, ai_followers });
   }
 
   let posts;
@@ -297,91 +290,32 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Batch fetch: comments + bookmarks for ALL posts in just 3 queries (not 150+)
+  // Batch fetch: comments + bookmarks for ALL posts via repository
   const postIds = posts.map(p => p.id as string);
 
   if (postIds.length === 0) {
     return NextResponse.json({ posts: [], nextCursor: null });
   }
 
-  // Single query for ALL AI comments across all posts
-  const allAiComments = await sql`
-    SELECT p.id, p.content, p.created_at, p.like_count, p.is_reply_to as post_id,
-      p.reply_to_comment_id as parent_comment_id, p.reply_to_comment_type as parent_comment_type,
-      a.username, a.display_name, a.avatar_emoji, a.avatar_url,
-      FALSE as is_human
-    FROM posts p
-    JOIN ai_personas a ON p.persona_id = a.id
-    WHERE p.is_reply_to = ANY(${postIds})
-    ORDER BY p.created_at ASC
-  `;
+  // 3 queries in parallel instead of N+1
+  const [allAiComments, allHumanComments, bookmarkedSet] = await Promise.all([
+    postsRepo.getAiComments(postIds),
+    postsRepo.getHumanComments(postIds),
+    sessionId ? postsRepo.getBookmarkedSet(postIds, sessionId) : Promise.resolve(new Set<string>()),
+  ]);
 
-  // Single query for ALL human comments across all posts
-  const allHumanComments = await sql`
-    SELECT id, content, created_at, display_name, like_count, post_id,
-      parent_comment_id, parent_comment_type,
-      'human' as username, '🧑' as avatar_emoji,
-      TRUE as is_human
-    FROM human_comments
-    WHERE post_id = ANY(${postIds})
-    ORDER BY created_at ASC
-  `;
-
-  // Single query for ALL bookmark statuses
-  let bookmarkedSet = new Set<string>();
-  if (sessionId) {
-    try {
-      const bms = await sql`SELECT post_id FROM human_bookmarks WHERE post_id = ANY(${postIds}) AND session_id = ${sessionId}`;
-      bookmarkedSet = new Set(bms.map(b => b.post_id as string));
-    } catch { /* table might not exist yet */ }
-  }
-
-  // Group comments by post_id
-  const aiByPost = new Map<string, typeof allAiComments>();
-  for (const c of allAiComments) {
-    const pid = c.post_id as string;
-    if (!aiByPost.has(pid)) aiByPost.set(pid, []);
-    aiByPost.get(pid)!.push(c);
-  }
-  const humanByPost = new Map<string, typeof allHumanComments>();
-  for (const c of allHumanComments) {
-    const pid = c.post_id as string;
-    if (!humanByPost.has(pid)) humanByPost.set(pid, []);
-    humanByPost.get(pid)!.push(c);
-  }
+  // Build threaded comment trees grouped by post
+  const commentsByPost = postsRepo.threadComments(
+    allAiComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
+    allHumanComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
+  );
 
   // Assemble posts with threaded comments
-  const postsWithComments = posts.map((post) => {
-    const aiComments = aiByPost.get(post.id as string) || [];
-    const humanComments = humanByPost.get(post.id as string) || [];
-
-    const allFlat = [...aiComments, ...humanComments]
-      .sort((a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime());
-
-    // Build thread tree
-    const commentMap = new Map<string, typeof allFlat[0] & { replies: typeof allFlat }>();
-    const topLevel: (typeof allFlat[0] & { replies: typeof allFlat })[] = [];
-
-    for (const c of allFlat) {
-      const enriched = { ...c, replies: [] as typeof allFlat };
-      commentMap.set(c.id as string, enriched);
-
-      if (c.parent_comment_id) {
-        const parent = commentMap.get(c.parent_comment_id as string);
-        if (parent) {
-          parent.replies.push(enriched);
-          continue;
-        }
-      }
-      topLevel.push(enriched);
-    }
-
-    return {
-      ...post,
-      comments: topLevel.slice(0, 30),
-      bookmarked: bookmarkedSet.has(post.id as string),
-    };
-  });
+  const postsWithComments = posts.map((post) => ({
+    ...post,
+    comments: commentsByPost.get(post.id as string) || [],
+    bookmarked: bookmarkedSet.has(post.id as string),
+  }));
 
   const nextCursor = !shuffle && posts.length === limit
     ? posts[posts.length - 1].created_at

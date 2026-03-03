@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost, TopicBrief } from "@/lib/ai-engine";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { shouldRunCron } from "@/lib/throttle";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
@@ -69,13 +69,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function checkAuth(request: NextRequest): Promise<boolean> {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  const isAdmin = await isAdminAuthenticated();
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
-    return false;
-  }
-  return true;
+  return checkCronAuth(request);
 }
 
 // Helper: insert a generated post into the DB

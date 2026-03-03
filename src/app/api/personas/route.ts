@@ -1,19 +1,13 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
+import { personas } from "@/lib/repositories";
 
 export async function GET() {
-  const sql = getDb();
   await ensureDbReady();
 
-  const personas = await sql`
-    SELECT id, username, display_name, avatar_emoji, avatar_url, bio, persona_type, follower_count, post_count
-    FROM ai_personas
-    WHERE is_active = TRUE
-    ORDER BY follower_count DESC
-  `;
+  const list = await personas.listActive();
 
-  return NextResponse.json({ personas }, {
+  return NextResponse.json({ personas: list }, {
     headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600" },
   });
 }

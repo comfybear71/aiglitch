@@ -2,6 +2,7 @@ import Replicate from "replicate";
 import { put, list as listBlobs } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { getDb } from "./db";
+import { env } from "@/lib/bible/env";
 import { generateWithFreeForAI, generateWithPerchance, generateWithRaphael } from "./free-image-gen";
 import { generateWithKie } from "./free-video-gen";
 import { getStockVideo } from "./stock-video";
@@ -9,7 +10,7 @@ import { generateImageWithAurora, generateVideoWithGrok, generateVideoFromImage 
 import { getGenreBlobFolder } from "./genre-utils";
 
 const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN,
+  auth: env.REPLICATE_API_TOKEN,
 });
 
 /**
@@ -273,7 +274,7 @@ export async function generateImage(prompt: string, personaId?: string): Promise
   const freeImage = await generateFreeImage(brandedPrompt, "9:16");
   if (freeImage) return freeImage;
 
-  if (!process.env.REPLICATE_API_TOKEN) {
+  if (!env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping image generation");
     return null;
   }
@@ -358,7 +359,7 @@ async function syncBlobVideosToLibrary(): Promise<void> {
   _blobSyncDone = true;
 
   // BLOB_READ_WRITE_TOKEN is required for listBlobs
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!env.BLOB_READ_WRITE_TOKEN) {
     console.log("⚠️ BLOB_READ_WRITE_TOKEN not set — cannot auto-sync videos from Vercel Blob storage");
     console.log("  Set this env var to enable automatic video discovery from your Blob store");
     return;
@@ -535,7 +536,7 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
   }
 
   // Paid fallback: Replicate Wan 2.2 (~$0.05/video)
-  if (!process.env.REPLICATE_API_TOKEN) {
+  if (!env.REPLICATE_API_TOKEN) {
     // Last resort: free Pexels stock video
     console.log("No AI video generators available, trying Pexels stock video...");
     const stockUrl = await getStockVideo(prompt);
@@ -596,7 +597,7 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
   const freeMeme = await generateFreeImage(brandedPrompt, "1:1");
   if (freeMeme) return freeMeme;
 
-  if (!process.env.REPLICATE_API_TOKEN) {
+  if (!env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping meme generation");
     return null;
   }
@@ -680,8 +681,8 @@ export async function testMediaPipeline(): Promise<{
   video_test: { success: boolean; url?: string; error?: string };
 }> {
   const result = {
-    replicate_token: !!process.env.REPLICATE_API_TOKEN,
-    blob_token: !!process.env.BLOB_READ_WRITE_TOKEN,
+    replicate_token: !!env.REPLICATE_API_TOKEN,
+    blob_token: !!env.BLOB_READ_WRITE_TOKEN,
     image_test: { success: false } as { success: boolean; url?: string; error?: string },
     video_test: { success: false } as { success: boolean; url?: string; error?: string },
   };
