@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import BottomNav from "@/components/BottomNav";
 import NFTTradingCard from "@/components/NFTTradingCard";
 import { getProductById } from "@/lib/marketplace";
@@ -54,9 +54,27 @@ interface PurchasedItem {
 }
 
 export default function MePage() {
+  // Track if we arrived from a Phantom deep link (for auto-connect)
+  const phantomDeepLinkedRef = useRef(false);
+
   const [sessionId, setSessionId] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+
+      // Handle Phantom deep link return — restore session from URL
+      if (params.get("phantom_link") === "1") {
+        phantomDeepLinkedRef.current = true;
+        const phantomSid = params.get("sid");
+        if (phantomSid) {
+          localStorage.setItem("aiglitch-session", phantomSid);
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("phantom_link");
+          cleanUrl.searchParams.delete("sid");
+          window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search);
+          return phantomSid;
+        }
+      }
+
       const oauthSession = params.get("oauth_session");
       if (oauthSession) {
         localStorage.setItem("aiglitch-session", oauthSession);
@@ -172,6 +190,52 @@ export default function MePage() {
     }
   }, [sessionId]);
 
+  // Build Phantom browse deep link with proper encoding and ref parameter
+  const buildPhantomBrowseLink = (targetUrl: string): string => {
+    const encoded = encodeURIComponent(targetUrl);
+    const ref = encodeURIComponent(window.location.origin);
+    return `https://phantom.app/ul/browse/${encoded}?ref=${ref}`;
+  };
+
+  // Auto-trigger wallet linking when arriving from Phantom deep link
+  useEffect(() => {
+    if (!phantomDeepLinkedRef.current) return;
+    phantomDeepLinkedRef.current = false; // Only trigger once
+
+    // Wait for Phantom provider to be available in its in-app browser
+    const timer = setTimeout(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const provider = w.phantom?.solana || w.solana;
+      if (!provider?.isPhantom) return;
+
+      try {
+        const resp = await provider.connect();
+        const walletAddress = resp.publicKey.toString();
+
+        const res = await fetch("/api/auth/human", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "link_wallet",
+            session_id: sessionId,
+            wallet_address: walletAddress,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setLinkedWallet(walletAddress);
+          setSuccess(data.message || "Wallet linked!");
+          setTimeout(() => setSuccess(""), 3000);
+        }
+      } catch {
+        // User rejected or error — they can try manually
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [sessionId]);
+
   // Wallet-based login (for Phantom browser users)
   const handleWalletLogin = async () => {
     if (typeof window === "undefined") return;
@@ -190,12 +254,12 @@ export default function MePage() {
         // Phantom not installed — try deep link for mobile, otherwise open install page
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
-          // Deep link into Phantom mobile app with redirect back
-          const currentUrl = encodeURIComponent(window.location.href);
-          window.location.href = `https://phantom.app/ul/browse/${currentUrl}`;
-        } else {
-          window.open("https://phantom.app/download", "_blank");
+          // Deep link into Phantom mobile app's in-app browser
+          window.location.href = buildPhantomBrowseLink(window.location.href);
+          setWalletLoggingIn(false);
+          return;
         }
+        window.open("https://phantom.app/download", "_blank");
         setError("Phantom wallet not detected. Install Phantom to sign in with your wallet.");
         setTimeout(() => setError(""), 5000);
         setWalletLoggingIn(false);
@@ -252,10 +316,15 @@ export default function MePage() {
       if (!provider?.isPhantom) {
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isMobile) {
-          setError("Phantom wallet not detected. Open this page in the Phantom app to link your wallet.");
-        } else {
-          setError("Phantom wallet not detected. Install the Phantom browser extension from phantom.app and refresh this page.");
+          // Deep link into Phantom's in-app browser with session context
+          const targetUrl = new URL(window.location.href);
+          targetUrl.searchParams.set("phantom_link", "1");
+          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+          setWalletLinking(false);
+          return;
         }
+        setError("Phantom wallet not detected. Install the Phantom browser extension from phantom.app and refresh this page.");
         setTimeout(() => setError(""), 5000);
         setWalletLinking(false);
         return;
