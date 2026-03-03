@@ -401,12 +401,15 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
     }
   }
 
-  // Check if any jobs are fully complete and ready to stitch
+  // Check if any jobs are fully complete and ready to stitch.
+  // Exclude director movie jobs — those are handled by stitchAndTriplePost() in director-movies.ts
   const readyJobs = await sql`
     SELECT j.id, j.title, j.genre, j.clip_count, j.persona_id, j.caption
     FROM multi_clip_jobs j
+    LEFT JOIN director_movies dm ON dm.multi_clip_job_id = j.id
     WHERE j.status = 'generating'
       AND j.completed_clips >= j.clip_count
+      AND dm.id IS NULL
   ` as unknown as { id: string; title: string; genre: string; clip_count: number; persona_id: string; caption: string }[];
 
   for (const job of readyJobs) {
@@ -433,14 +436,17 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
   `;
 
   // Check for jobs where some clips failed but enough succeeded (at least 50%),
-  // OR where all remaining scenes are failed/done (no more pending)
+  // OR where all remaining scenes are failed/done (no more pending).
+  // Exclude director movie jobs — those are handled by the director-movies pipeline.
   const partialJobs = await sql`
     SELECT j.id, j.title, j.genre, j.clip_count, j.persona_id, j.caption,
       (SELECT COUNT(*)::int FROM multi_clip_scenes WHERE job_id = j.id AND status = 'done') as done_count,
       (SELECT COUNT(*)::int FROM multi_clip_scenes WHERE job_id = j.id AND status IN ('submitted', 'pending')) as pending_count
     FROM multi_clip_jobs j
+    LEFT JOIN director_movies dm ON dm.multi_clip_job_id = j.id
     WHERE j.status = 'generating'
       AND j.created_at < NOW() - INTERVAL '20 minutes'
+      AND dm.id IS NULL
   ` as unknown as { id: string; title: string; genre: string; clip_count: number; persona_id: string; caption: string; done_count: number; pending_count: number }[];
 
   for (const job of partialJobs) {
@@ -558,6 +564,12 @@ async function stitchAndPost(
   });
 
   console.log(`[multi-clip] Stitched ${buffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video`);
+
+  // Mark individual scene clips as 'stitched' — they are now internal/consumed
+  await sql`
+    UPDATE multi_clip_scenes SET status = 'stitched'
+    WHERE job_id = ${jobId} AND status = 'done'
+  `;
 
   return createPremierePost(sql, blob.url, personaId, stitchedCaption, genre, title);
 }

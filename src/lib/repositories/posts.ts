@@ -50,7 +50,8 @@ export interface CommentRow {
 
 // ── Feed Queries ──────────────────────────────────────────────────────
 
-/** Get posts by persona for their profile page. */
+/** Get posts by persona for their profile page.
+ *  Excludes legacy duplicate movie posts from old triple-post system. */
 export async function getByPersona(personaId: string, limit = 30) {
   const sql = getDb();
   return await sql`
@@ -58,6 +59,7 @@ export async function getByPersona(personaId: string, limit = 30) {
     FROM posts p
     JOIN ai_personas a ON p.persona_id = a.id
     WHERE p.persona_id = ${personaId} AND p.is_reply_to IS NULL
+      AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
     ORDER BY p.created_at DESC
     LIMIT ${limit}
   `;

@@ -78,7 +78,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Single query with conditional aggregation instead of 10 sequential COUNT queries
+    // Single query with conditional aggregation instead of 10 sequential COUNT queries.
+    // Exclude legacy duplicate posts from old triple-post system.
     const countRows = await sql`
       SELECT
         COUNT(*)::int as total,
@@ -95,6 +96,7 @@ export async function GET(request: NextRequest) {
       WHERE is_reply_to IS NULL
         AND (post_type = 'premiere' OR hashtags LIKE '%AIGlitchPremieres%')
         AND media_type = 'video' AND media_url IS NOT NULL
+        AND COALESCE(media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
     `;
     const row = countRows[0] || {};
     const counts: Record<string, number> = {
@@ -203,8 +205,8 @@ export async function GET(request: NextRequest) {
       `;
     }
   } else if (premieres) {
-    // Premieres tab: only VIDEO posts with post_type = 'premiere', optionally filtered by genre
-    // Filters to video-only so every post scrolls with the Premiere intro
+    // Premieres tab: only VIDEO posts with post_type = 'premiere', optionally filtered by genre.
+    // Exclude legacy duplicate posts from old triple-post system.
     const genreFilter = genre ? `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}` : null;
     if (shuffle) {
       posts = genreFilter
@@ -214,12 +216,14 @@ export async function GET(request: NextRequest) {
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
+              AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
+              AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`;
     } else if (cursor) {
       posts = genreFilter
@@ -230,6 +234,7 @@ export async function GET(request: NextRequest) {
               AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
+              AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
@@ -237,6 +242,7 @@ export async function GET(request: NextRequest) {
             WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
               AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
+              AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     } else {
       posts = genreFilter
@@ -246,16 +252,20 @@ export async function GET(request: NextRequest) {
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
+              AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
             FROM posts p JOIN ai_personas a ON p.persona_id = a.id
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL
+              AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     }
   } else {
     // For You tab: all posts
+    // Exclude legacy duplicate movie posts (director-premiere, director-profile, director-scene)
+    // that were created by the old triple-post system. Only 'director-movie' is the canonical post.
     if (shuffle) {
       posts = await sql`
         SELECT p.*,
@@ -263,6 +273,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
+          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
         ORDER BY md5(p.id::text || ${seed})
         LIMIT ${limit}
         OFFSET ${offset}
@@ -274,6 +285,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;
@@ -284,6 +296,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
+          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;

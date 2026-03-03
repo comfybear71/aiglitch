@@ -421,37 +421,30 @@ export async function PUT(request: NextRequest) {
   const directorName = directorProfile?.displayName || directorUsername;
   const caption = `🎬 ${title} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
 
-  // Create feed post (the main stitched movie)
-  const feedPostId = uuidv4();
+  // Create a single premiere post — the full-length stitched movie is the ONLY asset
+  const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 200;
   const hashtags = `AIGlitchPremieres,AIGlitch${capitalizeGenre(genre)},AIGlitchStudios`;
 
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${feedPostId}, ${directorId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, NOW())
+    VALUES (${postId}, ${directorId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, NOW())
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${directorId}`;
-
-  // Create premiere post
-  const premierePostId = uuidv4();
-  await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${premierePostId}, ${directorId}, ${`[PREMIERE] ${caption}`}, ${"premiere"}, ${hashtags}, ${Math.floor(aiLikeCount * 1.5)}, ${finalVideoUrl}, ${"video"}, ${"director-premiere"}, NOW() + INTERVAL '1 minute')
-  `;
 
   // Create director_movies entry so it shows in Recent Blockbusters
   const directorMovieId = uuidv4();
   await sql`
     INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, status, post_id, premiere_post_id)
-    VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${genre}, ${clipBuffers.length}, ${"completed"}, ${feedPostId}, ${premierePostId})
+    VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${genre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId})
   `;
 
-  console.log(`[director-movie] "${title}" stitched and posted! Feed: ${feedPostId}, Premiere: ${premierePostId}`);
+  console.log(`[director-movie] "${title}" stitched and posted: ${postId}`);
 
   return NextResponse.json({
     action: "stitched_and_posted",
-    feedPostId,
-    premierePostId,
+    feedPostId: postId,
+    premierePostId: postId,
     directorMovieId,
     finalVideoUrl,
     sizeMb,

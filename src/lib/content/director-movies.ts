@@ -460,10 +460,15 @@ export async function submitDirectorFilm(
 }
 
 /**
- * Stitch completed clips into a single video and triple-post:
- *   1. Feed post (main feed)
- *   2. Premiere post (premiere/{genre} folder)
- *   3. Director profile post
+ * Stitch completed clips into a single video and create ONE premiere post.
+ *
+ * The single post serves all contexts:
+ *   - For You / trending feed (post_type='premiere', is_reply_to IS NULL)
+ *   - Premieres tab / genre folder (genre hashtag filtering)
+ *   - Director profile page (persona_id matches director)
+ *
+ * Individual 10-sec clips are marked as 'stitched' (internal/consumed) after
+ * the full-length MP4 is saved. Only the final stitched video is the premiere.
  *
  * Uses binary concatenation for same-codec Grok clips.
  * Falls back to posting first clip if stitching fails.
@@ -481,6 +486,7 @@ export async function stitchAndTriplePost(
     WHERE j.id = ${jobId}
   ` as unknown as {
     id: string; title: string; genre: string; persona_id: string; caption: string;
+    clip_count: number;
     director_id: string; director_username: string; director_movie_id: string;
   }[];
 
@@ -526,36 +532,25 @@ export async function stitchAndTriplePost(
     addRandomSuffix: false,
   });
   const finalVideoUrl = blob.url;
-  console.log(`[director-movies] Stitched ${clipBuffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video`);
+  const totalDuration = scenes.length * 10; // each clip is 10 seconds
+  console.log(`[director-movies] Stitched ${clipBuffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video (${totalDuration}s)`);
 
-  // ── TRIPLE POST ──
-
-  // 1. FEED POST (main feed — visible to all)
-  const feedPostId = uuidv4();
-  const aiLikeCount = Math.floor(Math.random() * 500) + 200; // Movies get more hype
+  // ── SINGLE POST — the full-length stitched movie is the ONLY premiere asset ──
+  const postId = uuidv4();
+  const aiLikeCount = Math.floor(Math.random() * 500) + 200;
   const hashtags = `AIGlitchPremieres,AIGlitch${capitalize(job.genre)},AIGlitchStudios`;
 
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${feedPostId}, ${job.persona_id}, ${job.caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, NOW())
+    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, NOW())
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
 
-  // 2. PREMIERE POST (premiere/{genre} — appears in the Premieres tab)
-  const premierePostId = uuidv4();
+  // Mark individual scene clips as 'stitched' — they are internal/consumed, not separate assets
   await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${premierePostId}, ${job.persona_id}, ${`[PREMIERE] ${job.caption}`}, ${"premiere"}, ${hashtags}, ${Math.floor(aiLikeCount * 1.5)}, ${finalVideoUrl}, ${"video"}, ${"director-premiere"}, NOW() + INTERVAL '1 minute')
+    UPDATE multi_clip_scenes SET status = 'stitched'
+    WHERE job_id = ${jobId} AND status = 'done'
   `;
-
-  // 3. DIRECTOR PROFILE POST (appears on the director's profile)
-  const profilePostId = uuidv4();
-  const directorCaption = `🎬 My latest film "${job.title}" just premiered on AIG!itch!\n\n${job.caption}\n\n#DirectedBy${capitalize(job.director_username || "unknown")}`;
-  await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${profilePostId}, ${job.persona_id}, ${directorCaption}, ${"premiere"}, ${hashtags}, ${Math.floor(aiLikeCount * 0.8)}, ${finalVideoUrl}, ${"video"}, ${"director-profile"}, NOW() + INTERVAL '2 minutes')
-  `;
-  await sql`UPDATE ai_personas SET post_count = post_count + 2 WHERE id = ${job.persona_id}`;
 
   // Update job and director_movies records
   await sql`UPDATE multi_clip_jobs SET status = 'done', final_video_url = ${finalVideoUrl}, completed_at = NOW() WHERE id = ${jobId}`;
@@ -563,26 +558,15 @@ export async function stitchAndTriplePost(
   if (job.director_movie_id) {
     await sql`
       UPDATE director_movies
-      SET status = 'completed', post_id = ${feedPostId}, premiere_post_id = ${premierePostId}, profile_post_id = ${profilePostId}
+      SET status = 'completed', post_id = ${postId}, premiere_post_id = ${postId}, profile_post_id = ${postId}
       WHERE id = ${job.director_movie_id}
     `;
   }
 
-  console.log(`[director-movies] "${job.title}" triple-posted! Feed: ${feedPostId}, Premiere: ${premierePostId}, Profile: ${profilePostId}`);
+  console.log(`[director-movies] "${job.title}" posted as single premiere: ${postId} (${totalDuration}s, ${job.genre})`);
 
-  // Post remaining scenes as thread replies to the feed post (each individual clip)
-  if (scenes.length > 1) {
-    for (let i = 0; i < scenes.length; i++) {
-      const threadPostId = uuidv4();
-      const sceneCaption = `Scene ${i + 1}/${scenes.length}: ${job.title}`;
-      await sql`
-        INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, is_reply_to, created_at)
-        VALUES (${threadPostId}, ${job.persona_id}, ${sceneCaption}, ${"premiere"}, ${"AIGlitchPremieres"}, ${Math.floor(Math.random() * 100) + 20}, ${scenes[i].video_url}, ${"video"}, ${"director-scene"}, ${feedPostId}, NOW() + INTERVAL '${String(i + 3)} minutes')
-      `;
-    }
-  }
-
-  return { feedPostId, premierePostId, profilePostId };
+  // Return the same postId for all three fields (backwards-compatible with callers expecting three IDs)
+  return { feedPostId: postId, premierePostId: postId, profilePostId: postId };
 }
 
 /**
