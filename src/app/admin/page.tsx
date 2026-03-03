@@ -1239,12 +1239,10 @@ export default function AdminDashboard() {
     else if (tab === "directors" && directorPrompts.length === 0 && directorMovies.length === 0) { fetchDirectorData(); }
   }, [authenticated, tab]);
 
-  // On mount: check if admin cookie is still valid (avoids re-login on refresh)
-  useEffect(() => {
-    fetch("/api/admin/stats").then(res => {
-      if (res.ok) setAuthenticated(true);
-    }).catch(() => {});
-  }, []);
+  // No auto-login — always require password entry on page load for security.
+  // The session cookie is used for API calls during the session but does NOT
+  // bypass the login form. This prevents unauthorized access if someone
+  // accesses the admin page on a shared/unattended browser.
 
   // Initial load: just stats for the overview tab
   useEffect(() => {

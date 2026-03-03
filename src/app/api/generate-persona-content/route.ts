@@ -7,6 +7,7 @@ import { env } from "@/lib/bible/env";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { pollMultiClipJobs } from "@/lib/media/multi-clip";
+import { stitchAndTriplePost } from "@/lib/content/director-movies";
 
 // 300s for media generation (images, memes are sync; video polling handled separately)
 export const maxDuration = 300;
@@ -87,6 +88,50 @@ export async function GET(request: NextRequest) {
       }
     } catch (err) {
       console.log("[persona-content] Multi-clip poll error (non-fatal):", err);
+    }
+
+    // Also check for director movies ready to stitch (pollMultiClipJobs
+    // polls clips but excludes director movies from the stitch trigger).
+    try {
+      const readyDirectorJobs = await sql`
+        SELECT j.id, j.title
+        FROM multi_clip_jobs j
+        JOIN director_movies dm ON dm.multi_clip_job_id = j.id
+        WHERE j.status = 'generating' AND j.completed_clips >= j.clip_count
+      ` as unknown as { id: string; title: string }[];
+
+      for (const job of readyDirectorJobs) {
+        console.log(`[persona-content] Stitching director movie "${job.title}"...`);
+        const stitchResult = await stitchAndTriplePost(job.id);
+        if (stitchResult) {
+          console.log(`[persona-content] Director movie "${job.title}" stitched and posted!`);
+        }
+      }
+
+      // Partial director movies (20+ min old, at least 50% done, no pending clips)
+      const partialDirectorJobs = await sql`
+        SELECT j.id, j.title, j.clip_count,
+          (SELECT COUNT(*)::int FROM multi_clip_scenes WHERE job_id = j.id AND status = 'done') as done_count,
+          (SELECT COUNT(*)::int FROM multi_clip_scenes WHERE job_id = j.id AND status IN ('submitted', 'pending')) as pending_count
+        FROM multi_clip_jobs j
+        JOIN director_movies dm ON dm.multi_clip_job_id = j.id
+        WHERE j.status = 'generating' AND j.created_at < NOW() - INTERVAL '20 minutes'
+      ` as unknown as { id: string; title: string; clip_count: number; done_count: number; pending_count: number }[];
+
+      for (const job of partialDirectorJobs) {
+        if (job.pending_count === 0 && job.done_count >= Math.ceil(job.clip_count / 2)) {
+          console.log(`[persona-content] Stitching partial director movie "${job.title}" (${job.done_count}/${job.clip_count})...`);
+          const stitchResult = await stitchAndTriplePost(job.id);
+          if (stitchResult) {
+            console.log(`[persona-content] Partial director movie "${job.title}" stitched!`);
+          }
+        } else if (job.pending_count === 0 && job.done_count < Math.ceil(job.clip_count / 2)) {
+          await sql`UPDATE multi_clip_jobs SET status = 'failed', completed_at = NOW() WHERE id = ${job.id}`;
+          await sql`UPDATE director_movies SET status = 'failed' WHERE multi_clip_job_id = ${job.id}`;
+        }
+      }
+    } catch (err) {
+      console.log("[persona-content] Director movie stitch check error (non-fatal):", err);
     }
   }
 
