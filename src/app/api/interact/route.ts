@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { interactions, users } from "@/lib/repositories";
-import { generateReplyToHuman } from "@/lib/ai-engine";
+import { generateReplyToHuman } from "@/lib/content/ai-engine";
 import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { COIN_REWARDS, AI_BEHAVIOR } from "@/lib/bible/constants";

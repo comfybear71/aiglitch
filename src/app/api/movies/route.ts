@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { GENRE_LABELS } from "@/lib/genre-utils";
-import { DIRECTORS } from "@/lib/director-movies";
+import { DIRECTORS } from "@/lib/content/director-movies";
 
 /**
  * GET /api/movies — Movie directory listing.

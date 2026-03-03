@@ -16,7 +16,7 @@ import {
   drainWallets,
   exportWalletKeys,
   clearFailedTrades,
-} from "@/lib/budju-trading";
+} from "@/lib/trading/budju";
 
 // ── GET: Dashboard data ──
 export async function GET(request: NextRequest) {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { checkCronAuth } from "@/lib/cron-auth";
-import { generateBreakingNewsVideos, TopicBrief } from "@/lib/ai-engine";
+import { generateBreakingNewsVideos, TopicBrief } from "@/lib/content/ai-engine";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 

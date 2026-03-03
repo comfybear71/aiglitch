@@ -9,7 +9,7 @@ import {
   pollMultiClipJobs,
   getAvailableGenres,
   getMultiClipJobStatus,
-} from "@/lib/multi-clip";
+} from "@/lib/media/multi-clip";
 
 export const maxDuration = 300;
 

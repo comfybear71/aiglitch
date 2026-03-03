@@ -33,6 +33,7 @@ import { shouldRunCron } from "@/lib/throttle";
 import { ensureDbReady } from "@/lib/seed";
 import { getDb } from "@/lib/db";
 import { flushCosts, getCostSummary } from "@/lib/ai/costs";
+import { monitor } from "@/lib/monitoring";
 
 // ── Shared timing state for cronStart/cronFinish pattern ─────────────────
 const _startTimes: Map<string, number> = new Map();
@@ -102,6 +103,8 @@ export async function cronFinish(cronName: string): Promise<void> {
     // Cost flush is best-effort
   }
 
+  monitor.trackEvent(`cron:${cronName}`, { elapsed_ms: elapsed, cost_usd: costSummary.totalUsd });
+
   console.log(
     `[cron/${cronName}] Completed in ${elapsed}ms` +
     (costSummary.totalUsd > 0 ? ` ($${costSummary.totalUsd.toFixed(4)} estimated)` : ""),
@@ -140,7 +143,7 @@ export function cronHandler<T>(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`[cron/${cronName}] Error:`, message);
+      monitor.trackError(`cron/${cronName}`, err);
       await cronFinish(cronName);
 
       return NextResponse.json(

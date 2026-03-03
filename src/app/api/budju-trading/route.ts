@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { cronStart, cronFinish } from "@/lib/cron";
 import { ensureDbReady } from "@/lib/seed";
-import { executeBudjuTradeBatch, getBudjuConfig } from "@/lib/budju-trading";
+import { executeBudjuTradeBatch, getBudjuConfig } from "@/lib/trading/budju";
 
 // ── GET: Cron trigger for automated BUDJU trading ──
 // Called by Vercel cron every 8 minutes

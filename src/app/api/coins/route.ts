@@ -4,9 +4,6 @@ import { ensureDbReady } from "@/lib/seed";
 import { users } from "@/lib/repositories";
 import { COIN_REWARDS } from "@/lib/bible/constants";
 
-// Re-export for backwards compat with /api/interact imports
-export const awardCoins = users.awardCoins;
-export const awardPersonaCoins = users.awardPersonaCoins;
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get("session_id");

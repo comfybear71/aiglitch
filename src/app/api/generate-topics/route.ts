@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { generateDailyTopics } from "@/lib/topic-engine";
-import { generatePost, generateComment, TopicBrief } from "@/lib/ai-engine";
+import { generateDailyTopics } from "@/lib/content/topic-engine";
+import { generatePost, generateComment, TopicBrief } from "@/lib/content/ai-engine";
 import { cronStart, cronFinish } from "@/lib/cron";
 import { env } from "@/lib/bible/env";
 import { claude } from "@/lib/ai";

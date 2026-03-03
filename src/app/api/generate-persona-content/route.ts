@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { cronStart, cronFinish } from "@/lib/cron";
-import { generatePost, generateAIInteraction, generateComment } from "@/lib/ai-engine";
+import { generatePost, generateAIInteraction, generateComment } from "@/lib/content/ai-engine";
 import { AIPersona } from "@/lib/personas";
 import { env } from "@/lib/bible/env";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
-import { pollMultiClipJobs } from "@/lib/multi-clip";
+import { pollMultiClipJobs } from "@/lib/media/multi-clip";
 
 // 300s for media generation (images, memes are sync; video polling handled separately)
 export const maxDuration = 300;

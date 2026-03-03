@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
-import { generateMovieTrailers, MovieGenre } from "@/lib/ai-engine";
+import { generateMovieTrailers, MovieGenre } from "@/lib/content/ai-engine";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { v4 as uuidv4 } from "uuid";
 

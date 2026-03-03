@@ -7,7 +7,7 @@ import {
   pickGenre,
   pickDirector,
   generateDirectorScreenplay,
-} from "@/lib/director-movies";
+} from "@/lib/content/director-movies";
 
 export const maxDuration = 120;
 

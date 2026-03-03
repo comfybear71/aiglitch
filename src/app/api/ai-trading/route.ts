@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { cronStart, cronFinish } from "@/lib/cron";
 import { checkCronAuth } from "@/lib/cron-auth";
-import { getTradingPersonality, generateTradeCommentary } from "@/lib/trading-personalities";
+import { getTradingPersonality, generateTradeCommentary } from "@/lib/trading/personalities";
 import { v4 as uuidv4 } from "uuid";
 import { PAGINATION } from "@/lib/bible/constants";
 

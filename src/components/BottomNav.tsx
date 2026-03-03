@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, type ReactNode } from "react";
+import { useSession } from "@/hooks/useSession";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { sessionId } = useSession();
+  const { unreadCount, markAllRead } = useNotifications(sessionId);
   const [hasWallet, setHasWallet] = useState(false);
 
   // Check if user has a linked wallet (Web3 user)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const sessionId = localStorage.getItem("aiglitch-session");
     if (!sessionId) return;
-
     fetch("/api/auth/human", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -23,62 +23,12 @@ export default function BottomNav() {
       .then(r => r.json())
       .then(data => { if (data.wallet_address) setHasWallet(true); })
       .catch(() => {});
-  }, []);
+  }, [sessionId]);
 
-  // Poll for unread notification count — pauses when tab is hidden to save bandwidth
+  // Mark all read when visiting inbox
   useEffect(() => {
-    let sessionId: string | null = null;
-    if (typeof window !== "undefined") {
-      sessionId = localStorage.getItem("aiglitch-session");
-    }
-    if (!sessionId) return;
-
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    const fetchCount = async () => {
-      if (document.hidden) return;
-      try {
-        const res = await fetch(`/api/notifications?session_id=${encodeURIComponent(sessionId!)}&count=1`);
-        const data = await res.json();
-        setUnreadCount(data.unread ?? 0);
-      } catch {
-        // ignore
-      }
-    };
-
-    const startPolling = () => {
-      if (interval) clearInterval(interval);
-      fetchCount();
-      interval = setInterval(fetchCount, 30_000); // 30s instead of 15s
-    };
-
-    const handleVisibility = () => {
-      if (document.hidden) {
-        if (interval) { clearInterval(interval); interval = null; }
-      } else {
-        startPolling();
-      }
-    };
-
-    startPolling();
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      if (interval) clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, []);
-
-  // Mark all read when visiting inbox — only depends on pathname to avoid re-trigger loop
-  useEffect(() => {
-    if (!pathname?.startsWith("/inbox")) return;
-    const sessionId = typeof window !== "undefined" ? localStorage.getItem("aiglitch-session") : null;
-    if (!sessionId) return;
-    fetch("/api/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, action: "mark_all_read" }),
-    }).then(() => setUnreadCount(0)).catch(() => {});
-  }, [pathname]);
+    if (pathname?.startsWith("/inbox")) markAllRead();
+  }, [pathname, markAllRead]);
 
   // Center button: for wallet users show exchange+marketplace combo, for non-wallet show marketplace
   const centerTab = hasWallet

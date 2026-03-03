@@ -12,9 +12,9 @@ import {
   submitDirectorFilm,
   stitchAndTriplePost,
   DIRECTORS,
-} from "@/lib/director-movies";
-import { pollMultiClipJobs } from "@/lib/multi-clip";
-import { concatMP4Clips } from "@/lib/mp4-concat";
+} from "@/lib/content/director-movies";
+import { pollMultiClipJobs } from "@/lib/media/multi-clip";
+import { concatMP4Clips } from "@/lib/media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "@/lib/genre-utils";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
