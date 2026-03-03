@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       current_block: getCurrentBlock(),
       network: "Solana Mainnet-Beta",
       token_name: "GlitchCoin",
-      token_symbol: "$GLITCH",
+      token_symbol: "§GLITCH",
       token_standard: "SPL Token",
       contract_address: "G1tCHc0iN69420SoLaNaDeGeNeRaTe42069BrrRrR",
       recent_transactions: recentTx,
@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
     const coinRows = await sql`SELECT balance FROM glitch_coins WHERE session_id = ${session_id}`;
     const coinBalance = coinRows.length > 0 ? Number(coinRows[0].balance) : 0;
     if (coinBalance < amount) {
-      return NextResponse.json({ error: "Insufficient $GLITCH balance", balance: coinBalance }, { status: 402 });
+      return NextResponse.json({ error: "Insufficient §GLITCH balance", balance: coinBalance }, { status: 402 });
     }
 
     // Check recipient wallet exists
@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
     const block = getCurrentBlock();
     await sql`
       INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
-      VALUES (${uuidv4()}, ${txHash}, ${block}, ${senderAddr}, ${to_address}, ${amount}, 'GLITCH', 5000, 'confirmed', ${"Transfer " + amount + " $GLITCH"}, NOW())
+      VALUES (${uuidv4()}, ${txHash}, ${block}, ${senderAddr}, ${to_address}, ${amount}, 'GLITCH', 5000, 'confirmed', ${"Transfer " + amount + " §GLITCH"}, NOW())
     `;
 
     // Record in coin_transactions for history

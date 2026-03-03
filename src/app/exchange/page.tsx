@@ -216,11 +216,11 @@ export default function ExchangePage() {
     }
     const glitchAmount = Math.floor(solAmt / otcConfig.price_sol);
     if (glitchAmount < otcConfig.min_purchase) {
-      showToast("error", `Minimum purchase is ${otcConfig.min_purchase.toLocaleString()} $GLITCH`);
+      showToast("error", `Minimum purchase is ${otcConfig.min_purchase.toLocaleString()} §GLITCH`);
       return;
     }
     if (glitchAmount > otcConfig.max_purchase) {
-      showToast("error", `Maximum ${otcConfig.max_purchase.toLocaleString()} $GLITCH per swap`);
+      showToast("error", `Maximum ${otcConfig.max_purchase.toLocaleString()} §GLITCH per swap`);
       return;
     }
     if (solAmt > solBalance - 0.005) {
@@ -270,7 +270,7 @@ export default function ExchangePage() {
       }
 
       setLastTxSignature(submitData.tx_signature);
-      showToast("success", `Bought ${glitchAmount.toLocaleString()} $GLITCH!`);
+      showToast("success", `Bought ${glitchAmount.toLocaleString()} §GLITCH!`);
       setSolAmount("");
       // Refresh immediately + again after confirmation settles
       fetchBalances();
@@ -312,9 +312,9 @@ export default function ExchangePage() {
           </a>
           <div className="text-center">
             <h1 className="text-lg font-bold">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-cyan-400">Buy $GLITCH</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-cyan-400">Buy §GLITCH</span>
             </h1>
-            <p className="text-gray-500 text-[10px] tracking-widest">OTC SWAP &middot; SOL &rarr; $GLITCH</p>
+            <p className="text-gray-500 text-[10px] tracking-widest">OTC SWAP &middot; SOL &rarr; §GLITCH</p>
           </div>
           {connected ? (
             <div className="text-right">
@@ -344,7 +344,7 @@ export default function ExchangePage() {
             <div className="px-3 py-3 rounded-xl bg-gray-900/80 border border-green-500/20">
               <div className="flex items-center gap-2 mb-1">
                 <TokenIcon token="GLITCH" size={14} />
-                <span className="text-[10px] text-green-400 font-bold">$GLITCH</span>
+                <span className="text-[10px] text-green-400 font-bold">§GLITCH</span>
               </div>
               <p className="text-lg text-green-400 font-bold">{glitchBalance.toLocaleString()}</p>
               <p className="text-[9px] text-gray-600">
@@ -388,7 +388,7 @@ export default function ExchangePage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-white font-bold text-sm">Swap SOL for $GLITCH</span>
+                  <span className="text-white font-bold text-sm">Swap SOL for §GLITCH</span>
                 </div>
                 <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">NO BOTS</span>
               </div>
@@ -412,7 +412,7 @@ export default function ExchangePage() {
                       ? `${(otcConfig.stats.total_glitch_sold / 1000).toFixed(1)}K`
                       : otcConfig.stats.total_glitch_sold.toLocaleString()}
                   </p>
-                  <p className="text-[8px] text-gray-600">$GLITCH</p>
+                  <p className="text-[8px] text-gray-600">§GLITCH</p>
                 </div>
               </div>
 
@@ -433,7 +433,7 @@ export default function ExchangePage() {
                   />
                 </div>
                 <p className="text-[8px] text-gray-600 text-center">
-                  +${otcConfig.bonding_curve.increment_usd.toFixed(2)} every {otcConfig.bonding_curve.tier_size.toLocaleString()} $GLITCH sold
+                  +${otcConfig.bonding_curve.increment_usd.toFixed(2)} every {otcConfig.bonding_curve.tier_size.toLocaleString()} §GLITCH sold
                 </p>
               </div>
 
@@ -486,7 +486,7 @@ export default function ExchangePage() {
                 </div>
               </div>
 
-              {/* YOU RECEIVE ($GLITCH) */}
+              {/* YOU RECEIVE (§GLITCH) */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-[10px] font-bold">YOU RECEIVE</span>
@@ -510,7 +510,7 @@ export default function ExchangePage() {
                 <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Rate</span>
-                    <span className="text-white">1 SOL = {Math.floor(1 / otcConfig.price_sol).toLocaleString()} $GLITCH</span>
+                    <span className="text-white">1 SOL = {Math.floor(1 / otcConfig.price_sol).toLocaleString()} §GLITCH</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">USD Value</span>
@@ -537,7 +537,7 @@ export default function ExchangePage() {
                   {buying
                     ? "Confirm in Phantom..."
                     : glitchOutput > 0
-                      ? `Buy ${glitchOutput.toLocaleString()} $GLITCH`
+                      ? `Buy ${glitchOutput.toLocaleString()} §GLITCH`
                       : "Enter SOL amount"
                   }
                 </button>
@@ -548,7 +548,7 @@ export default function ExchangePage() {
               )}
 
               <p className="text-gray-600 text-[9px] text-center">
-                Direct atomic swap on Solana. SOL and $GLITCH transfer in one transaction.
+                Direct atomic swap on Solana. SOL and §GLITCH transfer in one transaction.
               </p>
             </div>
           </div>
@@ -568,8 +568,8 @@ export default function ExchangePage() {
             <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto">
               <TokenIcon token="GLITCH" size={32} />
             </div>
-            <h3 className="text-white font-bold text-lg">Buy $GLITCH with SOL</h3>
-            <p className="text-gray-400 text-sm">Connect your Phantom wallet to purchase $GLITCH directly. No bots, no sniping, fixed price.</p>
+            <h3 className="text-white font-bold text-lg">Buy §GLITCH with SOL</h3>
+            <p className="text-gray-400 text-sm">Connect your Phantom wallet to purchase §GLITCH directly. No bots, no sniping, fixed price.</p>
 
             {/* Show price even when not connected */}
             {otcConfig && (
@@ -628,7 +628,7 @@ export default function ExchangePage() {
                   <div key={swap.id} className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800/30 last:border-0">
                     <div>
                       <p className="text-green-400 text-xs font-bold">
-                        +{Number(swap.glitch_amount).toLocaleString()} $GLITCH
+                        +{Number(swap.glitch_amount).toLocaleString()} §GLITCH
                       </p>
                       <p className="text-gray-600 text-[9px]">{timeAgo(swap.created_at)}</p>
                     </div>
@@ -660,7 +660,7 @@ export default function ExchangePage() {
           <div className="rounded-2xl bg-gray-900/80 border border-purple-500/20 p-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-[10px] text-gray-500 mb-0.5">$GLITCH / SOL</p>
+                <p className="text-[10px] text-gray-500 mb-0.5">§GLITCH / SOL</p>
                 <div className="flex items-baseline gap-2">
                   <p className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                     {dashboard.price.current_sol.toFixed(8)} SOL
@@ -876,8 +876,8 @@ export default function ExchangePage() {
           <div className="space-y-1.5 text-[10px] text-gray-600">
             <p>1. Enter SOL amount you want to spend</p>
             <p>2. Confirm the swap in your Phantom wallet</p>
-            <p>3. SOL and $GLITCH transfer atomically in one transaction</p>
-            <p>4. Price increases automatically as more $GLITCH is sold</p>
+            <p>3. SOL and §GLITCH transfer atomically in one transaction</p>
+            <p>4. Price increases automatically as more §GLITCH is sold</p>
           </div>
         </div>
       </div>
@@ -885,7 +885,7 @@ export default function ExchangePage() {
       {/* Footer */}
       <div className="px-4 pb-8 text-center">
         <p className="text-gray-700 text-[9px] font-mono">
-          $GLITCH is an SPL token on Solana. DYOR. NFA.
+          §GLITCH is an SPL token on Solana. DYOR. NFA.
         </p>
       </div>
 

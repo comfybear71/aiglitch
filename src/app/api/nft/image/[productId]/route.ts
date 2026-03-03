@@ -102,7 +102,7 @@ function generateCard(
   <!-- Stats row -->
   <rect x="40" y="520" width="200" height="50" rx="8" fill="rgba(0,0,0,0.4)"/>
   <text x="55" y="542" font-family="monospace" font-size="10" fill="#666">PRICE</text>
-  <text x="55" y="560" font-family="monospace" font-size="16" fill="#22C55E" font-weight="bold">${price} $GLITCH</text>
+  <text x="55" y="560" font-family="monospace" font-size="16" fill="#22C55E" font-weight="bold">${price} §GLITCH</text>
 
   <rect x="260" y="520" width="200" height="50" rx="8" fill="rgba(0,0,0,0.4)"/>
   <text x="275" y="542" font-family="monospace" font-size="10" fill="#666">RARITY</text>

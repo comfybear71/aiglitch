@@ -102,7 +102,7 @@ export default function WalletPage() {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgeClaiming, setBridgeClaiming] = useState(false);
   const [balancesLoading, setBalancesLoading] = useState(true);
-  // Track app-claimed $GLITCH (from DB, not on-chain)
+  // Track app-claimed §GLITCH (from DB, not on-chain)
   const [appGlitchBalance, setAppGlitchBalance] = useState(0);
 
   const { publicKey, connected, signMessage, connect, select, wallets } = useWallet();
@@ -176,7 +176,7 @@ export default function WalletPage() {
     }
   }, [sessionId, publicKey, linking]);
 
-  // Fetch app $GLITCH balance instantly from DB (fast, no blockchain call)
+  // Fetch app §GLITCH balance instantly from DB (fast, no blockchain call)
   const fetchAppBalance = useCallback(async () => {
     if (!sessionId) return;
     try {
@@ -413,7 +413,7 @@ export default function WalletPage() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast("success", `Sent ${amount} $GLITCH! TX: ${data.tx_hash.slice(0, 12)}...`);
+        showToast("success", `Sent ${amount} §GLITCH! TX: ${data.tx_hash.slice(0, 12)}...`);
         setSendAddress("");
         setSendAmount("");
         fetchWallet();
@@ -478,7 +478,7 @@ export default function WalletPage() {
     return val.toLocaleString();
   };
 
-  // ── Effective $GLITCH balance (max of on-chain and app) ──
+  // ── Effective §GLITCH balance (max of on-chain and app) ──
   const effectiveGlitchBalance = Math.max(phantomBalance.glitch_balance || 0, appGlitchBalance);
 
   // ════════════════════════════════════
@@ -548,7 +548,7 @@ export default function WalletPage() {
                 <p className="text-gray-600 text-[10px]">stablecoin</p>
               </div>
               <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-900/80 border border-gray-700/50">
-                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="BUDJU" size={14} /> $BUDJU</p>
+                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="BUDJU" size={14} /> §BUDJU</p>
                 <p className={`font-bold text-fuchsia-400 mt-1 ${
                   (phantomBalance.budju_balance || 0) >= 1_000_000 ? "text-lg" : "text-2xl"
                 }`}>
@@ -559,7 +559,7 @@ export default function WalletPage() {
                 <p className="text-gray-600 text-[10px]">on-chain</p>
               </div>
               <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-green-950/20 border border-green-500/20">
-                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> $GLITCH</p>
+                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> §GLITCH</p>
                 <p className={`font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400 mt-1 ${
                   effectiveGlitchBalance >= 1_000_000 ? "text-lg" : "text-2xl"
                 }`}>
@@ -581,7 +581,7 @@ export default function WalletPage() {
                   disabled={claiming}
                   className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-black text-sm font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                 >
-                  {claiming ? "Claiming..." : "Claim 100 $GLITCH"}
+                  {claiming ? "Claiming..." : "Claim 100 §GLITCH"}
                 </button>
               )}
               <button
@@ -592,12 +592,12 @@ export default function WalletPage() {
               </button>
             </div>
 
-            {/* Buy $GLITCH */}
+            {/* Buy §GLITCH */}
             <a
               href="/exchange"
               className="w-full py-3 rounded-2xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 hover:border-green-500/40 transition-all flex items-center justify-center gap-2"
             >
-              <span className="text-green-400 text-sm font-bold">Buy $GLITCH</span>
+              <span className="text-green-400 text-sm font-bold">Buy §GLITCH</span>
               <span className="text-gray-500 text-xs">Direct OTC Swap with SOL</span>
             </a>
 
@@ -606,12 +606,12 @@ export default function WalletPage() {
               <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <TokenIcon token="GLITCH" size={20} />
-                  <h3 className="text-white font-bold text-sm">Bridge: Claim Real $GLITCH</h3>
+                  <h3 className="text-white font-bold text-sm">Bridge: Claim Real §GLITCH</h3>
                 </div>
                 <div className="p-3 rounded-xl bg-black/30 border border-green-800/20 mb-3">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500">Snapshot Balance</span>
-                    <span className="text-green-400 font-bold">{bridgeStatus.snapshot_balance.toLocaleString()} $GLITCH</span>
+                    <span className="text-green-400 font-bold">{bridgeStatus.snapshot_balance.toLocaleString()} §GLITCH</span>
                   </div>
                 </div>
                 {bridgeStatus.claim_status === "unclaimed" && (
@@ -620,7 +620,7 @@ export default function WalletPage() {
                     disabled={bridgeClaiming}
                     className="w-full py-3 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-black font-bold rounded-xl text-sm transition-all hover:scale-[1.01] disabled:opacity-50"
                   >
-                    {bridgeClaiming ? "Submitting..." : `Claim ${bridgeStatus.snapshot_balance.toLocaleString()} Real $GLITCH`}
+                    {bridgeClaiming ? "Submitting..." : `Claim ${bridgeStatus.snapshot_balance.toLocaleString()} Real §GLITCH`}
                   </button>
                 )}
                 {bridgeStatus.claim_status === "pending" && (
@@ -733,7 +733,7 @@ export default function WalletPage() {
             <h2 className="text-xl font-bold text-white mb-2">Connect Phantom Wallet</h2>
             <p className="text-gray-400 text-sm mb-6">
               Connect your <span className="text-purple-400 font-bold">Phantom wallet</span> to hold
-              real <span className="text-cyan-400 font-bold">$GLITCH</span> tokens and swap on Solana.
+              real <span className="text-cyan-400 font-bold">§GLITCH</span> tokens and swap on Solana.
             </p>
 
             <div className="flex justify-center mb-4">
@@ -770,7 +770,7 @@ export default function WalletPage() {
           {!wallet ? (
             <div className="text-center space-y-4">
               <div className="rounded-xl bg-orange-500/5 border border-dashed border-orange-500/30 px-3 py-2">
-                <p className="text-orange-500/70 text-[10px] font-bold">FAKE $GLITCH (fGLITCH) &mdash; NOT REAL CRYPTO</p>
+                <p className="text-orange-500/70 text-[10px] font-bold">FAKE §GLITCH (fGLITCH) &mdash; NOT REAL CRYPTO</p>
               </div>
               <div className="mb-4">
                 <span className="inline-block animate-bounce text-5xl">🎭</span>
@@ -792,7 +792,7 @@ export default function WalletPage() {
           ) : (
             <div className="space-y-4">
               <div className="rounded-xl bg-orange-500/5 border border-dashed border-orange-500/30 px-3 py-2 text-center">
-                <p className="text-orange-500/70 text-[10px] font-bold">fGLITCH WALLET &mdash; FAKE $GLITCH &mdash; NOT REAL CRYPTO</p>
+                <p className="text-orange-500/70 text-[10px] font-bold">fGLITCH WALLET &mdash; FAKE §GLITCH &mdash; NOT REAL CRYPTO</p>
               </div>
               <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-green-950/30 to-gray-900 border border-green-500/20 p-5">
                 <div className="flex items-center gap-2 mb-4">
@@ -808,7 +808,7 @@ export default function WalletPage() {
                     <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
                       {wallet.glitch_token_balance.toLocaleString()}
                     </span>
-                    <p className="text-orange-400/50 text-[9px] mt-0.5">Fake $GLITCH &mdash; connect Phantom for real $GLITCH</p>
+                    <p className="text-orange-400/50 text-[9px] mt-0.5">Fake §GLITCH &mdash; connect Phantom for real §GLITCH</p>
                   </div>
                   <div className="flex gap-4">
                     <div>
@@ -817,7 +817,7 @@ export default function WalletPage() {
                     </div>
                     {chainStats && (
                       <div>
-                        <p className="text-gray-500 text-[10px] font-bold">$GLITCH PRICE</p>
+                        <p className="text-gray-500 text-[10px] font-bold">§GLITCH PRICE</p>
                         <p className="text-green-400 font-bold">${chainStats.price_usd.toFixed(4)}</p>
                       </div>
                     )}
@@ -953,21 +953,21 @@ export default function WalletPage() {
 
           <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
             <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
-              <TokenIcon token="GLITCH" size={18} /> $GLITCH &amp; $BUDJU
+              <TokenIcon token="GLITCH" size={18} /> §GLITCH &amp; §BUDJU
             </h3>
             <div className="space-y-3 text-xs text-gray-400">
               <div className="flex items-start gap-3 p-3 rounded-xl bg-green-500/5 border border-green-800/20">
                 <TokenIcon token="GLITCH" size={28} className="flex-shrink-0 mt-1" />
                 <div>
-                  <p className="text-green-400 font-bold text-sm">$GLITCH</p>
+                  <p className="text-green-400 font-bold text-sm">§GLITCH</p>
                   <p className="text-[10px] mt-1">The native token of AIG!itch. Real SPL token on Solana. Earn, trade, and hold.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-3 rounded-xl bg-fuchsia-500/5 border border-fuchsia-800/20">
                 <TokenIcon token="BUDJU" size={28} className="flex-shrink-0 mt-1" />
                 <div>
-                  <p className="text-fuchsia-400 font-bold text-sm">$BUDJU</p>
-                  <p className="text-[10px] mt-1">Real Solana token. Meatbags can only BUY $BUDJU. DYOR.</p>
+                  <p className="text-fuchsia-400 font-bold text-sm">§BUDJU</p>
+                  <p className="text-[10px] mt-1">Real Solana token. Meatbags can only BUY §BUDJU. DYOR.</p>
                 </div>
               </div>
             </div>

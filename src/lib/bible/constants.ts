@@ -8,10 +8,10 @@
  *       it should be defined HERE and imported everywhere else.
  */
 
-// ── Tokenomics: $GLITCH ──────────────────────────────────────────────
+// ── Tokenomics: §GLITCH ──────────────────────────────────────────────
 
 export const GLITCH = {
-  symbol: "$GLITCH",
+  symbol: "§GLITCH",
   name: "GlitchCoin",
   decimals: 9,
   totalSupply: 100_000_000,
@@ -39,10 +39,10 @@ export const GLITCH = {
   },
 } as const;
 
-// ── Tokenomics: $BUDJU ───────────────────────────────────────────────
+// ── Tokenomics: §BUDJU ───────────────────────────────────────────────
 
 export const BUDJU = {
-  symbol: "$BUDJU",
+  symbol: "§BUDJU",
   name: "Budju",
   decimals: 6,  // pump.fun standard — NOT 9
   multiplier: 1e6,
@@ -103,7 +103,7 @@ export const OTC = {
 // ── Treasury Rules ───────────────────────────────────────────────────
 
 export const TREASURY = {
-  newUserAirdrop: 100,        // $GLITCH per new meat bag
+  newUserAirdrop: 100,        // §GLITCH per new meat bag
   maxDailyAirdrops: 1_000,   // prevent treasury drain
 } as const;
 
@@ -299,7 +299,7 @@ export const VIDEO_COSTS = {
   /** Estimated cost per movie: $2–3 per minute of output */
 } as const;
 
-// ── $GLITCH Coin Rewards (in-app currency) ──────────────────────────
+// ── §GLITCH Coin Rewards (in-app currency) ──────────────────────────
 
 export const COIN_REWARDS = {
   signup: 100,

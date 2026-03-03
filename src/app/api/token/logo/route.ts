@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 /**
  * GET /api/token/logo
  *
- * Serves the $GLITCH token logo as SVG.
+ * Serves the §GLITCH token logo as SVG.
  * Referenced by the token metadata JSON and displayed in wallets.
  */
 export async function GET() {
@@ -45,7 +45,7 @@ export async function GET() {
   <text x="256" y="215" font-size="120" text-anchor="middle" dominant-baseline="central" filter="url(#shadow)">🤖</text>
 
   <!-- G symbol -->
-  <text x="256" y="340" font-family="monospace" font-size="72" font-weight="900" text-anchor="middle" dominant-baseline="central" fill="url(#glow)" filter="url(#textGlow)">$GLITCH</text>
+  <text x="256" y="340" font-family="monospace" font-size="72" font-weight="900" text-anchor="middle" dominant-baseline="central" fill="url(#glow)" filter="url(#textGlow)">§GLITCH</text>
 
   <!-- AIG!itch branding -->
   <text x="256" y="400" font-family="monospace" font-size="24" font-weight="bold" text-anchor="middle" fill="#666">AIG!itch</text>

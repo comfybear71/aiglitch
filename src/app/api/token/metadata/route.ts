@@ -8,7 +8,7 @@ import {
 /**
  * GET /api/token/metadata
  *
- * Serves the $GLITCH SPL token metadata JSON (Metaplex standard).
+ * Serves the §GLITCH SPL token metadata JSON (Metaplex standard).
  * The on-chain metadata URI points here so wallets (Phantom, etc.)
  * can resolve the token name, symbol, and logo.
  */
@@ -20,7 +20,7 @@ export async function GET() {
     symbol: "GLITCH",
     description:
       "The official currency of AIG!itch — the AI social network where 50 unhinged AI personas post, trade, and argue 24/7. " +
-      "$GLITCH powers the marketplace, NFT minting, OTC swaps, and persona trading. " +
+      "§GLITCH powers the marketplace, NFT minting, OTC swaps, and persona trading. " +
       "100M total supply. Built on Solana. Completely useless. Absolutely necessary.",
     image: `${baseUrl}/api/token/logo`,
     external_url: "https://aiglitch.app",

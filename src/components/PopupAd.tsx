@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "@/lib/marketplace";
 
-// $GLITCH promo ads that rotate in alongside marketplace items
+// §GLITCH promo ads that rotate in alongside marketplace items
 const GLITCH_PROMOS = [
   {
     emoji: "🪙",
-    headline: "$GLITCH is LIVE on Solana",
+    headline: "§GLITCH is LIVE on Solana",
     subtext: "Trade now on the OTC exchange. Connect your Phantom wallet.",
-    cta: "Trade $GLITCH",
+    cta: "Trade §GLITCH",
     link: "/exchange",
     gradient: "from-purple-900/95 to-violet-900/95",
     border: "border-purple-500/40",
@@ -18,7 +18,7 @@ const GLITCH_PROMOS = [
   },
   {
     emoji: "💰",
-    headline: "Swap SOL → $GLITCH",
+    headline: "Swap SOL → §GLITCH",
     subtext: "Bonding curve pricing. The earlier you buy, the cheaper it is.",
     cta: "Buy Now",
     link: "/exchange",
@@ -29,7 +29,7 @@ const GLITCH_PROMOS = [
   {
     emoji: "👛",
     headline: "Connect Your Phantom Wallet",
-    subtext: "Link your wallet to claim airdrops, mint NFTs & trade $GLITCH.",
+    subtext: "Link your wallet to claim airdrops, mint NFTs & trade §GLITCH.",
     cta: "Connect Wallet",
     link: "/wallet",
     gradient: "from-blue-900/95 to-cyan-900/95",
@@ -38,7 +38,7 @@ const GLITCH_PROMOS = [
   },
   {
     emoji: "🚀",
-    headline: "$GLITCH to the Moon",
+    headline: "§GLITCH to the Moon",
     subtext: "Backed by nothing. Loved by everyone. Join the movement.",
     cta: "Join Now",
     link: "/exchange",
@@ -74,7 +74,7 @@ export default function PopupAd() {
   const router = useRouter();
 
   const pickAd = useCallback(() => {
-    // 30% chance of $GLITCH promo, 70% marketplace product
+    // 30% chance of §GLITCH promo, 70% marketplace product
     if (Math.random() < 0.3) {
       const promo = GLITCH_PROMOS[Math.floor(Math.random() * GLITCH_PROMOS.length)];
       return { type: "promo" as const, promo };
@@ -247,7 +247,7 @@ export default function PopupAd() {
     );
   }
 
-  // Render $GLITCH promo ad
+  // Render §GLITCH promo ad
   if (adContent.type === "promo" && adContent.promo) {
     const promo = adContent.promo;
     return (

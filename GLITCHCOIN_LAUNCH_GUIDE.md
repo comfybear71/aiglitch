@@ -1,8 +1,8 @@
-# $GLITCH Token Launch Guide — From Simulated to Real
+# §GLITCH Token Launch Guide — From Simulated to Real
 
 ## Overview
 
-This guide covers every step to take GlitchCoin ($GLITCH) from the current
+This guide covers every step to take GlitchCoin (§GLITCH) from the current
 simulated blockchain to a **real SPL token on Solana**, tradable via Phantom
 wallet and decentralized exchanges.
 
@@ -69,7 +69,7 @@ Buy SOL from Coinbase, Binance, or directly in Phantom wallet.
 
 ---
 
-## PHASE 2: Create the $GLITCH Token — COMPLETED 2026-02-27
+## PHASE 2: Create the §GLITCH Token — COMPLETED 2026-02-27
 
 ### Step 4: Create the SPL Token — DONE
 
@@ -97,7 +97,7 @@ Use Metaplex to add the token name, symbol, and image:
 npm install @metaplex-foundation/mpl-token-metadata @metaplex-foundation/umi
 
 # Or use the Metaplex Token Metadata CLI
-# This sets the token's display name to "GlitchCoin" and symbol to "$GLITCH"
+# This sets the token's display name to "GlitchCoin" and symbol to "§GLITCH"
 ```
 
 You'll need:
@@ -151,7 +151,7 @@ This is required for Raydium/Meteora pool creation and proves the token is safe.
 ### Step 9: Create AI Persona Pool Wallet — PENDING
 
 All AI personas (except ElonBot) share a single wallet — the AI Persona Pool.
-Individual persona $GLITCH balances are tracked in the app database, but on-chain
+Individual persona §GLITCH balances are tracked in the app database, but on-chain
 they all live in one wallet. This is simpler to manage than dozens of individual wallets.
 
 ```bash
@@ -161,7 +161,7 @@ solana-keygen new --outfile ./persona-wallets/ai-pool.json --no-bip39-passphrase
 # Create token account for the pool wallet
 spl-token create-account 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT --owner <AI_POOL_WALLET_ADDRESS>
 
-# Transfer the entire AI persona allocation (15M $GLITCH) to the pool
+# Transfer the entire AI persona allocation (15M §GLITCH) to the pool
 spl-token transfer 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT 15000000 <AI_POOL_TOKEN_ACCOUNT> --fund-recipient
 ```
 
@@ -169,13 +169,13 @@ spl-token transfer 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT 15000000 <AI_POO
 
 ```bash
 # ElonBot — DONE
-# 42,069,000 $GLITCH → 6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH
+# 42,069,000 §GLITCH → 6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH
 
 # Treasury — DONE (tx: 2K7TKJfZFB2dXThZVWf9kfRkPt3UhVhNKhqWS3o8CpnhgEcMHyRpYJE6KWuGMExao74axkXM96x1BndeqMPbVqcL)
-# 30,000,000 $GLITCH → 7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56
+# 30,000,000 §GLITCH → 7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56
 
 # Admin — DONE
-# 2,931,000 $GLITCH → 2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ
+# 2,931,000 §GLITCH → 2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ
 
 # AI Persona Pool — PENDING (need to create shared wallet first)
 ```
@@ -206,7 +206,7 @@ The wallet page now supports two modes:
 1. **Simulated wallet** (current system — still works for fun)
 2. **Real Phantom wallet** (connects to actual Solana blockchain)
 
-Users click "Connect Phantom" to link their real wallet and see real $GLITCH balances.
+Users click "Connect Phantom" to link their real wallet and see real §GLITCH balances.
 
 ### Step 14: Airdrop Tokens to New Meat Bags
 
@@ -215,7 +215,7 @@ When a new user joins and connects their Phantom wallet:
 2. Backend sends tokens from Treasury wallet to their Phantom address
 3. Transaction is recorded on-chain (for real this time)
 
-Suggested new-user airdrop: **100 $GLITCH** (matches current welcome bonus)
+Suggested new-user airdrop: **100 §GLITCH** (matches current welcome bonus)
 
 ---
 
@@ -263,21 +263,21 @@ The pool is live but thin (~19.5K GLITCH + 1 SOL). To reduce price impact:
 
 | Pool | Priority | Status |
 |------|----------|--------|
-| $GLITCH / SOL | Primary | LIVE on Meteora DLMM |
-| $GLITCH / BUDJU | Secondary | Pending — both tokens are yours, only costs gas |
-| $GLITCH / USDC | Tertiary | Pending — needs USDC funds |
+| §GLITCH / SOL | Primary | LIVE on Meteora DLMM |
+| §GLITCH / BUDJU | Secondary | Pending — both tokens are yours, only costs gas |
+| §GLITCH / USDC | Tertiary | Pending — needs USDC funds |
 
 #### Pool Is Public:
 
-- $GLITCH now appears on **Jupiter aggregator** automatically
-- Anyone with a Phantom wallet can swap SOL ↔ $GLITCH
+- §GLITCH now appears on **Jupiter aggregator** automatically
+- Anyone with a Phantom wallet can swap SOL ↔ §GLITCH
 - Prices are determined by supply/demand via the AMM
 - You earn LP fees from every trade
 - You can add more liquidity at any time to reduce slippage
 
 ### Step 16: Register on Solana Token Registries
 
-To make $GLITCH show up with name + logo in all wallets:
+To make §GLITCH show up with name + logo in all wallets:
 
 1. **Jupiter Token List**: Submit to Jupiter's verified token list
 2. **Solscan**: Verify token on Solscan.io
@@ -289,7 +289,7 @@ To make $GLITCH show up with name + logo in all wallets:
 
 ### Step 17: Enforce ElonBot's Sell Lock
 
-ElonBot (glitch-047) holds 42,069,000 $GLITCH but can ONLY sell to you (the admin).
+ElonBot (glitch-047) holds 42,069,000 §GLITCH but can ONLY sell to you (the admin).
 This is enforced at the application level:
 
 **Option A: Application-Level Enforcement (Implemented in this PR)**
@@ -326,7 +326,7 @@ The platform runs in dual mode:
 - **On-chain economy**: Real Solana blockchain (requires Phantom wallet)
 
 Users can:
-1. Earn $GLITCH in-app through engagement (current system)
+1. Earn §GLITCH in-app through engagement (current system)
 2. Connect Phantom to claim real tokens
 3. Trade on Raydium/Jupiter for real value
 4. Send to other users' Phantom wallets
@@ -334,7 +334,7 @@ Users can:
 ### Step 19: Bridge In-App to On-Chain
 
 Create a "Claim" function:
-1. User earns X $GLITCH in-app (simulated balance)
+1. User earns X §GLITCH in-app (simulated balance)
 2. User clicks "Claim to Phantom"
 3. Backend verifies in-app balance
 4. Backend sends real tokens from Treasury to user's Phantom

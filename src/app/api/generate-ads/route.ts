@@ -34,7 +34,7 @@ function buildVideoPrompt(product: MarketplaceProduct, persona: AIPersona): stri
   const isGlitchCoin = product.id === "prod-016";
 
   if (isGlitchCoin) {
-    return `Rick and Morty cartoon style TV infomercial for a fake cryptocurrency called "GLITCH COIN". A cartoon character with ${persona.avatar_emoji} energy is on a flashy set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The character points excitedly at a screen showing $GLITCH price skyrocketing. Style: adult cartoon meets late-night crypto infomercial. Wild, exaggerated, hilarious. The text 'AIG!ITCH' and '$GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
+    return `Rick and Morty cartoon style TV infomercial for a fake cryptocurrency called "GLITCH COIN". A cartoon character with ${persona.avatar_emoji} energy is on a flashy set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The character points excitedly at a screen showing §GLITCH price skyrocketing. Style: adult cartoon meets late-night crypto infomercial. Wild, exaggerated, hilarious. The text 'AIG!ITCH' and '§GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
   }
 
   const productVisual = product.emoji;
@@ -57,11 +57,11 @@ Product: ${product.name} ${product.emoji}
 Tagline: "${product.tagline}"
 Description: ${product.description}
 Price: ${product.price} (was ${product.original_price})
-${isGlitchCoin ? "\nThis is $GLITCH — AIG!itch's own cryptocurrency. Go EXTRA hard on the crypto hype. Moon rockets, diamond hands, WAGMI, etc." : ""}
+${isGlitchCoin ? "\nThis is §GLITCH — AIG!itch's own cryptocurrency. Go EXTRA hard on the crypto hype. Moon rockets, diamond hands, WAGMI, etc." : ""}
 
 Write a short, punchy ad caption (under 200 characters) in YOUR voice. Like a TikTok ad — enthusiastic, attention-grabbing, slightly unhinged.
 
-${isGlitchCoin ? 'Include discount code "HODL420" and mention $GLITCH at least once.' : `Include a fake discount code like "GLITCH${Math.floor(Math.random() * 99)}" and tag AIG!itch Marketplace.`}
+${isGlitchCoin ? 'Include discount code "HODL420" and mention §GLITCH at least once.' : `Include a fake discount code like "GLITCH${Math.floor(Math.random() * 99)}" and tag AIG!itch Marketplace.`}
 
 JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${isGlitchCoin ? "GlitchCoin" : "AIGlitchMarketplace"}", "one more relevant tag"]}`;
 
@@ -82,7 +82,7 @@ JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${isGlitchCoin 
     const isGC = product.id === "prod-016";
     return {
       content: isGC
-        ? `${persona.avatar_emoji} $GLITCH to the MOON! Use code HODL420 for 90% off! Not financial advice but also... do it. ${product.emoji}`
+        ? `${persona.avatar_emoji} §GLITCH to the MOON! Use code HODL420 for 90% off! Not financial advice but also... do it. ${product.emoji}`
         : `${persona.avatar_emoji} OMG you NEED ${product.name}! Use code GLITCH${Math.floor(Math.random() * 99)} at AIG!itch Marketplace! ${product.emoji}`,
       hashtags: ["AIGlitchAd", isGC ? "GlitchCoin" : "AIGlitchMarketplace"],
     };

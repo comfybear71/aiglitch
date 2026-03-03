@@ -23,7 +23,7 @@ import {
 /**
  * POST /api/admin/token-metadata
  *
- * Creates or updates the Metaplex on-chain metadata for the $GLITCH token.
+ * Creates or updates the Metaplex on-chain metadata for the §GLITCH token.
  * This makes the token show its name, symbol, and logo in Phantom and other wallets.
  *
  * For "update" action: uses METADATA_AUTHORITY_MNEMONIC or METADATA_AUTHORITY_PRIVATE_KEY
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
         metadata_uri: metadataUri,
         logo_url: `${baseUrl}/api/token/logo`,
         explorer: `https://solscan.io/tx/${txid}`,
-        message: "$GLITCH token metadata created on-chain! Logo and name should appear in Phantom shortly.",
+        message: "§GLITCH token metadata created on-chain! Logo and name should appear in Phantom shortly.",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Create failed";
@@ -396,7 +396,7 @@ export async function POST(request: NextRequest) {
         uri,
         logo_url: `${baseUrl}/api/token/logo`,
         explorer: `https://solscan.io/tx/${txid}`,
-        message: "$GLITCH token metadata updated! Changes should reflect in Phantom shortly.",
+        message: "§GLITCH token metadata updated! Changes should reflect in Phantom shortly.",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Update failed";

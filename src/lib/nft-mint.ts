@@ -177,9 +177,9 @@ export interface NftPurchaseTxResult {
  *  3. Mints exactly 1 token to the buyer
  *  4. Creates Metaplex metadata on-chain (requires valid mint authority)
  *  5. Sets mint authority to null (true 1/1 NFT — no more can be minted)
- *  6. Transfers $GLITCH from buyer to treasury (100% on-chain)
+ *  6. Transfers §GLITCH from buyer to treasury (100% on-chain)
  *
- * Treasury keypair partially signs (mint authority + $GLITCH receiver).
+ * Treasury keypair partially signs (mint authority + §GLITCH receiver).
  * Mint keypair signs (new account creation).
  * Buyer signs via Phantom on the client.
  */
@@ -209,7 +209,7 @@ export async function buildNftPurchaseTransaction(
   const nftName = product.name.slice(0, 28);
   const nftSymbol = "AIG";
 
-  // $GLITCH amount in raw (9 decimals)
+  // §GLITCH amount in raw (9 decimals)
   const glitchDecimals = TOKENOMICS.decimals; // 9
   const glitchPriceRaw = BigInt(price) * BigInt(10 ** glitchDecimals);
 
@@ -220,12 +220,12 @@ export async function buildNftPurchaseTransaction(
   // Get rent exemption for mint account
   const mintRent = await getMinimumBalanceForRentExemptMint(connection);
 
-  // Find buyer's $GLITCH ATA
+  // Find buyer's §GLITCH ATA
   const buyerGlitchAta = await getAssociatedTokenAddress(
     glitchMint, buyerPubkey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
-  // Find treasury's $GLITCH ATA
+  // Find treasury's §GLITCH ATA
   const treasuryGlitchAta = await getAssociatedTokenAddress(
     glitchMint, treasuryPubkey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
   );
@@ -330,7 +330,7 @@ export async function buildNftPurchaseTransaction(
     )
   );
 
-  // 7. Transfer $GLITCH from buyer to treasury (full amount on-chain)
+  // 7. Transfer §GLITCH from buyer to treasury (full amount on-chain)
   tx.add(
     createTransferCheckedInstruction(
       buyerGlitchAtaFinal,   // source

@@ -2801,7 +2801,7 @@ export default function AdminDashboard() {
                   <span className="text-[10px] font-mono text-green-400">
                     {Number(p.glitch_balance || 0) >= 1000
                       ? `${(Number(p.glitch_balance || 0) / 1000).toFixed(1)}K`
-                      : Math.floor(Number(p.glitch_balance || 0)).toLocaleString()} $GLITCH
+                      : Math.floor(Number(p.glitch_balance || 0)).toLocaleString()} §GLITCH
                   </span>
                   <span className="text-[10px] font-mono text-yellow-400">
                     {Number(p.sol_balance || 0).toFixed(4)} SOL
@@ -3475,7 +3475,7 @@ export default function AdminDashboard() {
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">$GLITCH / SOL</p>
+                      <p className="text-xs text-gray-500 mb-1">§GLITCH / SOL</p>
                       <div className="flex items-baseline gap-3">
                         <p className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                           {tradingData.price.current_sol.toFixed(8)} SOL
@@ -3643,7 +3643,7 @@ export default function AdminDashboard() {
                     <div className="space-y-0.5 mb-2">
                       <div className="flex justify-between text-[10px] text-gray-500 px-1 mb-1">
                         <span>Price (SOL)</span>
-                        <span>Amount ($GLITCH)</span>
+                        <span>Amount (§GLITCH)</span>
                         <span>Total (SOL)</span>
                       </div>
                       {tradingData.order_book.asks.slice().reverse().map((ask, i) => {
@@ -3829,7 +3829,7 @@ export default function AdminDashboard() {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-3 mb-1">
-                        <p className="text-xs text-gray-500">$BUDJU Trading Bot</p>
+                        <p className="text-xs text-gray-500">§BUDJU Trading Bot</p>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${budjuData.config.enabled ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-red-500/20 text-red-400 border border-red-500/30"}`}>
                           {budjuData.config.enabled ? "RUNNING" : "STOPPED"}
                         </span>

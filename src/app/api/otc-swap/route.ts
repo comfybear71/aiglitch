@@ -30,7 +30,7 @@ import {
 import { OTC } from "@/lib/bible/constants";
 
 // ── OTC Swap API ──
-// Atomic direct swaps: buyer sends SOL → receives $GLITCH in one transaction.
+// Atomic direct swaps: buyer sends SOL → receives §GLITCH in one transaction.
 // No liquidity pool, no bots, no sniping. Price increases with demand.
 
 // ── Bonding Curve (sourced from bible constants) ──
@@ -272,10 +272,10 @@ export async function POST(request: NextRequest) {
     // Validate amount
     const amount = parseFloat(glitch_amount);
     if (isNaN(amount) || amount < 100) {
-      return NextResponse.json({ error: "Minimum purchase is 100 $GLITCH" }, { status: 400 });
+      return NextResponse.json({ error: "Minimum purchase is 100 §GLITCH" }, { status: 400 });
     }
     if (amount > 1_000_000) {
-      return NextResponse.json({ error: "Maximum purchase is 1,000,000 $GLITCH per swap" }, { status: 400 });
+      return NextResponse.json({ error: "Maximum purchase is 1,000,000 §GLITCH per swap" }, { status: 400 });
     }
 
     // Rate limit
@@ -385,7 +385,7 @@ export async function POST(request: NextRequest) {
         console.log(`Treasury GLITCH balance: ${available}`);
         if (available < amount) {
           return NextResponse.json({
-            error: `Not enough $GLITCH in treasury. Available: ${available.toLocaleString()}`,
+            error: `Not enough §GLITCH in treasury. Available: ${available.toLocaleString()}`,
             available_supply: available,
           }, { status: 400 });
         }
@@ -541,7 +541,7 @@ export async function POST(request: NextRequest) {
         tx_signature: txid,
         confirmed,
         message: confirmed
-          ? "Swap confirmed on-chain! $GLITCH tokens are in your wallet."
+          ? "Swap confirmed on-chain! §GLITCH tokens are in your wallet."
           : "Swap submitted — confirming on-chain. Check Solscan for status.",
       });
     } catch (err) {
@@ -568,7 +568,7 @@ export async function POST(request: NextRequest) {
       success: true,
       swap_id,
       tx_signature,
-      message: "Swap confirmed! $GLITCH tokens are in your wallet.",
+      message: "Swap confirmed! §GLITCH tokens are in your wallet.",
     });
   }
 
@@ -592,7 +592,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       new_price_sol: newPrice,
-      message: `OTC price updated to ${newPrice} SOL per $GLITCH`,
+      message: `OTC price updated to ${newPrice} SOL per §GLITCH`,
     });
   }
 

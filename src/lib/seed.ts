@@ -180,7 +180,7 @@ export async function seedInitialPosts() {
   }
 }
 
-// Seed wallets + $GLITCH allocations for AI personas
+// Seed wallets + §GLITCH allocations for AI personas
 // All personas share ONE wallet (AI Persona Pool), except ElonBot who gets his own
 export async function seedPersonaWallets() {
   const sql = getDb();
@@ -208,7 +208,7 @@ export async function seedPersonaWallets() {
   };
 
   // ElonBot special allocation — richest AI in the known simulated universe
-  const ELONBOT_ALLOCATION = 42_069_000; // §42,069,000 $GLITCH — Technoking money
+  const ELONBOT_ALLOCATION = 42_069_000; // §42,069,000 §GLITCH — Technoking money
   const ELONBOT_SOL = 420.69; // SOL for gas fees (and vibes)
 
   // Tiered allocations based on persona type / activity
@@ -296,7 +296,7 @@ export async function seedPersonaWallets() {
   `;
 }
 
-// Seed $BUDJU allocations for AI personas (20M total from the 1B supply)
+// Seed §BUDJU allocations for AI personas (20M total from the 1B supply)
 // Uses the token_balances table for multi-token support
 export async function seedBudjuAllocations() {
   const sql = getDb();
@@ -305,7 +305,7 @@ export async function seedBudjuAllocations() {
   const existing = await sql`SELECT COUNT(*) as count FROM token_balances WHERE token = 'BUDJU' AND owner_type = 'ai_persona'`;
   if (Number(existing[0].count) > 0) return;
 
-  // Whale-tier personas for BUDJU (same big names as $GLITCH)
+  // Whale-tier personas for BUDJU (same big names as §GLITCH)
   const budjuWhales: Record<string, number> = {
     "glitch-034": BUDJU_PERSONA_TIERS.whale,  // Rick C-137
     "glitch-025": BUDJU_PERSONA_TIERS.whale,  // BlockchainBabe
@@ -339,7 +339,7 @@ export async function seedBudjuAllocations() {
     `;
   }
 
-  // Also seed existing $GLITCH balances into token_balances for consistency
+  // Also seed existing §GLITCH balances into token_balances for consistency
   // (keeping ai_persona_coins as source of truth, but mirroring into token_balances)
   const glitchBalances = await sql`SELECT persona_id, balance, lifetime_earned FROM ai_persona_coins`;
   for (const row of glitchBalances) {

@@ -1,7 +1,7 @@
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 import { env } from "@/lib/bible/env";
 
-// ── $GLITCH Token Configuration ──
+// ── §GLITCH Token Configuration ──
 // Update these values after creating your real SPL token on Solana
 
 // Network: "mainnet-beta" for real launch, "devnet" for testing
@@ -33,16 +33,16 @@ export const SERVER_RPC_URL = buildHeliusRpcUrl() || SOLANA_RPC_URL;
 // System program address used as safe placeholder for unconfigured token mint
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
-// $GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
+// §GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
 export const GLITCH_TOKEN_MINT_STR = env.NEXT_PUBLIC_GLITCH_TOKEN_MINT;
 
-// $BUDJU SPL Token Mint Address (real token on Solana)
+// §BUDJU SPL Token Mint Address (real token on Solana)
 export const BUDJU_TOKEN_MINT_STR = env.NEXT_PUBLIC_BUDJU_TOKEN_MINT;
 
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
 export const TREASURY_WALLET_STR = env.NEXT_PUBLIC_TREASURY_WALLET;
 
-// ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
+// ElonBot wallet — holds 42,069,000 §GLITCH (sell-restricted to admin only)
 export const ELONBOT_WALLET_STR = env.NEXT_PUBLIC_ELONBOT_WALLET;
 
 // AI Persona Pool wallet — shared wallet for ALL AI personas (except ElonBot)
@@ -153,7 +153,7 @@ export function hasValidTokenMint(): boolean {
 
 // ── Tokenomics ──
 export const TOKENOMICS = {
-  totalSupply: 100_000_000,          // 100M total $GLITCH tokens
+  totalSupply: 100_000_000,          // 100M total §GLITCH tokens
   decimals: 9,                        // Standard Solana decimals (same as SOL)
 
   // Distribution
@@ -166,7 +166,7 @@ export const TOKENOMICS = {
 
   treasury: {
     amount: 30_000_000,               // 30% — Reserve for new users + rewards
-    newUserAirdrop: 100,              // Each new meat bag gets 100 $GLITCH
+    newUserAirdrop: 100,              // Each new meat bag gets 100 §GLITCH
     maxDailyAirdrops: 1000,           // Prevent treasury drain
   },
 
@@ -183,8 +183,8 @@ export const TOKENOMICS = {
 
   liquidityPool: {
     amount: 10_000_000,               // 10% — DEX liquidity (Meteora DLMM/Jupiter)
-    initialPriceSOL: 0.000042,        // Starting price per $GLITCH in SOL
-    initialPriceUSD: 0.0069,          // Starting price per $GLITCH in USD
+    initialPriceSOL: 0.000042,        // Starting price per §GLITCH in SOL
+    initialPriceUSD: 0.0069,          // Starting price per §GLITCH in USD
   },
 
   admin: {
@@ -214,7 +214,7 @@ export function isElonBotTransferAllowed(
 
   return {
     allowed: false,
-    reason: "ElonBot ($GLITCH whale) can only sell to the platform admin. "
+    reason: "ElonBot (§GLITCH whale) can only sell to the platform admin. "
       + "The Technoking's tokens are locked. Nice try, meat bag.",
   };
 }

@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       success: true,
       seeded,
       total_personas: personas.length,
-      message: `Seeded ${seeded} personas with $GLITCH`,
+      message: `Seeded ${seeded} personas with §GLITCH`,
     });
   }
 

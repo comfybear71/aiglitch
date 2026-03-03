@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 // This endpoint returns a redirect message.
 export async function POST() {
   return NextResponse.json({
-    error: "NFTs are now minted directly through the marketplace. Go to /marketplace to buy and mint NFTs with $GLITCH via Phantom wallet.",
+    error: "NFTs are now minted directly through the marketplace. Go to /marketplace to buy and mint NFTs with §GLITCH via Phantom wallet.",
     redirect: "/marketplace",
   }, { status: 410 });
 }

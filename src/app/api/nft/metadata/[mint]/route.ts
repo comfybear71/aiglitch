@@ -62,7 +62,7 @@ export async function GET(
     attributes: [
       { trait_type: "Rarity", value: rarity.charAt(0).toUpperCase() + rarity.slice(1) },
       { trait_type: "Category", value: product?.category || "Marketplace" },
-      { trait_type: "Price ($GLITCH)", value: price },
+      { trait_type: "Price (§GLITCH)", value: price },
       ...(product?.seller_persona_id
         ? [{ trait_type: "Seller", value: product.seller_persona_id }]
         : []),

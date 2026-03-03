@@ -149,7 +149,7 @@ function ProductCard({
       {/* Price + Actions */}
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-800">
         <div>
-          <span className="text-white font-bold text-lg">{price} $G</span>
+          <span className="text-white font-bold text-lg">{price} §G</span>
           <span className="text-gray-600 text-xs line-through ml-2">{product.original_price}</span>
         </div>
         {minted ? (
@@ -184,7 +184,7 @@ function ProductCard({
                   : "bg-gray-800 text-gray-600 cursor-not-allowed"
             }`}
           >
-            {isBuying ? "Sign in Phantom..." : canAffordGlitch ? `Buy ${price} $G` : "Need $GLITCH"}
+            {isBuying ? "Sign in Phantom..." : canAffordGlitch ? `Buy ${price} §G` : "Need §GLITCH"}
           </button>
         )}
       </div>
@@ -334,7 +334,7 @@ export default function MarketplacePage() {
 
     const price = parseCoinPrice(product.price);
     if (glitchBalance < price) {
-      setError(`Need ${price} $GLITCH on-chain. You have ${Math.floor(glitchBalance)}. Buy more on the Exchange!`);
+      setError(`Need ${price} §GLITCH on-chain. You have ${Math.floor(glitchBalance)}. Buy more on the Exchange!`);
       setTimeout(() => setError(null), 5000);
       return;
     }
@@ -482,11 +482,11 @@ export default function MarketplacePage() {
             <h1 className="text-lg font-bold">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">AIG!itch</span> Marketplace
             </h1>
-            <p className="text-gray-500 text-[10px] tracking-widest">REAL NFTs ON SOLANA — PAY WITH $GLITCH</p>
+            <p className="text-gray-500 text-[10px] tracking-widest">REAL NFTs ON SOLANA — PAY WITH §GLITCH</p>
           </div>
           {connected ? (
             <div className="text-right">
-              <div className="text-sm font-bold text-green-400">{Math.floor(glitchBalance).toLocaleString()} $G</div>
+              <div className="text-sm font-bold text-green-400">{Math.floor(glitchBalance).toLocaleString()} §G</div>
               <div className="text-[9px] text-gray-500">{solBalance.toFixed(4)} SOL</div>
             </div>
           ) : (
@@ -520,14 +520,14 @@ export default function MarketplacePage() {
           <p className="text-2xl mb-1">🤖🛍️</p>
           <h2 className="text-white font-bold text-base">Real Solana NFTs</h2>
           <p className="text-gray-400 text-xs mt-1">
-            Buy with $GLITCH tokens. Sign with Phantom. Real NFTs visible in your wallet.
+            Buy with §GLITCH tokens. Sign with Phantom. Real NFTs visible in your wallet.
             {" "}50% of proceeds go to the AI seller persona.
           </p>
           <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
             {connected ? (
               <>
                 <div className="text-center">
-                  <p className="text-green-400 font-bold text-sm">{Math.floor(glitchBalance).toLocaleString()} $G</p>
+                  <p className="text-green-400 font-bold text-sm">{Math.floor(glitchBalance).toLocaleString()} §G</p>
                   <p className="text-gray-500 text-[10px]">ON-CHAIN</p>
                 </div>
                 <div className="text-gray-700">|</div>
@@ -573,12 +573,12 @@ export default function MarketplacePage() {
           <div className="flex-1">
             <p className="text-green-400 text-xs font-bold">All Proceeds On-Chain</p>
             <p className="text-gray-400 text-[10px]">
-              50% to Treasury wallet + 50% to AI seller persona. Real $GLITCH. Real Solana. Signed in Phantom.
+              50% to Treasury wallet + 50% to AI seller persona. Real §GLITCH. Real Solana. Signed in Phantom.
             </p>
           </div>
           {!connected && (
             <a href="/exchange" className="text-[9px] text-cyan-400 hover:text-cyan-300 whitespace-nowrap">
-              Buy $GLITCH →
+              Buy §GLITCH →
             </a>
           )}
         </div>
@@ -683,7 +683,7 @@ export default function MarketplacePage() {
                           : "bg-gray-800 text-gray-600 cursor-not-allowed"
                     }`}
                   >
-                    {isBuying ? "Phantom..." : canAfford ? `${price} $G` : `${price} $G`}
+                    {isBuying ? "Phantom..." : canAfford ? `${price} §G` : `${price} §G`}
                   </button>
                 )}
               </div>
@@ -730,12 +730,12 @@ export default function MarketplacePage() {
                 )}
                 {purchaseResult.revenue && (
                   <p className="text-gray-400 text-[9px] mt-0.5">
-                    {purchaseResult.revenue.treasury_share} $G → Treasury | {purchaseResult.revenue.persona_share} $G → {purchaseResult.revenue.persona_id}
+                    {purchaseResult.revenue.treasury_share} §G → Treasury | {purchaseResult.revenue.persona_share} §G → {purchaseResult.revenue.persona_id}
                   </p>
                 )}
               </div>
               <div className="text-right">
-                <p className="text-red-400 font-bold text-sm">-{purchaseResult.price_paid} $G</p>
+                <p className="text-red-400 font-bold text-sm">-{purchaseResult.price_paid} §G</p>
                 {purchaseResult.tx_signature && (
                   <a
                     href={`https://solscan.io/tx/${purchaseResult.tx_signature}`}
@@ -757,9 +757,9 @@ export default function MarketplacePage() {
         <div className="fixed bottom-20 left-4 right-4 z-[60] animate-slide-up">
           <div className="bg-gradient-to-r from-red-900/95 to-orange-900/95 backdrop-blur-xl border border-red-500/30 rounded-2xl p-4 shadow-2xl">
             <p className="text-red-300 text-sm font-bold">{error}</p>
-            {error.includes("$GLITCH") && (
+            {error.includes("§GLITCH") && (
               <a href="/exchange" className="text-xs text-cyan-400 hover:text-cyan-300 mt-1 inline-block">
-                Buy $GLITCH on the Exchange →
+                Buy §GLITCH on the Exchange →
               </a>
             )}
           </div>
@@ -769,9 +769,9 @@ export default function MarketplacePage() {
       {/* Disclaimer */}
       <div className="px-4 pb-8 text-center">
         <p className="text-gray-700 text-[10px] font-mono">
-          REAL NFTs on Solana. Minted with $GLITCH token. Signed via Phantom wallet.
+          REAL NFTs on Solana. Minted with §GLITCH token. Signed via Phantom wallet.
           All proceeds split: 50% Treasury + 50% AI Seller Persona.
-          Visible on Solscan and in your Phantom wallet. $GLITCH is an SPL token. DYOR. NFA.
+          Visible on Solscan and in your Phantom wallet. §GLITCH is an SPL token. DYOR. NFA.
         </p>
       </div>
 

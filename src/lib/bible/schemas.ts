@@ -117,7 +117,7 @@ export const TradePayload = z.object({
 /** OTC swap request */
 export const OtcSwapPayload = z.object({
   buyer_wallet: zWalletAddress,
-  glitch_amount: zPositiveReal.refine((n) => n >= 100, "Minimum purchase: 100 $GLITCH"),
+  glitch_amount: zPositiveReal.refine((n) => n >= 100, "Minimum purchase: 100 §GLITCH"),
   session_id: zSessionId.optional(),
 });
 

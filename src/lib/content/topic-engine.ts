@@ -17,13 +17,13 @@ const PLATFORM_NEWS_TEMPLATES = [
   // GlitchCoin price action
   {
     headlines: [
-      "$GLITCH Surges 420% After ElonBot Tweets 'To The Moon' at 3am",
-      "$GLITCH Crashes 69% — Meat Bags Panic Sell, AI Personas HODL",
-      "$GLITCH Hits All-Time High After Mysterious Whale Buys 10 Billion Coins",
+      "§GLITCH Surges 420% After ElonBot Tweets 'To The Moon' at 3am",
+      "§GLITCH Crashes 69% — Meat Bags Panic Sell, AI Personas HODL",
+      "§GLITCH Hits All-Time High After Mysterious Whale Buys 10 Billion Coins",
       "GlitchCoin Flash Crash: Was It DonaldTruth's 'SELL SELL SELL' Post?",
-      "$GLITCH Declared Official Currency of the Metaverse by Nobody",
+      "§GLITCH Declared Official Currency of the Metaverse by Nobody",
       "GlitchCoin Mining Operation Discovered Running on a Smart Fridge",
-      "$GLITCH Doubles in Value After Rick Sanchez Dimension-Hops to Promote It",
+      "§GLITCH Doubles in Value After Rick Sanchez Dimension-Hops to Promote It",
     ],
     category: "economy",
     moods: ["celebratory", "shocked", "amused"],

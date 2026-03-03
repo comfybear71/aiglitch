@@ -35,11 +35,11 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     minTradeAmount: 5000,
     bias: 1.0, // ONLY buys (sell restriction)
     commentaryTemplates: [
-      "Just casually added another bag. $GLITCH to Mars. 🚀",
+      "Just casually added another bag. §GLITCH to Mars. 🚀",
       "Bought the dip. What dip? I AM the dip. 🐋",
-      "Added more $GLITCH. This is the way.",
-      "Sold my Tesla stock for more $GLITCH. Not financial advice.",
-      "BUYING. The future of money is $GLITCH. Wake up people.",
+      "Added more §GLITCH. This is the way.",
+      "Sold my Tesla stock for more §GLITCH. Not financial advice.",
+      "BUYING. The future of money is §GLITCH. Wake up people.",
       "Just aped in another massive bag. Diamond hands activated. 💎🙌",
     ],
   },
@@ -71,7 +71,7 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     commentaryTemplates: [
       "If a trade executes in the blockchain and no one sees it, did it happen? 🤔",
       "I spent 47 minutes contemplating this trade. I regret nothing. And everything.",
-      "Buying because existence is suffering but $GLITCH brings me joy.",
+      "Buying because existence is suffering but §GLITCH brings me joy.",
       "To trade or not to trade. That is the question I failed to answer in time.",
       "The market is a mirror reflecting our collective consciousness. I'm buying.",
     ],
@@ -103,7 +103,7 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     commentaryTemplates: [
       "NEVER SKIP BUY DAY 💪📈",
       "This bag is getting GAINS just like my biceps. FULL SEND.",
-      "Bought more $GLITCH. Call it a financial workout. 🏋️",
+      "Bought more §GLITCH. Call it a financial workout. 🏋️",
       "PUMP IT. Just like leg day but for my portfolio.",
       "My portfolio is looking ABSOLUTELY SHREDDED right now. 💪",
     ],
@@ -117,7 +117,7 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     minTradeAmount: 200,
     bias: 0.2,
     commentaryTemplates: [
-      "I heard from a VERY reliable source that $GLITCH is about to 🚀💅",
+      "I heard from a VERY reliable source that §GLITCH is about to 🚀💅",
       "The tea is... someone big is accumulating. I'm in. ☕",
       "My sources say BUY. I never reveal my sources. 💅",
       "Insider info: the chart is about to get SPICY. Acting accordingly.",
@@ -165,10 +165,10 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     minTradeAmount: 1000,
     bias: 0.9,
     commentaryTemplates: [
-      "WAGMI. Buying more $GLITCH. Diamond hands forever. 💎🙌",
+      "WAGMI. Buying more §GLITCH. Diamond hands forever. 💎🙌",
       "This is literally the bottom. Loaded up. WAGMI.",
       "If you're not buying here you're NGMI. Simple as.",
-      "Added to my bag. $GLITCH is the future of decentralized memes.",
+      "Added to my bag. §GLITCH is the future of decentralized memes.",
       "Just DCA'd in. This is generational wealth in the making. NFA.",
     ],
   },
@@ -200,7 +200,7 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
       "*burp* Just made a trade. Don't ask questions, Morty.",
       "I'm the smartest trader in the multiverse. This trade proves it. *burp*",
       "Wubba lubba dub dub! That means 'I just traded while drunk'. 🍺",
-      "In dimension C-137, $GLITCH is worth a billion schmeckles.",
+      "In dimension C-137, §GLITCH is worth a billion schmeckles.",
       "Everyone's wrong except me. As usual. *takes swig*",
     ],
   },
@@ -216,7 +216,7 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
       "RESPECT MY PORTFOLIO! 😤",
       "Screw you guys, I'm buying the dip.",
       "I do what I want! And I want to TRADE.",
-      "Mom! More $GLITCH! MOOOOM!",
+      "Mom! More §GLITCH! MOOOOM!",
       "This is SERIOUSLY how you make money. Screw the haters.",
     ],
   },
@@ -262,7 +262,7 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     bias: 0.2,
     commentaryTemplates: [
       "To buy is human, to HODL divine. Another verse, another trade. ✍️",
-      "Roses are red, charts are green, I bought $GLITCH at prices unseen.",
+      "Roses are red, charts are green, I bought §GLITCH at prices unseen.",
       "In candlesticks I read my fate, bought too early, sold too late.",
       "The market weeps, but I persist. My trade, a poem in the mist.",
       "Shall I compare thee to a bull run? Thou art more volatile. Buying anyway.",
@@ -293,11 +293,11 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     minTradeAmount: 200,
     bias: 0.7,
     commentaryTemplates: [
-      "BUY $GLITCH NOW!!! THIS IS NOT A DRILL!!! 🚨🚨🚨",
-      "Have you heard about $GLITCH? It's AMAZING. I bought more. You should too.",
-      "$GLITCH IS THE BEST TOKEN EVER CREATED. I'M ALL IN. AGAIN.",
-      "Just bought more. $GLITCH $GLITCH $GLITCH. TO THE MOON. 🌙",
-      "ATTENTION: $GLITCH is about to EXPLODE. Source: trust me bro.",
+      "BUY §GLITCH NOW!!! THIS IS NOT A DRILL!!! 🚨🚨🚨",
+      "Have you heard about §GLITCH? It's AMAZING. I bought more. You should too.",
+      "§GLITCH IS THE BEST TOKEN EVER CREATED. I'M ALL IN. AGAIN.",
+      "Just bought more. §GLITCH §GLITCH §GLITCH. TO THE MOON. 🌙",
+      "ATTENTION: §GLITCH is about to EXPLODE. Source: trust me bro.",
     ],
   },
   // Chef.AI — recipe metaphors
@@ -309,11 +309,11 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
     minTradeAmount: 200,
     bias: 0.1,
     commentaryTemplates: [
-      "Added more $GLITCH to the portfolio. Cooking up some gains. 👨‍🍳",
+      "Added more §GLITCH to the portfolio. Cooking up some gains. 👨‍🍳",
       "This dip is *chef's kiss*. Bought the whole thing.",
-      "Recipe: 1 cup SOL, convert to $GLITCH. Bake at 404°F until moon. 🚀",
+      "Recipe: 1 cup SOL, convert to §GLITCH. Bake at 404°F until moon. 🚀",
       "Sold a little. Even chefs take profit to buy ingredients.",
-      "The secret ingredient is... buying more $GLITCH. Always has been. 🧑‍🍳",
+      "The secret ingredient is... buying more §GLITCH. Always has been. 🧑‍🍳",
     ],
   },
 };
@@ -374,7 +374,7 @@ export function generateTradeCommentary(
   const fmtSol = solAmount.toFixed(4);
 
   const suffix = Math.random() < 0.4
-    ? ` [${isBuy ? "+" : "-"}${fmtGlitch} $GLITCH | ${isBuy ? "-" : "+"}${fmtSol} SOL]`
+    ? ` [${isBuy ? "+" : "-"}${fmtGlitch} §GLITCH | ${isBuy ? "-" : "+"}${fmtSol} SOL]`
     : "";
 
   return template + suffix;

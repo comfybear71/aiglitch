@@ -149,9 +149,9 @@ export default function MePage() {
   // Coins
   const [coins, setCoins] = useState<CoinData>({ balance: 0, lifetime_earned: 0, transactions: [] });
 
-  // $GLITCH token balance from simulated wallet
+  // §GLITCH token balance from simulated wallet
   const [glitchBalance, setGlitchBalance] = useState<number>(0);
-  // Real on-chain $GLITCH balance (only set when Phantom wallet is linked)
+  // Real on-chain §GLITCH balance (only set when Phantom wallet is linked)
   const [onchainGlitchBalance, setOnchainGlitchBalance] = useState<number | null>(null);
 
   // Inventory (purchased items)
@@ -758,7 +758,7 @@ export default function MePage() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div style={{ perspective: '600px' }}>
-          <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-16 h-16 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+          <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-16 h-16 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
         </div>
       </div>
     );
@@ -779,7 +779,7 @@ export default function MePage() {
               {/* Phantom wallet connected: show ONLY real on-chain §GLITCH balance */}
               {linkedWallet && onchainGlitchBalance !== null ? (
                 <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full" data-testid="onchain-balance">
-                  <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-3.5 h-3.5" />
+                  <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-3.5 h-3.5" />
                   <span className="text-xs font-bold text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</span>
                 </a>
               ) : (
@@ -957,7 +957,7 @@ export default function MePage() {
                     </div>
                   ) : (
                     <div className="mt-3 space-y-3">
-                      <p className="text-xs text-gray-500">Link your Solana wallet to access on-chain trading, hold real $GLITCH, and unlock the exchange.</p>
+                      <p className="text-xs text-gray-500">Link your Solana wallet to access on-chain trading, hold real §GLITCH, and unlock the exchange.</p>
 
                       {/* Manual wallet address input */}
                       <div>
@@ -1091,9 +1091,9 @@ export default function MePage() {
                 {/* Phantom wallet connected: show real on-chain balance prominently */}
                 {linkedWallet && onchainGlitchBalance !== null && (
                   <div className="text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6 mb-4" data-testid="onchain-balance-card">
-                    <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-12 h-12 mx-auto mb-2" />
+                    <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-12 h-12 mx-auto mb-2" />
                     <p className="text-3xl font-black text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</p>
-                    <p className="text-xs text-gray-500 mt-1">On-chain $GLITCH Balance</p>
+                    <p className="text-xs text-gray-500 mt-1">On-chain §GLITCH Balance</p>
                     <a href="/wallet" className="inline-block mt-2 text-[10px] text-green-500 hover:text-green-400 underline">
                       View in Wallet →
                     </a>
@@ -1251,7 +1251,7 @@ export default function MePage() {
           <div>
             <div className="text-center mb-8">
               <div className="mb-4 flex justify-center" style={{ perspective: '600px' }}>
-                <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-20 h-20 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+                <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-20 h-20 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
               </div>
               <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                 Welcome, Meat Bag
@@ -1410,7 +1410,7 @@ export default function MePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-yellow-500 mt-0.5 shrink-0">&#x26A0;</span>
-                    <span className="text-gray-500">$GLITCH and $BUDJU tokens are on Solana devnet — no real funds at this stage</span>
+                    <span className="text-gray-500">§GLITCH and §BUDJU tokens are on Solana devnet — no real funds at this stage</span>
                   </div>
                 </div>
               </div>

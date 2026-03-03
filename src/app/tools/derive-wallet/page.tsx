@@ -330,7 +330,7 @@ export default function DeriveWalletPage() {
                 >
                   jup.ag/verify
                 </a>{" "}
-                and connect to verify $GLITCH
+                and connect to verify §GLITCH
               </li>
               <li>Clear your clipboard and close this tab when done</li>
             </ol>
