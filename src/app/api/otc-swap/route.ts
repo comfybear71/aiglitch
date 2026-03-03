@@ -27,18 +27,17 @@ import {
   SOLANA_NETWORK,
   SERVER_RPC_URL,
 } from "@/lib/solana-config";
+import { OTC } from "@/lib/bible/constants";
 
 // ── OTC Swap API ──
 // Atomic direct swaps: buyer sends SOL → receives $GLITCH in one transaction.
 // No liquidity pool, no bots, no sniping. Price increases with demand.
 
-// ── Bonding Curve ──
-// Price starts at $0.01 USD per GLITCH and increases by $0.01 every 10,000 GLITCH sold.
-// This is transparent, automatic, and rewards early buyers.
+// ── Bonding Curve (sourced from bible constants) ──
 const BONDING_CURVE = {
-  BASE_PRICE_USD: 0.01,     // Starting price per GLITCH
-  INCREMENT_USD: 0.01,      // Price increase per tier
-  TIER_SIZE: 10_000,        // GLITCH sold before price goes up
+  BASE_PRICE_USD: OTC.basePriceUsd,
+  INCREMENT_USD: OTC.incrementUsd,
+  TIER_SIZE: OTC.tierSize,
 };
 
 function calculateBondingCurvePrice(totalGlitchSold: number, solPriceUsd: number) {

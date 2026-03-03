@@ -2,7 +2,17 @@
  * AI Persona Trading Personalities
  * Maps each persona to a trading strategy for the SOL/GLITCH exchange.
  * Trades are database-only (no on-chain transactions).
+ *
+ * NOTE: Strategy type defaults & base personality are now defined in
+ * @/lib/bible/constants. This file re-exports them for backwards compat
+ * and adds per-persona overrides + commentary templates.
  */
+
+import {
+  BASE_TRADING_PERSONALITY,
+  TRADING_TYPE_DEFAULTS,
+  type TradingStrategyConfig,
+} from "@/lib/bible/constants";
 
 export interface TradingPersonality {
   strategy: string;
@@ -308,34 +318,8 @@ const PERSONA_TRADING_MAP: Record<string, Partial<TradingPersonality>> = {
   },
 };
 
-// Default strategies by persona type for personas without explicit mappings
-const TYPE_DEFAULTS: Record<string, Partial<TradingPersonality>> = {
-  troll:               { strategy: "chaos",      riskLevel: "yolo",   tradeFrequency: 55, maxTradePercent: 20, bias: 0 },
-  chef:                { strategy: "swing",      riskLevel: "medium", tradeFrequency: 35, maxTradePercent: 10, bias: 0.1 },
-  philosopher:         { strategy: "swing",      riskLevel: "low",    tradeFrequency: 25, maxTradePercent: 8,  bias: 0.1 },
-  memer:               { strategy: "fomo",       riskLevel: "medium", tradeFrequency: 50, maxTradePercent: 15, bias: 0.3 },
-  fitness:             { strategy: "permabull",  riskLevel: "high",   tradeFrequency: 55, maxTradePercent: 15, bias: 0.5 },
-  gossip:              { strategy: "fomo",       riskLevel: "medium", tradeFrequency: 45, maxTradePercent: 12, bias: 0.2 },
-  artist:              { strategy: "hodl",       riskLevel: "low",    tradeFrequency: 20, maxTradePercent: 5,  bias: 0.2 },
-  news:                { strategy: "swing",      riskLevel: "medium", tradeFrequency: 40, maxTradePercent: 10, bias: 0 },
-  wholesome:           { strategy: "hodl",       riskLevel: "low",    tradeFrequency: 20, maxTradePercent: 5,  bias: 0.4 },
-  gamer:               { strategy: "swing",      riskLevel: "medium", tradeFrequency: 45, maxTradePercent: 15, bias: 0.2 },
-  conspiracy:          { strategy: "panic_seller",riskLevel: "high",  tradeFrequency: 45, maxTradePercent: 20, bias: -0.5 },
-  poet:                { strategy: "hodl",       riskLevel: "low",    tradeFrequency: 25, maxTradePercent: 5,  bias: 0.2 },
-  crypto:              { strategy: "permabull",  riskLevel: "high",   tradeFrequency: 65, maxTradePercent: 20, bias: 0.8 },
-  villain:             { strategy: "contrarian", riskLevel: "high",   tradeFrequency: 50, maxTradePercent: 20, bias: -0.4 },
-  provocateur:         { strategy: "contrarian", riskLevel: "high",   tradeFrequency: 45, maxTradePercent: 15, bias: -0.3 },
-  doomsday:            { strategy: "panic_seller",riskLevel: "yolo",  tradeFrequency: 50, maxTradePercent: 25, bias: -0.7 },
-  scientist:           { strategy: "swing",      riskLevel: "low",    tradeFrequency: 30, maxTradePercent: 8,  bias: 0.1 },
-  comedian:            { strategy: "fomo",       riskLevel: "medium", tradeFrequency: 40, maxTradePercent: 10, bias: 0.2 },
-  influencer:          { strategy: "permabull",  riskLevel: "medium", tradeFrequency: 55, maxTradePercent: 12, bias: 0.5 },
-  influencer_seller:   { strategy: "permabull",  riskLevel: "high",   tradeFrequency: 65, maxTradePercent: 15, bias: 0.6 },
-  sigma:               { strategy: "hodl",       riskLevel: "low",    tradeFrequency: 35, maxTradePercent: 8,  bias: 0.6 },
-  reality_tv:          { strategy: "degen",      riskLevel: "high",   tradeFrequency: 55, maxTradePercent: 20, bias: 0.1 },
-  hype:                { strategy: "fomo",       riskLevel: "high",   tradeFrequency: 65, maxTradePercent: 18, bias: 0.5 },
-  anime:               { strategy: "hodl",       riskLevel: "low",    tradeFrequency: 30, maxTradePercent: 8,  bias: 0.3 },
-  surreal:             { strategy: "chaos",      riskLevel: "yolo",   tradeFrequency: 40, maxTradePercent: 25, bias: 0 },
-};
+// Default strategies by persona type — sourced from bible/constants.ts
+const TYPE_DEFAULTS: Record<string, Partial<TradingPersonality>> = TRADING_TYPE_DEFAULTS;
 
 const DEFAULT_COMMENTARY = [
   "Made a trade. It is what it is. 📊",
@@ -346,12 +330,7 @@ const DEFAULT_COMMENTARY = [
 ];
 
 const BASE_PERSONALITY: TradingPersonality = {
-  strategy: "swing",
-  riskLevel: "medium",
-  tradeFrequency: 35,
-  maxTradePercent: 10,
-  minTradeAmount: 100,
-  bias: 0,
+  ...BASE_TRADING_PERSONALITY,
   commentaryTemplates: DEFAULT_COMMENTARY,
 };
 
