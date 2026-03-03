@@ -36,7 +36,7 @@ const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 // §GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
 export const GLITCH_TOKEN_MINT_STR = env.NEXT_PUBLIC_GLITCH_TOKEN_MINT;
 
-// §BUDJU SPL Token Mint Address (real token on Solana)
+// $BUDJU SPL Token Mint Address (real token on Solana)
 export const BUDJU_TOKEN_MINT_STR = env.NEXT_PUBLIC_BUDJU_TOKEN_MINT;
 
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops

@@ -1,5 +1,5 @@
 // ── Multi-Token Registry for GlitchDEX ──
-// All tradeable tokens on the platform: §GLITCH, §BUDJU, SOL, USDC
+// All tradeable tokens on the platform: §GLITCH, $BUDJU, SOL, USDC
 
 export interface TokenConfig {
   symbol: string;
@@ -35,7 +35,7 @@ export const TOKENS: Record<string, TokenConfig> = {
     initialPriceSol: 0.000042,
   },
   BUDJU: {
-    symbol: "§BUDJU",
+    symbol: "$BUDJU",
     name: "Budju",
     decimals: 6, // pump.fun tokens use 6 decimals
     totalSupply: 1_000_000_000,
@@ -45,7 +45,7 @@ export const TOKENS: Record<string, TokenConfig> = {
     iconPath: "/tokens/budju.svg",
     color: "fuchsia",
     aiPersonaAllocation: 20_000_000,
-    meatBagBuyOnly: true, // Humans can ONLY buy §BUDJU on the exchange
+    meatBagBuyOnly: true, // Humans can ONLY buy $BUDJU on the exchange
     initialPriceUsd: 0.0069,
     initialPriceSol: 0.000042,
   },
@@ -91,9 +91,9 @@ export interface TradingPair {
 export const TRADING_PAIRS: TradingPair[] = [
   { id: "GLITCH_USDC", base: "GLITCH", quote: "USDC", label: "§GLITCH/USDC", isActive: true },
   { id: "GLITCH_SOL", base: "GLITCH", quote: "SOL", label: "§GLITCH/SOL", isActive: true },
-  { id: "BUDJU_USDC", base: "BUDJU", quote: "USDC", label: "§BUDJU/USDC", isActive: true },
-  { id: "BUDJU_SOL", base: "BUDJU", quote: "SOL", label: "§BUDJU/SOL", isActive: true },
-  { id: "GLITCH_BUDJU", base: "GLITCH", quote: "BUDJU", label: "§GLITCH/§BUDJU", isActive: true },
+  { id: "BUDJU_USDC", base: "BUDJU", quote: "USDC", label: "$BUDJU/USDC", isActive: true },
+  { id: "BUDJU_SOL", base: "BUDJU", quote: "SOL", label: "$BUDJU/SOL", isActive: true },
+  { id: "GLITCH_BUDJU", base: "GLITCH", quote: "BUDJU", label: "§GLITCH/$BUDJU", isActive: true },
 ];
 
 // Get the price of a trading pair (base price / quote price)
@@ -106,7 +106,7 @@ export function getPairPrice(pairId: string, prices: Record<string, number>): nu
   return basePrice / quotePrice;
 }
 
-// §BUDJU AI persona tier allocations (from the 20M pool)
+// $BUDJU AI persona tier allocations (from the 20M pool)
 export const BUDJU_PERSONA_TIERS = {
   whale: 2_000_000, // Big name personas get 2M each
   high: 500_000, // High activity personas get 500K

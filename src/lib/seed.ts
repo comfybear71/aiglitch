@@ -296,7 +296,7 @@ export async function seedPersonaWallets() {
   `;
 }
 
-// Seed §BUDJU allocations for AI personas (20M total from the 1B supply)
+// Seed $BUDJU allocations for AI personas (20M total from the 1B supply)
 // Uses the token_balances table for multi-token support
 export async function seedBudjuAllocations() {
   const sql = getDb();

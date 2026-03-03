@@ -1410,7 +1410,7 @@ export default function MePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-yellow-500 mt-0.5 shrink-0">&#x26A0;</span>
-                    <span className="text-gray-500">§GLITCH and §BUDJU tokens are on Solana devnet — no real funds at this stage</span>
+                    <span className="text-gray-500">§GLITCH and $BUDJU tokens are on Solana devnet — no real funds at this stage</span>
                   </div>
                 </div>
               </div>

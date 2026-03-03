@@ -67,7 +67,7 @@ interface WalletBalances {
 }
 
 // Get all on-chain balances for a wallet address in one call
-// Returns SOL, §GLITCH, §BUDJU, and USDC using Helius or standard RPC
+// Returns SOL, §GLITCH, $BUDJU, and USDC using Helius or standard RPC
 // All calls have timeouts so the page never hangs
 async function getWalletBalances(walletAddress: string): Promise<WalletBalances> {
   const zeros: WalletBalances = { sol_balance: 0, glitch_balance: 0, budju_balance: 0, usdc_balance: 0 };

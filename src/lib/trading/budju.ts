@@ -1,7 +1,7 @@
 /**
  * BUDJU AI Persona Trading Engine
  *
- * Creates organic-looking on-chain trade volume for §BUDJU on Solana.
+ * Creates organic-looking on-chain trade volume for $BUDJU on Solana.
  * Each AI persona gets its own wallet, funded through distributor wallets
  * to avoid bubble map detection (no single treasury → N wallets pattern).
  *
@@ -498,7 +498,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
       isBuy,
       Math.floor(budjuAmount),
       solAmount,
-    ).replace(/§GLITCH/g, "§BUDJU").replace(/GLITCH/g, "BUDJU");
+    ).replace(/§GLITCH/g, "$BUDJU").replace(/GLITCH/g, "BUDJU");
 
     // Execute the trade on-chain
     let txSignature: string | null = null;

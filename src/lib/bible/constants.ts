@@ -39,10 +39,10 @@ export const GLITCH = {
   },
 } as const;
 
-// ── Tokenomics: §BUDJU ───────────────────────────────────────────────
+// ── Tokenomics: $BUDJU ───────────────────────────────────────────────
 
 export const BUDJU = {
-  symbol: "§BUDJU",
+  symbol: "$BUDJU",
   name: "Budju",
   decimals: 6,  // pump.fun standard — NOT 9
   multiplier: 1e6,

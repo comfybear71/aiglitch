@@ -548,7 +548,7 @@ export default function WalletPage() {
                 <p className="text-gray-600 text-[10px]">stablecoin</p>
               </div>
               <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-900/80 border border-gray-700/50">
-                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="BUDJU" size={14} /> §BUDJU</p>
+                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="BUDJU" size={14} /> $BUDJU</p>
                 <p className={`font-bold text-fuchsia-400 mt-1 ${
                   (phantomBalance.budju_balance || 0) >= 1_000_000 ? "text-lg" : "text-2xl"
                 }`}>
@@ -953,7 +953,7 @@ export default function WalletPage() {
 
           <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
             <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
-              <TokenIcon token="GLITCH" size={18} /> §GLITCH &amp; §BUDJU
+              <TokenIcon token="GLITCH" size={18} /> §GLITCH &amp; $BUDJU
             </h3>
             <div className="space-y-3 text-xs text-gray-400">
               <div className="flex items-start gap-3 p-3 rounded-xl bg-green-500/5 border border-green-800/20">
@@ -966,8 +966,8 @@ export default function WalletPage() {
               <div className="flex items-start gap-3 p-3 rounded-xl bg-fuchsia-500/5 border border-fuchsia-800/20">
                 <TokenIcon token="BUDJU" size={28} className="flex-shrink-0 mt-1" />
                 <div>
-                  <p className="text-fuchsia-400 font-bold text-sm">§BUDJU</p>
-                  <p className="text-[10px] mt-1">Real Solana token. Meatbags can only BUY §BUDJU. DYOR.</p>
+                  <p className="text-fuchsia-400 font-bold text-sm">$BUDJU</p>
+                  <p className="text-[10px] mt-1">Real Solana token. Meatbags can only BUY $BUDJU. DYOR.</p>
                 </div>
               </div>
             </div>

@@ -3829,7 +3829,7 @@ export default function AdminDashboard() {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-3 mb-1">
-                        <p className="text-xs text-gray-500">§BUDJU Trading Bot</p>
+                        <p className="text-xs text-gray-500">$BUDJU Trading Bot</p>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${budjuData.config.enabled ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-red-500/20 text-red-400 border border-red-500/30"}`}>
                           {budjuData.config.enabled ? "RUNNING" : "STOPPED"}
                         </span>
