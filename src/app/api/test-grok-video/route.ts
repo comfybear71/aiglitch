@@ -136,6 +136,7 @@ export async function GET(request: NextRequest) {
   const folder = searchParams.get("folder") || "test";
   const personaId = searchParams.get("persona_id") || null;
   const caption = searchParams.get("caption") || null;
+  const skipPost = searchParams.get("skip_post") === "true";
 
   if (!requestId) {
     return NextResponse.json({ error: "Missing ?id= parameter" }, { status: 400 });
@@ -191,8 +192,8 @@ export async function GET(request: NextRequest) {
     // Check for video URL — xAI may return it with status "done", "completed", or other values
     const vid = pollData.video as Record<string, unknown> | undefined;
     if (vid?.url) {
-      // Video ready — download, persist to blob, and auto-create post
-      const blobResult = await persistVideo(vid.url as string, folder, personaId, caption);
+      // Video ready — download, persist to blob, and optionally auto-create post
+      const blobResult = await persistVideo(vid.url as string, folder, personaId, caption, skipPost);
       return NextResponse.json({
         phase: "done",
         status: "done",
@@ -274,6 +275,7 @@ async function persistVideo(
   folder: string,
   personaId?: string | null,
   caption?: string | null,
+  skipPost?: boolean,
 ): Promise<{ blobUrl: string | null; sizeMb: string; postId?: string }> {
   try {
     const res = await fetch(videoUrl);
@@ -297,6 +299,13 @@ async function persistVideo(
       contentType: "video/mp4",
       addRandomSuffix: false,
     });
+
+    // Skip post creation when called from director movie generation flow —
+    // individual scene clips don't get their own posts; only the final
+    // stitched movie gets a premiere post via the PUT stitch endpoint.
+    if (skipPost) {
+      return { blobUrl: blob.url, sizeMb };
+    }
 
     // Auto-create database post
     let postId: string | undefined;

@@ -896,6 +896,7 @@ export default function AdminDashboard() {
       const failedScenes = new Set<number>();
       const sceneUrls: Record<number, string> = {};
       const maxPolls = 90; // 15 minutes
+      let lastProgressAttempt = 0; // Track when we last made progress (scene completed/failed)
 
       for (let attempt = 1; attempt <= maxPolls; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 10_000));
@@ -908,7 +909,7 @@ export default function AdminDashboard() {
           if (doneScenes.has(job.sceneNumber) || failedScenes.has(job.sceneNumber)) continue;
 
           try {
-            const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(job.requestId!)}&folder=${folder}`);
+            const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(job.requestId!)}&folder=${folder}&skip_post=true`);
             const pollData = await pollRes.json();
             const status = pollData.status || "unknown";
 
@@ -916,9 +917,11 @@ export default function AdminDashboard() {
               doneScenes.add(job.sceneNumber);
               sceneUrls[job.sceneNumber] = pollData.blobUrl || pollData.videoUrl;
               setGenerationLog(prev => [...prev, `  🎉 Scene ${job.sceneNumber} "${job.title}" DONE (${timeStr}) ${pollData.sizeMb ? `— ${pollData.sizeMb}MB` : ""}`]);
+              lastProgressAttempt = attempt;
             } else if (status === "moderation_failed" || status === "expired" || status === "failed") {
               failedScenes.add(job.sceneNumber);
               setGenerationLog(prev => [...prev, `  ❌ Scene ${job.sceneNumber} "${job.title}" ${status} (${timeStr})`]);
+              lastProgressAttempt = attempt;
             }
           } catch {
             // poll error — will retry next round
@@ -934,6 +937,20 @@ export default function AdminDashboard() {
         }
 
         if (totalDone >= pendingJobs.length) break;
+
+        // Stall detection: if we have at least half the clips and no scene has
+        // completed/failed in the last 60 seconds, stop waiting and stitch with
+        // what we have rather than blocking for the full 15-minute timeout.
+        const stallThreshold = 6; // 6 polls × 10s = 60 seconds of no progress
+        if (
+          doneScenes.size >= Math.ceil(pendingJobs.length / 2) &&
+          lastProgressAttempt > 0 &&
+          (attempt - lastProgressAttempt) >= stallThreshold
+        ) {
+          const stuckCount = pendingJobs.length - totalDone;
+          setGenerationLog(prev => [...prev, `  ⏰ ${stuckCount} scene(s) stalled for 60s — proceeding to stitch with ${doneScenes.size}/${pendingJobs.length} clips`]);
+          break;
+        }
       }
 
       // Final summary
