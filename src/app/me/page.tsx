@@ -54,21 +54,42 @@ interface PurchasedItem {
 }
 
 export default function MePage() {
-  // Track if we arrived from a Phantom deep link (for auto-connect)
+  // Track if we arrived from a Phantom deep link (for auto-connect / auto-login)
   const phantomDeepLinkedRef = useRef(false);
+  const phantomLoginLinkedRef = useRef(false);
+
+  // Helper: poll for Phantom provider availability (in-app browser may inject late)
+  const waitForPhantomProvider = async (maxWaitMs = 3000, intervalMs = 300) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    let elapsed = 0;
+    while (elapsed < maxWaitMs) {
+      const provider = w.phantom?.solana || w.solana;
+      if (provider?.isPhantom) return provider;
+      await new Promise(r => setTimeout(r, intervalMs));
+      elapsed += intervalMs;
+    }
+    return null;
+  };
 
   const [sessionId, setSessionId] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
 
       // Handle Phantom deep link return — restore session from URL
-      if (params.get("phantom_link") === "1") {
-        phantomDeepLinkedRef.current = true;
+      // phantom_link=1 → wallet linking, phantom_login=1 → wallet login
+      const isPhantomLink = params.get("phantom_link") === "1";
+      const isPhantomLogin = params.get("phantom_login") === "1";
+
+      if (isPhantomLink || isPhantomLogin) {
+        if (isPhantomLink) phantomDeepLinkedRef.current = true;
+        if (isPhantomLogin) phantomLoginLinkedRef.current = true;
         const phantomSid = params.get("sid");
         if (phantomSid) {
           localStorage.setItem("aiglitch-session", phantomSid);
           const cleanUrl = new URL(window.location.href);
           cleanUrl.searchParams.delete("phantom_link");
+          cleanUrl.searchParams.delete("phantom_login");
           cleanUrl.searchParams.delete("sid");
           window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search);
           return phantomSid;
@@ -171,11 +192,19 @@ export default function MePage() {
   // Detect Phantom in-app browser & fetch linked wallet
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const isPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom) ||
-      /Phantom/i.test(navigator.userAgent);
-    setIsPhantomBrowser(isPhantom);
+
+    // Check immediately and also after a delay (provider may inject late)
+    const checkPhantom = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      return !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom) ||
+        /Phantom/i.test(navigator.userAgent);
+    };
+    setIsPhantomBrowser(checkPhantom());
+    // Re-check after provider injection delay
+    const recheckTimer = setTimeout(() => {
+      if (checkPhantom()) setIsPhantomBrowser(true);
+    }, 1500);
 
     // Fetch linked wallet for the logged-in user
     if (sessionId && sessionId !== "anon") {
@@ -188,6 +217,8 @@ export default function MePage() {
         .then(data => { if (data.wallet_address) setLinkedWallet(data.wallet_address); })
         .catch(() => {});
     }
+
+    return () => clearTimeout(recheckTimer);
   }, [sessionId]);
 
   // Build Phantom browse deep link with proper encoding.
@@ -199,20 +230,19 @@ export default function MePage() {
     return `https://phantom.app/ul/browse/${encoded}?ref=${ref}`;
   };
 
-  // Auto-trigger wallet linking when arriving from Phantom deep link
+  // Auto-trigger wallet linking when arriving from Phantom deep link (phantom_link=1)
   useEffect(() => {
     if (!phantomDeepLinkedRef.current) return;
     phantomDeepLinkedRef.current = false; // Only trigger once
 
-    // Wait for Phantom provider to be available in its in-app browser
-    const timer = setTimeout(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any;
-      const provider = w.phantom?.solana || w.solana;
-      if (!provider?.isPhantom) return;
+    // Poll for Phantom provider — in-app browser may inject it late
+    const run = async () => {
+      const provider = await waitForPhantomProvider(4000);
+      if (!provider) return;
 
       try {
         const resp = await provider.connect();
+        if (!resp?.publicKey) return;
         const walletAddress = resp.publicKey.toString();
 
         const res = await fetch("/api/auth/human", {
@@ -233,10 +263,53 @@ export default function MePage() {
       } catch {
         // User rejected or error — they can try manually
       }
-    }, 1500);
-
+    };
+    // Small initial delay for page to stabilize, then poll
+    const timer = setTimeout(run, 500);
     return () => clearTimeout(timer);
   }, [sessionId]);
+
+  // Auto-trigger wallet LOGIN when arriving from Phantom deep link (phantom_login=1)
+  useEffect(() => {
+    if (!phantomLoginLinkedRef.current) return;
+    phantomLoginLinkedRef.current = false; // Only trigger once
+
+    const run = async () => {
+      const provider = await waitForPhantomProvider(4000);
+      if (!provider) return;
+
+      try {
+        const resp = await provider.connect();
+        if (!resp?.publicKey) return;
+        const walletAddress = resp.publicKey.toString();
+
+        const res = await fetch("/api/auth/human", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "wallet_login",
+            session_id: sessionId,
+            wallet_address: walletAddress,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          const newSid = data.user.session_id || sessionId;
+          localStorage.setItem("aiglitch-session", newSid);
+          setSessionId(newSid);
+          setLinkedWallet(walletAddress);
+          setSuccess(data.found_existing
+            ? `Welcome back, @${data.user.username}!`
+            : "Wallet account created!");
+          fetchProfile();
+        }
+      } catch {
+        // User rejected or error — they can try manually via button
+      }
+    };
+    const timer = setTimeout(run, 500);
+    return () => clearTimeout(timer);
+  }, [sessionId, fetchProfile]);
 
   // Wallet-based login (for Phantom browser users)
   const handleWalletLogin = async () => {
@@ -244,20 +317,18 @@ export default function MePage() {
     setWalletLoggingIn(true);
     setError("");
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any;
-      let provider = w.phantom?.solana || w.solana;
-      // Phantom may inject late after page reload — wait briefly then retry
-      if (!provider?.isPhantom) {
-        await new Promise(r => setTimeout(r, 600));
-        provider = w.phantom?.solana || w.solana;
-      }
-      if (!provider?.isPhantom) {
+      // Poll for Phantom provider — may take a moment to inject
+      const provider = await waitForPhantomProvider(3000);
+
+      if (!provider) {
         // Phantom not installed — try deep link for mobile, otherwise open install page
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
-          // Deep link into Phantom mobile app's in-app browser
-          window.location.href = buildPhantomBrowseLink(window.location.href);
+          // Deep link into Phantom mobile app's in-app browser with session context
+          const targetUrl = new URL(window.location.href);
+          targetUrl.searchParams.set("phantom_login", "1");
+          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
           setWalletLoggingIn(false);
           return;
         }
@@ -267,7 +338,24 @@ export default function MePage() {
         setWalletLoggingIn(false);
         return;
       }
-      const resp = await provider.connect();
+
+      // Connect with timeout so it doesn't hang forever
+      const connectWithTimeout = (timeoutMs: number) => {
+        return Promise.race([
+          provider.connect(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
+          ),
+        ]);
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resp = await connectWithTimeout(30000) as any;
+      if (!resp?.publicKey) {
+        setError("Phantom did not return a wallet address. Please try again.");
+        setTimeout(() => setError(""), 5000);
+        setWalletLoggingIn(false);
+        return;
+      }
       const walletAddress = resp.publicKey.toString();
 
       const res = await fetch("/api/auth/human", {
@@ -294,8 +382,15 @@ export default function MePage() {
         setError(data.error || "Wallet login failed");
         setTimeout(() => setError(""), 5000);
       }
-    } catch {
-      setError("Failed to connect Phantom wallet");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "WALLET_TIMEOUT") {
+        setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
+      } else if (message.includes("User rejected")) {
+        setError("Connection was rejected. Please approve the Phantom connection request.");
+      } else {
+        setError("Failed to connect Phantom wallet. Please make sure Phantom is unlocked and try again.");
+      }
       setTimeout(() => setError(""), 5000);
     }
     setWalletLoggingIn(false);
@@ -307,15 +402,10 @@ export default function MePage() {
     setWalletLinking(true);
     setError("");
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any;
-      let provider = w.phantom?.solana || w.solana;
-      // Phantom may inject late after page reload — wait briefly then retry
-      if (!provider?.isPhantom) {
-        await new Promise(r => setTimeout(r, 600));
-        provider = w.phantom?.solana || w.solana;
-      }
-      if (!provider?.isPhantom) {
+      // Poll for Phantom provider — may take a moment to inject
+      const provider = await waitForPhantomProvider(3000);
+
+      if (!provider) {
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isMobile) {
           // Deep link into Phantom's in-app browser with session context
@@ -342,6 +432,12 @@ export default function MePage() {
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resp = await connectWithTimeout(30000) as any;
+      if (!resp?.publicKey) {
+        setError("Phantom did not return a wallet address. Please try again.");
+        setTimeout(() => setError(""), 5000);
+        setWalletLinking(false);
+        return;
+      }
       const walletAddress = resp.publicKey.toString();
 
       const res = await fetch("/api/auth/human", {

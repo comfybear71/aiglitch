@@ -119,6 +119,16 @@ export default function WalletPage() {
     const tryAutoConnect = async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = window as any;
+      // Poll for Phantom provider — in-app browser may inject it late
+      let elapsed = 0;
+      const maxWait = 3000;
+      const interval = 300;
+      while (elapsed < maxWait) {
+        const isPhantomAvailable = w.phantom?.solana?.isPhantom || w.solana?.isPhantom;
+        if (isPhantomAvailable) break;
+        await new Promise(r => setTimeout(r, interval));
+        elapsed += interval;
+      }
       const isPhantomAvailable = w.phantom?.solana?.isPhantom || w.solana?.isPhantom;
       if (!isPhantomAvailable) return;
       const phantomWallet = wallets.find(wal => wal.adapter.name === "Phantom");
