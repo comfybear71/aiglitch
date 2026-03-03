@@ -1,13 +1,19 @@
 /**
- * AIG!itch — Two-Tier TTL Cache
- * ==============================
+ * AIG!itch — Two-Tier TTL Cache (Performance-Tuned)
+ * ==================================================
  * L1: In-memory Map (instant, per serverless instance)
  * L2: Upstash Redis (persistent across deploys, shared across instances)
+ *
+ * Performance features:
+ * - Redis reads capped at 150ms via Promise.race (prevents slow Redis from blocking pages)
+ * - Stale-while-revalidate: serves expired L1 entries instantly, refreshes in background
+ * - Fire-and-forget Redis writes (never block on L2 writes)
+ * - Timing metrics for diagnostics via getCacheMetrics()
  *
  * If Redis isn't configured (no UPSTASH_REDIS_REST_URL), degrades gracefully
  * to pure in-memory — identical to the original behavior.
  *
- * Usage (unchanged from before):
+ * Usage (unchanged):
  *   import { cache, TTL } from "@/lib/cache";
  *
  *   const personas = await cache.getOrSet("personas:active", 120, async () => {
@@ -42,33 +48,146 @@ function getRedis(): Redis | null {
 
 const REDIS_PREFIX = "aiglitch:";
 
+// ── Performance Tuning ──────────────────────────────────────────────
+
+/** Hard cap on Redis read latency — after this, treat as a miss. */
+const REDIS_READ_TIMEOUT_MS = 150;
+
+/** Entries within this factor of their TTL after expiry are "stale but usable". */
+const STALE_GRACE_FACTOR = 2; // serve stale up to 2x TTL
+
+/** Log warnings for cache operations exceeding this threshold. */
+const SLOW_OP_THRESHOLD_MS = 100;
+
+// ── Metrics ─────────────────────────────────────────────────────────
+
+interface CacheMetrics {
+  l1Hits: number;
+  l1Misses: number;
+  l1StaleHits: number;
+  l2Hits: number;
+  l2Misses: number;
+  l2Timeouts: number;
+  l2Errors: number;
+  computes: number;
+  slowOps: number;
+}
+
+const metrics: CacheMetrics = {
+  l1Hits: 0,
+  l1Misses: 0,
+  l1StaleHits: 0,
+  l2Hits: 0,
+  l2Misses: 0,
+  l2Timeouts: 0,
+  l2Errors: 0,
+  computes: 0,
+  slowOps: 0,
+};
+
+/** Returns a snapshot of cache performance metrics (useful for /api/health). */
+export function getCacheMetrics(): Readonly<CacheMetrics> {
+  return { ...metrics };
+}
+
+/** Reset metrics (useful in tests). */
+export function resetCacheMetrics(): void {
+  metrics.l1Hits = 0;
+  metrics.l1Misses = 0;
+  metrics.l1StaleHits = 0;
+  metrics.l2Hits = 0;
+  metrics.l2Misses = 0;
+  metrics.l2Timeouts = 0;
+  metrics.l2Errors = 0;
+  metrics.computes = 0;
+  metrics.slowOps = 0;
+}
+
+// ── Redis with timeout ──────────────────────────────────────────────
+
+const TIMEOUT_SENTINEL = Symbol("timeout");
+
+async function redisGetWithTimeout<T>(
+  redis: Redis,
+  key: string,
+): Promise<T | null> {
+  const start = Date.now();
+  try {
+    const result = await Promise.race([
+      redis.get<T>(key),
+      new Promise<typeof TIMEOUT_SENTINEL>((resolve) =>
+        setTimeout(() => resolve(TIMEOUT_SENTINEL), REDIS_READ_TIMEOUT_MS),
+      ),
+    ]);
+
+    if (result === TIMEOUT_SENTINEL) {
+      metrics.l2Timeouts++;
+      const elapsed = Date.now() - start;
+      console.warn(`[Cache] Redis read timed out after ${elapsed}ms for key: ${key}`);
+      return null;
+    }
+
+    return result as T | null;
+  } catch (err) {
+    metrics.l2Errors++;
+    const elapsed = Date.now() - start;
+    console.warn(`[Cache] Redis read failed after ${elapsed}ms:`, err);
+    return null;
+  }
+}
+
 // ── L1: In-Memory TTL Cache ─────────────────────────────────────────
 
 interface CacheEntry<T = unknown> {
   value: T;
   expiresAt: number; // Date.now() + ttl
+  ttlMs: number;     // original TTL in ms (for stale grace calculation)
 }
 
 class TTLCache {
   private store = new Map<string, CacheEntry>();
   private readonly maxEntries: number;
+  /** Keys currently being revalidated in background — prevents stampede. */
+  private revalidating = new Set<string>();
 
   constructor(maxEntries = 500) {
     this.maxEntries = maxEntries;
   }
 
-  /** Get a cached value from L1 (in-memory), or null if missing/expired. */
+  /** Get a fresh (non-expired) value from L1, or null. */
   get<T>(key: string): T | null {
     const entry = this.store.get(key);
     if (!entry) return null;
     if (Date.now() > entry.expiresAt) {
+      // Don't delete — stale entries are still usable for SWR
+      return null;
+    }
+    return entry.value as T;
+  }
+
+  /**
+   * Get a stale (expired but within grace window) value from L1.
+   * Returns null if the entry doesn't exist or has exceeded the grace window.
+   */
+  private getStale<T>(key: string): T | null {
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    const now = Date.now();
+    if (now <= entry.expiresAt) {
+      // Not stale — it's still fresh (caller should have used get())
+      return entry.value as T;
+    }
+    // Check if within stale grace window
+    const staleDeadline = entry.expiresAt + entry.ttlMs * STALE_GRACE_FACTOR;
+    if (now > staleDeadline) {
+      // Too old — evict
       this.store.delete(key);
       return null;
     }
     return entry.value as T;
   }
 
-  /** Store a value in L1 (in-memory) with a TTL in seconds. */
+  /** Store a value in L1 with a TTL in seconds. */
   set<T>(key: string, ttlSeconds: number, value: T): void {
     // Evict expired entries when nearing capacity
     if (this.store.size >= this.maxEntries) {
@@ -82,46 +201,64 @@ class TTLCache {
     this.store.set(key, {
       value,
       expiresAt: Date.now() + ttlSeconds * 1000,
+      ttlMs: ttlSeconds * 1000,
     });
   }
 
   /**
    * Get cached value or compute + cache it.
-   * Two-tier: checks L1 (memory) → L2 (Redis) → compute.
+   * Four-tier lookup: L1 fresh → L1 stale (+ bg refresh) → L2 with timeout → compute.
    */
   async getOrSet<T>(key: string, ttlSeconds: number, compute: () => Promise<T>): Promise<T> {
-    // L1: In-memory (instant)
-    const l1 = this.get<T>(key);
-    if (l1 !== null) return l1;
+    const opStart = Date.now();
 
-    // L2: Redis (persistent, cross-instance)
-    const redis = getRedis();
-    if (redis) {
-      try {
-        const l2 = await redis.get<T>(`${REDIS_PREFIX}${key}`);
-        if (l2 !== null && l2 !== undefined) {
-          // Warm L1 from L2 hit
-          this.set(key, ttlSeconds, l2);
-          return l2;
-        }
-      } catch (err) {
-        console.warn("[Cache] Redis read failed, falling back to compute:", err);
-      }
+    // ── Tier 1: L1 fresh (instant) ──
+    const l1 = this.get<T>(key);
+    if (l1 !== null) {
+      metrics.l1Hits++;
+      return l1;
     }
 
-    // Miss: compute fresh value
+    // ── Tier 2: L1 stale (instant, triggers background refresh) ──
+    const stale = this.getStale<T>(key);
+    if (stale !== null) {
+      metrics.l1StaleHits++;
+      // Serve stale immediately, refresh in background
+      this.revalidateInBackground(key, ttlSeconds, compute);
+      return stale;
+    }
+
+    metrics.l1Misses++;
+
+    // ── Tier 3: L2 Redis with timeout ──
+    const redis = getRedis();
+    if (redis) {
+      const l2 = await redisGetWithTimeout<T>(redis, `${REDIS_PREFIX}${key}`);
+      if (l2 !== null && l2 !== undefined) {
+        metrics.l2Hits++;
+        // Warm L1 from L2 hit
+        this.set(key, ttlSeconds, l2);
+        this.logSlowOp(opStart, key, "L2 hit");
+        return l2;
+      }
+      metrics.l2Misses++;
+    }
+
+    // ── Tier 4: Compute fresh value ──
+    metrics.computes++;
     const value = await compute();
 
     // Store in L1
     this.set(key, ttlSeconds, value);
 
-    // Store in L2 (best-effort, don't block)
+    // Store in L2 (fire-and-forget, never block)
     if (redis) {
       redis.set(`${REDIS_PREFIX}${key}`, value, { ex: ttlSeconds }).catch((err: unknown) => {
         console.warn("[Cache] Redis write failed:", err);
       });
     }
 
+    this.logSlowOp(opStart, key, "compute");
     return value;
   }
 
@@ -164,6 +301,7 @@ class TTLCache {
   /** Clear the entire L1 cache. */
   clear(): void {
     this.store.clear();
+    this.revalidating.clear();
   }
 
   /** Current L1 cache size. */
@@ -171,11 +309,40 @@ class TTLCache {
     return this.store.size;
   }
 
+  // ── Private helpers ─────────────────────────────────────────────────
+
+  /** Revalidate a key in the background (stale-while-revalidate). */
+  private revalidateInBackground<T>(key: string, ttlSeconds: number, compute: () => Promise<T>): void {
+    // Prevent stampede: only one revalidation per key at a time
+    if (this.revalidating.has(key)) return;
+    this.revalidating.add(key);
+
+    compute()
+      .then((value) => {
+        this.set(key, ttlSeconds, value);
+        // Also update L2
+        const redis = getRedis();
+        if (redis) {
+          redis.set(`${REDIS_PREFIX}${key}`, value, { ex: ttlSeconds }).catch((err: unknown) => {
+            console.warn("[Cache] Redis bg-write failed:", err);
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Cache] Background revalidation failed for key "${key}":`, err);
+      })
+      .finally(() => {
+        this.revalidating.delete(key);
+      });
+  }
+
   /** Sweep expired L1 entries. Called automatically on capacity pressure. */
   private evictExpired(): void {
     const now = Date.now();
     for (const [key, entry] of this.store) {
-      if (now > entry.expiresAt) {
+      // Evict entries past stale grace too
+      const staleDeadline = entry.expiresAt + entry.ttlMs * STALE_GRACE_FACTOR;
+      if (now > staleDeadline) {
         this.store.delete(key);
       }
     }
@@ -195,6 +362,15 @@ class TTLCache {
         await redis.del(...keys);
       }
     } while (cursor !== "0");
+  }
+
+  /** Log a warning if a cache operation was slow. */
+  private logSlowOp(startMs: number, key: string, tier: string): void {
+    const elapsed = Date.now() - startMs;
+    if (elapsed > SLOW_OP_THRESHOLD_MS) {
+      metrics.slowOps++;
+      console.warn(`[Cache] Slow ${tier} for "${key}": ${elapsed}ms`);
+    }
   }
 }
 

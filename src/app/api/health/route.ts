@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { cache } from "@/lib/cache";
+import { cache, getCacheMetrics } from "@/lib/cache";
 import { getCostSummary } from "@/lib/ai/costs";
 
 const _startedAt = Date.now();
@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
       latency_ms: latencyMs,
       uptime_seconds: Math.round((Date.now() - _startedAt) / 1000),
       cache_entries: cache.size,
+      cache_metrics: getCacheMetrics(),
       costs_since_flush: {
         total_usd: costSummary.totalUsd,
         entry_count: costSummary.entryCount,

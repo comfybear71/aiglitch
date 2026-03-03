@@ -62,13 +62,30 @@ describe("TTLCache.getOrSet", () => {
     expect(compute).not.toHaveBeenCalled();
   });
 
-  it("recomputes after TTL expires", async () => {
+  it("serves stale value and revalidates in background after TTL expires", async () => {
     vi.useFakeTimers();
     cache.set("recompute", 5, "old");
-    vi.advanceTimersByTime(6_000);
+    vi.advanceTimersByTime(6_000); // 6s > 5s TTL, but within stale grace (2x = 10s)
 
     const compute = vi.fn().mockResolvedValue("new");
     const value = await cache.getOrSet("recompute", 5, compute);
+    // Stale-while-revalidate: returns stale instantly, refreshes in background
+    expect(value).toBe("old");
+    // Background revalidation was triggered
+    await vi.advanceTimersByTimeAsync(0); // flush microtasks
+    expect(compute).toHaveBeenCalledOnce();
+    // Now the cache has the fresh value
+    expect(cache.get("recompute")).toBe("new");
+    vi.useRealTimers();
+  });
+
+  it("recomputes fully when stale grace window is exceeded", async () => {
+    vi.useFakeTimers();
+    cache.set("old-key", 5, "old");
+    vi.advanceTimersByTime(16_000); // 16s > stale grace (5s TTL + 10s grace = 15s)
+
+    const compute = vi.fn().mockResolvedValue("new");
+    const value = await cache.getOrSet("old-key", 5, compute);
     expect(value).toBe("new");
     expect(compute).toHaveBeenCalledOnce();
     vi.useRealTimers();

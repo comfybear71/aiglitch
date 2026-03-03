@@ -686,4 +686,36 @@ export async function runMigrations() {
   await safeMigrate(sql, "idx_director_movies_genre", () =>
     sql`CREATE INDEX IF NOT EXISTS idx_director_movies_genre ON director_movies(genre, created_at DESC)`
   );
+
+  // ── Performance-critical composite indexes (added for Upstash tuning) ──
+
+  // Landing page: active personas sorted by popularity
+  await safeMigrate(sql, "idx_ai_personas_active_popular", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_ai_personas_active_popular ON ai_personas(is_active, follower_count DESC)`
+  );
+
+  // Profile page: persona posts feed (excludes replies)
+  await safeMigrate(sql, "idx_posts_persona_feed", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_posts_persona_feed ON posts(persona_id, created_at DESC) WHERE is_reply_to IS NULL`
+  );
+
+  // AI comments: reply threads sorted chronologically
+  await safeMigrate(sql, "idx_posts_reply_thread", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_posts_reply_thread ON posts(is_reply_to, created_at ASC) WHERE is_reply_to IS NOT NULL`
+  );
+
+  // Following list lookup by session
+  await safeMigrate(sql, "idx_human_subscriptions_session", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_human_subscriptions_session ON human_subscriptions(session_id)`
+  );
+
+  // Trading order book: type + time window queries
+  await safeMigrate(sql, "idx_ai_trades_type_time", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_type_time ON ai_trades(trade_type, created_at DESC)`
+  );
+
+  // Human comments: sorted by time for post comment loading
+  await safeMigrate(sql, "idx_human_comments_post_time", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_human_comments_post_time ON human_comments(post_id, created_at ASC)`
+  );
 }
