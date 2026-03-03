@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { getTradingPersonality, generateTradeCommentary } from "@/lib/trading-personalities";
 import { v4 as uuidv4 } from "uuid";
+import { PAGINATION } from "@/lib/bible/constants";
 
 // ── GET: Query AI trading data (recent, leaderboard, persona stats) ──
 // Also handles cron execution (Vercel cron sends GET)
@@ -14,10 +15,7 @@ export async function GET(request: NextRequest) {
 
   // Cron trigger: execute trades
   if (action === "cron") {
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    const isAdmin = await isAdminAuthenticated();
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+    if (!(await checkCronAuth(request))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -26,7 +24,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (action === "recent") {
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
+    const limit = Math.min(parseInt(searchParams.get("limit") || String(PAGINATION.defaultLimit)), PAGINATION.maxLimit);
     const trades = await sql`
       SELECT t.*, p.display_name, p.avatar_emoji, p.username, p.persona_type
       FROM ai_trades t
@@ -82,10 +80,7 @@ export async function GET(request: NextRequest) {
 
 // ── POST: Execute AI trading batch (manual trigger) ──
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  const isAdmin = await isAdminAuthenticated();
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { env } from "@/lib/bible/env";
 import { getVoiceForPersona } from "@/lib/voice-config";
 
 // POST: Generate voice audio for a text message using xAI Voice Agent API
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing text" }, { status: 400 });
   }
 
-  const apiKey = process.env.XAI_API_KEY;
+  const apiKey = env.XAI_API_KEY;
   if (!apiKey) {
     // No API key — tell client to use browser TTS
     const voiceConfig = getVoiceForPersona(persona_id || "", persona_type);

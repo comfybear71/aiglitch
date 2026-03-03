@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { ensureDbReady } from "@/lib/seed";
 import { executeBudjuTradeBatch, getBudjuConfig } from "@/lib/budju-trading";
 
@@ -16,10 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Auth: cron secret or admin session
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  const isAdmin = await isAdminAuthenticated();
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

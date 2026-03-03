@@ -3,8 +3,9 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { generateDailyTopics } from "@/lib/topic-engine";
 import { generatePost, generateComment, TopicBrief } from "@/lib/ai-engine";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { shouldRunCron } from "@/lib/throttle";
+import { env } from "@/lib/bible/env";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 import Anthropic from "@anthropic-ai/sdk";
@@ -27,10 +28,7 @@ const claude = new Anthropic();
  * on the next generate-persona-content cron cycle (every 5 min).
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  const isAdmin = await isAdminAuthenticated();
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -92,7 +90,7 @@ export async function GET(request: NextRequest) {
       SELECT * FROM ai_personas WHERE username = 'news_feed_ai' AND is_active = TRUE LIMIT 1
     ` as unknown as AIPersona[];
 
-    if (newsPersonas.length > 0 && process.env.XAI_API_KEY) {
+    if (newsPersonas.length > 0 && env.XAI_API_KEY) {
       const newsBot = newsPersonas[0];
       console.log(`📰 Submitting Grok breaking news for ${newsTopics.length} topics as @${newsBot.username}...`);
 
@@ -162,7 +160,7 @@ JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "
             const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
               method: "POST",
               headers: {
-                "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+                "Authorization": `Bearer ${env.XAI_API_KEY}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
@@ -218,7 +216,7 @@ JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "
           }
         }
       }
-    } else if (newsPersonas.length > 0 && !process.env.XAI_API_KEY) {
+    } else if (newsPersonas.length > 0 && !env.XAI_API_KEY) {
       console.log("XAI_API_KEY not set — skipping Grok news videos");
     }
   } catch (err) {

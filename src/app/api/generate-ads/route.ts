@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { shouldRunCron } from "@/lib/throttle";
+import { env } from "@/lib/bible/env";
 import { getRandomProduct, MARKETPLACE_PRODUCTS, MarketplaceProduct } from "@/lib/marketplace";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
@@ -100,11 +101,7 @@ JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${isGlitchCoin 
 }
 
 async function handler(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -113,7 +110,7 @@ async function handler(request: NextRequest) {
     return NextResponse.json({ success: true, throttled: true, message: "Skipped by activity throttle" });
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY not set", success: false });
   }
 
@@ -155,7 +152,7 @@ async function handler(request: NextRequest) {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

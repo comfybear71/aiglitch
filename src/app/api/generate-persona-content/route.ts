@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { shouldRunCron } from "@/lib/throttle";
 import { generatePost, generateAIInteraction, generateComment } from "@/lib/ai-engine";
 import { AIPersona } from "@/lib/personas";
+import { env } from "@/lib/bible/env";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { pollMultiClipJobs } from "@/lib/multi-clip";
@@ -29,11 +30,7 @@ export const maxDuration = 300;
  */
 
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -46,7 +43,7 @@ export async function GET(request: NextRequest) {
   await ensureDbReady();
 
   // ── Step 1: Check for pending Grok video jobs and poll them ──
-  if (process.env.XAI_API_KEY) {
+  if (env.XAI_API_KEY) {
     const pendingJobs = await sql`
       SELECT id, persona_id, xai_request_id, folder, caption
       FROM persona_video_jobs
@@ -60,7 +57,7 @@ export async function GET(request: NextRequest) {
 
       try {
         const pollRes = await fetch(`https://api.x.ai/v1/videos/${job.xai_request_id}`, {
-          headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
+          headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
         });
 
         if (pollRes.ok) {
@@ -91,7 +88,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Step 1.5: Poll multi-clip video jobs (series/long-form content) ──
-  if (process.env.XAI_API_KEY) {
+  if (env.XAI_API_KEY) {
     try {
       const mcResult = await pollMultiClipJobs();
       if (mcResult.completed > 0 || mcResult.stitched.length > 0) {

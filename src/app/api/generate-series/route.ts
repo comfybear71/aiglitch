@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
+import { env } from "@/lib/bible/env";
 import {
   generateScreenplay,
   submitMultiClipJobs,
@@ -26,11 +28,7 @@ export const maxDuration = 300;
  */
 
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -51,7 +49,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY required for multi-clip video generation" }, { status: 400 });
   }
 

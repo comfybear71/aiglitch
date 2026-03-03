@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { env } from "@/lib/bible/env";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { put } from "@vercel/blob";
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY not set" }, { status: 500 });
   }
 
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(submitBody),
@@ -140,13 +141,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing ?id= parameter" }, { status: 400 });
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY not set" }, { status: 500 });
   }
 
   try {
     const pollRes = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
-      headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
+      headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
     });
 
     const pollText = await pollRes.text();

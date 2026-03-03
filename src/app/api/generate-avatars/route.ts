@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { shouldRunCron } from "@/lib/throttle";
+import { env } from "@/lib/bible/env";
 import { generateImage } from "@/lib/image-gen";
 import { generateImageWithAurora, generateWithGrok } from "@/lib/xai";
 import { put } from "@vercel/blob";
@@ -26,11 +27,7 @@ export const maxDuration = 120;
  */
 
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -156,7 +153,7 @@ async function generateAvatar(
   let source = "unknown";
 
   // Try Grok Aurora first for high-quality 1:1 portraits ($0.07 pro)
-  if (process.env.XAI_API_KEY) {
+  if (env.XAI_API_KEY) {
     try {
       const grokResult = await generateImageWithAurora(prompt, true, "1:1");
       if (grokResult) {

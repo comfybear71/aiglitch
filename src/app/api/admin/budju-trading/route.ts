@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { env } from "@/lib/bible/env";
 import { ensureDbReady } from "@/lib/seed";
 import {
   getBudjuDashboard,
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     try {
       const data = await getBudjuDashboard();
       // Warn if Jupiter API key is missing
-      const jupiterKeySet = !!process.env.JUPITER_API_KEY;
+      const jupiterKeySet = !!env.JUPITER_API_KEY;
       return NextResponse.json({ ...data, jupiter_api_key_set: jupiterKeySet });
     } catch (err) {
       console.error("[BUDJU Dashboard] Error:", err);

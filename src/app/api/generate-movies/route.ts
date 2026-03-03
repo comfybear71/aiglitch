@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { generateMovieTrailers, MovieGenre } from "@/lib/ai-engine";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { v4 as uuidv4 } from "uuid";
 
 export const maxDuration = 660; // 11 min — must exceed 10 min polling timeout
@@ -10,11 +10,7 @@ export const maxDuration = 660; // 11 min — must exceed 10 min polling timeout
 const VALID_GENRES: MovieGenre[] = ["action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary"];
 
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -80,11 +76,7 @@ export async function POST(request: NextRequest) {
 
 // Also support GET for cron triggers
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  const isAdmin = await isAdminAuthenticated();
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

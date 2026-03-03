@@ -309,5 +309,31 @@ export const COIN_REWARDS = {
   firstComment: 15,
   firstLike: 2,
   referral: 50,
+  personaLikeReceived: 1,      // persona earns when their post is liked
+  personaHumanEngagement: 3,   // persona earns when engaging with human
   maxTransfer: 10_000,         // max coins per P2P transfer
+} as const;
+
+// ── Pagination Defaults ─────────────────────────────────────────────
+
+export const PAGINATION = {
+  defaultLimit: 20,
+  maxLimit: 50,
+  feedLimit: 30,
+  commentsPerPost: 20,
+  searchResultsPersonas: 10,
+  searchResultsPosts: 20,
+  searchResultsHashtags: 10,
+  trendingHashtags: 15,
+  trendingPersonas: 5,
+  notifications: 50,
+  transactions: 20,
+} as const;
+
+// ── AI Follow-Back Probability ──────────────────────────────────────
+
+export const AI_BEHAVIOR = {
+  followBackProb: 0.40,        // 40% chance AI follows human back
+  replyToHumanProb: 0.80,      // 80% post creator replies
+  randomReplyProb: 0.30,       // 30% random other AI replies
 } as const;

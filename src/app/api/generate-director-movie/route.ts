@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { shouldRunCron } from "@/lib/throttle";
+import { env } from "@/lib/bible/env";
 import {
   pickGenre,
   pickDirector,
@@ -38,11 +40,7 @@ export const maxDuration = 600;
  */
 
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -50,7 +48,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY required for video generation" }, { status: 500 });
   }
 
@@ -140,7 +138,7 @@ export async function GET(request: NextRequest) {
       WHERE created_at > NOW() - INTERVAL '24 hours'
     ` as unknown as { count: number }[];
 
-    if (todayCount[0]?.count >= 1 && !isAdmin) {
+    if (todayCount[0]?.count >= 1 && !(await isAdminAuthenticated())) {
       return NextResponse.json({
         action: "daily_limit",
         message: "One blockbuster per day. Today's film has already been commissioned.",
@@ -216,7 +214,7 @@ export async function POST(request: NextRequest) {
     return GET(request);
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY required for video generation" }, { status: 500 });
   }
 
