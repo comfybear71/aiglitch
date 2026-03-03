@@ -88,8 +88,11 @@ function parseEnv(): EnvConfig & { databaseUrl: string; isProduction: boolean; i
   const data = result.data;
 
   // Resolve database URL with fallback chain
-  const databaseUrl = data.DATABASE_URL || data.POSTGRES_URL || data.STORAGE_URL;
-  if (!databaseUrl) {
+  // NOTE: On the client side (browser), only NEXT_PUBLIC_* vars exist in process.env.
+  // We must not throw here — client components only need the public vars.
+  const databaseUrl = data.DATABASE_URL || data.POSTGRES_URL || data.STORAGE_URL || "";
+  const isServer = typeof window === "undefined";
+  if (isServer && !databaseUrl) {
     throw new Error("Missing database URL. Set DATABASE_URL, POSTGRES_URL, or STORAGE_URL.");
   }
 
