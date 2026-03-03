@@ -33,6 +33,7 @@ import { getDb } from "../db";
 import { GENRE_TEMPLATES, type GenreTemplate } from "../media/multi-clip";
 import { concatMP4Clips } from "../media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
+import { submitVideoJob } from "../xai";
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -646,39 +647,36 @@ export async function submitDirectorFilm(
     );
 
     try {
-      const response = await fetch("https://api.x.ai/v1/videos/generations", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "grok-imagine-video",
-          prompt: enrichedPrompt,
-          duration: scene.duration,
-          aspect_ratio: "16:9",
-          resolution: "720p",
-        }),
-      });
+      // Use shared submitVideoJob() for consistent auth, logging, and Kie.ai fallback
+      const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9");
 
-      if (!response.ok) {
-        console.error(`[director-movies] Scene ${scene.sceneNumber} submit failed:`, await response.text());
+      if (result.fellBack) {
+        console.warn(`[director-movies] Scene ${scene.sceneNumber} used fallback provider: ${result.provider}`);
+      }
+
+      if (result.requestId) {
+        // Grok accepted — will poll later
+        await sql`
+          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, xai_request_id, status)
+          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${result.requestId}, ${"submitted"})
+        `;
+        console.log(`[director-movies] Scene ${scene.sceneNumber}/${screenplay.scenes.length} submitted: ${result.requestId} (${result.provider})`);
+      } else if (result.videoUrl) {
+        // Synchronous result (from Kie.ai fallback or rare Grok instant response)
+        const blobUrl = await persistDirectorClip(result.videoUrl, jobId, scene.sceneNumber);
+        await sql`
+          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, video_url, status, completed_at)
+          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${blobUrl}, ${"done"}, NOW())
+        `;
+        await sql`UPDATE multi_clip_jobs SET completed_clips = completed_clips + 1 WHERE id = ${jobId}`;
+        console.log(`[director-movies] Scene ${scene.sceneNumber}/${screenplay.scenes.length} done immediately (${result.provider})`);
+      } else {
+        // Both Grok and fallback failed
+        console.error(`[director-movies] Scene ${scene.sceneNumber} submit failed — no provider available`);
         await sql`
           INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status)
           VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"})
         `;
-        continue;
-      }
-
-      const data = await response.json();
-      const requestId = data.request_id;
-
-      if (requestId) {
-        await sql`
-          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, xai_request_id, status)
-          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${requestId}, ${"submitted"})
-        `;
-        console.log(`[director-movies] Scene ${scene.sceneNumber}/${screenplay.scenes.length} submitted: ${requestId}`);
       }
     } catch (err) {
       console.error(`[director-movies] Scene ${scene.sceneNumber} error:`, err);
@@ -846,4 +844,17 @@ export async function getMovieConcept(genre: string): Promise<{ id?: string; tit
 
 function capitalize(s: string): string {
   return capitalizeGenre(s);
+}
+
+/** Persist a fallback-provider video clip to blob storage (used when Kie.ai returns a direct URL). */
+async function persistDirectorClip(tempUrl: string, jobId: string, sceneNumber: number): Promise<string> {
+  const res = await fetch(tempUrl);
+  if (!res.ok) throw new Error(`Failed to download clip: HTTP ${res.status}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const blob = await put(`multi-clip/${jobId}/scene-${sceneNumber}.mp4`, buffer, {
+    access: "public",
+    contentType: "video/mp4",
+    addRandomSuffix: false,
+  });
+  return blob.url;
 }

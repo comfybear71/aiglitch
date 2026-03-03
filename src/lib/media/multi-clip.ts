@@ -23,7 +23,8 @@ import { put } from "@vercel/blob";
 import { getDb } from "../db";
 import { concatMP4Clips } from "./mp4-concat";
 import { getGenreBlobFolder } from "../genre-utils";
-// Video generation is handled via direct fetch to xAI API for async job submission
+import { submitVideoJob } from "../xai";
+import { env } from "../bible/env";
 
 // ─── Genre Prompt Templates ───────────────────────────────────────────────
 // Based on the PDF's 5-component prompt framework:
@@ -295,48 +296,34 @@ export async function submitMultiClipJobs(
     const enrichedPrompt = `${scene.videoPrompt}. ${template.cinematicStyle}. ${template.lightingDesign}. ${template.technicalValues}`;
 
     try {
-      // Submit to Grok (async — returns request_id)
-      const response = await fetch("https://api.x.ai/v1/videos/generations", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "grok-imagine-video",
-          prompt: enrichedPrompt,
-          duration: scene.duration,
-          aspect_ratio: aspectRatio,
-          resolution: "720p",
-        }),
-      });
+      // Use shared submitVideoJob() for consistent auth, logging, and Kie.ai fallback
+      const result = await submitVideoJob(enrichedPrompt, scene.duration, aspectRatio);
 
-      if (!response.ok) {
-        console.error(`[multi-clip] Scene ${scene.sceneNumber} submit failed:`, await response.text());
-        await sql`
-          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status)
-          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"})
-        `;
-        continue;
+      if (result.fellBack) {
+        console.warn(`[multi-clip] Scene ${scene.sceneNumber} used fallback provider: ${result.provider}`);
       }
 
-      const data = await response.json();
-      const requestId = data.request_id;
-
-      if (requestId) {
+      if (result.requestId) {
         await sql`
           INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, xai_request_id, status)
-          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${requestId}, ${"submitted"})
+          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${result.requestId}, ${"submitted"})
         `;
-        console.log(`[multi-clip] Scene ${scene.sceneNumber}/${screenplay.clipCount} submitted: ${requestId}`);
-      } else if (data.video?.url) {
-        // Rare: synchronous result
-        const blobUrl = await persistClip(data.video.url, jobId, scene.sceneNumber);
+        console.log(`[multi-clip] Scene ${scene.sceneNumber}/${screenplay.clipCount} submitted: ${result.requestId} (${result.provider})`);
+      } else if (result.videoUrl) {
+        // Synchronous result (from Kie.ai fallback or rare Grok instant response)
+        const blobUrl = await persistClip(result.videoUrl, jobId, scene.sceneNumber);
         await sql`
           INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, video_url, status, completed_at)
           VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${blobUrl}, ${"done"}, NOW())
         `;
         await sql`UPDATE multi_clip_jobs SET completed_clips = completed_clips + 1 WHERE id = ${jobId}`;
+        console.log(`[multi-clip] Scene ${scene.sceneNumber}/${screenplay.clipCount} done immediately (${result.provider})`);
+      } else {
+        console.error(`[multi-clip] Scene ${scene.sceneNumber} submit failed — no provider available`);
+        await sql`
+          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status)
+          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"})
+        `;
       }
     } catch (err) {
       console.error(`[multi-clip] Scene ${scene.sceneNumber} error:`, err);
@@ -380,7 +367,7 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
     result.polled++;
     try {
       const pollRes = await fetch(`https://api.x.ai/v1/videos/${scene.xai_request_id}`, {
-        headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
+        headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
       });
 
       if (!pollRes.ok) continue;

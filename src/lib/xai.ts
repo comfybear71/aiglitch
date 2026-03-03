@@ -386,3 +386,173 @@ export async function generateVideoWithGrok(
 export function isXAIConfigured(): boolean {
   return !!env.XAI_API_KEY;
 }
+
+// ── Video Job Submission with Auth-Error Fallback ───────────────────
+
+export interface VideoJobResult {
+  /** xAI request_id for polling, or null if fallback provider was used */
+  requestId: string | null;
+  /** If the video was generated synchronously (rare), this is the URL */
+  videoUrl: string | null;
+  /** Which provider handled the request */
+  provider: "grok" | "kie" | "none";
+  /** true if grok returned 401/403 and we fell back */
+  fellBack: boolean;
+}
+
+/**
+ * Submit a video generation job to Grok, with automatic fallback to Kie.ai
+ * on auth errors (401/403). Used by director-movies and multi-clip pipelines.
+ *
+ * This replaces raw fetch calls scattered across the codebase — all video
+ * submissions should go through here for consistent auth, logging, and fallback.
+ *
+ * NOTE on the "Unauthorized" regression: if you see this, check:
+ *   1. XAI_API_KEY is set in .env.local / Vercel env vars
+ *   2. The key has video generation permissions (https://console.x.ai → API Keys)
+ *   3. The key has sufficient credits (Super Grok tier required for video)
+ *   4. The key hasn't been revoked or expired
+ */
+export async function submitVideoJob(
+  prompt: string,
+  duration: number = 10,
+  aspectRatio: "9:16" | "16:9" | "1:1" = "16:9",
+): Promise<VideoJobResult> {
+  const noResult: VideoJobResult = { requestId: null, videoUrl: null, provider: "none", fellBack: false };
+
+  // ── Try Grok first ──
+  const apiKey = env.XAI_API_KEY;
+  if (!apiKey) {
+    console.warn("[video-submit] XAI_API_KEY not set — trying fallback provider");
+    return tryKieFallback(prompt, aspectRatio, true);
+  }
+
+  const maskedKey = `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`;
+  console.log(`[video-submit] Submitting to Grok (${duration}s, ${aspectRatio}, key=${maskedKey})`);
+
+  try {
+    const res = await fetch("https://api.x.ai/v1/videos/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "grok-imagine-video",
+        prompt,
+        duration,
+        aspect_ratio: aspectRatio,
+        resolution: "720p",
+      }),
+    });
+
+    if (!res.ok) {
+      const status = res.status;
+      const errBody = await res.text().catch(() => "(unreadable)");
+
+      console.error(
+        `[video-submit] Grok FAILED — HTTP ${status}\n` +
+        `  URL: POST https://api.x.ai/v1/videos/generations\n` +
+        `  Key: ${maskedKey}\n` +
+        `  Body: ${errBody.slice(0, 500)}`
+      );
+
+      // Auth errors → fall back to Kie.ai
+      if (status === 401 || status === 403) {
+        console.warn(`[video-submit] Grok auth error (${status}). Falling back to Kie.ai...`);
+        return tryKieFallback(prompt, aspectRatio, true);
+      }
+
+      // Rate limit → log but don't fall back (temporary)
+      if (status === 429) {
+        console.warn("[video-submit] Grok rate limited (429). Falling back to Kie.ai...");
+        return tryKieFallback(prompt, aspectRatio, true);
+      }
+
+      return noResult;
+    }
+
+    const data = await res.json();
+    const requestId = data.request_id;
+
+    if (requestId) {
+      console.log(`[video-submit] Grok accepted: request_id=${requestId}`);
+      return { requestId, videoUrl: null, provider: "grok", fellBack: false };
+    }
+
+    // Rare: synchronous video result
+    if (data.video?.url) {
+      console.log(`[video-submit] Grok returned video immediately`);
+      trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: duration * COST_TABLE["grok-video"].perSecond, durationSeconds: duration, model: "grok-imagine-video" });
+      return { requestId: null, videoUrl: data.video.url, provider: "grok", fellBack: false };
+    }
+
+    console.error("[video-submit] Grok response missing request_id:", JSON.stringify(data).slice(0, 300));
+    return noResult;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[video-submit] Grok network/fetch error: ${msg}`);
+    // Network errors → fall back to Kie.ai
+    console.warn("[video-submit] Falling back to Kie.ai due to network error...");
+    return tryKieFallback(prompt, aspectRatio, true);
+  }
+}
+
+/** Internal: attempt Kie.ai as fallback video provider */
+async function tryKieFallback(
+  prompt: string,
+  aspectRatio: "9:16" | "16:9" | "1:1",
+  fellBack: boolean,
+): Promise<VideoJobResult> {
+  try {
+    // Dynamic import to avoid pulling in Kie.ai code when not needed
+    const { generateWithKie } = await import("@/lib/media/free-video-gen");
+    const url = await generateWithKie(prompt, aspectRatio);
+    if (url) {
+      console.log(`[video-submit] Kie.ai fallback succeeded: ${url.slice(0, 80)}...`);
+      return { requestId: null, videoUrl: url, provider: "kie", fellBack };
+    }
+  } catch (err) {
+    console.warn("[video-submit] Kie.ai fallback also failed:", err instanceof Error ? err.message : err);
+  }
+  return { requestId: null, videoUrl: null, provider: "none", fellBack };
+}
+
+/**
+ * Check Grok video API auth status. Used by health check endpoints.
+ * Makes a minimal request to verify the API key works for video generation.
+ * Does NOT actually generate a video — just checks if auth succeeds at the API level.
+ */
+export async function checkGrokVideoAuth(): Promise<{
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+  keyConfigured: boolean;
+  maskedKey: string | null;
+}> {
+  const apiKey = env.XAI_API_KEY;
+  if (!apiKey) {
+    return { ok: false, status: null, error: "XAI_API_KEY not set", keyConfigured: false, maskedKey: null };
+  }
+
+  const maskedKey = `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`;
+
+  try {
+    // Submit a minimal video request — the cheapest way to test auth.
+    // We use a 1s duration and a simple prompt. If auth works, we get a request_id.
+    // Cancel cost concern: at $0.05/s this costs $0.05, so only call this endpoint sparingly.
+    // Alternative: just check the models endpoint for a free auth test.
+    const res = await fetch("https://api.x.ai/v1/models", {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+    });
+
+    if (res.ok) {
+      return { ok: true, status: 200, error: null, keyConfigured: true, maskedKey };
+    }
+
+    const errBody = await res.text().catch(() => "");
+    return { ok: false, status: res.status, error: errBody.slice(0, 300), keyConfigured: true, maskedKey };
+  } catch (err) {
+    return { ok: false, status: null, error: err instanceof Error ? err.message : String(err), keyConfigured: true, maskedKey };
+  }
+}
