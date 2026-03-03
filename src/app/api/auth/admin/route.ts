@@ -48,6 +48,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 
+  // ── Clear rate limit on success (only failed attempts should count) ──
+  adminLoginLimiter.reset(ip);
+
   // ── Issue session token ──────────────────────────────────────────
   const token = generateToken(env.ADMIN_PASSWORD);
   const response = NextResponse.json({ success: true });

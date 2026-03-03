@@ -22,15 +22,14 @@ export function safeEqual(a: string, b: string): boolean {
 
 /**
  * Generate an HMAC-SHA256 admin session token.
- * The token is derived from the password + a per-boot random salt,
- * so it is unpredictable and changes across restarts.
+ * Uses the password as key + a static message so the token is:
+ * - Deterministic across all serverless instances (same password → same token)
+ * - Changes when the admin password changes
+ * - Not reversible (HMAC is one-way)
  */
-const BOOT_SALT = crypto.getRandomValues(new Uint8Array(32));
-const BOOT_SALT_HEX = Buffer.from(BOOT_SALT).toString("hex");
-
 export function generateToken(password: string): string {
-  return createHmac("sha256", BOOT_SALT_HEX)
-    .update(password)
+  return createHmac("sha256", password)
+    .update("aiglitch-admin-session-v1")
     .digest("hex");
 }
 

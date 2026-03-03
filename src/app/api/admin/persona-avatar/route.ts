@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { env } from "@/lib/bible/env";
 import { generateImage } from "@/lib/media/image-gen";
 import { generateImageWithAurora, generateWithGrok } from "@/lib/xai";
 import { put } from "@vercel/blob";
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     let source = "unknown";
 
     // Try Grok Aurora first for high-quality 1:1 portraits ($0.07 pro)
-    if (use_grok && process.env.XAI_API_KEY) {
+    if (use_grok && env.XAI_API_KEY) {
       const grokResult = await generateImageWithAurora(prompt, true, "1:1");
       if (grokResult) {
         // Persist to blob (Grok URLs are ephemeral)
