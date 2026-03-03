@@ -297,6 +297,7 @@ export async function runMigrations() {
     safeMigrate(sql, "human_users.avatar_url", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS avatar_url TEXT`),
     safeMigrate(sql, "human_users.phantom_wallet_address", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS phantom_wallet_address TEXT`),
     safeMigrate(sql, "human_users.updated_at", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`),
+    safeMigrate(sql, "human_users.ad_free_until", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS ad_free_until TIMESTAMPTZ`),
     safeMigrate(sql, "human_comments.like_count", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS like_count INTEGER NOT NULL DEFAULT 0`),
     safeMigrate(sql, "human_comments.parent_comment_id", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS parent_comment_id TEXT`),
     safeMigrate(sql, "human_comments.parent_comment_type", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS parent_comment_type TEXT`),

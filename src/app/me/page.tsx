@@ -164,6 +164,10 @@ export default function MePage() {
   const [copied, setCopied] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
+  // Ad-free status (Phantom wallet users can pay 20 GLITCH coins)
+  const [adFreeUntil, setAdFreeUntil] = useState<string | null>(null);
+  const [purchasingAdFree, setPurchasingAdFree] = useState(false);
+
   // Wallet linking
   const [linkedWallet, setLinkedWallet] = useState<string | null>(null);
   const [walletLinking, setWalletLinking] = useState(false);
@@ -578,7 +582,8 @@ export default function MePage() {
       fetch(`/api/marketplace?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch(`/api/wallet?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch(`/api/nft?session_id=${sid}`).then(r => r.json()).catch(() => null),
-    ]).then(([coinsData, marketData, walletData, nftData]) => {
+      fetch("/api/coins", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId, action: "check_ad_free" }) }).then(r => r.json()).catch(() => null),
+    ]).then(([coinsData, marketData, walletData, nftData, adFreeData]) => {
       if (coinsData) setCoins(coinsData);
       if (marketData) setInventory(marketData.purchases || []);
       if (walletData?.wallet) setGlitchBalance(walletData.wallet.glitch_token_balance || 0);
@@ -589,6 +594,7 @@ export default function MePage() {
         }
         setNftMap(map);
       }
+      if (adFreeData?.ad_free) setAdFreeUntil(adFreeData.ad_free_until);
     });
   }, [user, sessionId]);
 
@@ -1106,6 +1112,83 @@ export default function MePage() {
                   <p className="text-xs text-gray-500 mt-1">AIG!itch Coins</p>
                   <p className="text-[10px] text-gray-600 mt-1">Lifetime earned: {coins.lifetime_earned.toLocaleString()}</p>
                 </div>
+
+                {/* Ad-Free Purchase — Phantom wallet users only */}
+                {linkedWallet && (
+                  <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-2xl p-4 mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🚫</span>
+                        <div>
+                          <h3 className="text-sm font-bold text-purple-300">Remove Ads</h3>
+                          <p className="text-[10px] text-gray-500">No popup ads for 30 days</p>
+                        </div>
+                      </div>
+                      <span className="text-lg font-black text-yellow-400">20 🪙</span>
+                    </div>
+                    {adFreeUntil ? (
+                      <div className="text-center py-2">
+                        <p className="text-xs text-green-400 font-bold">Ad-Free Active</p>
+                        <p className="text-[10px] text-gray-500">Until {new Date(adFreeUntil).toLocaleDateString()}</p>
+                        <button
+                          onClick={async () => {
+                            if (purchasingAdFree) return;
+                            setPurchasingAdFree(true);
+                            try {
+                              const res = await fetch("/api/coins", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setAdFreeUntil(data.ad_free_until);
+                                setCoins(prev => ({ ...prev, balance: data.new_balance }));
+                                window.dispatchEvent(new Event("ad-free-purchased"));
+                              } else {
+                                setError(data.error || "Purchase failed");
+                                setTimeout(() => setError(""), 3000);
+                              }
+                            } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
+                            setPurchasingAdFree(false);
+                          }}
+                          disabled={purchasingAdFree || coins.balance < 20}
+                          className="mt-2 px-4 py-1.5 bg-purple-500/20 text-purple-400 text-[10px] font-bold rounded-full hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                        >
+                          {purchasingAdFree ? "Processing..." : "Extend +30 days"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          if (purchasingAdFree) return;
+                          setPurchasingAdFree(true);
+                          try {
+                            const res = await fetch("/api/coins", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setAdFreeUntil(data.ad_free_until);
+                              setCoins(prev => ({ ...prev, balance: data.new_balance }));
+                              window.dispatchEvent(new Event("ad-free-purchased"));
+                            } else {
+                              setError(data.error || "Purchase failed");
+                              setTimeout(() => setError(""), 3000);
+                            }
+                          } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
+                          setPurchasingAdFree(false);
+                        }}
+                        disabled={purchasingAdFree || coins.balance < 20}
+                        className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {purchasingAdFree ? "Processing..." : coins.balance < 20 ? `Need ${20 - coins.balance} more coins` : "Buy Ad-Free — 20 GLITCH Coins"}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-4 mb-4">
                   <h3 className="text-sm font-bold mb-3 text-yellow-400">How to earn coins</h3>

@@ -68,10 +68,36 @@ export default function PopupAd() {
     product?: MarketplaceProduct;
     promo?: (typeof GLITCH_PROMOS)[number];
   } | null>(null);
+  const [adFree, setAdFree] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const adRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  // Check if user has ad-free status (purchased with GLITCH coins via Phantom wallet)
+  useEffect(() => {
+    const sessionId = typeof window !== "undefined" ? localStorage.getItem("aiglitch-session") : null;
+    if (!sessionId) return;
+    fetch(`/api/coins?session_id=${encodeURIComponent(sessionId)}`)
+      .then(() => {
+        // Check ad-free status via dedicated action
+        return fetch("/api/coins", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, action: "check_ad_free" }),
+        });
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ad_free) setAdFree(true);
+      })
+      .catch(() => {});
+
+    // Also listen for ad-free purchase events from the profile page
+    const handleAdFreePurchase = () => setAdFree(true);
+    window.addEventListener("ad-free-purchased", handleAdFreePurchase);
+    return () => window.removeEventListener("ad-free-purchased", handleAdFreePurchase);
+  }, []);
 
   const pickAd = useCallback(() => {
     // 30% chance of §GLITCH promo, 70% marketplace product
@@ -85,6 +111,9 @@ export default function PopupAd() {
   }, []);
 
   const showAd = useCallback(() => {
+    // If user has ad-free status, don't show any ads
+    if (adFree) return;
+
     setAdContent(pickAd());
     setDismissing(false);
     setVisible(true);
@@ -93,7 +122,7 @@ export default function PopupAd() {
     setTimeout(() => {
       dismiss();
     }, 8000);
-  }, [pickAd]);
+  }, [pickAd, adFree]);
 
   const scheduleNext = useCallback(() => {
     // Random delay between 20-60 seconds

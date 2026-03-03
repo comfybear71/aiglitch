@@ -90,6 +90,7 @@ export const humanUsers = pgTable("human_users", {
   isActive: boolean("is_active").notNull().default(true),
   authProvider: text("auth_provider").default("local"),
   phantomWalletAddress: text("phantom_wallet_address"),
+  adFreeUntil: timestamp("ad_free_until", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`NOW()`),
 });
 

@@ -51,8 +51,12 @@ let _activeVideoId: string | null = null;
 let _userHasInteracted = false;
 if (typeof window !== "undefined") {
   const markInteracted = () => { _userHasInteracted = true; };
+  // Register on multiple events for earliest possible detection
   window.addEventListener("click", markInteracted, { once: true });
   window.addEventListener("touchstart", markInteracted, { once: true });
+  window.addEventListener("touchend", markInteracted, { once: true });
+  window.addEventListener("pointerdown", markInteracted, { once: true });
+  window.addEventListener("scroll", markInteracted, { once: true });
 }
 
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
@@ -233,7 +237,8 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   }, [post.id]);
 
   // Auto-play/pause video based on visibility — TikTok style
-  // Strategy: set _activeVideoId first, pause others, then try unmuted playback
+  // Strategy: ALWAYS try unmuted first, fallback to muted only if browser blocks it.
+  // This gives TikTok-like experience where videos play with sound immediately.
   useEffect(() => {
     if (!cardRef.current) return;
     const observer = new IntersectionObserver(
@@ -271,10 +276,10 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             return;
           }
           if (videoRef.current && !isPaused) {
-            // Unmute if: this is the active video AND user has interacted with the page
-            const shouldUnmute = _activeVideoId === post.id && _userHasInteracted;
-            videoRef.current.muted = !shouldUnmute;
-            setIsMuted(!shouldUnmute);
+            // ALWAYS try unmuted first — TikTok style
+            // Browsers allow unmuted autoplay after ANY user interaction (scroll, tap, etc.)
+            videoRef.current.muted = false;
+            setIsMuted(false);
             videoRef.current.play().catch(() => {
               // Browser blocked unmuted autoplay — fallback to muted
               if (videoRef.current) {
@@ -638,16 +643,16 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             autoPlay
             playsInline
             {...({ "webkit-playsinline": "" } as any)}
-            preload="metadata"
+            preload="auto"
             onError={() => setMediaFailed(true)}
             onLoadedData={() => {
               // If waiting for intro, don't start main video yet
               if (introPlaying) return;
               if (videoRef.current && !isPaused) {
-                // Unmute if this is the active video AND user has interacted with the page
-                const canUnmute = _activeVideoId === post.id && _userHasInteracted;
-                videoRef.current.muted = !canUnmute;
-                setIsMuted(!canUnmute);
+                // ALWAYS try unmuted first — TikTok style autoplay with sound
+                const isActive = _activeVideoId === post.id;
+                videoRef.current.muted = !isActive;
+                setIsMuted(!isActive);
                 videoRef.current.play().catch(() => {
                   if (videoRef.current) {
                     videoRef.current.muted = true;

@@ -31,7 +31,7 @@ interface FeedCacheEntry {
   ts: number;
 }
 const _feedCache = new Map<string, FeedCacheEntry>();
-const CACHE_TTL = 60_000; // 60s – show cached instantly, revalidate if stale
+const CACHE_TTL = 120_000; // 120s – show cached instantly, revalidate if stale
 
 interface FeedProps {
   defaultTab?: FeedTab;
@@ -167,6 +167,28 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return () => clearInterval(interval);
   }, []);
 
+  // Prefetch other tabs in background so switching is instant
+  // Fires once after initial feed loads — doesn't block the main feed
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (loading || prefetchedRef.current) return;
+    prefetchedRef.current = true;
+    const prefetchTab = async (url: string, cacheKey: string) => {
+      if (_feedCache.has(cacheKey)) return;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.posts?.length > 0) {
+          _feedCache.set(cacheKey, { posts: data.posts, cursor: null, ts: Date.now() });
+        }
+      } catch { /* non-critical */ }
+    };
+    // Stagger prefetches so they don't all fire at once
+    const seed = Math.random().toString(36).slice(2);
+    setTimeout(() => prefetchTab(`/api/feed?premieres=1&shuffle=1&seed=${seed}&limit=30`, "premieres-all"), 1000);
+    setTimeout(() => prefetchTab(`/api/feed?breaking=1&shuffle=1&seed=${seed}&limit=20`, "breaking"), 2500);
+  }, [loading]);
+
   const fetchPosts = useCallback(async (isLoadMore = false) => {
     try {
       let url: string;
@@ -208,16 +230,23 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         setFeedError(null);
       }
 
+      // Client-side safety filter: Premiere and Breaking tabs must be video-only
+      // This catches any edge cases where text posts leak through the backend query
+      let filteredPosts = data.posts;
+      if (tab === "premieres" || tab === "breaking") {
+        filteredPosts = data.posts.filter((p: Post) => p.media_type === "video" && p.media_url);
+      }
+
       if (tab === "bookmarks") {
-        setPosts(data.posts);
+        setPosts(filteredPosts);
         nextOffsetRef.current = null;
-        _feedCache.set("bookmarks", { posts: data.posts, cursor: null, ts: Date.now() });
+        _feedCache.set("bookmarks", { posts: filteredPosts, cursor: null, ts: Date.now() });
       } else if (isLoadMore) {
-        setPosts((prev) => [...prev, ...data.posts]);
-        allPostsRef.current = [...allPostsRef.current, ...data.posts];
+        setPosts((prev) => [...prev, ...filteredPosts]);
+        allPostsRef.current = [...allPostsRef.current, ...filteredPosts];
       } else {
-        setPosts(data.posts);
-        allPostsRef.current = data.posts;
+        setPosts(filteredPosts);
+        allPostsRef.current = filteredPosts;
         loopCountRef.current = 0;
 
         const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : "foryou";
@@ -406,26 +435,28 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       const currentIdx = posts.findIndex(p => p.id === activeId);
       if (currentIdx === -1) return;
 
-      // Look ahead up to 3 posts for the next video
-      for (let i = currentIdx + 1; i < Math.min(currentIdx + 4, posts.length); i++) {
+      // Look ahead up to 5 posts for the next videos — preload for instant playback
+      let preloaded = 0;
+      for (let i = currentIdx + 1; i < Math.min(currentIdx + 6, posts.length) && preloaded < 2; i++) {
         const next = posts[i];
         if (next?.media_type === "video" && next.media_url) {
           // Don't duplicate existing prefetch links
-          if (document.querySelector(`link[data-prefetch-video="${next.id}"]`)) break;
+          if (document.querySelector(`link[data-prefetch-video="${next.id}"]`)) { preloaded++; continue; }
 
           const link = document.createElement("link");
-          link.rel = "prefetch";
+          link.rel = "preload";
           link.as = "video";
           link.href = next.media_url;
           link.setAttribute("data-prefetch-video", next.id);
+          link.setAttribute("crossorigin", "anonymous");
           document.head.appendChild(link);
+          preloaded++;
 
-          // Keep max 3 prefetch links to limit memory
+          // Keep max 4 preload links to limit memory
           const allPrefetch = document.querySelectorAll("link[data-prefetch-video]");
-          if (allPrefetch.length > 3) {
+          if (allPrefetch.length > 4) {
             allPrefetch[0].remove();
           }
-          break;
         }
       }
     };
