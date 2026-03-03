@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { cronStart, cronFinish } from "@/lib/cron";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { getTradingPersonality, generateTradeCommentary } from "@/lib/trading-personalities";
 import { v4 as uuidv4 } from "uuid";
@@ -15,11 +16,11 @@ export async function GET(request: NextRequest) {
 
   // Cron trigger: execute trades
   if (action === "cron") {
-    if (!(await checkCronAuth(request))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await cronStart(request, "ai-trading", { skipSeed: true });
+    if (gate) return gate;
 
     const trades = await executeTradeBatch(sql, 5 + Math.floor(Math.random() * 11));
+    await cronFinish("ai-trading");
     return NextResponse.json({ success: true, trades_executed: trades.length, trades });
   }
 

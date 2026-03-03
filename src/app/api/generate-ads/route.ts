@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureDbReady } from "@/lib/seed";
-import { checkCronAuth } from "@/lib/cron-auth";
-import { shouldRunCron } from "@/lib/throttle";
+import { cronStart, cronFinish } from "@/lib/cron";
 import { env } from "@/lib/bible/env";
 import { getRandomProduct, MARKETPLACE_PRODUCTS, MarketplaceProduct } from "@/lib/marketplace";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
-import Anthropic from "@anthropic-ai/sdk";
+import { claude } from "@/lib/ai";
 
 export const maxDuration = 60;
-
-const claude = new Anthropic();
 
 /**
  * Generate AI influencer video ads for marketplace products + GlitchCoin.
@@ -70,25 +66,18 @@ ${isGlitchCoin ? 'Include discount code "HODL420" and mention $GLITCH at least o
 JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${isGlitchCoin ? "GlitchCoin" : "AIGlitchMarketplace"}", "one more relevant tag"]}`;
 
   try {
-    const response = await claude.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 300,
-      messages: [{ role: "user", content: prompt }],
-    });
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const parsed = await claude.generateJSON<{ content: string; hashtags: string[] }>(prompt, 300);
+    if (parsed?.content) {
+      return {
+        content: parsed.content,
+        hashtags: parsed.hashtags || ["AIGlitchAd"],
+      };
+    }
 
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          content: parsed.content || text.slice(0, 200),
-          hashtags: parsed.hashtags || ["AIGlitchAd"],
-        };
-      }
-    } catch { /* fall through */ }
-
-    return { content: text.slice(0, 200), hashtags: ["AIGlitchAd"] };
+    // Fallback: try plain text generation
+    const text = await claude.safeGenerate(prompt, 300);
+    if (text) return { content: text.slice(0, 200), hashtags: ["AIGlitchAd"] };
+    throw new Error("Claude returned null");
   } catch {
     const isGC = product.id === "prod-016";
     return {
@@ -101,21 +90,15 @@ JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${isGlitchCoin 
 }
 
 async function handler(request: NextRequest) {
-  if (!(await checkCronAuth(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Check activity throttle — may skip this run to save costs
-  if (!(await shouldRunCron("ads"))) {
-    return NextResponse.json({ success: true, throttled: true, message: "Skipped by activity throttle" });
-  }
+  const gate = await cronStart(request, "ads");
+  if (gate) return gate;
 
   if (!env.XAI_API_KEY) {
+    await cronFinish("ads");
     return NextResponse.json({ error: "XAI_API_KEY not set", success: false });
   }
 
   const sql = getDb();
-  await ensureDbReady();
 
   // Pick a product and an influencer persona
   const product = pickAdProduct();
@@ -216,6 +199,7 @@ async function handler(request: NextRequest) {
     `;
 
     console.log(`[ads] Grok video job ${jobId} submitted for "${product.name}" by @${persona.username}`);
+    await cronFinish("ads");
 
     return NextResponse.json({
       success: true,
@@ -226,6 +210,7 @@ async function handler(request: NextRequest) {
       requestId,
     });
   } catch (err) {
+    await cronFinish("ads");
     return NextResponse.json({
       success: false,
       error: err instanceof Error ? err.message : String(err),

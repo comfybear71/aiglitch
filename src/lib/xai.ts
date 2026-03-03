@@ -17,6 +17,7 @@
 
 import OpenAI from "openai";
 import { env } from "@/lib/bible/env";
+import { trackCost, COST_TABLE } from "@/lib/ai/costs";
 
 /**
  * Fetch with automatic retry on 429 (rate limit) and transient network errors.
@@ -85,7 +86,19 @@ export async function generateWithGrok(
       temperature: 0.9,
     });
 
-    return response.choices[0]?.message?.content ?? null;
+    const text = response.choices[0]?.message?.content ?? null;
+    if (text) {
+      trackCost({
+        provider: "grok-text",
+        task: "text-generation",
+        estimatedCostUsd: ((response.usage?.prompt_tokens ?? 0) / 1_000_000) * COST_TABLE["grok-text"].perMInputTokens
+          + ((response.usage?.completion_tokens ?? 0) / 1_000_000) * COST_TABLE["grok-text"].perMOutputTokens,
+        inputTokens: response.usage?.prompt_tokens,
+        outputTokens: response.usage?.completion_tokens,
+        model: "grok-4-1-fast-reasoning",
+      });
+    }
+    return text;
   } catch (err) {
     console.error("Grok text generation failed:", err instanceof Error ? err.message : err);
     return null;
@@ -144,6 +157,12 @@ export async function generateImageWithAurora(
 
     if (imageData.url) {
       console.log(`Grok image generated (${model}): ${imageData.url.slice(0, 80)}...`);
+      trackCost({
+        provider: pro ? "grok-image-pro" : "grok-image",
+        task: "image-generation",
+        estimatedCostUsd: pro ? COST_TABLE["grok-image-pro"].perCall : COST_TABLE["grok-image"].perCall,
+        model,
+      });
       return { url: imageData.url, contentType: "image/png" };
     }
 
@@ -230,7 +249,10 @@ export async function generateVideoFromImage(
           console.error("Grok img2vid failed moderation.");
           return null;
         }
-        if (pollData.video?.url) return pollData.video.url;
+        if (pollData.video?.url) {
+          trackCost({ provider: "grok-img2vid", task: "video-generation", estimatedCostUsd: duration * COST_TABLE["grok-img2vid"].perSecond, durationSeconds: duration, model: "grok-imagine-video" });
+          return pollData.video.url;
+        }
         return null;
       }
       if (pollData.status === "expired" || pollData.status === "failed") {
@@ -298,6 +320,7 @@ export async function generateVideoWithGrok(
       // If the response already contains the video URL (synchronous)
       if (createData.video?.url) {
         console.log(`Grok video generated immediately: ${createData.video.url.slice(0, 80)}...`);
+        trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: duration * COST_TABLE["grok-video"].perSecond, durationSeconds: duration, model: "grok-imagine-video" });
         return createData.video.url;
       }
       console.error("Grok video: no request_id in response:", JSON.stringify(createData).slice(0, 300));
@@ -334,6 +357,7 @@ export async function generateVideoWithGrok(
         }
         if (pollData.video?.url) {
           console.log(`Grok video generated successfully: ${pollData.video.url.slice(0, 80)}...`);
+          trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: duration * COST_TABLE["grok-video"].perSecond, durationSeconds: duration, model: "grok-imagine-video" });
           return pollData.video.url;
         }
         console.error("Grok video done but no URL:", JSON.stringify(pollData).slice(0, 300));

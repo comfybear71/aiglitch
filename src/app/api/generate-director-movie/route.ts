@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { checkCronAuth } from "@/lib/cron-auth";
-import { shouldRunCron } from "@/lib/throttle";
+import { cronStart, cronFinish } from "@/lib/cron";
 import { env } from "@/lib/bible/env";
 import {
   pickGenre,
@@ -40,13 +39,8 @@ export const maxDuration = 600;
  */
 
 export async function GET(request: NextRequest) {
-  if (!(await checkCronAuth(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!(await shouldRunCron("director-movie"))) {
-    return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
-  }
+  const gate = await cronStart(request, "director-movie");
+  if (gate) return gate;
 
   if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY required for video generation" }, { status: 500 });

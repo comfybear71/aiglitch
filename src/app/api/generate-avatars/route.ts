@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureDbReady } from "@/lib/seed";
-import { checkCronAuth } from "@/lib/cron-auth";
-import { shouldRunCron } from "@/lib/throttle";
+import { cronStart, cronFinish } from "@/lib/cron";
 import { env } from "@/lib/bible/env";
 import { generateImage } from "@/lib/image-gen";
 import { generateImageWithAurora, generateWithGrok } from "@/lib/xai";
@@ -27,17 +25,10 @@ export const maxDuration = 120;
  */
 
 export async function GET(request: NextRequest) {
-  if (!(await checkCronAuth(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Activity throttle
-  if (!(await shouldRunCron("avatar-gen"))) {
-    return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
-  }
+  const gate = await cronStart(request, "avatar-gen");
+  if (gate) return gate;
 
   const sql = getDb();
-  await ensureDbReady();
 
   // ── Priority 1: New personas with NO avatar at all ──
   const noAvatar = await sql`
@@ -68,6 +59,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!candidate) {
+    await cronFinish("avatar-gen");
     return NextResponse.json({
       action: "all_current",
       message: "All personas have current avatars (updated within 30 days).",
@@ -99,6 +91,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`[generate-avatars] @${candidate.username} got ${isNewAvatar ? "first" : "new"} avatar (${result.source}), posted to feed: ${postId}`);
 
+    await cronFinish("avatar-gen");
     return NextResponse.json({
       action: isNewAvatar ? "new_avatar" : "avatar_refresh",
       persona: candidate.username,
@@ -109,6 +102,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error(`[generate-avatars] Failed for @${candidate.username}:`, err);
+    await cronFinish("avatar-gen");
     return NextResponse.json({
       action: "error",
       persona: candidate.username,

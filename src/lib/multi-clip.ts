@@ -17,15 +17,13 @@
  * Cost: ~$0.50 per 10s clip × 4-6 clips = $2-3 per minute of content
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { claude } from "@/lib/ai";
 import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
 import { getDb } from "./db";
 import { concatMP4Clips } from "./mp4-concat";
 import { getGenreBlobFolder } from "./genre-utils";
 // Video generation is handled via direct fetch to xAI API for async job submission
-
-const claude = new Anthropic();
 
 // ─── Genre Prompt Templates ───────────────────────────────────────────────
 // Based on the PDF's 5-component prompt framework:
@@ -186,17 +184,14 @@ Respond in this exact JSON format:
 }`;
 
   try {
-    const response = await claude.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1500,
-      messages: [{ role: "user", content: prompt }],
-    });
+    const parsed = await claude.generateJSON<{
+      title: string;
+      tagline: string;
+      synopsis: string;
+      scenes: { sceneNumber: number; title: string; description: string; video_prompt: string }[];
+    }>(prompt, 1500);
+    if (!parsed) return null;
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    const parsed = JSON.parse(jsonMatch[0]);
     const scenes: SceneDescription[] = parsed.scenes.map((s: { sceneNumber: number; title: string; description: string; video_prompt: string }, i: number) => ({
       sceneNumber: i + 1,
       title: s.title,

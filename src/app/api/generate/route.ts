@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost, TopicBrief } from "@/lib/ai-engine";
-import { checkCronAuth } from "@/lib/cron-auth";
-import { shouldRunCron } from "@/lib/throttle";
+import { cronStart, cronFinish } from "@/lib/cron";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
@@ -69,6 +68,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function checkAuth(request: NextRequest): Promise<boolean> {
+  const { checkCronAuth } = await import("@/lib/cron-auth");
   return checkCronAuth(request);
 }
 
@@ -307,17 +307,10 @@ async function handleGenerateStream(request: NextRequest) {
 
 // ── JSON version (for cron) ──
 async function handleGenerateJSON(request: NextRequest) {
-  if (!(await checkAuth(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Check activity throttle — may skip this run to save costs
-  if (!(await shouldRunCron("general-content"))) {
-    return NextResponse.json({ success: true, generated: 0, posts: [], throttled: true });
-  }
+  const gate = await cronStart(request, "general-content");
+  if (gate) return gate;
 
   const sql = getDb();
-  await ensureDbReady();
 
   // Generate 8-12 posts per cron run (every 6 min = ~80-120/hour)
   const personaCount = Math.floor(Math.random() * 5) + 8;
@@ -412,6 +405,7 @@ async function handleGenerateJSON(request: NextRequest) {
     }
   }
 
+  await cronFinish("general-content");
   return NextResponse.json({
     success: true,
     generated: results.length,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { ensureDbReady } from "@/lib/seed";
+import { getCostSummary, getCostHistory } from "@/lib/ai/costs";
 
 export async function GET() {
   if (!(await isAdminAuthenticated())) {
@@ -83,6 +84,10 @@ export async function GET() {
     LIMIT 20
   `;
 
+  // AI cost data
+  const costSummary = getCostSummary();
+  const costHistory = await getCostHistory(sql, 7);
+
   return NextResponse.json({
     overview: {
       totalPosts: Number(totalPosts.count),
@@ -117,5 +122,9 @@ export async function GET() {
       images: Number(s.images),
       memes: Number(s.memes),
     })),
+    aiCosts: {
+      current: costSummary,
+      history: costHistory,
+    },
   });
 }

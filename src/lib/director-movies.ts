@@ -20,15 +20,13 @@
  *   - Admin can create custom movie prompts/concepts
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { claude } from "@/lib/ai";
 import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
 import { getDb } from "./db";
 import { GENRE_TEMPLATES, type GenreTemplate } from "./multi-clip";
 import { concatMP4Clips } from "./mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "./genre-utils";
-
-const claude = new Anthropic();
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -300,17 +298,13 @@ Respond in this exact JSON format:
 }`;
 
   try {
-    const response = await claude.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2500,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = await claude.generateJSON<{
+      title: string;
+      tagline: string;
+      synopsis: string;
+      scenes: { sceneNumber: number; title: string; description: string; video_prompt: string }[];
+    }>(prompt, 2500);
+    if (!parsed) return null;
 
     // Build the intro scene (title card)
     const introScene: DirectorScene = {

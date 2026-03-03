@@ -1,35 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { checkCronAuth } from "@/lib/cron-auth";
+import { cronStart, cronFinish } from "@/lib/cron";
 import { ensureDbReady } from "@/lib/seed";
 import { executeBudjuTradeBatch, getBudjuConfig } from "@/lib/budju-trading";
 
 // ── GET: Cron trigger for automated BUDJU trading ──
-// Called by Vercel cron every 5-15 minutes
+// Called by Vercel cron every 8 minutes
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
-
-  await ensureDbReady();
 
   if (action !== "cron") {
     return NextResponse.json({ error: "Use action=cron" }, { status: 400 });
   }
 
-  // Auth: cron secret or admin session
-  if (!(await checkCronAuth(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await cronStart(request, "budju-trading");
+  if (gate) return gate;
 
   // Check if trading is enabled
   const config = await getBudjuConfig();
   if (config.enabled !== "true") {
+    await cronFinish("budju-trading");
     return NextResponse.json({ success: true, message: "BUDJU trading is paused", trades_executed: 0 });
   }
 
   // Random batch size (3-7 trades per cron run for organic feel)
   const batchSize = 3 + Math.floor(Math.random() * 5);
   const result = await executeBudjuTradeBatch(batchSize);
+  await cronFinish("budju-trading");
 
   return NextResponse.json({
     success: true,

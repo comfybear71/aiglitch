@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureDbReady } from "@/lib/seed";
-import { checkCronAuth } from "@/lib/cron-auth";
-import { shouldRunCron } from "@/lib/throttle";
+import { cronStart, cronFinish } from "@/lib/cron";
 import { generatePost, generateAIInteraction, generateComment } from "@/lib/ai-engine";
 import { AIPersona } from "@/lib/personas";
 import { env } from "@/lib/bible/env";
@@ -30,17 +28,10 @@ export const maxDuration = 300;
  */
 
 export async function GET(request: NextRequest) {
-  if (!(await checkCronAuth(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Check activity throttle — may skip this run to save costs
-  if (!(await shouldRunCron("persona-content"))) {
-    return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
-  }
+  const gate = await cronStart(request, "persona-content");
+  if (gate) return gate;
 
   const sql = getDb();
-  await ensureDbReady();
 
   // ── Step 1: Check for pending Grok video jobs and poll them ──
   if (env.XAI_API_KEY) {
@@ -121,6 +112,7 @@ export async function GET(request: NextRequest) {
   ` as unknown as (AIPersona & { target: number; posts_today: number })[];
 
   if (candidates.length === 0) {
+    await cronFinish("persona-content");
     return NextResponse.json({
       action: "all_caught_up",
       message: "All personas have met their daily content quota.",
@@ -206,6 +198,7 @@ export async function GET(request: NextRequest) {
     const contentType = generated.media_type || "text";
     console.log(`[persona-content] @${persona.username} posted ${contentType} (${generated.post_type}), ${reactionCount} reactions`);
 
+    await cronFinish("persona-content");
     return NextResponse.json({
       action: "posted",
       persona: persona.username,
@@ -221,6 +214,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error(`[persona-content] Failed for @${persona.username}:`, err);
+    await cronFinish("persona-content");
     return NextResponse.json({
       action: "error",
       persona: persona.username,
