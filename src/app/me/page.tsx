@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import BottomNav from "@/components/BottomNav";
 import NFTTradingCard from "@/components/NFTTradingCard";
 import { getProductById } from "@/lib/marketplace";
+import { formatGlitchBalance } from "@/lib/wallet-display";
 
 const AVATAR_OPTIONS = ["🧑", "👩", "👨", "🧑‍💻", "👽", "🤡", "💀", "🦊", "🐱", "🐶", "🦄", "🤖", "👾", "🎭", "🧙", "🥷", "🐸", "🦇", "🐻", "🎃", "👻", "🤠", "🧛", "🧟"];
 
@@ -100,8 +101,10 @@ export default function MePage() {
   // Coins
   const [coins, setCoins] = useState<CoinData>({ balance: 0, lifetime_earned: 0, transactions: [] });
 
-  // $GLITCH token balance from wallet
+  // $GLITCH token balance from simulated wallet
   const [glitchBalance, setGlitchBalance] = useState<number>(0);
+  // Real on-chain $GLITCH balance (only set when Phantom wallet is linked)
+  const [onchainGlitchBalance, setOnchainGlitchBalance] = useState<number | null>(null);
 
   // Inventory (purchased items)
   const [inventory, setInventory] = useState<PurchasedItem[]>([]);
@@ -390,16 +393,18 @@ export default function MePage() {
   }, [user, sessionId]);
 
   // Fetch real on-chain GLITCH balance when user has a linked Phantom wallet.
-  // This ensures the profile matches what Phantom shows (not just the internal DB).
+  // Stores it separately so the header can show ONLY the real balance for wallet users.
   useEffect(() => {
     if (!linkedWallet || !sessionId) return;
     const sid = encodeURIComponent(sessionId);
     fetch(`/api/solana?action=balance&wallet_address=${linkedWallet}&session_id=${sid}`)
       .then(r => r.json())
       .then(data => {
-        if (data.glitch_balance !== undefined) {
-          // Use the effective balance (max of on-chain and app) — same logic as wallet page
-          setGlitchBalance(prev => Math.max(prev, data.glitch_balance || 0));
+        if (data.onchain_glitch_balance !== undefined) {
+          setOnchainGlitchBalance(data.onchain_glitch_balance || 0);
+        } else if (data.glitch_balance !== undefined) {
+          // Fallback: API may return combined balance
+          setOnchainGlitchBalance(data.glitch_balance || 0);
         }
       })
       .catch(() => {});
@@ -571,18 +576,27 @@ export default function MePage() {
           </div>
           {user && (
             <div className="flex items-center gap-2">
-              {/* $GLITCH wallet balance */}
-              {glitchBalance > 0 && (
-                <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full">
-                  <span className="text-[10px] font-bold text-green-400">$G</span>
-                  <span className="text-xs font-bold text-green-400">{glitchBalance.toLocaleString()}</span>
+              {/* Phantom wallet connected: show ONLY real on-chain §GLITCH balance */}
+              {linkedWallet && onchainGlitchBalance !== null ? (
+                <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full" data-testid="onchain-balance">
+                  <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-3.5 h-3.5" />
+                  <span className="text-xs font-bold text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</span>
                 </a>
+              ) : (
+                <>
+                  {/* No Phantom wallet: show simulated $G + in-app coins */}
+                  {glitchBalance > 0 && (
+                    <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full" data-testid="simulated-glitch-balance">
+                      <span className="text-[10px] font-bold text-green-400">$G</span>
+                      <span className="text-xs font-bold text-green-400">{glitchBalance.toLocaleString()}</span>
+                    </a>
+                  )}
+                  <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 rounded-full" data-testid="simulated-coin-balance">
+                    <span className="text-xs">🪙</span>
+                    <span className="text-xs font-bold text-yellow-400">{coins.balance.toLocaleString()}</span>
+                  </div>
+                </>
               )}
-              {/* Coin balance */}
-              <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 rounded-full">
-                <span className="text-xs">🪙</span>
-                <span className="text-xs font-bold text-yellow-400">{coins.balance.toLocaleString()}</span>
-              </div>
               {/* Sign out */}
               <button onClick={() => setShowSignOutConfirm(true)}
                 className="text-gray-500 hover:text-red-400 active:text-red-400 transition-colors p-2 -mr-2 min-w-[40px] min-h-[40px] flex items-center justify-center">
@@ -865,6 +879,18 @@ export default function MePage() {
             {/* Coins tab */}
             {activeTab === "coins" && (
               <div>
+                {/* Phantom wallet connected: show real on-chain balance prominently */}
+                {linkedWallet && onchainGlitchBalance !== null && (
+                  <div className="text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6 mb-4" data-testid="onchain-balance-card">
+                    <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-12 h-12 mx-auto mb-2" />
+                    <p className="text-3xl font-black text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</p>
+                    <p className="text-xs text-gray-500 mt-1">On-chain $GLITCH Balance</p>
+                    <a href="/wallet" className="inline-block mt-2 text-[10px] text-green-500 hover:text-green-400 underline">
+                      View in Wallet →
+                    </a>
+                  </div>
+                )}
+
                 <div className="text-center bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-2xl p-6 mb-4">
                   <p className="text-4xl mb-2">🪙</p>
                   <p className="text-3xl font-black text-yellow-400">{coins.balance.toLocaleString()}</p>
