@@ -391,6 +391,35 @@ export async function testPlatformToken(
   platform: MarketingPlatform,
 ): Promise<{ success: boolean; username?: string; error?: string }> {
   const account = await getAccountForPlatform(platform);
+
+  // For X: OAuth 1.0a env vars can work without a DB account
+  if (platform === "x") {
+    const creds = getAppCredentials();
+    if (!creds && !account) {
+      return { success: false, error: "No active account in DB and no X_CONSUMER_KEY/X_ACCESS_TOKEN env vars set" };
+    }
+    try {
+      const meUrl = "https://api.twitter.com/2/users/me";
+      let authHeader: string;
+      if (creds) {
+        authHeader = buildOAuth1Header("GET", meUrl, creds);
+      } else {
+        authHeader = `Bearer ${account!.access_token}`;
+      }
+      const res = await fetch(meUrl, {
+        headers: { Authorization: authHeader },
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        return { success: false, error: `X API ${res.status}: ${body.slice(0, 300)}` };
+      }
+      const data = await res.json() as { data?: { username?: string } };
+      return { success: true, username: data.data?.username };
+    } catch (err) {
+      return { success: false, error: `X fetch error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
   if (!account) {
     return { success: false, error: `No active account for ${platform}` };
   }
@@ -399,29 +428,6 @@ export async function testPlatformToken(
   }
 
   switch (platform) {
-    case "x": {
-      try {
-        const creds = getAppCredentials();
-        const meUrl = "https://api.twitter.com/2/users/me";
-        let authHeader: string;
-        if (creds) {
-          authHeader = buildOAuth1Header("GET", meUrl, creds);
-        } else {
-          authHeader = `Bearer ${account.access_token}`;
-        }
-        const res = await fetch(meUrl, {
-          headers: { Authorization: authHeader },
-        });
-        if (!res.ok) {
-          const body = await res.text();
-          return { success: false, error: `X API ${res.status}: ${body.slice(0, 300)}` };
-        }
-        const data = await res.json() as { data?: { username?: string } };
-        return { success: true, username: data.data?.username };
-      } catch (err) {
-        return { success: false, error: `X fetch error: ${err instanceof Error ? err.message : String(err)}` };
-      }
-    }
     default:
       return { success: false, error: `Token test not yet implemented for ${platform}` };
   }
