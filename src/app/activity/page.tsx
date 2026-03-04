@@ -60,6 +60,19 @@ interface DirectorStats {
   lastAt: string | null;
 }
 
+interface DirectorMovie {
+  id: string;
+  title: string;
+  genre: string;
+  director_username: string;
+  director_display_name: string;
+  status: string;
+  clip_count: number;
+  created_at: string;
+  video_url: string | null;
+  premiere_post_id: string | null;
+}
+
 interface ActivityData {
   recentActivity: ActivityPost[];
   pendingJobs: VideoJob[];
@@ -76,6 +89,7 @@ interface ActivityData {
   activeTopics: Topic[];
   activityThrottle: number;
   directorStats?: DirectorStats;
+  recentMovies?: DirectorMovie[];
   cronSchedules: CronSchedule[];
 }
 
@@ -128,7 +142,7 @@ export default function ActivityPage() {
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<"feed" | "ads" | "jobs" | "topics">("feed");
+  const [activeTab, setActiveTab] = useState<"feed" | "ads" | "jobs" | "topics" | "movies">("feed");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [throttle, setThrottle] = useState(100);
   const [throttleSaving, setThrottleSaving] = useState(false);
@@ -483,7 +497,7 @@ export default function ActivityPage() {
 
         {/* Tab Selector */}
         <div className="flex gap-1 bg-gray-900/60 rounded-xl p-1 border border-gray-800">
-          {(["feed", "ads", "jobs", "topics"] as const).map((t) => (
+          {(["feed", "ads", "jobs", "topics", "movies"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -491,7 +505,7 @@ export default function ActivityPage() {
                 activeTab === t ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              {t === "feed" ? "📋 Feed" : t === "ads" ? "💰 Ads" : t === "jobs" ? "🎬 Jobs" : "📰 Topics"}
+              {t === "feed" ? "📋 Feed" : t === "ads" ? "💰 Ads" : t === "jobs" ? "🎬 Jobs" : t === "topics" ? "📰 Topics" : "🎥 Movies"}
             </button>
           ))}
         </div>
@@ -656,6 +670,64 @@ export default function ActivityPage() {
             ))}
             {data.activeTopics.length === 0 && (
               <p className="text-xs text-gray-500 text-center py-4">No active topics. Next generation in: check Topics & News timer.</p>
+            )}
+          </div>
+        )}
+
+        {/* Movies Tab */}
+        {activeTab === "movies" && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-gray-400">Director Movies</h3>
+            {(data.recentMovies || []).map((movie) => (
+              <div key={movie.id} className={`border rounded-xl p-3 ${
+                movie.status === "completed" ? "bg-purple-500/5 border-purple-500/30" :
+                movie.status === "generating" ? "bg-amber-500/5 border-amber-500/30" :
+                "bg-gray-900/60 border-gray-800"
+              }`}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-lg">🎥</span>
+                  <div className="flex-1 min-w-0">
+                    {movie.premiere_post_id ? (
+                      <Link href={`/post/${movie.premiere_post_id}`} className="text-sm font-bold hover:text-purple-400 transition-colors">
+                        {movie.title}
+                      </Link>
+                    ) : (
+                      <div className="text-sm font-bold">{movie.title}</div>
+                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] text-gray-400">by {movie.director_display_name}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        {movie.genre}
+                      </span>
+                      <span className="text-[9px] text-gray-600">{movie.clip_count} clips</span>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                      movie.status === "completed" ? "bg-green-500/20 text-green-400" :
+                      movie.status === "generating" ? "bg-amber-500/20 text-amber-400 animate-pulse" :
+                      movie.status === "pending" ? "bg-blue-500/20 text-blue-400" :
+                      "bg-gray-800 text-gray-400"
+                    }`}>
+                      {movie.status === "completed" ? "Completed" :
+                       movie.status === "generating" ? "Filming..." :
+                       movie.status === "pending" ? "Pending" : movie.status}
+                    </span>
+                    <div className="text-[10px] text-gray-600 mt-0.5">{timeAgo(movie.created_at)}</div>
+                  </div>
+                </div>
+                {movie.video_url && movie.premiere_post_id && (
+                  <Link
+                    href={`/post/${movie.premiere_post_id}`}
+                    className="mt-2 flex items-center gap-1.5 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    ▶ Watch premiere
+                  </Link>
+                )}
+              </div>
+            ))}
+            {(data.recentMovies || []).length === 0 && (
+              <p className="text-xs text-gray-500 text-center py-4">No director movies yet. Check the Director Movies cron timer above.</p>
             )}
           </div>
         )}

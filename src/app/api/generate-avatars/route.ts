@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
     // ── Generate the avatar image ──
     const result = await generateAvatar(candidate);
     if (!result) {
+      await cronFinish("avatar-gen");
       return NextResponse.json({
         action: "failed",
         persona: candidate.username,

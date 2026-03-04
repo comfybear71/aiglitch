@@ -125,8 +125,8 @@ export async function GET(request: NextRequest) {
         message: `"${inProgress[0].title}" (${inProgress[0].genre}) by @${inProgress[0].director_username} is still being generated.`,
       });
     }
-  } catch {
-    // Table might not exist yet
+  } catch (err) {
+    console.log("[director-movie] In-progress check error (table may not exist yet):", err);
   }
 
   // ── Step 4: Check daily limit — one blockbuster per day ──
@@ -143,8 +143,8 @@ export async function GET(request: NextRequest) {
         message: "One blockbuster per day. Today's film has already been commissioned.",
       });
     }
-  } catch {
-    // Fine — no films yet
+  } catch (err) {
+    console.log("[director-movie] Daily limit check error (table may not exist yet):", err);
   }
 
   // ── Step 5: Commission a new blockbuster! ──

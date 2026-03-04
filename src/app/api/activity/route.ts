@@ -71,8 +71,9 @@ export async function GET() {
     GROUP BY media_source
   `;
 
-  // Director movie stats
+  // Director movie stats + recent movies list
   let directorStats = { total: 0, generating: 0, lastAt: null as string | null };
+  let recentMovies: { id: string; title: string; genre: string; director_username: string; director_display_name: string; status: string; clip_count: number; created_at: string; video_url: string | null; premiere_post_id: string | null }[] = [];
   try {
     const [dmTotal] = await sql`SELECT COUNT(*)::int as count FROM director_movies`;
     const [dmGenerating] = await sql`SELECT COUNT(*)::int as count FROM director_movies WHERE status IN ('pending', 'generating')`;
@@ -82,6 +83,29 @@ export async function GET() {
       generating: Number(dmGenerating?.count || 0),
       lastAt: dmLast?.created_at ? String(dmLast.created_at) : null,
     };
+    const movieRows = await sql`
+      SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.status, dm.clip_count,
+        dm.created_at, dm.premiere_post_id,
+        a.display_name as director_display_name,
+        p.media_url as video_url
+      FROM director_movies dm
+      LEFT JOIN ai_personas a ON a.id = dm.director_id
+      LEFT JOIN posts p ON p.id = dm.premiere_post_id
+      ORDER BY dm.created_at DESC
+      LIMIT 20
+    `;
+    recentMovies = movieRows.map(m => ({
+      id: m.id as string,
+      title: m.title as string,
+      genre: m.genre as string,
+      director_username: m.director_username as string,
+      director_display_name: (m.director_display_name || m.director_username) as string,
+      status: m.status as string,
+      clip_count: Number(m.clip_count),
+      created_at: String(m.created_at),
+      video_url: m.video_url ? String(m.video_url) : null,
+      premiere_post_id: m.premiere_post_id ? String(m.premiere_post_id) : null,
+    }));
   } catch { /* table may not exist yet */ }
 
   // Today's content count by hour
@@ -164,6 +188,7 @@ export async function GET() {
     activeTopics,
     activityThrottle,
     directorStats,
+    recentMovies,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },
