@@ -69,12 +69,67 @@ interface PostResult {
 // API v2: POST https://api.twitter.com/2/tweets
 // Auth: OAuth 2.0 Bearer Token or OAuth 1.0a
 
+async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppCredentials>): Promise<string | null> {
+  try {
+    // Download the image
+    const imageResponse = await fetch(mediaUrl);
+    if (!imageResponse.ok) return null;
+
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+    const base64Data = imageBuffer.toString("base64");
+
+    // Determine media type from URL or content-type
+    const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
+    const isVideo = contentType.startsWith("video/");
+    if (isVideo) return null; // Video upload requires chunked upload, skip for now
+
+    // Upload via v1.1 media/upload endpoint (supports OAuth 1.0a only)
+    const uploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
+
+    if (!creds) return null;
+
+    const authHeader = buildOAuth1Header("POST", uploadUrl, creds);
+
+    // Use multipart/form-data with base64 media_data
+    const formBody = new URLSearchParams();
+    formBody.append("media_data", base64Data);
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formBody.toString(),
+    });
+
+    if (!uploadResponse.ok) {
+      console.error("[X media upload]", uploadResponse.status, await uploadResponse.text());
+      return null;
+    }
+
+    const uploadData = await uploadResponse.json() as { media_id_string?: string };
+    return uploadData.media_id_string || null;
+  } catch (err) {
+    console.error("[X media upload error]", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 async function postToX(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
     // Prefer OAuth 1.0a app credentials from env vars
     const creds = getAppCredentials();
     const tweetUrl = "https://api.twitter.com/2/tweets";
     const payload: Record<string, unknown> = { text };
+
+    // Upload media if provided and we have OAuth 1.0a creds
+    if (mediaUrl && creds) {
+      const mediaId = await uploadMediaToX(mediaUrl, creds);
+      if (mediaId) {
+        payload.media = { media_ids: [mediaId] };
+      }
+    }
 
     let authHeader: string;
     if (creds) {
