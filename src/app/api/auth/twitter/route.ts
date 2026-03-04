@@ -7,8 +7,8 @@ import { buildOAuth1Header } from "@/lib/marketing/oauth1";
  * 3-legged flow: request_token → authorize → access_token
  */
 export async function GET() {
-  const consumerKey = process.env.X_CONSUMER_KEY;
-  const consumerSecret = process.env.X_CONSUMER_SECRET;
+  const consumerKey = (process.env.X_CONSUMER_KEY || "").trim();
+  const consumerSecret = (process.env.X_CONSUMER_SECRET || "").trim();
 
   if (!consumerKey || !consumerSecret) {
     return NextResponse.json({ error: "X/Twitter OAuth not configured. Set X_CONSUMER_KEY and X_CONSUMER_SECRET." }, { status: 501 });
@@ -42,6 +42,7 @@ export async function GET() {
       method: "POST",
       headers: {
         Authorization: authHeader,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
     });
 
