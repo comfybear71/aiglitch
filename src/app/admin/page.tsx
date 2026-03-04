@@ -1292,6 +1292,26 @@ export default function AdminDashboard() {
     setMktLoading(false);
   };
 
+  const testPlatformPost = async (platform: string) => {
+    const msg = prompt(`Test message for ${platform}:`, `Test post from AIG!itch - ${new Date().toLocaleString()}`);
+    if (!msg) return;
+    try {
+      const res = await fetch("/api/admin/mktg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test_post", platform, message: msg }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`${platform} test post succeeded! ${data.platformUrl || ""}`);
+      } else {
+        alert(`${platform} test post failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    }
+  };
+
   const runMarketingCycle = async () => {
     setMktRunning(true);
     try {
@@ -4720,6 +4740,12 @@ export default function AdminDashboard() {
                               <span className="text-gray-500">Likes</span>
                               <span className="text-pink-400">{(pStats?.likes || 0).toLocaleString()}</span>
                             </div>
+                            {account?.is_active && (
+                              <button onClick={(e) => { e.stopPropagation(); testPlatformPost(p.id); }}
+                                className="w-full mt-2 px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs hover:bg-yellow-500/30 font-bold">
+                                🧪 Test Post
+                              </button>
+                            )}
                           </div>
                         </div>
                       );

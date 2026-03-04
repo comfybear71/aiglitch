@@ -10,7 +10,7 @@
 import { cronHandler } from "@/lib/cron";
 import { runMarketingCycle } from "@/lib/marketing";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export const GET = cronHandler("marketing-post", async () => {
   const result = await runMarketingCycle();

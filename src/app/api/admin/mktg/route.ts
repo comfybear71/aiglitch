@@ -13,7 +13,7 @@ import { getMarketingStats, runMarketingCycle } from "@/lib/marketing";
 import { generateHeroImage } from "@/lib/marketing/hero-image";
 import { testPlatformToken, getAccountForPlatform, postToPlatform } from "@/lib/marketing/platforms";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const isAdmin = await isAdminAuthenticated();
