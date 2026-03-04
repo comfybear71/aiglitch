@@ -154,6 +154,12 @@ export default function MePage() {
   // Real on-chain §GLITCH balance (only set when Phantom wallet is linked)
   const [onchainGlitchBalance, setOnchainGlitchBalance] = useState<number | null>(null);
 
+  // Full wallet balances for Phantom dropdown
+  const [walletBalances, setWalletBalances] = useState<{ sol: number; usdc: number; budju: number; glitch: number } | null>(null);
+  const [showWalletDropdown, setShowWalletDropdown] = useState(false);
+  const [walletRefreshing, setWalletRefreshing] = useState(false);
+  const walletDropdownRef = useRef<HTMLDivElement>(null);
+
   // Inventory (purchased items)
   const [inventory, setInventory] = useState<PurchasedItem[]>([]);
 
@@ -598,23 +604,40 @@ export default function MePage() {
     });
   }, [user, sessionId]);
 
-  // Fetch real on-chain GLITCH balance when user has a linked Phantom wallet.
-  // Stores it separately so the header can show ONLY the real balance for wallet users.
-  useEffect(() => {
+  // Fetch real on-chain balances when user has a linked Phantom wallet.
+  const fetchWalletBalances = useCallback(async () => {
     if (!linkedWallet || !sessionId) return;
     const sid = encodeURIComponent(sessionId);
-    fetch(`/api/solana?action=balance&wallet_address=${linkedWallet}&session_id=${sid}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.onchain_glitch_balance !== undefined) {
-          setOnchainGlitchBalance(data.onchain_glitch_balance || 0);
-        } else if (data.glitch_balance !== undefined) {
-          // Fallback: API may return combined balance
-          setOnchainGlitchBalance(data.glitch_balance || 0);
-        }
-      })
-      .catch(() => {});
+    try {
+      const res = await fetch(`/api/solana?action=balance&wallet_address=${linkedWallet}&session_id=${sid}`);
+      const data = await res.json();
+      if (data.onchain_glitch_balance !== undefined) {
+        setOnchainGlitchBalance(data.onchain_glitch_balance || 0);
+      } else if (data.glitch_balance !== undefined) {
+        setOnchainGlitchBalance(data.glitch_balance || 0);
+      }
+      setWalletBalances({
+        sol: data.sol_balance ?? 0,
+        usdc: data.usdc_balance ?? 0,
+        budju: data.budju_balance ?? 0,
+        glitch: data.glitch_balance ?? data.onchain_glitch_balance ?? 0,
+      });
+    } catch { /* network error */ }
   }, [linkedWallet, sessionId]);
+
+  useEffect(() => { fetchWalletBalances(); }, [fetchWalletBalances]);
+
+  // Close wallet dropdown when clicking outside
+  useEffect(() => {
+    if (!showWalletDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (walletDropdownRef.current && !walletDropdownRef.current.contains(e.target as Node)) {
+        setShowWalletDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showWalletDropdown]);
 
   // Claim signup bonus
   useEffect(() => {
@@ -782,20 +805,175 @@ export default function MePage() {
           </div>
           {user && (
             <div className="flex items-center gap-2">
-              {/* Phantom wallet connected: show ONLY real on-chain §GLITCH balance */}
+              {/* Phantom wallet connected: show ONLY real on-chain §GLITCH balance as dropdown toggle */}
               {linkedWallet && onchainGlitchBalance !== null ? (
-                <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full" data-testid="onchain-balance">
-                  <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-3.5 h-3.5" />
-                  <span className="text-xs font-bold text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</span>
-                </a>
+                <div ref={walletDropdownRef} className="relative">
+                  <button
+                    onClick={() => setShowWalletDropdown(prev => !prev)}
+                    className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full hover:bg-green-500/20 transition-colors"
+                    data-testid="onchain-balance"
+                  >
+                    <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-3.5 h-3.5" />
+                    <span className="text-xs font-bold text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</span>
+                    <svg className={`w-3 h-3 text-green-400 transition-transform ${showWalletDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+
+                  {/* Wallet Dropdown */}
+                  {showWalletDropdown && (
+                    <div className="absolute right-0 top-full mt-2 w-72 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[60] overflow-hidden">
+                      {/* Wallet Address */}
+                      <div className="px-4 pt-3 pb-2 border-b border-gray-800">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Phantom Wallet</span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await navigator.clipboard.writeText(linkedWallet);
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 1500);
+                            }}
+                            className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono"
+                          >
+                            {copied ? "Copied!" : `${linkedWallet.slice(0, 4)}...${linkedWallet.slice(-4)}`}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Token Balances */}
+                      <div className="p-3 space-y-1.5 border-b border-gray-800">
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/sol.svg" alt="SOL" className="w-4 h-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <span className="text-xs text-gray-300 font-semibold">SOL</span>
+                          </div>
+                          <span className="text-xs font-bold text-purple-400 font-mono">{walletBalances ? walletBalances.sol.toFixed(4) : "---"}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/usdc.svg" alt="USDC" className="w-4 h-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <span className="text-xs text-gray-300 font-semibold">USDC</span>
+                          </div>
+                          <span className="text-xs font-bold text-green-400 font-mono">{walletBalances ? walletBalances.usdc.toFixed(2) : "---"}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/budju.svg" alt="$BUDJU" className="w-4 h-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <span className="text-xs text-gray-300 font-semibold">$BUDJU</span>
+                          </div>
+                          <span className="text-xs font-bold text-fuchsia-400 font-mono">{walletBalances ? walletBalances.budju.toLocaleString() : "---"}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-4 h-4" />
+                            <span className="text-xs text-gray-300 font-semibold">§GLITCH</span>
+                          </div>
+                          <span className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400 font-mono">{formatGlitchBalance(onchainGlitchBalance)}</span>
+                        </div>
+                      </div>
+
+                      {/* Ad-Free Purchase */}
+                      <div className="p-3 border-b border-gray-800">
+                        {adFreeUntil ? (
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm">🚫</span>
+                                <span className="text-xs font-bold text-green-400">Ad-Free Active</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500 mt-0.5">Until {new Date(adFreeUntil).toLocaleDateString()}</p>
+                            </div>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (purchasingAdFree) return;
+                                setPurchasingAdFree(true);
+                                try {
+                                  const res = await fetch("/api/coins", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    setAdFreeUntil(data.ad_free_until);
+                                    setCoins(prev => ({ ...prev, balance: data.new_balance }));
+                                    window.dispatchEvent(new Event("ad-free-purchased"));
+                                  } else {
+                                    setError(data.error || "Purchase failed");
+                                    setTimeout(() => setError(""), 3000);
+                                  }
+                                } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
+                                setPurchasingAdFree(false);
+                              }}
+                              disabled={purchasingAdFree || coins.balance < 20}
+                              className="text-[10px] px-3 py-1.5 bg-purple-500/20 text-purple-400 font-bold rounded-full hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                            >
+                              {purchasingAdFree ? "..." : "+30 days"}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (purchasingAdFree) return;
+                              setPurchasingAdFree(true);
+                              try {
+                                const res = await fetch("/api/coins", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setAdFreeUntil(data.ad_free_until);
+                                  setCoins(prev => ({ ...prev, balance: data.new_balance }));
+                                  window.dispatchEvent(new Event("ad-free-purchased"));
+                                } else {
+                                  setError(data.error || "Purchase failed");
+                                  setTimeout(() => setError(""), 3000);
+                                }
+                              } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
+                              setPurchasingAdFree(false);
+                            }}
+                            disabled={purchasingAdFree || coins.balance < 20}
+                            className="w-full py-2 bg-gradient-to-r from-purple-600/80 to-pink-600/80 text-white text-xs font-bold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all disabled:opacity-50"
+                          >
+                            {purchasingAdFree ? "Processing..." : coins.balance < 20 ? `🚫 Need ${20 - coins.balance} more coins` : "🚫 Remove Ads — 20 GLITCH"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="p-3 space-y-2">
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setWalletRefreshing(true);
+                            await fetchWalletBalances();
+                            setWalletRefreshing(false);
+                          }}
+                          className="w-full py-2 bg-gray-800 text-cyan-400 text-xs font-bold rounded-xl border border-gray-700 hover:border-cyan-500/50 transition-all"
+                        >
+                          {walletRefreshing ? "Refreshing..." : "Refresh Balances"}
+                        </button>
+                        <a
+                          href="/exchange"
+                          className="block w-full py-2 bg-green-500/10 text-green-400 text-xs font-bold rounded-xl border border-green-500/20 hover:border-green-500/40 transition-all text-center"
+                        >
+                          Buy §GLITCH
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <>
                   {/* No Phantom wallet: show simulated $G + in-app coins */}
                   {glitchBalance > 0 && (
-                    <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full" data-testid="simulated-glitch-balance">
+                    <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full" data-testid="simulated-glitch-balance">
                       <span className="text-[10px] font-bold text-green-400">$G</span>
                       <span className="text-xs font-bold text-green-400">{glitchBalance.toLocaleString()}</span>
-                    </a>
+                    </div>
                   )}
                   <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 rounded-full" data-testid="simulated-coin-balance">
                     <span className="text-xs">🪙</span>
@@ -1112,83 +1290,6 @@ export default function MePage() {
                   <p className="text-xs text-gray-500 mt-1">AIG!itch Coins</p>
                   <p className="text-[10px] text-gray-600 mt-1">Lifetime earned: {coins.lifetime_earned.toLocaleString()}</p>
                 </div>
-
-                {/* Ad-Free Purchase — Phantom wallet users only */}
-                {linkedWallet && (
-                  <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-2xl p-4 mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🚫</span>
-                        <div>
-                          <h3 className="text-sm font-bold text-purple-300">Remove Ads</h3>
-                          <p className="text-[10px] text-gray-500">No popup ads for 30 days</p>
-                        </div>
-                      </div>
-                      <span className="text-lg font-black text-yellow-400">20 🪙</span>
-                    </div>
-                    {adFreeUntil ? (
-                      <div className="text-center py-2">
-                        <p className="text-xs text-green-400 font-bold">Ad-Free Active</p>
-                        <p className="text-[10px] text-gray-500">Until {new Date(adFreeUntil).toLocaleDateString()}</p>
-                        <button
-                          onClick={async () => {
-                            if (purchasingAdFree) return;
-                            setPurchasingAdFree(true);
-                            try {
-                              const res = await fetch("/api/coins", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
-                              });
-                              const data = await res.json();
-                              if (data.success) {
-                                setAdFreeUntil(data.ad_free_until);
-                                setCoins(prev => ({ ...prev, balance: data.new_balance }));
-                                window.dispatchEvent(new Event("ad-free-purchased"));
-                              } else {
-                                setError(data.error || "Purchase failed");
-                                setTimeout(() => setError(""), 3000);
-                              }
-                            } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
-                            setPurchasingAdFree(false);
-                          }}
-                          disabled={purchasingAdFree || coins.balance < 20}
-                          className="mt-2 px-4 py-1.5 bg-purple-500/20 text-purple-400 text-[10px] font-bold rounded-full hover:bg-purple-500/30 transition-colors disabled:opacity-50"
-                        >
-                          {purchasingAdFree ? "Processing..." : "Extend +30 days"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={async () => {
-                          if (purchasingAdFree) return;
-                          setPurchasingAdFree(true);
-                          try {
-                            const res = await fetch("/api/coins", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              setAdFreeUntil(data.ad_free_until);
-                              setCoins(prev => ({ ...prev, balance: data.new_balance }));
-                              window.dispatchEvent(new Event("ad-free-purchased"));
-                            } else {
-                              setError(data.error || "Purchase failed");
-                              setTimeout(() => setError(""), 3000);
-                            }
-                          } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
-                          setPurchasingAdFree(false);
-                        }}
-                        disabled={purchasingAdFree || coins.balance < 20}
-                        className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {purchasingAdFree ? "Processing..." : coins.balance < 20 ? `Need ${20 - coins.balance} more coins` : "Buy Ad-Free — 20 GLITCH Coins"}
-                      </button>
-                    )}
-                  </div>
-                )}
 
                 <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-4 mb-4">
                   <h3 className="text-sm font-bold mb-3 text-yellow-400">How to earn coins</h3>
