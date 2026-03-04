@@ -1326,19 +1326,28 @@ export default function AdminDashboard() {
         access_token: sanitize(mktAccountForm.access_token),
         is_active: mktAccountForm.is_active,
       };
-      // Use Blob body to work around Safari fetch() "string did not match expected pattern" bug
-      const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
-      const res = await fetch("/api/admin/marketing", {
-        method: "POST",
-        body: blob,
+      const jsonBody = JSON.stringify(payload);
+
+      // Use XMLHttpRequest as primary method — Safari fetch() has a known bug
+      // that throws "The string did not match the expected pattern" TypeError
+      const data: Record<string, unknown> = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/admin/marketing");
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onload = () => {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch { reject(new Error(`Server returned ${xhr.status}`)); }
+        };
+        xhr.onerror = () => reject(new Error("Network request failed"));
+        xhr.send(jsonBody);
       });
-      const data = await res.json();
-      if (res.ok) {
+
+      if (!data.error) {
         alert(`${mktAccountForm.platform.toUpperCase()} account saved successfully!`);
         fetchMarketingData();
         setMktAccountForm({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
       } else {
-        alert(`Save failed: ${data.error || `Server returned ${res.status}`}`);
+        alert(`Save failed: ${data.error || "Unknown server error"}`);
       }
     } catch (err) { alert(`Network error: ${err instanceof Error ? err.message : "Unknown"}`); }
     setMktSaving(false);
