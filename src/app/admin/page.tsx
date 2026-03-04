@@ -1309,6 +1309,10 @@ export default function AdminDashboard() {
   };
 
   const savePlatformAccount = async () => {
+    if (!mktAccountForm.account_name && !mktAccountForm.access_token) {
+      alert("Please enter at least an account name or access token.");
+      return;
+    }
     setMktSaving(true);
     try {
       const res = await fetch("/api/admin/marketing", {
@@ -1316,12 +1320,15 @@ export default function AdminDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "save_account", ...mktAccountForm }),
       });
+      const data = await res.json();
       if (res.ok) {
-        alert(`${mktAccountForm.platform} account saved!`);
+        alert(`${mktAccountForm.platform.toUpperCase()} account saved successfully!`);
         fetchMarketingData();
         setMktAccountForm({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
+      } else {
+        alert(`Save failed: ${data.error || `Server returned ${res.status}`}`);
       }
-    } catch (err) { alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`); }
+    } catch (err) { alert(`Network error: ${err instanceof Error ? err.message : "Unknown"}`); }
     setMktSaving(false);
   };
 
@@ -4639,7 +4646,16 @@ export default function AdminDashboard() {
                       const account = mktAccounts.find(a => a.platform === p.id);
                       const pStats = mktStats?.platformBreakdown?.find(s => s.platform === p.id);
                       return (
-                        <div key={p.id} className={`bg-gray-900/50 border-t-2 ${p.bg} border border-gray-800 rounded-lg p-3`}>
+                        <div key={p.id} onClick={() => {
+                          setMktAccountForm({
+                            platform: p.id,
+                            account_name: account?.account_name || "",
+                            account_id: account?.account_id || "",
+                            account_url: account?.account_url || "",
+                            access_token: "",
+                            is_active: account?.is_active || false,
+                          });
+                        }} className={`bg-gray-900/50 border-t-2 ${p.bg} border border-gray-800 rounded-lg p-3 cursor-pointer hover:bg-gray-800/70 transition-colors ${mktAccountForm.platform === p.id ? "ring-2 ring-yellow-500/60" : ""}`}>
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-xl">{p.emoji}</span>
                             <span className="text-sm font-bold">{p.name}</span>
@@ -4674,6 +4690,7 @@ export default function AdminDashboard() {
                       );
                     })}
                   </div>
+                  <p className="text-[10px] text-gray-600 mt-1">Click a platform card to select it and edit its account details below.</p>
                 </div>
 
                 {/* Platform Account Setup */}
