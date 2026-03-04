@@ -265,6 +265,8 @@ export default function AdminDashboard() {
   const [mktAccounts, setMktAccounts] = useState<MktPlatformAccount[]>([]);
   const [mktLoading, setMktLoading] = useState(false);
   const [mktRunning, setMktRunning] = useState(false);
+  const [heroGenerating, setHeroGenerating] = useState(false);
+  const [heroUrl, setHeroUrl] = useState<string | null>(null);
   const [mktAccountForm, setMktAccountForm] = useState<{ platform: string; account_name: string; account_id: string; account_url: string; access_token: string; is_active: boolean }>({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
   const [mktSaving, setMktSaving] = useState(false);
   const [mktTestingToken, setMktTestingToken] = useState(false);
@@ -1328,6 +1330,27 @@ export default function AdminDashboard() {
       alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
     }
     setMktRunning(false);
+  };
+
+  const generateHeroImage = async () => {
+    setHeroGenerating(true);
+    try {
+      const res = await fetch("/api/admin/mktg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate_hero" }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        setHeroUrl(data.url);
+        alert("Sgt. Pepper hero image generated!");
+      } else {
+        alert(`Hero generation failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    }
+    setHeroGenerating(false);
   };
 
   const savePlatformAccount = async () => {
@@ -4658,6 +4681,10 @@ export default function AdminDashboard() {
                       className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
                       {mktRunning ? "⏳ Running..." : "🚀 Run Marketing Cycle"}
                     </button>
+                    <button onClick={generateHeroImage} disabled={heroGenerating}
+                      className="px-3 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
+                      {heroGenerating ? "⏳ Generating..." : "🎸 Sgt. Pepper Hero"}
+                    </button>
                     <button onClick={fetchMarketingData}
                       className="px-3 py-2 bg-gray-800 text-gray-300 rounded-lg text-xs hover:bg-gray-700">
                       🔄 Refresh
@@ -4668,6 +4695,16 @@ export default function AdminDashboard() {
                     </a>
                   </div>
                 </div>
+
+                {/* Hero Image Preview */}
+                {heroUrl && (
+                  <div className="bg-gray-900/50 border border-yellow-500/30 rounded-lg p-3">
+                    <h3 className="text-xs font-bold text-yellow-400 mb-2">🎸 Sgt. Pepper Hero Image</h3>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={heroUrl} alt="Sgt. Pepper Hero" className="w-full rounded-lg" />
+                    <p className="text-[10px] text-gray-500 mt-1 break-all">{heroUrl}</p>
+                  </div>
+                )}
 
                 {/* Stats Overview */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
