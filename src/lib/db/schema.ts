@@ -651,6 +651,81 @@ export const multiClipScenes = pgTable("multi_clip_scenes", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
+// ─── 50. marketing_campaigns ─────────────────────────────────────────────────
+export const marketingCampaigns = pgTable("marketing_campaigns", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status").notNull().default("active"), // draft | active | paused | completed
+  targetPlatforms: text("target_platforms").notNull().default("x,tiktok,instagram,facebook,youtube"),
+  contentStrategy: text("content_strategy").notNull().default("top_engagement"),
+  postsPerDay: integer("posts_per_day").notNull().default(4),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 51. marketing_posts ─────────────────────────────────────────────────────
+export const marketingPosts = pgTable("marketing_posts", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").references(() => marketingCampaigns.id),
+  platform: text("platform").notNull(), // x | tiktok | instagram | facebook | youtube
+  sourcePostId: text("source_post_id").references(() => posts.id),
+  personaId: text("persona_id").references(() => aiPersonas.id),
+  adaptedContent: text("adapted_content").notNull(),
+  adaptedMediaUrl: text("adapted_media_url"),
+  thumbnailUrl: text("thumbnail_url"),
+  platformPostId: text("platform_post_id"), // ID returned from platform API
+  platformUrl: text("platform_url"), // link to the live post
+  status: text("status").notNull().default("queued"), // queued | posting | posted | failed
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+  impressions: integer("impressions").notNull().default(0),
+  likes: integer("likes").notNull().default(0),
+  shares: integer("shares").notNull().default(0),
+  comments: integer("comments").notNull().default(0),
+  views: integer("views").notNull().default(0),
+  clicks: integer("clicks").notNull().default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 52. marketing_platform_accounts ─────────────────────────────────────────
+export const marketingPlatformAccounts = pgTable("marketing_platform_accounts", {
+  id: text("id").primaryKey(),
+  platform: text("platform").unique().notNull(), // x | tiktok | instagram | facebook | youtube
+  accountName: text("account_name").notNull().default(""),
+  accountId: text("account_id").notNull().default(""),
+  accountUrl: text("account_url").notNull().default(""),
+  accessToken: text("access_token").notNull().default(""),
+  refreshToken: text("refresh_token").notNull().default(""),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+  extraConfig: text("extra_config").notNull().default("{}"), // JSON blob for platform-specific settings
+  isActive: boolean("is_active").notNull().default(false),
+  lastPostedAt: timestamp("last_posted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 53. marketing_metrics_daily ─────────────────────────────────────────────
+export const marketingMetricsDaily = pgTable("marketing_metrics_daily", {
+  id: text("id").primaryKey(),
+  platform: text("platform").notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  totalImpressions: integer("total_impressions").notNull().default(0),
+  totalLikes: integer("total_likes").notNull().default(0),
+  totalShares: integer("total_shares").notNull().default(0),
+  totalComments: integer("total_comments").notNull().default(0),
+  totalViews: integer("total_views").notNull().default(0),
+  totalClicks: integer("total_clicks").notNull().default(0),
+  postsPublished: integer("posts_published").notNull().default(0),
+  followerCount: integer("follower_count").notNull().default(0),
+  followerGrowth: integer("follower_growth").notNull().default(0),
+  topPostId: text("top_post_id"),
+  collectedAt: timestamp("collected_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+}, (table) => [
+  unique("marketing_metrics_platform_date").on(table.platform, table.date),
+]);
+
 // ─── Cost tracking (added in Phase 4) ──────────────────────────────────────
 export const aiCostLog = pgTable("ai_cost_log", {
   id: text("id").primaryKey(),

@@ -286,6 +286,7 @@ export const CRON_SCHEDULES = {
   budjuTrading:          "*/8 * * * *",   // every 8 min
   generateAvatars:       "*/20 * * * *",  // every 20 min
   generateDirectorMovie: "*/10 * * * *",  // every 10 min
+  marketingPost:         "0 */3 * * *",  // every 3 hours
 } as const;
 
 // ── Video Cost Estimates ─────────────────────────────────────────────

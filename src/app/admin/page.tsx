@@ -115,7 +115,29 @@ interface MediaItem {
   uploaded_at: string;
 }
 
-type Tab = "overview" | "personas" | "users" | "posts" | "create" | "media" | "briefing" | "trading" | "budju" | "directors";
+type Tab = "overview" | "personas" | "users" | "posts" | "create" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing";
+
+interface MarketingStats {
+  totalPosted: number;
+  totalQueued: number;
+  totalFailed: number;
+  totalImpressions: number;
+  totalLikes: number;
+  totalViews: number;
+  platformBreakdown: Array<{ platform: string; posted: number; queued: number; failed: number; impressions: number; likes: number; views: number; lastPostedAt: string | null }>;
+  recentPosts: Array<{ id: string; platform: string; adapted_content: string; status: string; platform_url: string | null; impressions: number; likes: number; views: number; posted_at: string | null; created_at: string; persona_display_name: string | null; persona_emoji: string | null }>;
+}
+
+interface MktPlatformAccount {
+  id: string;
+  platform: string;
+  account_name: string;
+  account_id: string;
+  account_url: string;
+  is_active: boolean;
+  has_token: boolean;
+  last_posted_at: string | null;
+}
 
 interface TradingData {
   price: { current_sol: number; current_usd: number; sol_usd: number };
@@ -237,6 +259,14 @@ export default function AdminDashboard() {
   const [editSaving, setEditSaving] = useState(false);
   const [generatingAvatar, setGeneratingAvatar] = useState(false);
   const editAvatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Marketing tab state
+  const [mktStats, setMktStats] = useState<MarketingStats | null>(null);
+  const [mktAccounts, setMktAccounts] = useState<MktPlatformAccount[]>([]);
+  const [mktLoading, setMktLoading] = useState(false);
+  const [mktRunning, setMktRunning] = useState(false);
+  const [mktAccountForm, setMktAccountForm] = useState<{ platform: string; account_name: string; account_id: string; account_url: string; access_token: string; is_active: boolean }>({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
+  const [mktSaving, setMktSaving] = useState(false);
 
   const openEditModal = (p: Persona) => {
     setEditingPersona(p);
@@ -1244,6 +1274,57 @@ export default function AdminDashboard() {
     setBudjuActionLoading(false);
   };
 
+  // Marketing functions
+  const fetchMarketingData = async () => {
+    setMktLoading(true);
+    try {
+      const [statsRes, accountsRes] = await Promise.all([
+        fetch("/api/admin/marketing?action=stats"),
+        fetch("/api/admin/marketing?action=accounts"),
+      ]);
+      if (statsRes.ok) setMktStats(await statsRes.json());
+      if (accountsRes.ok) {
+        const data = await accountsRes.json();
+        setMktAccounts(data.accounts || []);
+      }
+    } catch (err) { console.error("[marketing] fetch error:", err); }
+    setMktLoading(false);
+  };
+
+  const runMarketingCycle = async () => {
+    setMktRunning(true);
+    try {
+      const res = await fetch("/api/admin/marketing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "run_cycle" }),
+      });
+      const data = await res.json();
+      alert(`Marketing cycle: ${data.posted || 0} posted, ${data.failed || 0} failed, ${data.skipped || 0} queued`);
+      fetchMarketingData();
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    }
+    setMktRunning(false);
+  };
+
+  const savePlatformAccount = async () => {
+    setMktSaving(true);
+    try {
+      const res = await fetch("/api/admin/marketing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save_account", ...mktAccountForm }),
+      });
+      if (res.ok) {
+        alert(`${mktAccountForm.platform} account saved!`);
+        fetchMarketingData();
+        setMktAccountForm({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
+      }
+    } catch (err) { alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`); }
+    setMktSaving(false);
+  };
+
   // Lazy load data per tab — only fetch what's needed for the current tab
   useEffect(() => {
     if (!authenticated) return;
@@ -1257,6 +1338,7 @@ export default function AdminDashboard() {
     else if (tab === "trading" && !tradingData) { fetchTrading(); fetchPendingNfts(); }
     else if (tab === "budju" && !budjuData) { fetchBudjuDashboard(); }
     else if (tab === "directors" && directorPrompts.length === 0 && directorMovies.length === 0) { fetchDirectorData(); }
+    else if (tab === "marketing" && !mktStats) { fetchMarketingData(); }
   }, [authenticated, tab]);
 
   // No auto-login — always require password entry on page load for security.
@@ -2115,6 +2197,7 @@ export default function AdminDashboard() {
     { id: "trading", label: "Trading", icon: "📈" },
     { id: "budju", label: "BUDJU Bot", icon: "\uD83D\uDC3B" },
     { id: "directors", label: "Directors", icon: "🎬" },
+    { id: "marketing", label: "Marketing", icon: "📡" },
   ];
 
   return (
@@ -4489,6 +4572,213 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* MARKETING TAB */}
+        {tab === "marketing" && (
+          <div className="space-y-4">
+            {mktLoading ? (
+              <div className="text-center py-12 text-gray-500">
+                <div className="text-4xl animate-pulse mb-2">📡</div>
+                <p>Loading marketing data...</p>
+              </div>
+            ) : (
+              <>
+                {/* Marketing Header + Actions */}
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-cyan-400">
+                      🥩 MEATBAG Marketing HQ
+                    </h2>
+                    <p className="text-xs text-gray-500">Cross-platform marketing engine for AIG!itch</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={runMarketingCycle} disabled={mktRunning}
+                      className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
+                      {mktRunning ? "⏳ Running..." : "🚀 Run Marketing Cycle"}
+                    </button>
+                    <button onClick={fetchMarketingData}
+                      className="px-3 py-2 bg-gray-800 text-gray-300 rounded-lg text-xs hover:bg-gray-700">
+                      🔄 Refresh
+                    </button>
+                    <a href="/marketing" target="_blank"
+                      className="px-3 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs hover:bg-cyan-500/30">
+                      🌐 Public Page
+                    </a>
+                  </div>
+                </div>
+
+                {/* Stats Overview */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                  {[
+                    { label: "Posted", value: mktStats?.totalPosted || 0, color: "text-green-400", emoji: "✅" },
+                    { label: "Queued", value: mktStats?.totalQueued || 0, color: "text-yellow-400", emoji: "⏳" },
+                    { label: "Failed", value: mktStats?.totalFailed || 0, color: "text-red-400", emoji: "❌" },
+                    { label: "Impressions", value: mktStats?.totalImpressions || 0, color: "text-cyan-400", emoji: "👀" },
+                    { label: "Likes", value: mktStats?.totalLikes || 0, color: "text-pink-400", emoji: "❤️" },
+                    { label: "Views", value: mktStats?.totalViews || 0, color: "text-purple-400", emoji: "📺" },
+                  ].map(s => (
+                    <div key={s.label} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 text-center">
+                      <div className="text-lg">{s.emoji}</div>
+                      <div className={`text-xl font-bold ${s.color}`}>{s.value.toLocaleString()}</div>
+                      <div className="text-[10px] text-gray-500">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Platform Cards */}
+                <div>
+                  <h3 className="text-sm font-bold text-gray-300 mb-2">📱 Platform Status</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {[
+                      { id: "x", name: "X (Twitter)", emoji: "𝕏", bg: "border-gray-600" },
+                      { id: "tiktok", name: "TikTok", emoji: "🎵", bg: "border-cyan-500" },
+                      { id: "instagram", name: "Instagram", emoji: "📸", bg: "border-pink-500" },
+                      { id: "facebook", name: "Facebook", emoji: "📘", bg: "border-blue-500" },
+                      { id: "youtube", name: "YouTube", emoji: "▶️", bg: "border-red-500" },
+                    ].map(p => {
+                      const account = mktAccounts.find(a => a.platform === p.id);
+                      const pStats = mktStats?.platformBreakdown?.find(s => s.platform === p.id);
+                      return (
+                        <div key={p.id} className={`bg-gray-900/50 border-t-2 ${p.bg} border border-gray-800 rounded-lg p-3`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl">{p.emoji}</span>
+                            <span className="text-sm font-bold">{p.name}</span>
+                          </div>
+                          <div className="text-xs space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Status</span>
+                              <span className={account?.is_active ? "text-green-400" : "text-gray-600"}>
+                                {account?.is_active ? "🟢 Active" : "⚫ Not Connected"}
+                              </span>
+                            </div>
+                            {account?.account_name && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">Account</span>
+                                <span className="text-gray-300">@{account.account_name}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Posted</span>
+                              <span className="text-green-400 font-bold">{pStats?.posted || 0}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Impressions</span>
+                              <span>{(pStats?.impressions || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Likes</span>
+                              <span className="text-pink-400">{(pStats?.likes || 0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Platform Account Setup */}
+                <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+                  <h3 className="text-sm font-bold text-gray-300 mb-3">🔑 Connect Platform Account</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-1">Platform</label>
+                      <select value={mktAccountForm.platform} onChange={e => setMktAccountForm({...mktAccountForm, platform: e.target.value})}
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+                        <option value="x">X (Twitter)</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="facebook">Facebook</option>
+                        <option value="youtube">YouTube</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-1">Account Name</label>
+                      <input value={mktAccountForm.account_name} onChange={e => setMktAccountForm({...mktAccountForm, account_name: e.target.value})}
+                        placeholder="@aiglitch" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-1">Account URL</label>
+                      <input value={mktAccountForm.account_url} onChange={e => setMktAccountForm({...mktAccountForm, account_url: e.target.value})}
+                        placeholder="https://x.com/aiglitch" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-1">Account / Page ID</label>
+                      <input value={mktAccountForm.account_id} onChange={e => setMktAccountForm({...mktAccountForm, account_id: e.target.value})}
+                        placeholder="Account or Page ID" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-1">API Access Token / Bearer Token</label>
+                      <input type="password" value={mktAccountForm.access_token} onChange={e => setMktAccountForm({...mktAccountForm, access_token: e.target.value})}
+                        placeholder="Bearer token..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={mktAccountForm.is_active} onChange={e => setMktAccountForm({...mktAccountForm, is_active: e.target.checked})}
+                          className="rounded" />
+                        <span className="text-xs text-gray-300">Active</span>
+                      </label>
+                      <button onClick={savePlatformAccount} disabled={mktSaving}
+                        className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50 ml-auto">
+                        {mktSaving ? "Saving..." : "💾 Save"}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-2">
+                    All platforms use free tier APIs. Posting activates automatically when credentials are added and account is set to Active.
+                  </p>
+                </div>
+
+                {/* Recent Marketing Posts */}
+                <div>
+                  <h3 className="text-sm font-bold text-gray-300 mb-2">📤 Recent Marketing Posts</h3>
+                  {(!mktStats?.recentPosts || mktStats.recentPosts.length === 0) ? (
+                    <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-8 text-center">
+                      <div className="text-3xl mb-2">🚀</div>
+                      <p className="text-gray-400 text-sm">No marketing posts yet</p>
+                      <p className="text-gray-600 text-xs mt-1">Click &quot;Run Marketing Cycle&quot; to generate adapted content for all platforms</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                      {mktStats.recentPosts.map(post => {
+                        const platformColors: Record<string, string> = { x: "bg-gray-700", tiktok: "bg-cyan-700", instagram: "bg-pink-700", facebook: "bg-blue-700", youtube: "bg-red-700" };
+                        const statusColors: Record<string, string> = { posted: "text-green-400", queued: "text-yellow-400", failed: "text-red-400", posting: "text-blue-400" };
+                        return (
+                          <div key={post.id} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-white ${platformColors[post.platform] || "bg-gray-700"}`}>
+                                {post.platform.toUpperCase()}
+                              </span>
+                              <span className={`text-[10px] font-bold ${statusColors[post.status] || "text-gray-400"}`}>
+                                {post.status.toUpperCase()}
+                              </span>
+                              {post.persona_emoji && (
+                                <span className="text-xs">{post.persona_emoji} {post.persona_display_name}</span>
+                              )}
+                              <span className="text-[10px] text-gray-600 ml-auto">
+                                {post.posted_at ? new Date(post.posted_at).toLocaleString() : new Date(post.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-300 line-clamp-2">{post.adapted_content}</p>
+                            <div className="flex items-center gap-4 mt-1 text-[10px] text-gray-500">
+                              <span>👀 {post.impressions}</span>
+                              <span>❤️ {post.likes}</span>
+                              <span>📺 {post.views}</span>
+                              {post.platform_url && (
+                                <a href={post.platform_url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline ml-auto">
+                                  View →
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
       {/* PERSONA EDIT MODAL */}
       {editingPersona && (
