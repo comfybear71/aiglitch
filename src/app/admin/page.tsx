@@ -4780,6 +4780,20 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                   </div>
+                  {mktAccountForm.platform === "tiktok" && (
+                    <div className="mt-3 p-3 bg-cyan-900/20 border border-cyan-800/40 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <p className="text-xs text-cyan-300 font-bold">🎵 Quick Connect TikTok</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">Log in with TikTok to automatically get your access token. Requires TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET env vars.</p>
+                        </div>
+                        <a href="/api/auth/tiktok"
+                          className="px-4 py-2 bg-cyan-600 text-white font-bold rounded-lg text-xs hover:bg-cyan-500 whitespace-nowrap shrink-0">
+                          Connect TikTok
+                        </a>
+                      </div>
+                    </div>
+                  )}
                   <p className="text-[10px] text-gray-600 mt-2">
                     All platforms use free tier APIs. Posting activates automatically when credentials are added and account is set to Active.
                   </p>
