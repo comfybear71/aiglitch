@@ -17,6 +17,7 @@ import { adaptContentForPlatform, pickTopPosts } from "./content-adapter";
 
 export { pickTopPosts } from "./content-adapter";
 export { getActiveAccounts } from "./platforms";
+export { collectAllMetrics } from "./metrics-collector";
 export * from "./types";
 
 /**

@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
-import { getMarketingStats, runMarketingCycle } from "@/lib/marketing";
+import { getMarketingStats, runMarketingCycle, collectAllMetrics } from "@/lib/marketing";
 import { generateHeroImage } from "@/lib/marketing/hero-image";
 import { testPlatformToken, getAccountForPlatform, postToPlatform } from "@/lib/marketing/platforms";
 import type { MarketingPlatform } from "@/lib/marketing/types";
@@ -212,6 +212,12 @@ export async function POST(request: NextRequest) {
           ON CONFLICT (key) DO UPDATE SET value = ${result.url}, updated_at = NOW()
         `;
       }
+      return NextResponse.json({ ok: true, ...result });
+    }
+
+    // ── Collect metrics from all platforms ────────────────────────────
+    case "collect_metrics": {
+      const result = await collectAllMetrics();
       return NextResponse.json({ ok: true, ...result });
     }
 
