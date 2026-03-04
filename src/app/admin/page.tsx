@@ -1315,10 +1315,21 @@ export default function AdminDashboard() {
     }
     setMktSaving(true);
     try {
+      // Sanitize form values — strip invisible Unicode chars and trim (fixes Safari/iOS paste issues)
+      const sanitize = (s: string) => s.replace(/[\u200B-\u200D\uFEFF\u00A0\u2028\u2029]/g, "").trim();
+      const payload = {
+        action: "save_account" as const,
+        platform: mktAccountForm.platform,
+        account_name: sanitize(mktAccountForm.account_name),
+        account_id: sanitize(mktAccountForm.account_id),
+        account_url: sanitize(mktAccountForm.account_url),
+        access_token: sanitize(mktAccountForm.access_token),
+        is_active: mktAccountForm.is_active,
+      };
       const res = await fetch("/api/admin/marketing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save_account", ...mktAccountForm }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
