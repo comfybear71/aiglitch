@@ -16,6 +16,15 @@ export async function GET() {
 
   const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/twitter`;
 
+  // Temporary debug: log key shapes to verify env vars are correct (no secrets exposed)
+  console.log("OAuth debug:", {
+    keyPrefix: consumerKey.slice(0, 4),
+    keySuffix: consumerKey.slice(-4),
+    keyLen: consumerKey.length,
+    secretLen: consumerSecret.length,
+    callbackUrl,
+  });
+
   try {
     const requestTokenUrl = "https://api.twitter.com/oauth/request_token";
     const authHeader = buildOAuth1Header("POST", requestTokenUrl, {
