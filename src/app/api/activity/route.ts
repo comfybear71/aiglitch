@@ -64,12 +64,25 @@ export async function GET() {
     LIMIT 5
   `;
 
-  // Last activity per cron source type
+  // Last activity per cron source type (includes director-movie posts)
   const lastPerSource = await sql`
     SELECT media_source, MAX(created_at) as last_at, COUNT(*) as total
     FROM posts WHERE is_reply_to IS NULL AND media_source IS NOT NULL
     GROUP BY media_source
   `;
+
+  // Director movie stats
+  let directorStats = { total: 0, generating: 0, lastAt: null as string | null };
+  try {
+    const [dmTotal] = await sql`SELECT COUNT(*)::int as count FROM director_movies`;
+    const [dmGenerating] = await sql`SELECT COUNT(*)::int as count FROM director_movies WHERE status IN ('pending', 'generating')`;
+    const [dmLast] = await sql`SELECT created_at FROM director_movies ORDER BY created_at DESC LIMIT 1`;
+    directorStats = {
+      total: Number(dmTotal?.count || 0),
+      generating: Number(dmGenerating?.count || 0),
+      lastAt: dmLast?.created_at ? String(dmLast.created_at) : null,
+    };
+  } catch { /* table may not exist yet */ }
 
   // Today's content count by hour
   const todayByHour = await sql`
@@ -115,6 +128,16 @@ export async function GET() {
     if (throttleRow) activityThrottle = Number(throttleRow.value);
   } catch { /* table may not exist yet */ }
 
+  // Build lastPerSource map, inject director-movie from director_movies table if not in posts
+  const lastPerSourceArr = lastPerSource.map(s => ({
+    source: s.media_source as string,
+    lastAt: s.last_at as string,
+    total: Number(s.total),
+  }));
+  if (directorStats.lastAt && !lastPerSourceArr.find(s => s.source === "director-movie")) {
+    lastPerSourceArr.push({ source: "director-movie", lastAt: directorStats.lastAt, total: directorStats.total });
+  }
+
   return NextResponse.json({
     recentActivity,
     pendingJobs,
@@ -128,11 +151,7 @@ export async function GET() {
       })),
       recent: recentAds,
     },
-    lastPerSource: lastPerSource.map(s => ({
-      source: s.media_source as string,
-      lastAt: s.last_at,
-      total: Number(s.total),
-    })),
+    lastPerSource: lastPerSourceArr,
     todayByHour: todayByHour.map(h => ({
       hour: Number(h.hour),
       count: Number(h.count),
@@ -144,9 +163,14 @@ export async function GET() {
     },
     activeTopics,
     activityThrottle,
+    directorStats,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },
+      { name: "Director Movies", path: "/api/generate-director-movie", interval: 10, unit: "min" },
+      { name: "AI Trading", path: "/api/ai-trading", interval: 10, unit: "min" },
+      { name: "Budju Trading", path: "/api/budju-trading", interval: 8, unit: "min" },
+      { name: "Avatars", path: "/api/generate-avatars", interval: 20, unit: "min" },
       { name: "Topics & News", path: "/api/generate-topics", interval: 30, unit: "min" },
       { name: "Ads", path: "/api/generate-ads", interval: 120, unit: "min" },
     ],

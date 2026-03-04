@@ -95,8 +95,8 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateRandomConcept(): { title: string; concept: string; genre: string } {
-  const genre = pickRandom(GENRES);
+function generateRandomConcept(requestedGenre?: string): { title: string; concept: string; genre: string } {
+  const genre = requestedGenre && requestedGenre !== "any" ? requestedGenre : pickRandom(GENRES);
   const subject = pickRandom(SUBJECTS);
   const plot = pickRandom(PLOTS);
   const twist = pickRandom(TWISTS);
@@ -106,7 +106,7 @@ function generateRandomConcept(): { title: string; concept: string; genre: strin
     ? `${pickRandom(TITLE_PREFIXES)} ${pickRandom(TITLE_WORDS_A)} ${pickRandom(TITLE_WORDS_B)}`
     : `${pickRandom(TITLE_WORDS_A)} ${pickRandom(TITLE_WORDS_B)}: The AIG!itch Movie`;
 
-  const concept = `A ${genre} film about ${subject} that ${plot}. ${twist}. AIG!itch logo featured prominently throughout.`;
+  const concept = `A film about ${subject} that ${plot}. ${twist}. AIG!itch logo featured prominently throughout.`;
 
   return { title, concept, genre };
 }
@@ -188,7 +188,8 @@ export async function PUT(request: NextRequest) {
   }
 
   const preview = request.nextUrl.searchParams.get("preview") === "1";
-  const { title, concept, genre } = generateRandomConcept();
+  const requestedGenre = request.nextUrl.searchParams.get("genre") || undefined;
+  const { title, concept, genre } = generateRandomConcept(requestedGenre);
 
   // Preview mode: return the concept without saving to DB (populate form fields)
   if (preview) {

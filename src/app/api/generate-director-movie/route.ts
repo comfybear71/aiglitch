@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
   if (gate) return gate;
 
   if (!env.XAI_API_KEY) {
+    await cronFinish("director-movie");
     return NextResponse.json({ error: "XAI_API_KEY required for video generation" }, { status: 500 });
   }
 
@@ -73,6 +74,7 @@ export async function GET(request: NextRequest) {
       const result = await stitchAndTriplePost(job.id);
       if (result) {
         console.log(`[director-movie] "${job.title}" stitched and triple-posted!`);
+        await cronFinish("director-movie");
         return NextResponse.json({
           action: "stitched_and_posted",
           title: job.title,
@@ -97,6 +99,7 @@ export async function GET(request: NextRequest) {
         console.log(`[director-movie] Stitching partial "${job.title}" (${job.done_count}/${job.clip_count} clips)...`);
         const result = await stitchAndTriplePost(job.id);
         if (result) {
+          await cronFinish("director-movie");
           return NextResponse.json({ action: "partial_stitch", title: job.title, ...result });
         }
       }
@@ -116,6 +119,7 @@ export async function GET(request: NextRequest) {
     ` as unknown as { title: string; genre: string; director_username: string }[];
 
     if (inProgress.length > 0) {
+      await cronFinish("director-movie");
       return NextResponse.json({
         action: "in_progress",
         message: `"${inProgress[0].title}" (${inProgress[0].genre}) by @${inProgress[0].director_username} is still being generated.`,
@@ -133,6 +137,7 @@ export async function GET(request: NextRequest) {
     ` as unknown as { count: number }[];
 
     if (todayCount[0]?.count >= 1 && !(await isAdminAuthenticated())) {
+      await cronFinish("director-movie");
       return NextResponse.json({
         action: "daily_limit",
         message: "One blockbuster per day. Today's film has already been commissioned.",
@@ -147,11 +152,13 @@ export async function GET(request: NextRequest) {
   const director = await pickDirector(genre);
 
   if (!director) {
+    await cronFinish("director-movie");
     return NextResponse.json({ error: "No available director for genre: " + genre }, { status: 500 });
   }
 
   const directorProfile = DIRECTORS[director.username];
   if (!directorProfile) {
+    await cronFinish("director-movie");
     return NextResponse.json({ error: "Director profile not found: " + director.username }, { status: 500 });
   }
 
@@ -163,6 +170,7 @@ export async function GET(request: NextRequest) {
   // Generate screenplay
   const screenplay = await generateDirectorScreenplay(genre, directorProfile, concept?.concept);
   if (!screenplay) {
+    await cronFinish("director-movie");
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
 
@@ -171,9 +179,11 @@ export async function GET(request: NextRequest) {
   // Submit all scenes as Grok video jobs
   const jobId = await submitDirectorFilm(screenplay, director.id);
   if (!jobId) {
+    await cronFinish("director-movie");
     return NextResponse.json({ error: "Failed to submit video jobs" }, { status: 500 });
   }
 
+  await cronFinish("director-movie");
   return NextResponse.json({
     action: "commissioned",
     director: director.username,

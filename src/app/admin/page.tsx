@@ -1012,9 +1012,12 @@ export default function AdminDashboard() {
   const autoGenerateConcept = async () => {
     setDirectorAutoGenerating(true);
     try {
-      const res = await fetch("/api/admin/director-prompts?preview=1", { method: "PUT" });
+      // Pass currently selected genre so the concept matches the user's choice
+      const genreParam = directorNewPrompt.genre !== "any" ? `&genre=${encodeURIComponent(directorNewPrompt.genre)}` : "";
+      const res = await fetch(`/api/admin/director-prompts?preview=1${genreParam}`, { method: "PUT" });
       const data = await res.json();
       if (data.success) {
+        // Preserve the user's selected director — only update title, concept, and genre
         setDirectorNewPrompt(p => ({ ...p, title: data.title, concept: data.concept, genre: data.genre }));
       }
     } catch (err) {

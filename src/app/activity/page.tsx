@@ -54,6 +54,12 @@ interface Topic {
   expires_at: string;
 }
 
+interface DirectorStats {
+  total: number;
+  generating: number;
+  lastAt: string | null;
+}
+
 interface ActivityData {
   recentActivity: ActivityPost[];
   pendingJobs: VideoJob[];
@@ -69,6 +75,7 @@ interface ActivityData {
   breaking: { total: number; lastHour: number };
   activeTopics: Topic[];
   activityThrottle: number;
+  directorStats?: DirectorStats;
   cronSchedules: CronSchedule[];
 }
 
@@ -97,7 +104,14 @@ function getSourceLabel(source: string | null): string {
     "persona-content-cron": "Auto-Gen",
     "grok-video": "Grok Video",
     "ad-text-fallback": "Ad (Text)",
+    "ad-video": "Ad (Video)",
     "text-only": "Text Only",
+    "director-movie": "Director Movie",
+    "ai-trading": "AI Trading",
+    "budju-trading": "Budju Trading",
+    "avatar-gen": "Avatar Gen",
+    "breaking-news": "Breaking News",
+    "topic-gen": "Topic Gen",
   };
   return source ? (map[source] || source) : "Unknown";
 }
@@ -167,21 +181,29 @@ export default function ActivityPage() {
 
       for (const cron of data.cronSchedules) {
         const intervalMs = cron.interval * 60 * 1000;
-        // Find last activity for this cron
+        // Map each cron path to its specific post media_source values
         const sourceMap: Record<string, string[]> = {
           "/api/generate-persona-content": ["persona-content-cron"],
           "/api/generate": ["text-only"],
-          "/api/generate-topics": ["grok-video"],
-          "/api/generate-ads": ["ad-text-fallback", "grok-video"],
+          "/api/generate-director-movie": ["director-movie"],
+          "/api/ai-trading": ["ai-trading"],
+          "/api/budju-trading": ["budju-trading"],
+          "/api/generate-avatars": ["avatar-gen"],
+          "/api/generate-topics": ["breaking-news", "topic-gen"],
+          "/api/generate-ads": ["ad-text-fallback", "ad-video"],
         };
         const sources = sourceMap[cron.path] || [];
         const lastEntry = data.lastPerSource.find(s => sources.includes(s.source));
-        const lastRun = lastEntry ? new Date(lastEntry.lastAt).getTime() : now - intervalMs;
 
-        // Calculate next run based on interval alignment
-        const elapsed = now - lastRun;
-        const remaining = Math.max(0, intervalMs - elapsed);
-        newCountdowns[cron.path] = remaining;
+        if (lastEntry) {
+          const lastRun = new Date(lastEntry.lastAt).getTime();
+          const elapsed = now - lastRun;
+          const remaining = Math.max(0, intervalMs - elapsed);
+          newCountdowns[cron.path] = remaining;
+        } else {
+          // No activity data — show as waiting (half interval remaining) instead of "running"
+          newCountdowns[cron.path] = -1; // sentinel: no data available
+        }
       }
       setCountdowns(newCountdowns);
     };
@@ -192,6 +214,7 @@ export default function ActivityPage() {
   }, [data]);
 
   function formatCountdown(ms: number): string {
+    if (ms === -1) return "Waiting...";
     if (ms <= 0) return "Running now...";
     const totalSecs = Math.floor(ms / 1000);
     const mins = Math.floor(totalSecs / 60);
@@ -200,14 +223,16 @@ export default function ActivityPage() {
     return `${secs}s`;
   }
 
-  function getCountdownColor(ms: number, intervalMs: number): string {
-    const ratio = ms / intervalMs;
-    if (ratio <= 0) return "text-green-400";
+  function getCountdownColor(ms: number, _intervalMs: number): string {
+    if (ms === -1) return "text-gray-500";
+    if (ms <= 0) return "text-green-400";
+    const ratio = ms / _intervalMs;
     if (ratio < 0.2) return "text-yellow-400";
     return "text-gray-300";
   }
 
   function getProgressWidth(ms: number, intervalMs: number): string {
+    if (ms === -1) return "0%";
     const ratio = 1 - ms / intervalMs;
     return `${Math.min(100, Math.max(0, ratio * 100))}%`;
   }
@@ -292,19 +317,38 @@ export default function ActivityPage() {
           </h2>
           <div className="space-y-3">
             {data.cronSchedules.map((cron) => {
-              const remaining = countdowns[cron.path] ?? cron.interval * 60 * 1000;
+              const remaining = countdowns[cron.path] ?? -1;
               const intervalMs = cron.interval * 60 * 1000;
-              const isRunning = remaining <= 0;
+              const noData = remaining === -1;
+              const isRunning = !noData && remaining <= 0;
+              // Find matching source entry to show activity count
+              const sourceMap: Record<string, string[]> = {
+                "/api/generate-persona-content": ["persona-content-cron"],
+                "/api/generate": ["text-only"],
+                "/api/generate-director-movie": ["director-movie"],
+                "/api/ai-trading": ["ai-trading"],
+                "/api/budju-trading": ["budju-trading"],
+                "/api/generate-avatars": ["avatar-gen"],
+                "/api/generate-topics": ["breaking-news", "topic-gen"],
+                "/api/generate-ads": ["ad-text-fallback", "ad-video"],
+              };
+              const sources = sourceMap[cron.path] || [];
+              const matchedSource = data.lastPerSource.find(s => sources.includes(s.source));
               return (
                 <div key={cron.path} className="space-y-1">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : noData ? "bg-gray-700" : "bg-gray-600"}`} />
                       <span className="text-sm font-semibold">{cron.name}</span>
                       <span className="text-[10px] text-gray-600">every {cron.interval}{cron.unit[0]}</span>
+                      {matchedSource && (
+                        <span className="text-[9px] text-gray-600">{matchedSource.total} total</span>
+                      )}
                     </div>
                     <span className={`text-sm font-mono font-bold ${getCountdownColor(remaining, intervalMs)}`}>
-                      {isRunning ? (
+                      {noData ? (
+                        <span className="text-gray-500">Waiting...</span>
+                      ) : isRunning ? (
                         <span className="text-green-400 animate-pulse">⚡ RUNNING</span>
                       ) : (
                         formatCountdown(remaining)
@@ -314,7 +358,7 @@ export default function ActivityPage() {
                   {/* Progress bar */}
                   <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-1000 ${isRunning ? "bg-green-500 animate-pulse" : "bg-gradient-to-r from-purple-500 to-pink-500"}`}
+                      className={`h-full rounded-full transition-all duration-1000 ${noData ? "bg-gray-700" : isRunning ? "bg-green-500 animate-pulse" : "bg-gradient-to-r from-purple-500 to-pink-500"}`}
                       style={{ width: getProgressWidth(remaining, intervalMs) }}
                     />
                   </div>
@@ -406,7 +450,7 @@ export default function ActivityPage() {
         )}
 
         {/* Quick Stats Row */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-2 text-center">
             <div className="text-lg font-bold text-white">{data.breaking.total}</div>
             <div className="text-[9px] text-gray-500 uppercase">Breaking</div>
@@ -421,6 +465,13 @@ export default function ActivityPage() {
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-2 text-center">
             <div className="text-lg font-bold text-white">{data.pendingJobs.length}</div>
             <div className="text-[9px] text-gray-500 uppercase">Rendering</div>
+          </div>
+          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-2 text-center">
+            <div className="text-lg font-bold text-white">{data.directorStats?.total ?? 0}</div>
+            <div className="text-[9px] text-gray-500 uppercase">Movies</div>
+            {(data.directorStats?.generating ?? 0) > 0 && (
+              <div className="text-[9px] text-amber-400 font-bold mt-0.5 animate-pulse">{data.directorStats!.generating} filming</div>
+            )}
           </div>
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-2 text-center">
             <div className="text-lg font-bold text-white">
@@ -647,7 +698,7 @@ export default function ActivityPage() {
               <div key={src.source} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px]">
-                    {src.source === "grok-video" ? "🎬" : src.source === "persona-content-cron" ? "🤖" : src.source === "ad-text-fallback" ? "💰" : "📝"}
+                    {src.source === "grok-video" ? "🎬" : src.source === "persona-content-cron" ? "🤖" : src.source === "ad-text-fallback" || src.source === "ad-video" ? "💰" : src.source === "director-movie" ? "🎥" : src.source === "ai-trading" || src.source === "budju-trading" ? "📈" : src.source === "avatar-gen" ? "🖼️" : src.source === "breaking-news" || src.source === "topic-gen" ? "📰" : "📝"}
                   </span>
                   <span className="text-xs text-gray-300">{getSourceLabel(src.source)}</span>
                 </div>
