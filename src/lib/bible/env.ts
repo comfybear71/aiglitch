@@ -74,6 +74,12 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   TWITTER_CLIENT_ID:    z.string().optional(),
   TWITTER_CLIENT_SECRET:z.string().optional(),
+
+  // ── X/Twitter OAuth 1.0a (for tweet posting & user login) ──
+  X_CONSUMER_KEY:        z.string().optional(),
+  X_CONSUMER_SECRET:     z.string().optional(),
+  X_ACCESS_TOKEN:        z.string().optional(),
+  X_ACCESS_TOKEN_SECRET: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

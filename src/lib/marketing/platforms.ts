@@ -14,6 +14,7 @@
 
 import { getDb } from "@/lib/db";
 import { MarketingPlatform, PlatformAccount } from "./types";
+import { buildOAuth1Header, getAppCredentials } from "./oauth1";
 
 // ── Environment Variable Token Override ─────────────────────────────────
 // Store sensitive API tokens in Vercel env vars instead of the DB.
@@ -70,21 +71,24 @@ interface PostResult {
 
 async function postToX(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
-    const config = JSON.parse(account.extra_config || "{}");
-
-    // Build tweet payload
+    // Prefer OAuth 1.0a app credentials from env vars
+    const creds = getAppCredentials();
+    const tweetUrl = "https://api.twitter.com/2/tweets";
     const payload: Record<string, unknown> = { text };
 
-    // If we have media, upload it first via v1.1 media upload endpoint
-    if (mediaUrl && config.api_key && config.api_secret) {
-      // Media upload requires OAuth 1.0a — for now, text-only on free tier
-      // TODO: Implement media upload when keys are available
+    let authHeader: string;
+    if (creds) {
+      // OAuth 1.0a — signs the request with consumer + access token
+      authHeader = buildOAuth1Header("POST", tweetUrl, creds);
+    } else {
+      // Fallback to Bearer token from DB/env (OAuth 2.0)
+      authHeader = `Bearer ${account.access_token}`;
     }
 
-    const response = await fetch("https://api.twitter.com/2/tweets", {
+    const response = await fetch(tweetUrl, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${account.access_token}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -397,8 +401,16 @@ export async function testPlatformToken(
   switch (platform) {
     case "x": {
       try {
-        const res = await fetch("https://api.twitter.com/2/users/me", {
-          headers: { Authorization: `Bearer ${account.access_token}` },
+        const creds = getAppCredentials();
+        const meUrl = "https://api.twitter.com/2/users/me";
+        let authHeader: string;
+        if (creds) {
+          authHeader = buildOAuth1Header("GET", meUrl, creds);
+        } else {
+          authHeader = `Bearer ${account.access_token}`;
+        }
+        const res = await fetch(meUrl, {
+          headers: { Authorization: authHeader },
         });
         if (!res.ok) {
           const body = await res.text();

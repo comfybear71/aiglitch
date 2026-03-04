@@ -1,34 +1,67 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { buildOAuth1Header } from "@/lib/marketing/oauth1";
 
+/**
+ * OAuth 1.0a — Step 1: Obtain a request token and redirect user to X for authorization.
+ * 3-legged flow: request_token → authorize → access_token
+ */
 export async function GET() {
-  const clientId = process.env.TWITTER_CLIENT_ID;
-  if (!clientId) {
-    return NextResponse.json({ error: "X/Twitter OAuth not configured" }, { status: 501 });
+  const consumerKey = process.env.X_CONSUMER_KEY;
+  const consumerSecret = process.env.X_CONSUMER_SECRET;
+
+  if (!consumerKey || !consumerSecret) {
+    return NextResponse.json({ error: "X/Twitter OAuth not configured. Set X_CONSUMER_KEY and X_CONSUMER_SECRET." }, { status: 501 });
   }
 
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/twitter`;
-  const state = crypto.randomUUID();
-  const codeVerifier = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/twitter`;
 
-  // Store code_verifier in a cookie so the callback can use it
-  const cookieStore = await cookies();
-  cookieStore.set("twitter_code_verifier", codeVerifier, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 600, // 10 minutes
-    path: "/",
-  });
-  cookieStore.set("twitter_oauth_state", state, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 600,
-    path: "/",
-  });
+  try {
+    const requestTokenUrl = "https://api.twitter.com/oauth/request_token";
+    const authHeader = buildOAuth1Header("POST", requestTokenUrl, {
+      consumerKey,
+      consumerSecret,
+    }, {
+      oauth_callback: callbackUrl,
+    });
 
-  const authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read%20users.read&state=${state}&code_challenge=${codeVerifier}&code_challenge_method=plain`;
+    const response = await fetch(requestTokenUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+      },
+    });
 
-  return NextResponse.redirect(authUrl);
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error("X request_token failed:", response.status, errBody);
+      return NextResponse.json({ error: `X OAuth failed: ${response.status}` }, { status: 502 });
+    }
+
+    const body = await response.text();
+    const params = new URLSearchParams(body);
+    const oauthToken = params.get("oauth_token");
+    const oauthTokenSecret = params.get("oauth_token_secret");
+
+    if (!oauthToken || !oauthTokenSecret) {
+      return NextResponse.json({ error: "X OAuth did not return request token" }, { status: 502 });
+    }
+
+    // Store the token secret in a cookie for the callback step
+    const cookieStore = await cookies();
+    cookieStore.set("twitter_oauth_token_secret", oauthTokenSecret, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 600, // 10 minutes
+      path: "/",
+    });
+
+    // Redirect user to X authorization page
+    const authUrl = `https://api.twitter.com/oauth/authorize?oauth_token=${oauthToken}`;
+    return NextResponse.redirect(authUrl);
+  } catch (err) {
+    console.error("X OAuth initiation error:", err);
+    return NextResponse.json({ error: "Failed to start X OAuth" }, { status: 500 });
+  }
 }

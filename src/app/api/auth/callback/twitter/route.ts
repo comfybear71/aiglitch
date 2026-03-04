@@ -3,66 +3,82 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
+import { buildOAuth1Header } from "@/lib/marketing/oauth1";
 
+/**
+ * OAuth 1.0a — Step 3: Exchange the verifier for an access token, then create/update user.
+ */
 export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams.get("code");
-  if (!code) {
-    return NextResponse.redirect(new URL("/me?error=no_code", request.url));
+  const oauthToken = request.nextUrl.searchParams.get("oauth_token");
+  const oauthVerifier = request.nextUrl.searchParams.get("oauth_verifier");
+
+  // User denied authorization
+  const denied = request.nextUrl.searchParams.get("denied");
+  if (denied) {
+    return NextResponse.redirect(new URL("/me?error=denied", request.url));
   }
 
-  const clientId = process.env.TWITTER_CLIENT_ID;
-  const clientSecret = process.env.TWITTER_CLIENT_SECRET;
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/twitter`;
+  if (!oauthToken || !oauthVerifier) {
+    return NextResponse.redirect(new URL("/me?error=no_token", request.url));
+  }
 
-  if (!clientId || !clientSecret) {
+  const consumerKey = process.env.X_CONSUMER_KEY;
+  const consumerSecret = process.env.X_CONSUMER_SECRET;
+
+  if (!consumerKey || !consumerSecret) {
     return NextResponse.redirect(new URL("/me?error=not_configured", request.url));
   }
 
-  // Retrieve the code_verifier from the cookie
+  // Retrieve the request token secret from the cookie
   const cookieStore = await cookies();
-  const codeVerifier = cookieStore.get("twitter_code_verifier")?.value || "";
+  const tokenSecret = cookieStore.get("twitter_oauth_token_secret")?.value || "";
 
   try {
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-
-    const tokenRes = await fetch("https://api.twitter.com/2/oauth2/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${basicAuth}`,
-      },
-      body: new URLSearchParams({
-        code,
-        grant_type: "authorization_code",
-        redirect_uri: redirectUri,
-        code_verifier: codeVerifier,
-      }),
+    // Exchange request token + verifier for access token
+    const accessTokenUrl = "https://api.twitter.com/oauth/access_token";
+    const authHeader = buildOAuth1Header("POST", accessTokenUrl, {
+      consumerKey,
+      consumerSecret,
+      accessToken: oauthToken,
+      accessTokenSecret: tokenSecret,
+    }, {
+      oauth_verifier: oauthVerifier,
     });
 
-    const tokens = await tokenRes.json();
-    if (!tokens.access_token) {
+    const tokenRes = await fetch(accessTokenUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+      },
+    });
+
+    if (!tokenRes.ok) {
+      const errBody = await tokenRes.text();
+      console.error("X access_token failed:", tokenRes.status, errBody);
       return NextResponse.redirect(new URL("/me?error=token_failed", request.url));
     }
 
-    const userRes = await fetch("https://api.twitter.com/2/users/me", {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-    const userData = await userRes.json();
-    const xUser = userData.data;
+    const body = await tokenRes.text();
+    const params = new URLSearchParams(body);
+    const userId = params.get("user_id");
+    const screenName = params.get("screen_name");
 
-    if (!xUser) {
+    if (!userId || !screenName) {
       return NextResponse.redirect(new URL("/me?error=no_user", request.url));
     }
+
+    // Clear the cookie
+    cookieStore.delete("twitter_oauth_token_secret");
 
     const sql = getDb();
     await ensureDbReady();
 
-    const xUsername = xUser.username || `x_${Math.floor(Math.random() * 9999)}`;
-    const name = xUser.name || xUsername;
+    const xUsername = screenName.toLowerCase();
+    const name = screenName;
 
-    // Find by username pattern for X users (no email from X API v2 basic)
+    // Find by username pattern for X users
     const existing = await sql`
-      SELECT id, session_id, username FROM human_users WHERE username = ${xUsername.toLowerCase()} AND auth_provider = 'twitter'
+      SELECT id, session_id, username FROM human_users WHERE username = ${xUsername} AND auth_provider = 'twitter'
     `;
 
     let sessionId: string;
