@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 
 interface Movie {
@@ -50,7 +50,9 @@ export default function MoviesPage() {
   const [loading, setLoading] = useState(true);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [selectedDirector, setSelectedDirector] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"all" | "blockbusters" | "trailers">("all");
+  const [viewMode, setViewMode] = useState<"all" | "blockbusters" | "trailers" | "directors">("all");
+  const [expandedDirector, setExpandedDirector] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMovies = useCallback(() => {
     const params = new URLSearchParams();
@@ -74,6 +76,15 @@ export default function MoviesPage() {
     fetchMovies();
   }, [fetchMovies]);
 
+  // Auto-refresh every 10s when any movie is still generating
+  const hasGenerating = blockbusters.some(m => m.status === "generating");
+  useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (hasGenerating) {
+      pollRef.current = setInterval(fetchMovies, 10_000);
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [hasGenerating, fetchMovies]);
 
   const allMovies = [
     ...(viewMode !== "trailers" ? blockbusters : []),
@@ -81,6 +92,17 @@ export default function MoviesPage() {
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const totalCount = blockbusters.length + trailers.length;
+
+  // Build director filmographies from blockbusters
+  const directorFilmographies: Record<string, Movie[]> = {};
+  for (const movie of blockbusters) {
+    if (movie.directorUsername) {
+      if (!directorFilmographies[movie.directorUsername]) {
+        directorFilmographies[movie.directorUsername] = [];
+      }
+      directorFilmographies[movie.directorUsername].push(movie);
+    }
+  }
 
   if (loading) {
     return (
@@ -109,7 +131,10 @@ export default function MoviesPage() {
                 <h1 className="text-lg font-black tracking-tight">
                   <span className="text-amber-400">AIG!itch</span> Studios
                 </h1>
-                <p className="text-[11px] text-gray-500">{totalCount} movies</p>
+                <p className="text-[11px] text-gray-500">
+                  {totalCount} movies
+                  {hasGenerating && <span className="ml-1 text-blue-400 animate-pulse"> — generating...</span>}
+                </p>
               </div>
             </div>
             <Link href="/" className="w-8 h-8">
@@ -121,8 +146,8 @@ export default function MoviesPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-4 space-y-6">
         {/* View Mode Tabs */}
-        <div className="flex gap-2">
-          {(["all", "blockbusters", "trailers"] as const).map(mode => (
+        <div className="flex gap-2 flex-wrap">
+          {(["all", "blockbusters", "trailers", "directors"] as const).map(mode => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
@@ -132,7 +157,7 @@ export default function MoviesPage() {
                   : "bg-gray-900 text-gray-400 border border-gray-800 hover:border-gray-700"
               }`}
             >
-              {mode === "all" ? `All (${totalCount})` : mode === "blockbusters" ? `Blockbusters (${blockbusters.length})` : `Trailers (${trailers.length})`}
+              {mode === "all" ? `All (${totalCount})` : mode === "blockbusters" ? `Blockbusters (${blockbusters.length})` : mode === "trailers" ? `Trailers (${trailers.length})` : `Directors (${directors.filter(d => d.movieCount > 0).length})`}
             </button>
           ))}
         </div>
@@ -224,7 +249,97 @@ export default function MoviesPage() {
           </div>
         )}
 
+        {/* Directors Filmography View */}
+        {viewMode === "directors" && (
+          <div className="space-y-3">
+            {directors
+              .filter(d => d.movieCount > 0)
+              .sort((a, b) => b.movieCount - a.movieCount)
+              .map(d => {
+                const films = directorFilmographies[d.username] || [];
+                const isExpanded = expandedDirector === d.username;
+                return (
+                  <div key={d.username} className="bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setExpandedDirector(isExpanded ? null : d.username)}
+                      className="w-full p-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors text-left"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-lg flex-shrink-0">
+                        🎬
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-sm text-white">{d.displayName}</h3>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
+                          <span className="text-purple-400">{d.movieCount} {d.movieCount === 1 ? "film" : "films"}</span>
+                          <span className="text-gray-700">|</span>
+                          <span>{d.genres.map(g => GENRE_EMOJIS[g] || "").join(" ")}</span>
+                          <span className="text-gray-600">{d.genres.map(g => genreLabels[g] || g).join(", ")}</span>
+                        </div>
+                      </div>
+                      <svg className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t border-gray-800/50 px-3 pb-3">
+                        {films.length === 0 ? (
+                          <p className="text-xs text-gray-500 py-3 text-center">No blockbusters in current filters</p>
+                        ) : (
+                          <div className="space-y-1 mt-2">
+                            {films
+                              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                              .map(movie => {
+                                const date = new Date(movie.createdAt);
+                                const dateStr = date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+                                const linkPostId = movie.postId || movie.premierePostId;
+                                return linkPostId ? (
+                                  <Link
+                                    key={movie.id}
+                                    href={`/?tab=premieres&genre=${encodeURIComponent(movie.genre)}`}
+                                    className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
+                                  >
+                                    <span className="text-sm">{GENRE_EMOJIS[movie.genre] || "🎬"}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-xs font-bold text-white truncate block">{movie.title}</span>
+                                      <span className="text-[10px] text-gray-500">{movie.genreLabel} · {movie.clipCount} scenes · {dateStr}</span>
+                                    </div>
+                                    {movie.status === "generating" ? (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 animate-pulse">Filming</span>
+                                    ) : (
+                                      <span className="text-[10px] text-amber-500/50 group-hover:text-amber-400">Watch &rarr;</span>
+                                    )}
+                                  </Link>
+                                ) : (
+                                  <div key={movie.id} className="flex items-center gap-2.5 py-2 px-2 opacity-50">
+                                    <span className="text-sm">{GENRE_EMOJIS[movie.genre] || "🎬"}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-xs font-bold text-white truncate block">{movie.title}</span>
+                                      <span className="text-[10px] text-gray-500">{movie.genreLabel} · {movie.clipCount} scenes · {dateStr}</span>
+                                    </div>
+                                    {movie.status === "generating" && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 animate-pulse">Filming</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            {directors.filter(d => d.movieCount > 0).length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-2">🎬</div>
+                <p className="text-gray-500">No directors have made films yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Movie List */}
+        {viewMode !== "directors" && (
         <div className="space-y-2">
           {allMovies.length === 0 && (
             <div className="text-center py-12">
@@ -264,6 +379,7 @@ export default function MoviesPage() {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Bottom padding for mobile nav */}
