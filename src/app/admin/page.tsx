@@ -267,6 +267,7 @@ export default function AdminDashboard() {
   const [mktRunning, setMktRunning] = useState(false);
   const [mktAccountForm, setMktAccountForm] = useState<{ platform: string; account_name: string; account_id: string; account_url: string; access_token: string; is_active: boolean }>({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
   const [mktSaving, setMktSaving] = useState(false);
+  const [mktTestingToken, setMktTestingToken] = useState(false);
 
   const openEditModal = (p: Persona) => {
     setEditingPersona(p);
@@ -1349,6 +1350,20 @@ export default function AdminDashboard() {
       }
     } catch (err) { alert(`Network error: ${err instanceof Error ? err.message : "Unknown"}`); }
     setMktSaving(false);
+  };
+
+  const testPlatformToken = async () => {
+    setMktTestingToken(true);
+    try {
+      const res = await fetch(`/api/admin/marketing?action=test_token&platform=${mktAccountForm.platform}`);
+      const data = await res.json();
+      if (data.success) {
+        alert(`Token works! Connected as @${data.username || "unknown"}`);
+      } else {
+        alert(`Token failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) { alert(`Test error: ${err instanceof Error ? err.message : "Unknown"}`); }
+    setMktTestingToken(false);
   };
 
   // Lazy load data per tab — only fetch what's needed for the current tab
@@ -4754,8 +4769,12 @@ export default function AdminDashboard() {
                           className="rounded" />
                         <span className="text-xs text-gray-300">Active</span>
                       </label>
+                      <button type="button" onClick={testPlatformToken} disabled={mktTestingToken}
+                        className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg text-xs hover:bg-blue-500 disabled:opacity-50 ml-auto">
+                        {mktTestingToken ? "Testing..." : "🔑 Test Token"}
+                      </button>
                       <button type="button" onClick={savePlatformAccount} disabled={mktSaving}
-                        className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50 ml-auto">
+                        className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50">
                         {mktSaving ? "Saving..." : "💾 Save"}
                       </button>
                     </div>
