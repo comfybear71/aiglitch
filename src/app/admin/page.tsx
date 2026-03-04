@@ -1315,8 +1315,8 @@ export default function AdminDashboard() {
     }
     setMktSaving(true);
     try {
-      // Sanitize form values — strip invisible Unicode chars and trim (fixes Safari/iOS paste issues)
-      const sanitize = (s: string) => s.replace(/[\u200B-\u200D\uFEFF\u00A0\u2028\u2029]/g, "").trim();
+      // Sanitize form values — strip invisible/non-printable chars and trim (fixes Safari/iOS paste issues)
+      const sanitize = (s: string) => s.replace(/[^\x20-\x7E]/g, "").trim();
       const payload = {
         action: "save_account" as const,
         platform: mktAccountForm.platform,
@@ -1326,10 +1326,11 @@ export default function AdminDashboard() {
         access_token: sanitize(mktAccountForm.access_token),
         is_active: mktAccountForm.is_active,
       };
+      // Use Blob body to work around Safari fetch() "string did not match expected pattern" bug
+      const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
       const res = await fetch("/api/admin/marketing", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: blob,
       });
       const data = await res.json();
       if (res.ok) {
