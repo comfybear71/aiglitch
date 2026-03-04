@@ -11,7 +11,7 @@ import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { getMarketingStats, runMarketingCycle } from "@/lib/marketing";
 import { generateHeroImage } from "@/lib/marketing/hero-image";
-import { testPlatformToken } from "@/lib/marketing/platforms";
+import { testPlatformToken, getAccountForPlatform, postToPlatform } from "@/lib/marketing/platforms";
 
 export const maxDuration = 120;
 
@@ -128,6 +128,17 @@ export async function POST(request: NextRequest) {
     case "run_cycle": {
       const result = await runMarketingCycle();
       return NextResponse.json({ ok: true, ...result });
+    }
+
+    // ── Test single platform post ────────────────────────────────────
+    case "test_post": {
+      const { platform, message } = body;
+      if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
+      const account = await getAccountForPlatform(platform);
+      if (!account) return NextResponse.json({ error: `No active ${platform} account` }, { status: 404 });
+      const text = message || `Test post from AIG!itch - ${new Date().toLocaleString()}`;
+      const result = await postToPlatform(platform, account, text);
+      return NextResponse.json({ ok: true, platform, ...result });
     }
 
     // ── Create campaign ───────────────────────────────────────────────
