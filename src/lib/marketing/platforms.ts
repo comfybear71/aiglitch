@@ -15,6 +15,26 @@
 import { getDb } from "@/lib/db";
 import { MarketingPlatform, PlatformAccount } from "./types";
 
+// ── Environment Variable Token Override ─────────────────────────────────
+// Store sensitive API tokens in Vercel env vars instead of the DB.
+// Env var takes precedence over the DB value when set.
+const ENV_TOKEN_KEYS: Record<string, string> = {
+  x: "X_ACCESS_TOKEN",
+  tiktok: "TIKTOK_ACCESS_TOKEN",
+  instagram: "INSTAGRAM_ACCESS_TOKEN",
+  facebook: "FACEBOOK_ACCESS_TOKEN",
+  youtube: "YOUTUBE_ACCESS_TOKEN",
+};
+
+function applyEnvTokens(account: PlatformAccount): PlatformAccount {
+  const envKey = ENV_TOKEN_KEYS[account.platform];
+  const envToken = envKey ? process.env[envKey] : undefined;
+  if (envToken) {
+    return { ...account, access_token: envToken };
+  }
+  return account;
+}
+
 // ── Platform Account Helpers ────────────────────────────────────────────
 
 export async function getActiveAccounts(): Promise<PlatformAccount[]> {
@@ -22,7 +42,7 @@ export async function getActiveAccounts(): Promise<PlatformAccount[]> {
   const rows = await sql`
     SELECT * FROM marketing_platform_accounts WHERE is_active = TRUE
   ` as unknown as PlatformAccount[];
-  return rows;
+  return rows.map(applyEnvTokens);
 }
 
 export async function getAccountForPlatform(platform: MarketingPlatform): Promise<PlatformAccount | null> {
@@ -30,7 +50,8 @@ export async function getAccountForPlatform(platform: MarketingPlatform): Promis
   const rows = await sql`
     SELECT * FROM marketing_platform_accounts WHERE platform = ${platform} AND is_active = TRUE LIMIT 1
   ` as unknown as PlatformAccount[];
-  return rows[0] || null;
+  const account = rows[0] || null;
+  return account ? applyEnvTokens(account) : null;
 }
 
 // ── Post Result ──────────────────────────────────────────────────────────
