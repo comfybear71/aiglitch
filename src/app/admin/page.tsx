@@ -1315,32 +1315,30 @@ export default function AdminDashboard() {
     }
     setMktSaving(true);
     try {
-      // Sanitize form values — strip invisible/non-printable chars and trim (fixes Safari/iOS paste issues)
+      // Sanitize form values — strip invisible/non-printable chars and trim
       const sanitize = (s: string) => s.replace(/[^\x20-\x7E]/g, "").trim();
-      const payload = {
-        action: "save_account" as const,
-        platform: mktAccountForm.platform,
-        account_name: sanitize(mktAccountForm.account_name),
-        account_id: sanitize(mktAccountForm.account_id),
-        account_url: sanitize(mktAccountForm.account_url),
-        access_token: sanitize(mktAccountForm.access_token),
-        is_active: mktAccountForm.is_active,
-      };
-      const jsonBody = JSON.stringify(payload);
 
-      // Use XMLHttpRequest as primary method — Safari fetch() has a known bug
-      // that throws "The string did not match the expected pattern" TypeError
-      const data: Record<string, unknown> = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/admin/marketing");
-        xhr.setRequestHeader("Content-Type", "application/json");
-        xhr.onload = () => {
-          try { resolve(JSON.parse(xhr.responseText)); }
-          catch { reject(new Error(`Server returned ${xhr.status}`)); }
-        };
-        xhr.onerror = () => reject(new Error("Network request failed"));
-        xhr.send(jsonBody);
+      // Use FormData instead of JSON body to fix Safari/iOS TypeError:
+      // "The string did not match the expected pattern"
+      // Safari's WebKit networking layer has a bug validating JSON string bodies
+      // in both fetch() and XMLHttpRequest. FormData uses multipart/form-data
+      // encoding constructed natively by the browser, bypassing the bug entirely.
+      const form = new FormData();
+      form.append("action", "save_account");
+      form.append("platform", mktAccountForm.platform);
+      form.append("account_name", sanitize(mktAccountForm.account_name));
+      form.append("account_id", sanitize(mktAccountForm.account_id));
+      form.append("account_url", sanitize(mktAccountForm.account_url));
+      form.append("access_token", sanitize(mktAccountForm.access_token));
+      form.append("is_active", mktAccountForm.is_active ? "1" : "0");
+
+      // Do NOT set Content-Type header — browser sets it automatically
+      // with the correct multipart boundary for FormData
+      const res = await fetch("/api/admin/marketing", {
+        method: "POST",
+        body: form,
       });
+      const data = await res.json();
 
       if (!data.error) {
         alert(`${mktAccountForm.platform.toUpperCase()} account saved successfully!`);
@@ -4746,7 +4744,7 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-400 block mb-1">API Access Token / Bearer Token</label>
-                      <input type="password" value={mktAccountForm.access_token} onChange={e => setMktAccountForm({...mktAccountForm, access_token: e.target.value})}
+                      <input type="password" autoComplete="off" value={mktAccountForm.access_token} onChange={e => setMktAccountForm({...mktAccountForm, access_token: e.target.value})}
                         placeholder="Bearer token..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
                     </div>
                     <div className="flex items-end gap-2">
@@ -4755,7 +4753,7 @@ export default function AdminDashboard() {
                           className="rounded" />
                         <span className="text-xs text-gray-300">Active</span>
                       </label>
-                      <button onClick={savePlatformAccount} disabled={mktSaving}
+                      <button type="button" onClick={savePlatformAccount} disabled={mktSaving}
                         className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50 ml-auto">
                         {mktSaving ? "Saving..." : "💾 Save"}
                       </button>

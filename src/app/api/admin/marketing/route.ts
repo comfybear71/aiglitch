@@ -94,7 +94,23 @@ export async function POST(request: NextRequest) {
   const isAdmin = await isAdminAuthenticated();
   if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  // Support both JSON and FormData bodies — FormData fixes Safari/iOS
+  // "The string did not match the expected pattern" TypeError
+  let body: Record<string, unknown>;
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    body = Object.fromEntries(formData.entries());
+    // FormData sends everything as strings — convert boolean fields
+    if (typeof body.is_active === "string") {
+      body.is_active = body.is_active === "1" || body.is_active === "true";
+    }
+    if (typeof body.posts_per_day === "string") {
+      body.posts_per_day = parseInt(body.posts_per_day as string) || undefined;
+    }
+  } else {
+    body = await request.json();
+  }
   const { action } = body as { action: string };
 
   const sql = getDb();
