@@ -1280,8 +1280,8 @@ export default function AdminDashboard() {
     setMktLoading(true);
     try {
       const [statsRes, accountsRes] = await Promise.all([
-        fetch("/api/admin/marketing?action=stats"),
-        fetch("/api/admin/marketing?action=accounts"),
+        fetch("/api/admin/mktg?action=stats"),
+        fetch("/api/admin/mktg?action=accounts"),
       ]);
       if (statsRes.ok) setMktStats(await statsRes.json());
       if (accountsRes.ok) {
@@ -1295,7 +1295,7 @@ export default function AdminDashboard() {
   const runMarketingCycle = async () => {
     setMktRunning(true);
     try {
-      const res = await fetch("/api/admin/marketing", {
+      const res = await fetch("/api/admin/mktg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "run_cycle" }),
@@ -1335,7 +1335,7 @@ export default function AdminDashboard() {
 
       // Do NOT set Content-Type header — browser sets it automatically
       // with the correct multipart boundary for FormData
-      const res = await fetch("/api/admin/marketing", {
+      const res = await fetch("/api/admin/mktg", {
         method: "POST",
         body: form,
       });
@@ -1355,7 +1355,7 @@ export default function AdminDashboard() {
   const testPlatformToken = async () => {
     setMktTestingToken(true);
     try {
-      const res = await fetch(`/api/admin/marketing?action=test_token&platform=${mktAccountForm.platform}`);
+      const res = await fetch(`/api/admin/mktg?action=test_token&platform=${mktAccountForm.platform}`);
       const data = await res.json();
       if (data.success) {
         alert(`Token works! Connected as @${data.username || "unknown"}`);

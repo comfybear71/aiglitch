@@ -1,5 +1,5 @@
 /**
- * Admin Marketing API — /api/admin/marketing
+ * Admin Marketing API — /api/admin/mktg
  * =============================================
  * CRUD for marketing campaigns, platform accounts, and metrics.
  * Also supports manual post triggers and metric collection.

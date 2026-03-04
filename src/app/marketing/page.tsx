@@ -55,7 +55,7 @@ export default function MarketingPage() {
 
   async function fetchData() {
     try {
-      const res = await fetch("/api/admin/marketing?action=stats");
+      const res = await fetch("/api/admin/mktg?action=stats");
       if (res.ok) {
         const data = await res.json();
         setPosts(data.recentPosts || []);
