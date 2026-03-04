@@ -4761,7 +4761,7 @@ export default function AdminDashboard() {
                       <label className="text-[10px] text-gray-400 block mb-1">API Access Token / Bearer Token (optional)</label>
                       <input type="password" autoComplete="off" value={mktAccountForm.access_token} onChange={e => setMktAccountForm({...mktAccountForm, access_token: e.target.value})}
                         placeholder="Set via Vercel env var instead..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
-                      <p className="text-[9px] text-gray-500 mt-1">Or set <span className="text-yellow-500/70">{mktAccountForm.platform ? `${mktAccountForm.platform.toUpperCase()}_ACCESS_TOKEN` : "PLATFORM_ACCESS_TOKEN"}</span> in Vercel env vars</p>
+                      <p className="text-[9px] text-gray-500 mt-1">Or set <span className="text-yellow-500/70">{mktAccountForm.platform === "x" ? "XAI_API_KEY" : mktAccountForm.platform ? `${mktAccountForm.platform.toUpperCase()}_ACCESS_TOKEN` : "PLATFORM_ACCESS_TOKEN"}</span> in Vercel env vars</p>
                     </div>
                     <div className="flex items-end gap-2">
                       <label className="flex items-center gap-2 cursor-pointer">

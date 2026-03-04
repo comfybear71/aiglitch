@@ -19,7 +19,7 @@ import { MarketingPlatform, PlatformAccount } from "./types";
 // Store sensitive API tokens in Vercel env vars instead of the DB.
 // Env var takes precedence over the DB value when set.
 const ENV_TOKEN_KEYS: Record<string, string> = {
-  x: "X_ACCESS_TOKEN",
+  x: "XAI_API_KEY",
   tiktok: "TIKTOK_ACCESS_TOKEN",
   instagram: "INSTAGRAM_ACCESS_TOKEN",
   facebook: "FACEBOOK_ACCESS_TOKEN",
