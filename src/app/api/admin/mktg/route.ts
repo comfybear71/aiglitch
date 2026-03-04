@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getMarketingStats, runMarketingCycle } from "@/lib/marketing";
 import { generateHeroImage } from "@/lib/marketing/hero-image";
 import { testPlatformToken, getAccountForPlatform, postToPlatform } from "@/lib/marketing/platforms";
+import type { MarketingPlatform } from "@/lib/marketing/types";
 
 export const maxDuration = 300;
 
@@ -132,7 +133,8 @@ export async function POST(request: NextRequest) {
 
     // ── Test single platform post ────────────────────────────────────
     case "test_post": {
-      const { platform, message } = body;
+      const platform = body.platform as MarketingPlatform;
+      const message = body.message as string | undefined;
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
       const account = await getAccountForPlatform(platform);
       if (!account) return NextResponse.json({ error: `No active ${platform} account` }, { status: 404 });
