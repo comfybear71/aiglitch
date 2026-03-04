@@ -21,8 +21,12 @@ export async function GET() {
     keyPrefix: consumerKey.slice(0, 4),
     keySuffix: consumerKey.slice(-4),
     keyLen: consumerKey.length,
+    secretPrefix: consumerSecret.slice(0, 4),
+    secretSuffix: consumerSecret.slice(-4),
     secretLen: consumerSecret.length,
     callbackUrl,
+    keyHasWhitespace: consumerKey !== consumerKey.trim(),
+    secretHasWhitespace: consumerSecret !== consumerSecret.trim(),
   });
 
   try {
