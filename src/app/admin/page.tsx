@@ -1295,10 +1295,11 @@ export default function AdminDashboard() {
   const runMarketingCycle = async () => {
     setMktRunning(true);
     try {
+      const form = new FormData();
+      form.append("action", "run_cycle");
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "run_cycle" }),
+        body: form,
       });
       const data = await res.json();
       alert(`Marketing cycle: ${data.posted || 0} posted, ${data.failed || 0} failed, ${data.skipped || 0} queued`);
