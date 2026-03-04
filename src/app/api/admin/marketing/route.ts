@@ -11,6 +11,7 @@ import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { getMarketingStats, runMarketingCycle } from "@/lib/marketing";
 import { generateHeroImage } from "@/lib/marketing/hero-image";
+import { testPlatformToken } from "@/lib/marketing/platforms";
 
 export const maxDuration = 120;
 
@@ -83,6 +84,13 @@ export async function GET(request: NextRequest) {
         ORDER BY date DESC, platform
       `;
       return NextResponse.json({ metrics });
+    }
+
+    case "test_token": {
+      const platform = searchParams.get("platform");
+      if (!platform) return NextResponse.json({ error: "Missing ?platform= param" }, { status: 400 });
+      const result = await testPlatformToken(platform as import("@/lib/marketing/types").MarketingPlatform);
+      return NextResponse.json(result);
     }
 
     default:

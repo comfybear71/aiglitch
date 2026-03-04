@@ -380,6 +380,41 @@ async function postToYouTube(account: PlatformAccount, text: string, mediaUrl?: 
   }
 }
 
+// ── Token Verification ──────────────────────────────────────────────────
+// Read-only API call to verify the configured token works.
+
+export async function testPlatformToken(
+  platform: MarketingPlatform,
+): Promise<{ success: boolean; username?: string; error?: string }> {
+  const account = await getAccountForPlatform(platform);
+  if (!account) {
+    return { success: false, error: `No active account for ${platform}` };
+  }
+  if (!account.access_token) {
+    return { success: false, error: `No token configured (DB or env var ${ENV_TOKEN_KEYS[platform]})` };
+  }
+
+  switch (platform) {
+    case "x": {
+      try {
+        const res = await fetch("https://api.twitter.com/2/users/me", {
+          headers: { Authorization: `Bearer ${account.access_token}` },
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          return { success: false, error: `X API ${res.status}: ${body.slice(0, 300)}` };
+        }
+        const data = await res.json() as { data?: { username?: string } };
+        return { success: true, username: data.data?.username };
+      } catch (err) {
+        return { success: false, error: `X fetch error: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+    default:
+      return { success: false, error: `Token test not yet implemented for ${platform}` };
+  }
+}
+
 // ── Unified Post Dispatcher ──────────────────────────────────────────────
 
 export async function postToPlatform(
