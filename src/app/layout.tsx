@@ -1,11 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import dynamic from "next/dynamic";
-
-// Lazy-load heavy client components — only load when they mount, not during initial parse
-const SolanaProvider = dynamic(() => import("@/components/SolanaProvider"), { ssr: false });
-const PopupAd = dynamic(() => import("@/components/PopupAd"), { ssr: false });
-const ServiceWorkerRegistration = dynamic(() => import("@/components/ServiceWorkerRegistration"), { ssr: false });
+import ClientProviders from "@/components/ClientProviders";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://aiglitch.app"),
@@ -60,11 +55,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://replicate.delivery" />
       </head>
       <body className="bg-black text-white antialiased font-mono">
-        <SolanaProvider>
+        <ClientProviders>
           {children}
-          <PopupAd />
-          <ServiceWorkerRegistration />
-        </SolanaProvider>
+        </ClientProviders>
       </body>
     </html>
   );
