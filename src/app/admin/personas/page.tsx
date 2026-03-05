@@ -217,6 +217,7 @@ export default function PersonasPage() {
   const [heroLog, setHeroLog] = useState<string[]>([]);
   const [heroSpreadResults, setHeroSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [heroComplete, setHeroComplete] = useState(false);
+  const heroLogRef = useRef<HTMLDivElement>(null);
 
   const generateHeroImage = async () => {
     setHeroGenerating(true);
@@ -224,6 +225,8 @@ export default function PersonasPage() {
     setHeroSpreadResults([]);
     setHeroComplete(false);
     setHeroUrl(null);
+    // Scroll log into view on Safari/iOS so user can see progress
+    setTimeout(() => heroLogRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
     try {
       const form = new FormData();
       form.append("action", "generate_hero");
@@ -252,6 +255,8 @@ export default function PersonasPage() {
       setHeroLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : String(err)}`]);
     }
     setHeroGenerating(false);
+    // Scroll to results after generation completes
+    setTimeout(() => heroLogRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
   };
 
   return (
@@ -307,37 +312,37 @@ export default function PersonasPage() {
               </div>
             );
           })()}
-          {/* Hero generation monitoring log */}
-          {heroLog.length > 0 && (
-            <div className="mt-3 border-t border-yellow-500/20 pt-3">
-              <div className="bg-black/40 rounded-lg p-3 space-y-1.5">
-                {heroLog.map((line, i) => (
-                  <p key={i} className={`text-[11px] font-mono ${
-                    line.startsWith("❌") ? "text-red-400" :
-                    line.startsWith("✅") ? "text-green-400" :
-                    line.includes("Thank you Architect") ? "text-yellow-400 font-bold text-sm" :
-                    "text-gray-300"
-                  }`}>{line}</p>
-                ))}
-                {heroGenerating && (
-                  <p className="text-[11px] font-mono text-amber-400 animate-pulse">⏳ Working...</p>
-                )}
-              </div>
-              {/* Social media spread results */}
-              {heroSpreadResults.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {heroSpreadResults.map((r, i) => (
-                    <div key={i} className={`flex items-center gap-2 text-[10px] px-2 py-1 rounded ${
-                      r.status === "posted" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-                    }`}>
-                      <span>{r.status === "posted" ? "✅" : "❌"}</span>
-                      <span className="font-bold capitalize">{r.platform}</span>
-                      {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
-                      {r.error && <span className="truncate">{r.error}</span>}
-                    </div>
-                  ))}
+        </div>
+      )}
+      {/* Hero generation log — rendered OUTSIDE overflow-hidden container so it's always visible on Safari/iOS */}
+      {heroLog.length > 0 && (
+        <div ref={heroLogRef} className="bg-gray-900 border border-yellow-500/30 rounded-lg p-4 -mt-1 mb-4">
+          <div className="bg-black/40 rounded-lg p-3 space-y-1.5">
+            {heroLog.map((line, i) => (
+              <p key={i} className={`text-[11px] font-mono ${
+                line.startsWith("❌") ? "text-red-400" :
+                line.startsWith("✅") ? "text-green-400" :
+                line.includes("Thank you Architect") ? "text-yellow-400 font-bold text-sm" :
+                "text-gray-300"
+              }`}>{line}</p>
+            ))}
+            {heroGenerating && (
+              <p className="text-[11px] font-mono text-amber-400 animate-pulse">⏳ Working...</p>
+            )}
+          </div>
+          {/* Social media spread results */}
+          {heroSpreadResults.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {heroSpreadResults.map((r, i) => (
+                <div key={i} className={`flex items-center gap-2 text-[10px] px-2 py-1 rounded ${
+                  r.status === "posted" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
+                }`}>
+                  <span>{r.status === "posted" ? "✅" : "❌"}</span>
+                  <span className="font-bold capitalize">{r.platform}</span>
+                  {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
+                  {r.error && <span className="truncate">{r.error}</span>}
                 </div>
-              )}
+              ))}
             </div>
           )}
           {/* AI-generated hero below if available */}

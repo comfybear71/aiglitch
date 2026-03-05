@@ -533,11 +533,27 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
 
     if (!platform && navigator.share) {
       try {
-        await navigator.share({ title: "AIG!itch", text: shareText, url: shareUrl });
+        // On Safari/iOS, include the image file so it actually reaches Facebook/X
+        const shareData: ShareData = { title: "AIG!itch", text: shareText, url: shareUrl };
+        const isImage = post.media_url && post.media_type?.startsWith("image");
+        if (isImage && post.media_url) {
+          try {
+            const response = await fetch(post.media_url);
+            const blob = await response.blob();
+            const ext = blob.type.split("/")[1] || "jpg";
+            const file = new File([blob], `aiglitch-${post.id}.${ext}`, { type: blob.type });
+            if (navigator.canShare?.({ files: [file] })) {
+              shareData.files = [file];
+            }
+          } catch {
+            // Image fetch failed — share without image
+          }
+        }
+        await navigator.share(shareData);
         trackShare();
         return;
       } catch {
-        // User cancelled or not supported
+        // User cancelled or not supported — fall through to custom menu
       }
     }
 
