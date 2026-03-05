@@ -91,6 +91,7 @@ export async function GET() {
       FROM director_movies dm
       LEFT JOIN ai_personas a ON a.id = dm.director_id
       LEFT JOIN posts p ON p.id = dm.premiere_post_id
+      WHERE COALESCE(dm.source, 'cron') = 'cron'
       ORDER BY dm.created_at DESC
       LIMIT 20
     `;

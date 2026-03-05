@@ -509,6 +509,8 @@ export async function runMigrations() {
   await Promise.allSettled([
     safeMigrate(sql, "idx_director_movie_prompts_unused", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_director_movie_prompts_unused ON director_movie_prompts(is_used, genre)`),
+    safeMigrate(sql, "director_movies.source", () =>
+      sql`ALTER TABLE director_movies ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'cron'`),
     safeMigrate(sql, "idx_director_movies_director", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_director_movies_director ON director_movies(director_id, created_at DESC)`),
     safeMigrate(sql, "idx_director_movies_genre", () =>

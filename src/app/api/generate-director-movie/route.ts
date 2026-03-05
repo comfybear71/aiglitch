@@ -269,7 +269,7 @@ export async function POST(request: NextRequest) {
 
   console.log(`[director-movie] Screenplay: "${screenplay.title}" — ${screenplay.scenes.length} scenes, ${screenplay.totalDuration}s`);
 
-  const jobId = await submitDirectorFilm(screenplay, director.id);
+  const jobId = await submitDirectorFilm(screenplay, director.id, "admin");
   if (!jobId) {
     return NextResponse.json({ error: "Failed to submit video jobs" }, { status: 500 });
   }
@@ -446,8 +446,8 @@ export async function PUT(request: NextRequest) {
   // Create director_movies entry so it shows in Recent Blockbusters
   const directorMovieId = uuidv4();
   await sql`
-    INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, status, post_id, premiere_post_id)
-    VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${genre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId})
+    INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, status, post_id, premiere_post_id, source)
+    VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${genre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId}, ${"admin"})
   `;
 
   console.log(`[director-movie] "${title}" stitched and posted: ${postId}`);

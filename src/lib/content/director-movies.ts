@@ -566,6 +566,7 @@ function buildMovieBible(
 export async function submitDirectorFilm(
   screenplay: DirectorScreenplay,
   directorPersonaId: string,
+  source: "cron" | "admin" = "cron",
 ): Promise<string | null> {
   const sql = getDb();
   const template = GENRE_TEMPLATES[screenplay.genre] || GENRE_TEMPLATES.drama;
@@ -626,8 +627,8 @@ export async function submitDirectorFilm(
   // Also log in director_movies table
   const directorMovieId = uuidv4();
   await sql`
-    INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, multi_clip_job_id, status)
-    VALUES (${directorMovieId}, ${directorPersonaId}, ${screenplay.directorUsername}, ${screenplay.title}, ${screenplay.genre}, ${screenplay.scenes.length}, ${jobId}, ${"generating"})
+    INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, multi_clip_job_id, status, source)
+    VALUES (${directorMovieId}, ${directorPersonaId}, ${screenplay.directorUsername}, ${screenplay.title}, ${screenplay.genre}, ${screenplay.scenes.length}, ${jobId}, ${"generating"}, ${source})
   `;
 
   // Submit each scene as a Grok video job with full continuity context

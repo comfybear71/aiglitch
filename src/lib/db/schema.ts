@@ -616,6 +616,7 @@ export const directorMovies = pgTable("director_movies", {
   premierePostId: text("premiere_post_id"),
   profilePostId: text("profile_post_id"),
   status: text("status").notNull().default("pending"),
+  source: text("source").notNull().default("cron"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
 
