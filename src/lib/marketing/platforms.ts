@@ -259,9 +259,13 @@ async function postToX(account: PlatformAccount, text: string, mediaUrl?: string
 
     // Upload media if provided and we have OAuth 1.0a creds
     if (mediaUrl && creds) {
+      console.log(`[X post] Uploading media: ${mediaUrl}`);
       const mediaId = await uploadMediaToX(mediaUrl, creds);
       if (mediaId) {
+        console.log(`[X post] Media attached: ${mediaId}`);
         payload.media = { media_ids: [mediaId] };
+      } else {
+        console.warn(`[X post] Media upload failed for ${mediaUrl} — posting text-only`);
       }
     }
 
