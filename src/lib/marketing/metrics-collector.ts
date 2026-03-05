@@ -349,7 +349,7 @@ async function rollUpDailyMetrics(): Promise<void> {
     await sql`
       INSERT INTO marketing_metrics_daily (id, platform, date, posts_published, total_impressions, total_likes, total_shares, total_comments, total_views, total_clicks, collected_at)
       VALUES (${uuidv4()}, ${agg.platform}, ${today}, ${Number(agg.posts_published)}, ${Number(agg.total_impressions)}, ${Number(agg.total_likes)}, ${Number(agg.total_shares)}, ${Number(agg.total_comments)}, ${Number(agg.total_views)}, ${Number(agg.total_clicks)}, NOW())
-      ON CONFLICT ON CONSTRAINT marketing_metrics_platform_date
+      ON CONFLICT (platform, date)
       DO UPDATE SET
         posts_published = EXCLUDED.posts_published,
         total_impressions = EXCLUDED.total_impressions,
