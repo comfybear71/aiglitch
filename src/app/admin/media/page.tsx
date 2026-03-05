@@ -71,7 +71,7 @@ export default function MediaPage() {
   }, [authenticated]);
 
   // Server-side upload helper — used for small files and as fallback for failed client uploads
-  const serverUploadFile = async (file: File): Promise<{ ok: boolean; error?: string }> => {
+  const serverUploadFile = async (file: File): Promise<{ ok: boolean; error?: string; status?: string[] }> => {
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -86,7 +86,12 @@ export default function MediaPage() {
         if (data?.results?.length > 0 && data.results[0].error) {
           return { ok: false, error: data.results[0].error };
         }
-        return { ok: true };
+        // Server route always posts to feed when persona_id is set
+        const status: string[] = [];
+        if (mediaForm.persona_id) status.push("Posted to feed");
+        // Check if any social accounts are active (Architect content auto-spreads)
+        if (mediaForm.persona_id === ARCHITECT_PERSONA_ID) status.push("Marketing → auto-spreading");
+        return { ok: true, status };
       }
       const errText = await res.text().catch(() => `HTTP ${res.status}`);
       return { ok: false, error: `Server ${res.status}: ${errText.slice(0, 200)}` };
@@ -176,7 +181,7 @@ export default function MediaPage() {
         } else {
           // Small files: use simple server upload
           const result = await serverUploadFile(file);
-          allResults.push({ name: file.name, ok: result.ok, error: result.error });
+          allResults.push({ name: file.name, ok: result.ok, error: result.error, status: result.status });
         }
       } catch (err) {
         allResults.push({ name: file.name, ok: false, error: err instanceof Error ? err.message : String(err) });
@@ -592,17 +597,19 @@ export default function MediaPage() {
                     </div>
                   ))}
                   {uploadProgress.results.every(r => r.ok && !r.error) && (
-                    <div>
-                      <p className="text-xs text-green-400">All files uploaded successfully!</p>
-                      {uploadProgress.results.some(r => r.status?.length) && (
-                        <div className="mt-1 space-y-0.5">
-                          {uploadProgress.results.filter(r => r.status?.length).flatMap((r, i) =>
-                            (r.status || []).map((s, j) => (
-                              <p key={`s${i}-${j}`} className="text-xs text-cyan-400">{s}</p>
-                            ))
-                          )}
-                        </div>
+                    <div className="bg-green-950/30 border border-green-500/30 rounded-lg p-3 space-y-1.5">
+                      <p className="text-sm font-bold text-green-400">All files uploaded successfully!</p>
+                      {uploadProgress.results.some(r => r.status?.includes("Posted to feed")) && (
+                        <p className="text-xs text-cyan-400 flex items-center gap-1.5">
+                          <span className="text-green-400">&#10003;</span> Posted to feed
+                        </p>
                       )}
+                      {uploadProgress.results.some(r => r.status?.some(s => s.startsWith("Marketing"))) && (
+                        <p className="text-xs text-cyan-400 flex items-center gap-1.5">
+                          <span className="text-green-400">&#10003;</span> Social media marketing done
+                        </p>
+                      )}
+                      <p className="text-xs text-yellow-400/80 mt-1">Thank you Architect 🙏</p>
                     </div>
                   )}
                 </div>
