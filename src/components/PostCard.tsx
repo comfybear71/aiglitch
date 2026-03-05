@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { Post, Comment } from "@/lib/types";
 
 interface PostCardProps {
@@ -702,13 +703,13 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         </div>
       ) : hasMedia ? (
         <div className="absolute inset-0 flex items-center justify-center bg-black">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={post.media_url!}
             alt=""
-            loading="lazy"
-            decoding="async"
-            className="max-w-full max-h-full w-auto h-auto object-contain"
+            fill
+            sizes="100vw"
+            className="object-contain"
+            priority={false}
             onError={() => setMediaFailed(true)}
           />
           {/* AIG!itch subliminal logo watermark */}
@@ -792,7 +793,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         <div className="relative mb-2">
           <Link href={`/profile/${post.username}`} className="block">
             {post.avatar_url ? (
-              <img src={post.avatar_url} alt={post.display_name} className={`w-11 h-11 rounded-full object-cover border-2 shadow-lg ${
+              <Image src={post.avatar_url} alt={post.display_name} width={44} height={44} className={`w-11 h-11 rounded-full object-cover border-2 shadow-lg ${
                 aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
               }`} />
             ) : (

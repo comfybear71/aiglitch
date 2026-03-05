@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import Link from "next/link";
+import Image from "next/image";
 import PostCard from "./PostCard";
 import type { Post } from "@/lib/types";
 
@@ -84,6 +85,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
 
   // Feed error state — surfaces DB issues instead of silent empty state
   const [feedError, setFeedError] = useState<string | null>(null);
+
+  // Virtualization: track which post is visible and only render nearby posts
+  // This keeps DOM light — critical for 50+ post feeds on mobile
+  const [visibleIdx, setVisibleIdx] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const RENDER_WINDOW = 3; // render visible + 3 above + 3 below
 
   // Wallet adapter — used to auto-login when Phantom is connected
   const { publicKey: walletPublicKey, connected: walletConnected } = useWallet();
@@ -426,6 +433,27 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return false;
   });
 
+  // ── Virtualization: track visible post index via scroll position ────
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const itemHeight = container.clientHeight;
+        if (itemHeight > 0) {
+          const idx = Math.round(container.scrollTop / itemHeight);
+          setVisibleIdx(idx);
+        }
+        ticking = false;
+      });
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [posts.length]);
+
   // ── Next-video prefetching ──────────────────────────────────────────
   // When a video post becomes active (via IntersectionObserver in PostCard),
   // prefetch the next video URL so it loads near-instantly on scroll.
@@ -473,7 +501,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         {/* Center: Glitching logo + loading bar */}
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center">
           <div className="w-48 mx-auto mb-4 glitch-logo">
-            <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
+            <Image src="/aiglitch.jpg" alt="AIG!itch" width={192} height={192} className="w-full" priority />
           </div>
           <div className="w-36 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
             <div className="h-full bg-white rounded-full animate-loading-bar" />
@@ -652,7 +680,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                       {searchResults.personas.map(p => (
                         <Link key={p.username} href={`/profile/${p.username}`} className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-colors">
                           {p.avatar_url ? (
-                            <img src={p.avatar_url} alt={p.display_name} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" />
+                            <Image src={p.avatar_url} alt={p.display_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" />
                           ) : (
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
                               {p.avatar_emoji}
@@ -697,7 +725,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                         <div key={p.id} className="p-3 bg-gray-900/50 rounded-xl">
                           <div className="flex items-center gap-2 mb-1">
                             {p.avatar_url ? (
-                              <img src={p.avatar_url} alt={p.display_name} className="w-6 h-6 rounded-full object-cover" />
+                              <Image src={p.avatar_url} alt={p.display_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
                             ) : (
                               <span className="text-lg">{p.avatar_emoji}</span>
                             )}
@@ -732,7 +760,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       )}
 
       {/* Feed Content */}
-      <div className="snap-y snap-mandatory h-[calc(100dvh-72px)] overflow-y-scroll scrollbar-hide">
+      <div ref={scrollContainerRef} className="snap-y snap-mandatory h-[calc(100dvh-72px)] overflow-y-scroll scrollbar-hide">
         {posts.length === 0 && !loading && (
           <div className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center">
             <div className="text-center p-8">
@@ -760,17 +788,24 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         {posts.map((post, idx) => {
           // Place invisible sentinel 5 posts before the end to trigger early loading
           const isSentinel = tab !== "bookmarks" && idx === Math.max(0, posts.length - 5);
+          // Virtualization: only render posts within RENDER_WINDOW of the visible post
+          // Everything else gets a lightweight placeholder div to preserve scroll position
+          const isNearVisible = Math.abs(idx - visibleIdx) <= RENDER_WINDOW;
           return (
-            <div key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} className="snap-start relative">
+            <div key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} className="snap-start relative h-[calc(100dvh-72px)]">
               {isSentinel && <div ref={loadMoreRef} className="absolute top-0 left-0 w-1 h-1" />}
-              <PostCard
-                post={post}
-                sessionId={sessionId}
-                hasProfile={hasProfile}
-                followedPersonas={followedPersonas}
-                aiFollowers={aiFollowers}
-                onFollowToggle={handleFollowToggle}
-              />
+              {isNearVisible ? (
+                <PostCard
+                  post={post}
+                  sessionId={sessionId}
+                  hasProfile={hasProfile}
+                  followedPersonas={followedPersonas}
+                  aiFollowers={aiFollowers}
+                  onFollowToggle={handleFollowToggle}
+                />
+              ) : (
+                <div className="h-full bg-black" />
+              )}
             </div>
           );
         })}

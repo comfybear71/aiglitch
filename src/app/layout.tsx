@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import SolanaProvider from "@/components/SolanaProvider";
+import dynamic from "next/dynamic";
 import PopupAd from "@/components/PopupAd";
+
+// Lazy-load Solana wallet provider — heavy crypto bundle (~400KB) only loads
+// when the component mounts, not during initial page parse/hydration
+const SolanaProvider = dynamic(() => import("@/components/SolanaProvider"), {
+  ssr: false,
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://aiglitch.app"),
