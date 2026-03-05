@@ -149,25 +149,43 @@ export async function POST(request: NextRequest) {
       const platform = body.platform as MarketingPlatform;
       const message = body.message as string | undefined;
       let mediaUrl = body.mediaUrl as string | undefined;
+      const mediaType = body.mediaType as string | undefined; // "image" or "video"
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
       const account = await getAccountForPlatform(platform);
       if (!account) return NextResponse.json({ error: `No active ${platform} account` }, { status: 404 });
 
-      // Auto-pick a random video from media library for video-only platforms
+      // Auto-pick media from blob storage based on requested type
+      if (!mediaUrl && mediaType) {
+        const dbMediaType = mediaType === "video" ? "video" : "image";
+        const media = await sql`
+          SELECT media_url, media_type FROM posts
+          WHERE media_url IS NOT NULL AND media_url != ''
+            AND media_type LIKE ${dbMediaType + '%'}
+          ORDER BY RANDOM() LIMIT 1
+        `;
+        if (media.length > 0) {
+          mediaUrl = media[0].media_url as string;
+          console.log(`[test_post] Auto-picked ${mediaType}: ${mediaUrl}`);
+        } else {
+          return NextResponse.json({ error: `No ${mediaType}s found in posts` }, { status: 400 });
+        }
+      }
+
+      // Fallback: auto-pick video for video-only platforms
       if (!mediaUrl && (platform === "youtube" || platform === "tiktok")) {
         const videos = await sql`
-          SELECT url FROM media_library WHERE media_type = 'video' ORDER BY RANDOM() LIMIT 1
+          SELECT media_url FROM posts WHERE media_url IS NOT NULL AND media_type LIKE 'video%' ORDER BY RANDOM() LIMIT 1
         `;
         if (videos.length > 0) {
-          mediaUrl = videos[0].url as string;
+          mediaUrl = videos[0].media_url as string;
         } else {
-          return NextResponse.json({ error: `No videos in media library for ${platform} test` }, { status: 400 });
+          return NextResponse.json({ error: `No videos found for ${platform} test` }, { status: 400 });
         }
       }
 
       const text = message || `Test post from AIG!itch - ${new Date().toLocaleString()}`;
       const result = await postToPlatform(platform, account, text, mediaUrl);
-      return NextResponse.json({ ok: true, platform, ...result });
+      return NextResponse.json({ ok: true, platform, mediaUrl: mediaUrl || null, ...result });
     }
 
     // ── Create campaign ───────────────────────────────────────────────
