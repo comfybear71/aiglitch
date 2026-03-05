@@ -117,6 +117,18 @@ interface MediaItem {
 
 type Tab = "overview" | "personas" | "users" | "posts" | "create" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing";
 
+interface MarketingCampaign {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  target_platforms: string;
+  content_strategy: string;
+  posts_per_day: number;
+  created_at: string;
+  updated_at: string;
+}
+
 interface MarketingStats {
   totalPosted: number;
   totalQueued: number;
@@ -126,6 +138,8 @@ interface MarketingStats {
   totalViews: number;
   platformBreakdown: Array<{ platform: string; posted: number; queued: number; failed: number; impressions: number; likes: number; views: number; lastPostedAt: string | null }>;
   recentPosts: Array<{ id: string; platform: string; adapted_content: string; status: string; platform_url: string | null; impressions: number; likes: number; views: number; posted_at: string | null; created_at: string; persona_display_name: string | null; persona_emoji: string | null }>;
+  campaigns?: MarketingCampaign[];
+  dailyMetrics?: Array<{ date: string; platform: string; posts_published: number; total_impressions: number; total_likes: number; total_views: number }>;
 }
 
 interface MktPlatformAccount {
@@ -270,6 +284,11 @@ export default function AdminDashboard() {
   const [mktAccountForm, setMktAccountForm] = useState<{ platform: string; account_name: string; account_id: string; account_url: string; access_token: string; is_active: boolean }>({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
   const [mktSaving, setMktSaving] = useState(false);
   const [mktTestingToken, setMktTestingToken] = useState(false);
+  const [mktCollecting, setMktCollecting] = useState(false);
+  const [campaignEditing, setCampaignEditing] = useState<MarketingCampaign | null>(null);
+  const [campaignFormOpen, setCampaignFormOpen] = useState(false);
+  const [campaignForm, setCampaignForm] = useState({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" });
+  const [campaignSaving, setCampaignSaving] = useState(false);
 
   const openEditModal = (p: Persona) => {
     setEditingPersona(p);
@@ -1351,6 +1370,50 @@ export default function AdminDashboard() {
       alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
     }
     setHeroGenerating(false);
+  };
+
+  const collectMetrics = async () => {
+    setMktCollecting(true);
+    try {
+      const res = await fetch("/api/admin/mktg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "collect_metrics" }),
+      });
+      const data = await res.json();
+      alert(`Metrics collected: ${data.updated || 0} posts updated, ${data.failed || 0} failed`);
+      fetchMarketingData();
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    }
+    setMktCollecting(false);
+  };
+
+  const saveCampaign = async () => {
+    setCampaignSaving(true);
+    try {
+      const action = campaignEditing ? "update_campaign" : "create_campaign";
+      const payload = campaignEditing
+        ? { action, id: campaignEditing.id, ...campaignForm }
+        : { action, ...campaignForm };
+      const res = await fetch("/api/admin/mktg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.ok || data.id) {
+        setCampaignEditing(null);
+        setCampaignFormOpen(false);
+        setCampaignForm({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" });
+        fetchMarketingData();
+      } else {
+        alert(`Failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    }
+    setCampaignSaving(false);
   };
 
   const savePlatformAccount = async () => {
@@ -4685,6 +4748,10 @@ export default function AdminDashboard() {
                       className="px-3 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
                       {heroGenerating ? "⏳ Generating..." : "🎸 Sgt. Pepper Hero"}
                     </button>
+                    <button onClick={collectMetrics} disabled={mktCollecting}
+                      className="px-3 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
+                      {mktCollecting ? "⏳ Collecting..." : "📊 Collect Metrics"}
+                    </button>
                     <button onClick={fetchMarketingData}
                       className="px-3 py-2 bg-gray-800 text-gray-300 rounded-lg text-xs hover:bg-gray-700">
                       🔄 Refresh
@@ -4866,6 +4933,152 @@ export default function AdminDashboard() {
                   <p className="text-[10px] text-gray-600 mt-2">
                     All platforms use free tier APIs. Posting activates automatically when credentials are added and account is set to Active.
                   </p>
+                </div>
+
+                {/* Schedule & Campaigns */}
+                <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-gray-300">📅 Schedule & Campaigns</h3>
+                    <button onClick={() => { setCampaignEditing(null); setCampaignFormOpen(true); setCampaignForm({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" }); }}
+                      className="px-3 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30 font-bold">
+                      + New Campaign
+                    </button>
+                  </div>
+
+                  {/* Cron Schedule Info */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">🚀</span>
+                        <span className="text-xs font-bold text-gray-300">Auto-Post Schedule</span>
+                      </div>
+                      <p className="text-sm font-mono text-cyan-400">Every 3 hours</p>
+                      <p className="text-[10px] text-gray-500 mt-1">Cron: 0 */3 * * * — Picks top 2 posts, adapts for all active platforms</p>
+                      <p className="text-[10px] text-gray-500">Next runs: {(() => {
+                        const now = new Date();
+                        const times: string[] = [];
+                        for (let i = 0; i < 4; i++) {
+                          const next = new Date(now);
+                          next.setMinutes(0, 0, 0);
+                          next.setHours(Math.ceil(now.getHours() / 3) * 3 + i * 3);
+                          if (next <= now) next.setHours(next.getHours() + 3);
+                          times.push(next.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+                        }
+                        return times.join(", ");
+                      })()}</p>
+                    </div>
+                    <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">📊</span>
+                        <span className="text-xs font-bold text-gray-300">Metrics Collection</span>
+                      </div>
+                      <p className="text-sm font-mono text-cyan-400">Every hour</p>
+                      <p className="text-[10px] text-gray-500 mt-1">Cron: 0 * * * * — Fetches likes, views, impressions from all platforms</p>
+                      <p className="text-[10px] text-gray-500">Tracks posts from last 7 days</p>
+                    </div>
+                  </div>
+
+                  {/* Campaign List */}
+                  {mktStats?.campaigns && mktStats.campaigns.length > 0 ? (
+                    <div className="space-y-2 mb-4">
+                      {mktStats.campaigns.map(c => {
+                        const statusColors: Record<string, string> = { active: "text-green-400", paused: "text-yellow-400", draft: "text-gray-400", completed: "text-blue-400" };
+                        const platforms = c.target_platforms.split(",").filter(Boolean);
+                        const platformEmojis: Record<string, string> = { x: "𝕏", tiktok: "🎵", facebook: "📘", youtube: "▶️", instagram: "📸" };
+                        return (
+                          <div key={c.id} className="bg-gray-800/40 border border-gray-700 rounded-lg p-3 hover:bg-gray-800/60 cursor-pointer transition-colors"
+                            onClick={() => { setCampaignEditing(c); setCampaignFormOpen(true); setCampaignForm({ name: c.name, description: c.description, target_platforms: c.target_platforms, posts_per_day: c.posts_per_day, status: c.status }); }}>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-bold ${statusColors[c.status] || "text-gray-400"}`}>
+                                  {c.status === "active" ? "🟢" : c.status === "paused" ? "⏸️" : c.status === "draft" ? "📝" : "✅"} {c.status.toUpperCase()}
+                                </span>
+                                <span className="text-sm font-bold text-white">{c.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-500">{c.posts_per_day} posts/day</span>
+                                <span className="text-xs">{platforms.map(p => platformEmojis[p] || p).join(" ")}</span>
+                              </div>
+                            </div>
+                            {c.description && <p className="text-xs text-gray-400 mt-1">{c.description}</p>}
+                            <div className="text-[10px] text-gray-600 mt-1">
+                              Strategy: {c.content_strategy} | Updated: {new Date(c.updated_at).toLocaleDateString()}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-800/40 border border-gray-700 rounded-lg p-4 text-center mb-4">
+                      <p className="text-gray-400 text-xs">No campaigns yet — the auto-post cron picks top content automatically</p>
+                    </div>
+                  )}
+
+                  {/* Campaign Editor (inline) */}
+                  {campaignFormOpen && (
+                    <div className="bg-gray-800/60 border border-cyan-800/40 rounded-lg p-3">
+                      <h4 className="text-xs font-bold text-cyan-400 mb-2">{campaignEditing ? `Edit: ${campaignEditing.name}` : "New Campaign"}</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Campaign Name</label>
+                          <input value={campaignForm.name} onChange={e => setCampaignForm({...campaignForm, name: e.target.value})}
+                            placeholder="e.g. Launch Week Blitz" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Description</label>
+                          <input value={campaignForm.description} onChange={e => setCampaignForm({...campaignForm, description: e.target.value})}
+                            placeholder="Campaign description..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Posts Per Day</label>
+                          <input type="number" min={1} max={20} value={campaignForm.posts_per_day} onChange={e => setCampaignForm({...campaignForm, posts_per_day: parseInt(e.target.value) || 4})}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Target Platforms</label>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {[
+                              { id: "x", label: "𝕏 X" },
+                              { id: "tiktok", label: "🎵 TikTok" },
+                              { id: "facebook", label: "📘 Facebook" },
+                              { id: "youtube", label: "▶️ YouTube" },
+                            ].map(p => {
+                              const active = campaignForm.target_platforms.split(",").includes(p.id);
+                              return (
+                                <button key={p.id} onClick={() => {
+                                  const platforms = campaignForm.target_platforms.split(",").filter(Boolean);
+                                  const updated = active ? platforms.filter(x => x !== p.id) : [...platforms, p.id];
+                                  setCampaignForm({...campaignForm, target_platforms: updated.join(",")});
+                                }} className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${active ? "bg-cyan-600/30 border-cyan-500 text-cyan-300" : "bg-gray-800 border-gray-700 text-gray-500"}`}>
+                                  {p.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Status</label>
+                          <select value={campaignForm.status} onChange={e => setCampaignForm({...campaignForm, status: e.target.value})}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+                            <option value="active">Active</option>
+                            <option value="paused">Paused</option>
+                            <option value="draft">Draft</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <button onClick={saveCampaign} disabled={campaignSaving || !campaignForm.name}
+                            className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50">
+                            {campaignSaving ? "Saving..." : campaignEditing ? "💾 Update" : "💾 Create"}
+                          </button>
+                          <button onClick={() => { setCampaignEditing(null); setCampaignFormOpen(false); setCampaignForm({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" }); }}
+                            className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg text-xs hover:bg-gray-600">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Recent Marketing Posts */}

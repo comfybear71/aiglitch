@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     // ── Update campaign ───────────────────────────────────────────────
     case "update_campaign": {
-      const { id, status, name, description, posts_per_day } = body;
+      const { id, status, name, description, posts_per_day, target_platforms } = body;
       if (!id) return NextResponse.json({ error: "Missing campaign id" }, { status: 400 });
       await sql`
         UPDATE marketing_campaigns
@@ -178,6 +178,7 @@ export async function POST(request: NextRequest) {
             name = COALESCE(${name}, name),
             description = COALESCE(${description}, description),
             posts_per_day = COALESCE(${posts_per_day}, posts_per_day),
+            target_platforms = COALESCE(${target_platforms}, target_platforms),
             updated_at = NOW()
         WHERE id = ${id}
       `;

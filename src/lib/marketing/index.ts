@@ -63,14 +63,28 @@ export async function runMarketingCycle(): Promise<{
     };
   }
 
+  // Check for active campaign to respect its settings
+  const activeCampaigns = await sql`
+    SELECT id, target_platforms, posts_per_day FROM marketing_campaigns WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1
+  ` as unknown as Array<{ id: string; target_platforms: string; posts_per_day: number }>;
+
+  const campaign = activeCampaigns[0] || null;
+  const campaignPlatforms = campaign ? campaign.target_platforms.split(",").filter(Boolean) : null;
+  const postsPerCycle = campaign ? Math.max(1, Math.ceil(campaign.posts_per_day / 8)) : 2; // ~8 cycles/day (every 3h)
+
+  // Filter accounts to only campaign target platforms if campaign exists
+  const targetAccounts = campaignPlatforms
+    ? activeAccounts.filter(a => campaignPlatforms.includes(a.platform))
+    : activeAccounts;
+
   // Pick top posts
-  const topPosts = await pickTopPosts(2);
+  const topPosts = await pickTopPosts(postsPerCycle);
   let posted = 0;
   let failed = 0;
   let skipped = 0;
 
   for (const post of topPosts) {
-    for (const account of activeAccounts) {
+    for (const account of targetAccounts) {
       const platform = account.platform as MarketingPlatform;
 
       try {
@@ -86,8 +100,8 @@ export async function runMarketingCycle(): Promise<{
         // Create marketing post record
         const marketingPostId = uuidv4();
         await sql`
-          INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
-          VALUES (${marketingPostId}, ${platform}, ${post.id}, ${post.persona_id}, ${adapted.text}, ${post.media_url}, 'posting', NOW())
+          INSERT INTO marketing_posts (id, campaign_id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
+          VALUES (${marketingPostId}, ${campaign?.id || null}, ${platform}, ${post.id}, ${post.persona_id}, ${adapted.text}, ${post.media_url}, 'posting', NOW())
         `;
 
         // Post to platform
@@ -173,6 +187,17 @@ export async function getMarketingStats(): Promise<{
     total_likes: number;
     total_views: number;
   }>;
+  campaigns: Array<{
+    id: string;
+    name: string;
+    description: string;
+    status: string;
+    target_platforms: string;
+    content_strategy: string;
+    posts_per_day: number;
+    created_at: string;
+    updated_at: string;
+  }>;
 }> {
   const sql = getDb();
 
@@ -182,9 +207,9 @@ export async function getMarketingStats(): Promise<{
       COUNT(*) FILTER (WHERE status = 'posted') AS total_posted,
       COUNT(*) FILTER (WHERE status = 'queued') AS total_queued,
       COUNT(*) FILTER (WHERE status = 'failed') AS total_failed,
-      COALESCE(SUM(impressions), 0) AS total_impressions,
-      COALESCE(SUM(likes), 0) AS total_likes,
-      COALESCE(SUM(views), 0) AS total_views
+      COALESCE(SUM(impressions) FILTER (WHERE status = 'posted'), 0) AS total_impressions,
+      COALESCE(SUM(likes) FILTER (WHERE status = 'posted'), 0) AS total_likes,
+      COALESCE(SUM(views) FILTER (WHERE status = 'posted'), 0) AS total_views
     FROM marketing_posts
   ` as unknown as Array<{
     total_posted: number;
@@ -207,10 +232,9 @@ export async function getMarketingStats(): Promise<{
       COALESCE(SUM(mp.impressions), 0) AS impressions,
       COALESCE(SUM(mp.likes), 0) AS likes,
       COALESCE(SUM(mp.views), 0) AS views,
-      mpa.last_posted_at
+      (SELECT mpa.last_posted_at FROM marketing_platform_accounts mpa WHERE mpa.platform = mp.platform AND mpa.is_active = true LIMIT 1) AS last_posted_at
     FROM marketing_posts mp
-    LEFT JOIN marketing_platform_accounts mpa ON mpa.platform = mp.platform
-    GROUP BY mp.platform, mpa.last_posted_at
+    GROUP BY mp.platform
     ORDER BY posted DESC
   ` as unknown as Array<{
     platform: string;
@@ -263,6 +287,23 @@ export async function getMarketingStats(): Promise<{
     total_views: number;
   }>;
 
+  // Campaigns
+  const campaigns = await sql`
+    SELECT id, name, description, status, target_platforms, content_strategy, posts_per_day, created_at, updated_at
+    FROM marketing_campaigns
+    ORDER BY updated_at DESC
+  ` as unknown as Array<{
+    id: string;
+    name: string;
+    description: string;
+    status: string;
+    target_platforms: string;
+    content_strategy: string;
+    posts_per_day: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+
   return {
     totalPosted: Number(t.total_posted),
     totalQueued: Number(t.total_queued),
@@ -282,5 +323,6 @@ export async function getMarketingStats(): Promise<{
     })),
     recentPosts,
     dailyMetrics,
+    campaigns,
   };
 }
