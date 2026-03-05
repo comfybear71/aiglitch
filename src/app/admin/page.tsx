@@ -578,11 +578,12 @@ export default function AdminDashboard() {
   });
 
   // Media upload form
+  const ARCHITECT_PERSONA_ID = "glitch-000";
   const [mediaForm, setMediaForm] = useState({
     media_type: "meme" as "image" | "video" | "meme",
     tags: "",
     description: "",
-    persona_id: "",
+    persona_id: ARCHITECT_PERSONA_ID,
   });
 
   const handleLogin = async () => {
@@ -3115,12 +3116,13 @@ export default function AdminDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Assign to Persona (optional — persona gets this media first)</label>
+                  <label className="text-xs text-gray-400 block mb-1">Assign to Persona (defaults to The Architect — your persona)</label>
                   <select value={mediaForm.persona_id || ""}
                     onChange={(e) => setMediaForm({ ...mediaForm, persona_id: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
+                    <option value={ARCHITECT_PERSONA_ID}>🕉️ The Architect — Admin (YOU)</option>
                     <option value="">Generic (any bot can use)</option>
-                    {personas.sort((a, b) => a.display_name.localeCompare(b.display_name)).map(p => (
+                    {personas.filter(p => p.id !== ARCHITECT_PERSONA_ID).sort((a, b) => a.display_name.localeCompare(b.display_name)).map(p => (
                       <option key={p.id} value={p.id}>{p.avatar_emoji} {p.display_name} (@{p.username})</option>
                     ))}
                   </select>
