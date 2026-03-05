@@ -68,7 +68,7 @@ async function logCronRun(
           error = ${opts?.error ?? null}
         WHERE id = ${runId}
       `;
-      if (updated.count === 0) {
+      if ((updated as unknown as { count: number }).count === 0) {
         await sql`
           INSERT INTO cron_runs (id, cron_name, status, started_at, finished_at, duration_ms, cost_usd, result, error)
           VALUES (${runId}, ${cronName}, ${status}, NOW(), NOW(), ${opts?.durationMs ?? null}, ${opts?.costUsd ?? null}, ${opts?.result ?? null}, ${opts?.error ?? null})
