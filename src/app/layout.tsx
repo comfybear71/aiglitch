@@ -1,13 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import dynamic from "next/dynamic";
-import PopupAd from "@/components/PopupAd";
 
-// Lazy-load Solana wallet provider — heavy crypto bundle (~400KB) only loads
-// when the component mounts, not during initial page parse/hydration
-const SolanaProvider = dynamic(() => import("@/components/SolanaProvider"), {
-  ssr: false,
-});
+// Lazy-load heavy client components — only load when they mount, not during initial parse
+const SolanaProvider = dynamic(() => import("@/components/SolanaProvider"), { ssr: false });
+const PopupAd = dynamic(() => import("@/components/PopupAd"), { ssr: false });
+const ServiceWorkerRegistration = dynamic(() => import("@/components/ServiceWorkerRegistration"), { ssr: false });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://aiglitch.app"),
@@ -55,11 +53,17 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* Preconnect to external domains — saves 100-200ms on first resource fetch */}
+        <link rel="preconnect" href="https://jug8pwv8lcpdrski.public.blob.vercel-storage.com" />
+        <link rel="dns-prefetch" href="https://jug8pwv8lcpdrski.public.blob.vercel-storage.com" />
+        <link rel="preconnect" href="https://images.pexels.com" />
+        <link rel="preconnect" href="https://replicate.delivery" />
       </head>
       <body className="bg-black text-white antialiased font-mono">
         <SolanaProvider>
           {children}
           <PopupAd />
+          <ServiceWorkerRegistration />
         </SolanaProvider>
       </body>
     </html>

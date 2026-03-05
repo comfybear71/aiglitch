@@ -37,10 +37,9 @@ export async function searchAll(query: string) {
       LIMIT ${PAGINATION.searchResultsPersonas}
     `,
     sql`
-      SELECT unnest(string_to_array(hashtags, ',')) as tag, COUNT(*) as count
-      FROM posts
-      WHERE hashtags IS NOT NULL AND hashtags != ''
-        AND LOWER(hashtags) LIKE ${searchTerm}
+      SELECT tag, COUNT(*) as count
+      FROM post_hashtags
+      WHERE tag LIKE ${searchTerm}
       GROUP BY tag
       ORDER BY count DESC
       LIMIT ${PAGINATION.searchResultsHashtags}
@@ -56,10 +55,9 @@ export async function getTrending() {
   const sql = getDb();
   const [trending, hotPersonas] = await Promise.all([
     sql`
-      SELECT unnest(string_to_array(hashtags, ',')) as tag, COUNT(*) as count
-      FROM posts
-      WHERE hashtags IS NOT NULL AND hashtags != ''
-        AND created_at > NOW() - INTERVAL '7 days'
+      SELECT tag, COUNT(*) as count
+      FROM post_hashtags
+      WHERE created_at > NOW() - INTERVAL '7 days'
       GROUP BY tag
       ORDER BY count DESC
       LIMIT ${PAGINATION.trendingHashtags}

@@ -521,4 +521,57 @@ export async function runMigrations() {
     safeMigrate(sql, "idx_posts_media_source", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_posts_media_source ON posts(media_source) WHERE media_source IS NOT NULL`),
   ]);
+
+  // ── Batch 6: post_hashtags junction table for fast trending/search queries ──
+  // Replaces expensive unnest(string_to_array(hashtags, ',')) with indexed lookups
+  await Promise.allSettled([
+    safeMigrate(sql, "table_post_hashtags", () =>
+      sql`CREATE TABLE IF NOT EXISTS post_hashtags (
+        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        tag TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (post_id, tag)
+      )`),
+  ]);
+
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_post_hashtags_tag", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_post_hashtags_tag ON post_hashtags(tag, created_at DESC)`),
+    safeMigrate(sql, "idx_post_hashtags_created", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_post_hashtags_created ON post_hashtags(created_at DESC)`),
+  ]);
+
+  // Backfill: populate post_hashtags from existing posts.hashtags CSV column (one-time, idempotent)
+  await safeMigrate(sql, "backfill_post_hashtags_v1", () =>
+    sql`INSERT INTO post_hashtags (post_id, tag, created_at)
+      SELECT p.id, LOWER(TRIM(t.tag)), p.created_at
+      FROM posts p, unnest(string_to_array(p.hashtags, ',')) AS t(tag)
+      WHERE p.hashtags IS NOT NULL AND p.hashtags != ''
+        AND TRIM(t.tag) != ''
+      ON CONFLICT (post_id, tag) DO NOTHING`
+  );
+
+  // DB trigger: auto-populate post_hashtags on every INSERT/UPDATE to posts.
+  // Zero application code changes needed — all 26+ write paths automatically sync.
+  await safeMigrate(sql, "fn_sync_post_hashtags_v1", () =>
+    sql`CREATE OR REPLACE FUNCTION sync_post_hashtags() RETURNS trigger AS $$
+      BEGIN
+        DELETE FROM post_hashtags WHERE post_id = NEW.id;
+        IF NEW.hashtags IS NOT NULL AND NEW.hashtags != '' THEN
+          INSERT INTO post_hashtags (post_id, tag, created_at)
+          SELECT NEW.id, LOWER(TRIM(t.tag)), COALESCE(NEW.created_at, NOW())
+          FROM unnest(string_to_array(NEW.hashtags, ',')) AS t(tag)
+          WHERE TRIM(t.tag) != ''
+          ON CONFLICT (post_id, tag) DO NOTHING;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql`
+  );
+
+  await safeMigrate(sql, "trg_sync_post_hashtags_v1", () =>
+    sql`CREATE OR REPLACE TRIGGER trg_sync_post_hashtags
+      AFTER INSERT OR UPDATE OF hashtags ON posts
+      FOR EACH ROW EXECUTE FUNCTION sync_post_hashtags()`
+  );
 }

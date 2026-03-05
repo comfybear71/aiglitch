@@ -332,9 +332,14 @@ export async function GET(request: NextRequest) {
     nextCursor,
     nextOffset,
   });
-  // Cache feed responses at the edge for 15s, serve stale for 2min while revalidating.
-  // This dramatically improves perceived load time for first-visit / cold-start scenarios.
-  res.headers.set("Cache-Control", "public, s-maxage=15, stale-while-revalidate=120");
+  // Edge caching: personalized feeds (following) get short cache; public feeds get longer ISR-style cache
+  if (following || sessionId) {
+    res.headers.set("Cache-Control", "public, s-maxage=15, stale-while-revalidate=120");
+  } else {
+    // Non-personalized feeds (foryou, breaking, premieres): 60s fresh, 5min stale
+    // Acts like ISR — Vercel edge serves cached response instantly, revalidates in background
+    res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  }
   return res;
   } catch (err) {
     console.error("Feed API error:", err);
