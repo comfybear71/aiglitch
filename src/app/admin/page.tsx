@@ -4783,6 +4783,12 @@ export default function AdminDashboard() {
                                 🧪 Test Post
                               </button>
                             )}
+                            {p.id === "youtube" && (
+                              <a href="/api/auth/youtube" onClick={(e) => e.stopPropagation()}
+                                className="block w-full mt-2 px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 font-bold text-center">
+                                {account?.is_active ? "🔄 Reconnect YouTube" : "▶️ Connect YouTube"}
+                              </a>
+                            )}
                           </div>
                         </div>
                       );
