@@ -69,47 +69,181 @@ interface PostResult {
 // API v2: POST https://api.twitter.com/2/tweets
 // Auth: OAuth 2.0 Bearer Token or OAuth 1.0a
 
+/**
+ * Upload media to X using the chunked upload flow (INIT → APPEND → FINALIZE → STATUS).
+ * Works for both images and videos. Videos require async processing — we poll STATUS
+ * until processing completes before returning the media_id.
+ *
+ * API: POST https://upload.twitter.com/1.1/media/upload.json (OAuth 1.0a only)
+ * Chunk size: 4MB per APPEND call.
+ */
 async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppCredentials>): Promise<string | null> {
+  if (!creds) return null;
+
   try {
-    // Download the image
-    const imageResponse = await fetch(mediaUrl);
-    if (!imageResponse.ok) return null;
-
-    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-    const base64Data = imageBuffer.toString("base64");
-
-    // Determine media type from URL or content-type
-    const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
-    const isVideo = contentType.startsWith("video/");
-    if (isVideo) return null; // Video upload requires chunked upload, skip for now
-
-    // Upload via v1.1 media/upload endpoint (supports OAuth 1.0a only)
-    const uploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
-
-    if (!creds) return null;
-
-    const authHeader = buildOAuth1Header("POST", uploadUrl, creds);
-
-    // Use multipart/form-data with base64 media_data
-    const formBody = new URLSearchParams();
-    formBody.append("media_data", base64Data);
-
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: formBody.toString(),
-    });
-
-    if (!uploadResponse.ok) {
-      console.error("[X media upload]", uploadResponse.status, await uploadResponse.text());
+    // Download the media file
+    const mediaResponse = await fetch(mediaUrl);
+    if (!mediaResponse.ok) {
+      console.error("[X media upload] Failed to download media:", mediaResponse.status);
       return null;
     }
 
-    const uploadData = await uploadResponse.json() as { media_id_string?: string };
-    return uploadData.media_id_string || null;
+    const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
+    const totalBytes = mediaBuffer.byteLength;
+    const contentType = mediaResponse.headers.get("content-type") || "application/octet-stream";
+    const isVideo = contentType.startsWith("video/") || /\.(mp4|mov|webm)$/i.test(mediaUrl);
+
+    // Determine media_type and media_category for INIT
+    const mediaType = isVideo ? "video/mp4" : contentType;
+    const mediaCategory = isVideo ? "tweet_video" : (contentType === "image/gif" ? "tweet_gif" : "tweet_image");
+
+    const uploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
+
+    // ── INIT ──────────────────────────────────────────────────────────
+    const initParams: Record<string, string> = {
+      command: "INIT",
+      total_bytes: String(totalBytes),
+      media_type: mediaType,
+      media_category: mediaCategory,
+    };
+
+    const initAuth = buildOAuth1Header("POST", uploadUrl, creds, initParams);
+    const initBody = new URLSearchParams(initParams);
+
+    const initResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        Authorization: initAuth,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: initBody.toString(),
+    });
+
+    if (!initResponse.ok) {
+      console.error("[X media INIT]", initResponse.status, await initResponse.text());
+      return null;
+    }
+
+    const initData = await initResponse.json() as { media_id_string?: string };
+    const mediaId = initData.media_id_string;
+    if (!mediaId) {
+      console.error("[X media INIT] No media_id_string in response");
+      return null;
+    }
+
+    // ── APPEND (chunked, 4MB per chunk) ───────────────────────────────
+    const chunkSize = 4 * 1024 * 1024; // 4MB
+    let segmentIndex = 0;
+
+    for (let offset = 0; offset < totalBytes; offset += chunkSize) {
+      const chunk = mediaBuffer.subarray(offset, Math.min(offset + chunkSize, totalBytes));
+
+      // Build OAuth header for APPEND — only command, media_id, segment_index go into signature
+      const appendParams: Record<string, string> = {
+        command: "APPEND",
+        media_id: mediaId,
+        segment_index: String(segmentIndex),
+      };
+      const appendAuth = buildOAuth1Header("POST", uploadUrl, creds, appendParams);
+
+      // Send as multipart/form-data with binary chunk
+      const formData = new FormData();
+      formData.append("command", "APPEND");
+      formData.append("media_id", mediaId);
+      formData.append("segment_index", String(segmentIndex));
+      formData.append("media", new Blob([chunk]), "media");
+
+      const appendResponse = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { Authorization: appendAuth },
+        body: formData,
+      });
+
+      if (!appendResponse.ok && appendResponse.status !== 204) {
+        console.error("[X media APPEND]", appendResponse.status, await appendResponse.text());
+        return null;
+      }
+
+      segmentIndex++;
+    }
+
+    // ── FINALIZE ──────────────────────────────────────────────────────
+    const finalizeParams: Record<string, string> = {
+      command: "FINALIZE",
+      media_id: mediaId,
+    };
+
+    const finalizeAuth = buildOAuth1Header("POST", uploadUrl, creds, finalizeParams);
+    const finalizeBody = new URLSearchParams(finalizeParams);
+
+    const finalizeResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        Authorization: finalizeAuth,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: finalizeBody.toString(),
+    });
+
+    if (!finalizeResponse.ok) {
+      console.error("[X media FINALIZE]", finalizeResponse.status, await finalizeResponse.text());
+      return null;
+    }
+
+    const finalizeData = await finalizeResponse.json() as {
+      media_id_string?: string;
+      processing_info?: { state: string; check_after_secs?: number; error?: { message: string } };
+    };
+
+    // ── STATUS polling (for videos and async-processed media) ─────────
+    if (finalizeData.processing_info) {
+      let processingInfo = finalizeData.processing_info;
+      const maxAttempts = 30; // Max ~5 minutes of polling
+      let attempts = 0;
+
+      while (processingInfo.state !== "succeeded" && attempts < maxAttempts) {
+        if (processingInfo.state === "failed") {
+          console.error("[X media STATUS] Processing failed:", processingInfo.error?.message);
+          return null;
+        }
+
+        const waitSecs = processingInfo.check_after_secs || 5;
+        await new Promise(resolve => setTimeout(resolve, waitSecs * 1000));
+
+        const statusParams: Record<string, string> = {
+          command: "STATUS",
+          media_id: mediaId,
+        };
+        const statusAuth = buildOAuth1Header("GET", uploadUrl, creds, statusParams);
+        const statusUrl = `${uploadUrl}?command=STATUS&media_id=${mediaId}`;
+
+        const statusResponse = await fetch(statusUrl, {
+          method: "GET",
+          headers: { Authorization: statusAuth },
+        });
+
+        if (!statusResponse.ok) {
+          console.error("[X media STATUS]", statusResponse.status, await statusResponse.text());
+          return null;
+        }
+
+        const statusData = await statusResponse.json() as {
+          processing_info?: { state: string; check_after_secs?: number; error?: { message: string } };
+        };
+
+        if (!statusData.processing_info) break; // No processing info means done
+        processingInfo = statusData.processing_info;
+        attempts++;
+      }
+
+      if (processingInfo.state !== "succeeded" && attempts >= maxAttempts) {
+        console.error("[X media STATUS] Timed out waiting for processing");
+        return null;
+      }
+    }
+
+    console.log(`[X media upload] Success: ${mediaId} (${isVideo ? "video" : "image"}, ${totalBytes} bytes)`);
+    return mediaId;
   } catch (err) {
     console.error("[X media upload error]", err instanceof Error ? err.message : err);
     return null;
