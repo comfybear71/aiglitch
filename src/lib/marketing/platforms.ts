@@ -654,6 +654,7 @@ async function postToYouTube(account: PlatformAccount, text: string, mediaUrl?: 
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
+        "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "video/mp4",
         "Content-Length": String(videoBuffer.byteLength),
       },
