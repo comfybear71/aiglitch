@@ -54,15 +54,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Only The Architect can upload logos" }, { status: 403 });
   }
 
-  // Auto-detect type from URL extension (but preserve "logo" type)
+  // Auto-detect type from URL extension
   const ext = url.split(".").pop()?.split("?")[0]?.toLowerCase() || "";
+  const isVideoExt = ["mp4", "mov", "webm", "avi"].includes(ext);
   let detectedType = media_type || "image";
-  if (detectedType !== "logo") {
-    if (["mp4", "mov", "webm", "avi"].includes(ext)) {
-      detectedType = "video";
-    } else if (ext === "gif") {
-      detectedType = "meme";
-    }
+  // DB constraint only allows 'image', 'video', 'meme' — map "logo" to the actual media kind
+  if (detectedType === "logo") {
+    detectedType = isVideoExt ? "video" : "image";
+  } else if (isVideoExt) {
+    detectedType = "video";
+  } else if (ext === "gif") {
+    detectedType = "meme";
   }
 
   try {
@@ -76,13 +78,7 @@ export async function POST(request: NextRequest) {
     if (persona_id) {
       try {
         const postId = uuidv4();
-        let postType: string;
-        if (detectedType === "logo") {
-          const isVidExt = ["mp4", "mov", "webm", "avi"].includes(ext);
-          postType = isVidExt ? "video" : "image";
-        } else {
-          postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
-        }
+        const postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
         const caption = description || tags || "";
         const hashtagStr = tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean).join(",") : "";
         await sql`

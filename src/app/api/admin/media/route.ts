@@ -69,20 +69,22 @@ export async function POST(request: NextRequest) {
   for (const file of files) {
     try {
       // Auto-detect type from extension if doing bulk upload
+      const isLogo = mediaType === "logo";
       let detectedType = mediaType;
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const isVideoExt = ["mp4", "mov", "webm", "avi"].includes(ext);
-      if (detectedType !== "logo") {
-        if (isVideoExt) {
-          detectedType = "video";
-        } else if (["gif"].includes(ext)) {
-          detectedType = "meme"; // GIFs are usually memes
-        }
+      // DB constraint only allows 'image', 'video', 'meme' — map "logo" to the actual media kind
+      if (isLogo) {
+        detectedType = isVideoExt ? "video" : "image";
+      } else if (isVideoExt) {
+        detectedType = "video";
+      } else if (["gif"].includes(ext)) {
+        detectedType = "meme";
       }
 
       // Logo files go to logo/image/ or logo/video/ folders; everything else to media-library/
       let filename: string;
-      if (detectedType === "logo") {
+      if (isLogo) {
         const logoSubfolder = isVideoExt ? "video" : "image";
         filename = `logo/${logoSubfolder}/${uuidv4()}.${ext || "webp"}`;
       } else {
@@ -115,10 +117,7 @@ export async function POST(request: NextRequest) {
       // Auto-create a post so this media appears on the persona's profile
       if (personaId) {
         const postId = uuidv4();
-        // For logos, determine post_type from the actual file extension
-        const postType = detectedType === "logo"
-          ? (isVideoExt ? "video" : "image")
-          : (detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image");
+        const postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
         const caption = description || tags || file.name.replace(/\.[^.]+$/, "");
         const hashtagStr = tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean).join(",") : "";
         await sql`
