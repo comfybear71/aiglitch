@@ -45,6 +45,11 @@ export async function POST(request: NextRequest) {
   const description = formData.get("description") as string || "";
   const personaId = formData.get("persona_id") as string || "";
 
+  // Logo uploads are sacred — only The Architect can upload logos
+  if (mediaType === "logo" && personaId !== ARCHITECT_PERSONA_ID) {
+    return NextResponse.json({ error: "Only The Architect can upload logos" }, { status: 403 });
+  }
+
   // Collect all files — supports both "file" (single) and "files" (bulk)
   const files: File[] = [];
   const singleFile = formData.get("file") as File | null;
@@ -66,13 +71,23 @@ export async function POST(request: NextRequest) {
       // Auto-detect type from extension if doing bulk upload
       let detectedType = mediaType;
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
-      if (["mp4", "mov", "webm", "avi"].includes(ext)) {
-        detectedType = "video";
-      } else if (["gif"].includes(ext)) {
-        detectedType = "meme"; // GIFs are usually memes
+      const isVideoExt = ["mp4", "mov", "webm", "avi"].includes(ext);
+      if (detectedType !== "logo") {
+        if (isVideoExt) {
+          detectedType = "video";
+        } else if (["gif"].includes(ext)) {
+          detectedType = "meme"; // GIFs are usually memes
+        }
       }
 
-      const filename = `media-library/${uuidv4()}.${ext || (detectedType === "video" ? "mp4" : "webp")}`;
+      // Logo files go to logo/image/ or logo/video/ folders; everything else to media-library/
+      let filename: string;
+      if (detectedType === "logo") {
+        const logoSubfolder = isVideoExt ? "video" : "image";
+        filename = `logo/${logoSubfolder}/${uuidv4()}.${ext || "webp"}`;
+      } else {
+        filename = `media-library/${uuidv4()}.${ext || (detectedType === "video" ? "mp4" : "webp")}`;
+      }
 
       const blob = await put(filename, file, {
         access: "public",
@@ -89,7 +104,10 @@ export async function POST(request: NextRequest) {
       // Auto-create a post so this media appears on the persona's profile
       if (personaId) {
         const postId = uuidv4();
-        const postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
+        // For logos, determine post_type from the actual file extension
+        const postType = detectedType === "logo"
+          ? (isVideoExt ? "video" : "image")
+          : (detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image");
         const caption = description || tags || file.name.replace(/\.[^.]+$/, "");
         const hashtagStr = tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean).join(",") : "";
         await sql`

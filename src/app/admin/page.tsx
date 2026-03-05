@@ -629,7 +629,7 @@ export default function AdminDashboard() {
   // Media upload form
   const ARCHITECT_PERSONA_ID = "glitch-000";
   const [mediaForm, setMediaForm] = useState({
-    media_type: "meme" as "image" | "video" | "meme",
+    media_type: "meme" as "image" | "video" | "meme" | "logo",
     tags: "",
     description: "",
     persona_id: ARCHITECT_PERSONA_ID,
@@ -1650,7 +1650,14 @@ export default function AdminDashboard() {
           let blobUrl: string | null = null;
 
           try {
-            const blob = await safariSafeBlobUpload(`media-library/${file.name}`, file, {
+            // Logo uploads go to logo/image/ or logo/video/ folders; everything else to media-library/
+          let blobPath = `media-library/${file.name}`;
+          if (mediaForm.media_type === "logo") {
+            const fileExt = file.name.split(".").pop()?.toLowerCase() || "";
+            const isVid = ["mp4", "mov", "webm", "avi"].includes(fileExt);
+            blobPath = `logo/${isVid ? "video" : "image"}/${file.name}`;
+          }
+          const blob = await safariSafeBlobUpload(blobPath, file, {
               access: "public",
               handleUploadUrl: "/api/admin/media/upload",
               multipart: true,
@@ -3189,17 +3196,28 @@ export default function AdminDashboard() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Default Media Type (videos auto-detected)</label>
                   <select value={mediaForm.media_type}
-                    onChange={(e) => setMediaForm({ ...mediaForm, media_type: e.target.value as "image" | "video" | "meme" })}
+                    onChange={(e) => setMediaForm({ ...mediaForm, media_type: e.target.value as "image" | "video" | "meme" | "logo" })}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
                     <option value="meme">Meme</option>
                     <option value="image">Image</option>
                     <option value="video">Video</option>
+                    {mediaForm.persona_id === ARCHITECT_PERSONA_ID && (
+                      <option value="logo">Logo (Architect Only)</option>
+                    )}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Assign to Persona (defaults to The Architect — your persona)</label>
                   <select value={mediaForm.persona_id || ""}
-                    onChange={(e) => setMediaForm({ ...mediaForm, persona_id: e.target.value })}
+                    onChange={(e) => {
+                      const newPersona = e.target.value;
+                      const updates: Partial<typeof mediaForm> = { persona_id: newPersona };
+                      // Logo type is sacred — only The Architect can use it
+                      if (newPersona !== ARCHITECT_PERSONA_ID && mediaForm.media_type === "logo") {
+                        updates.media_type = "meme";
+                      }
+                      setMediaForm({ ...mediaForm, ...updates });
+                    }}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500">
                     <option value={ARCHITECT_PERSONA_ID}>🕉️ The Architect — Admin (YOU)</option>
                     <option value="">Generic (any bot can use)</option>
@@ -3352,7 +3370,7 @@ export default function AdminDashboard() {
             )}
 
             {/* Library Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
                 <p className="text-2xl font-black text-yellow-400">{mediaItems.filter(m => m.media_type === "meme").length}</p>
                 <p className="text-xs text-gray-400">Memes</p>
@@ -3364,6 +3382,10 @@ export default function AdminDashboard() {
               <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 text-center">
                 <p className="text-2xl font-black text-cyan-400">{mediaItems.filter(m => m.media_type === "video").length}</p>
                 <p className="text-xs text-gray-400">Videos</p>
+              </div>
+              <div className="bg-pink-500/10 border border-pink-500/20 rounded-xl p-4 text-center">
+                <p className="text-2xl font-black text-pink-400">{mediaItems.filter(m => m.media_type === "logo").length}</p>
+                <p className="text-xs text-gray-400">Logos</p>
               </div>
               <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 text-center">
                 <p className="text-2xl font-black text-purple-400">{mediaItems.filter(m => m.persona_id).length}</p>
