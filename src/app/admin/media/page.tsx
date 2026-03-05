@@ -73,6 +73,33 @@ export default function MediaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated]);
 
+  // Server-side upload helper — used for small files and as fallback for failed client uploads
+  const serverUploadFile = async (file: File): Promise<boolean> => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("media_type", mediaForm.media_type);
+      formData.append("tags", mediaForm.tags);
+      formData.append("description", mediaForm.description);
+      if (mediaForm.persona_id) formData.append("persona_id", mediaForm.persona_id);
+
+      const res = await fetch("/api/admin/media", { method: "POST", body: formData });
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.results?.length > 0) {
+          return !data.results[0].error;
+        }
+        return true;
+      }
+      const errText = await res.text().catch(() => `HTTP ${res.status}`);
+      console.error(`Server upload failed for ${file.name}:`, errText);
+      return false;
+    } catch (err) {
+      console.error(`Server upload error for ${file.name}:`, err);
+      return false;
+    }
+  };
+
   // Upload files
   const uploadFiles = async (files: File[]) => {
     if (files.length === 0) return;
@@ -92,7 +119,10 @@ export default function MediaPage() {
       });
 
       try {
-        if (file.size > MAX_SERVER_SIZE) {
+        // Try client upload first for large files, fall back to server upload
+        const useClientUpload = file.size > MAX_SERVER_SIZE;
+
+        if (useClientUpload) {
           // Large files: use Vercel Blob client upload
           let blobUrl: string | null = null;
 
@@ -110,7 +140,7 @@ export default function MediaPage() {
             });
             blobUrl = blob.url;
           } catch (uploadErr) {
-            console.warn(`Blob upload threw for ${file.name} (may still have succeeded):`, uploadErr);
+            console.warn(`Blob client upload failed for ${file.name}:`, uploadErr);
             if (uploadErr && typeof uploadErr === "object" && "url" in uploadErr) {
               blobUrl = (uploadErr as { url: string }).url;
             }
@@ -136,36 +166,15 @@ export default function MediaPage() {
               allResults.push({ name: file.name, ok: false });
             }
           } else {
-            allResults.push({ name: file.name, ok: false });
+            // Client upload failed — try server upload as fallback (may work for files near the limit)
+            console.warn(`Client upload failed for ${file.name}, trying server fallback...`);
+            const fallbackOk = await serverUploadFile(file);
+            allResults.push({ name: file.name, ok: fallbackOk });
           }
         } else {
           // Small files: use simple server upload
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("media_type", mediaForm.media_type);
-          formData.append("tags", mediaForm.tags);
-          formData.append("description", mediaForm.description);
-          if (mediaForm.persona_id) formData.append("persona_id", mediaForm.persona_id);
-
-          const res = await fetch("/api/admin/media", { method: "POST", body: formData });
-          if (res.ok) {
-            try {
-              const data = await res.json();
-              if (data.results && data.results.length > 0) {
-                for (const r of data.results) {
-                  allResults.push({ name: r.name, ok: !r.error });
-                }
-              } else {
-                allResults.push({ name: file.name, ok: true });
-              }
-            } catch {
-              allResults.push({ name: file.name, ok: true });
-            }
-          } else {
-            const errText = await res.text().catch(() => `HTTP ${res.status}`);
-            console.error(`Upload failed for ${file.name}:`, errText);
-            allResults.push({ name: file.name, ok: false });
-          }
+          const ok = await serverUploadFile(file);
+          allResults.push({ name: file.name, ok });
         }
       } catch (err) {
         console.error(`Upload error for ${file.name}:`, err);
@@ -486,7 +495,7 @@ export default function MediaPage() {
                   <option value="image">Image</option>
                   <option value="video">Video</option>
                   {mediaForm.persona_id === ARCHITECT_PERSONA_ID && (
-                    <option value="logo">Logo (Architect Only)</option>
+                    <option value="logo">Logo (auto-sorts → logo/image or logo/video)</option>
                   )}
                 </select>
               </div>

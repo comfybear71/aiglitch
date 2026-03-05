@@ -89,9 +89,20 @@ export async function POST(request: NextRequest) {
         filename = `media-library/${uuidv4()}.${ext || (detectedType === "video" ? "mp4" : "webp")}`;
       }
 
+      // iOS Safari sometimes sends empty or wrong content types (e.g., HEIC files named .jpeg)
+      // Detect content type from extension as fallback
+      const contentTypeFromExt: Record<string, string> = {
+        jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+        gif: "image/gif", heic: "image/heic", heif: "image/heif", avif: "image/avif",
+        mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", avi: "video/x-msvideo",
+      };
+      const resolvedContentType = file.type && file.type !== "application/octet-stream"
+        ? file.type
+        : contentTypeFromExt[ext] || "image/jpeg";
+
       const blob = await put(filename, file, {
         access: "public",
-        contentType: file.type,
+        contentType: resolvedContentType,
         addRandomSuffix: true,
       });
 

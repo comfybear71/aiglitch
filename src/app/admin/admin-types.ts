@@ -254,8 +254,11 @@ export function formatBudjuAmount(n: number): string {
  * We temporarily patch fetch to wrap JSON bodies in FormData, and our
  * server endpoints detect FormData and unwrap the JSON from "__json" field.
  */
-export const isSafari = typeof navigator !== "undefined" &&
-  /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+export const isSafari = typeof navigator !== "undefined" && (
+  /^((?!chrome|android).)*safari/i.test(navigator.userAgent) ||
+  // iPad OS 13+ reports as Macintosh — detect via touch support + webkit
+  (navigator.maxTouchPoints > 0 && /AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent))
+);
 
 export async function safariSafeBlobUpload(
   pathname: string,
@@ -267,6 +270,9 @@ export async function safariSafeBlobUpload(
   if (!isSafari) {
     return upload(pathname, file, opts);
   }
+
+  // iOS Safari may send HEIC files with wrong MIME type — fix the file object
+  const fixedFile = fixIOSFileType(file);
 
   const originalFetch = window.fetch;
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -286,8 +292,24 @@ export async function safariSafeBlobUpload(
   };
 
   try {
-    return await upload(pathname, file, opts);
+    return await upload(pathname, fixedFile, opts);
   } finally {
     window.fetch = originalFetch;
   }
+}
+
+/** iOS Safari sometimes reports empty or wrong MIME types for camera roll photos */
+function fixIOSFileType(file: File): File {
+  if (file.type && file.type !== "application/octet-stream") return file;
+  const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  const typeMap: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+    gif: "image/gif", heic: "image/heic", heif: "image/heif", avif: "image/avif",
+    mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", avi: "video/x-msvideo",
+  };
+  const correctType = typeMap[ext];
+  if (correctType) {
+    return new File([file], file.name, { type: correctType, lastModified: file.lastModified });
+  }
+  return file;
 }

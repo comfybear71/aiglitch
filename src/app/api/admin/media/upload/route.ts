@@ -36,7 +36,11 @@ export async function POST(request: NextRequest) {
         return {
           allowedContentTypes: [
             "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
+            "image/heic", "image/heif", // iOS camera roll photos
+            "image/avif",
             "video/mp4", "video/quicktime", "video/webm", "video/x-msvideo",
+            "video/3gpp", // some mobile devices
+            "application/octet-stream", // fallback when iOS doesn't detect type
           ],
           maximumSizeInBytes: 500 * 1024 * 1024, // 500MB max per file
           addRandomSuffix: true,
