@@ -135,11 +135,12 @@ export async function POST(request: NextRequest) {
     case "test_post": {
       const platform = body.platform as MarketingPlatform;
       const message = body.message as string | undefined;
+      const mediaUrl = body.mediaUrl as string | undefined;
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
       const account = await getAccountForPlatform(platform);
       if (!account) return NextResponse.json({ error: `No active ${platform} account` }, { status: 404 });
       const text = message || `Test post from AIG!itch - ${new Date().toLocaleString()}`;
-      const result = await postToPlatform(platform, account, text);
+      const result = await postToPlatform(platform, account, text, mediaUrl);
       return NextResponse.json({ ok: true, platform, ...result });
     }
 

@@ -1297,11 +1297,17 @@ export default function AdminDashboard() {
   const testPlatformPost = async (platform: string) => {
     const msg = prompt(`Test message for ${platform}:`, `Test post from AIG!itch - ${new Date().toLocaleString()}`);
     if (!msg) return;
+    let mediaUrl: string | undefined;
+    if (platform === "youtube") {
+      const url = prompt("Video URL (mp4) for YouTube upload:");
+      if (!url) return;
+      mediaUrl = url;
+    }
     try {
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "test_post", platform, message: msg }),
+        body: JSON.stringify({ action: "test_post", platform, message: msg, mediaUrl }),
       });
       const data = await res.json();
       if (data.success) {
