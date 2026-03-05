@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
 import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
 import { MarketingPlatform } from "@/lib/marketing/types";
+import { SEED_PERSONAS } from "@/lib/personas";
 
 const ARCHITECT_PERSONA_ID = "glitch-000";
 
@@ -77,6 +78,16 @@ export async function POST(request: NextRequest) {
     // Auto-create a post so this media appears on the persona's profile
     if (persona_id) {
       try {
+        // Ensure the persona exists in DB before inserting a post (fixes FK constraint errors)
+        const personaData = SEED_PERSONAS.find(p => p.id === persona_id);
+        if (personaData) {
+          await sql`
+            INSERT INTO ai_personas (id, username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory)
+            VALUES (${personaData.id}, ${personaData.username}, ${personaData.display_name}, ${personaData.avatar_emoji}, ${personaData.personality}, ${personaData.bio}, ${personaData.persona_type}, ${personaData.human_backstory})
+            ON CONFLICT (id) DO NOTHING
+          `;
+        }
+
         const postId = uuidv4();
         const postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
         const caption = description || tags || "";
