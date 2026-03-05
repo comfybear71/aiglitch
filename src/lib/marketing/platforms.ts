@@ -13,8 +13,11 @@
  */
 
 import { getDb } from "@/lib/db";
+import sharp from "sharp";
 import { MarketingPlatform, PlatformAccount } from "./types";
 import { buildOAuth1Header, getAppCredentials } from "./oauth1";
+
+const X_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB — X's limit for tweet_image
 
 // ── Environment Variable Token Override ─────────────────────────────────
 // Store sensitive API tokens in Vercel env vars instead of the DB.
@@ -90,14 +93,44 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
       return { error: msg };
     }
 
-    const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-    const totalBytes = mediaBuffer.byteLength;
+    let mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
     const contentType = mediaResponse.headers.get("content-type") || "application/octet-stream";
     const isVideo = contentType.startsWith("video/") || /\.(mp4|mov|webm)$/i.test(mediaUrl);
 
+    // Compress images over X's 5MB limit using sharp
+    let finalContentType = contentType;
+    if (!isVideo && mediaBuffer.byteLength > X_IMAGE_MAX_BYTES) {
+      console.log(`[X media upload] Image is ${(mediaBuffer.byteLength / 1024 / 1024).toFixed(1)}MB, compressing...`);
+      try {
+        // Progressive JPEG compression — try quality 80, then lower if still too big
+        let quality = 80;
+        let compressed = await sharp(mediaBuffer).jpeg({ quality, progressive: true }).toBuffer();
+        while (compressed.byteLength > X_IMAGE_MAX_BYTES && quality > 20) {
+          quality -= 15;
+          compressed = await sharp(mediaBuffer).jpeg({ quality, progressive: true }).toBuffer();
+        }
+        if (compressed.byteLength <= X_IMAGE_MAX_BYTES) {
+          console.log(`[X media upload] Compressed: ${(mediaBuffer.byteLength / 1024 / 1024).toFixed(1)}MB → ${(compressed.byteLength / 1024 / 1024).toFixed(1)}MB (q=${quality})`);
+          mediaBuffer = compressed;
+          finalContentType = "image/jpeg";
+        } else {
+          // Last resort: resize down
+          compressed = await sharp(mediaBuffer).resize(1920, 1920, { fit: "inside" }).jpeg({ quality: 70 }).toBuffer();
+          console.log(`[X media upload] Resized+compressed: ${(mediaBuffer.byteLength / 1024 / 1024).toFixed(1)}MB → ${(compressed.byteLength / 1024 / 1024).toFixed(1)}MB`);
+          mediaBuffer = compressed;
+          finalContentType = "image/jpeg";
+        }
+      } catch (compressErr) {
+        console.error("[X media upload] Compression failed:", compressErr);
+        return { error: `Image compression failed: ${compressErr instanceof Error ? compressErr.message : String(compressErr)}` };
+      }
+    }
+
+    const totalBytes = mediaBuffer.byteLength;
+
     // Determine media_type and media_category for INIT
-    const mediaType = isVideo ? "video/mp4" : contentType;
-    const mediaCategory = isVideo ? "tweet_video" : (contentType === "image/gif" ? "tweet_gif" : "tweet_image");
+    const mediaType = isVideo ? "video/mp4" : finalContentType;
+    const mediaCategory = isVideo ? "tweet_video" : (finalContentType === "image/gif" ? "tweet_gif" : "tweet_image");
 
     const uploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
 
@@ -143,13 +176,8 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
     for (let offset = 0; offset < totalBytes; offset += chunkSize) {
       const chunk = mediaBuffer.subarray(offset, Math.min(offset + chunkSize, totalBytes));
 
-      // Build OAuth header for APPEND — only command, media_id, segment_index go into signature
-      const appendParams: Record<string, string> = {
-        command: "APPEND",
-        media_id: mediaId,
-        segment_index: String(segmentIndex),
-      };
-      const appendAuth = buildOAuth1Header("POST", uploadUrl, creds, appendParams);
+      // OAuth 1.0a: multipart/form-data body params must NOT be in the signature
+      const appendAuth = buildOAuth1Header("POST", uploadUrl, creds);
 
       // Send as multipart/form-data with binary chunk
       const formData = new FormData();
