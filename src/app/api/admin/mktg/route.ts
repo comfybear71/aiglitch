@@ -95,8 +95,16 @@ export async function GET(request: NextRequest) {
     }
 
     case "collect_metrics": {
-      const result = await collectAllMetrics();
-      return NextResponse.json({ ok: true, ...result });
+      try {
+        const result = await collectAllMetrics();
+        return NextResponse.json({ ok: true, ...result });
+      } catch (err) {
+        console.error("[collect_metrics GET] crash:", err);
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+          { status: 500 }
+        );
+      }
     }
 
     default:
@@ -237,8 +245,16 @@ export async function POST(request: NextRequest) {
 
     // ── Collect metrics from all platforms ────────────────────────────
     case "collect_metrics": {
-      const result = await collectAllMetrics();
-      return NextResponse.json({ ok: true, ...result });
+      try {
+        const result = await collectAllMetrics();
+        return NextResponse.json({ ok: true, ...result });
+      } catch (err) {
+        console.error("[collect_metrics POST] crash:", err);
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+          { status: 500 }
+        );
+      }
     }
 
     // ── Delete marketing post ─────────────────────────────────────────

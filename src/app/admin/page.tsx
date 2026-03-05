@@ -1400,6 +1400,11 @@ export default function AdminDashboard() {
         setMktCollecting(false);
         return;
       }
+      if (data.error) {
+        alert(`collectMetrics server error:\n${data.error}\n${data.stack || ""}`);
+        setMktCollecting(false);
+        return;
+      }
       alert(`Metrics collected: ${data.updated || 0} posts updated, ${data.failed || 0} failed`);
       fetchMarketingData();
     } catch (err) {
