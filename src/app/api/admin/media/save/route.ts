@@ -92,11 +92,22 @@ export async function POST(request: NextRequest) {
         await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona_id}`;
 
         // Spread to social platforms in background — don't block the response
+        let spreadPlatforms: string[] = [];
         if (persona_id === ARCHITECT_PERSONA_ID) {
+          try {
+            const accounts = await getActiveAccounts();
+            spreadPlatforms = accounts.map(a => a.platform);
+          } catch { /* ignore */ }
           spreadArchitectContent(sql, postId, caption, url, detectedType).catch(err =>
             console.error("[Architect auto-market]", err instanceof Error ? err.message : err)
           );
         }
+
+        return NextResponse.json({
+          success: true, id, url,
+          posted: true,
+          spreading: spreadPlatforms.length > 0 ? spreadPlatforms : undefined,
+        });
       } catch (postErr) {
         const postErrMsg = postErr instanceof Error ? postErr.message : String(postErr);
         console.error("[media/save] Post creation failed:", postErrMsg);

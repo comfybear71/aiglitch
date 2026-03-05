@@ -10,7 +10,7 @@ export default function MediaPage() {
   // Media state
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean; error?: string }[] }>({ total: 0, done: 0, current: "", results: [] });
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean; error?: string; status?: string[] }[] }>({ total: 0, done: 0, current: "", results: [] });
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +101,7 @@ export default function MediaPage() {
     setUploading(true);
     setUploadProgress({ total: files.length, done: 0, current: files[0].name, results: [] });
 
-    const allResults: { name: string; ok: boolean; error?: string }[] = [];
+    const allResults: { name: string; ok: boolean; error?: string; status?: string[] }[] = [];
     const MAX_SERVER_SIZE = 4 * 1024 * 1024; // 4MB - Vercel serverless body limit
 
     for (let i = 0; i < files.length; i++) {
@@ -160,7 +160,10 @@ export default function MediaPage() {
             if (saveRes.ok) {
               const saveData = await saveRes.json().catch(() => null);
               const warning = saveData?.warning;
-              allResults.push({ name: file.name, ok: true, error: warning || undefined });
+              const status: string[] = [];
+              if (saveData?.posted) status.push("Posted to feed");
+              if (saveData?.spreading?.length) status.push(`Marketing → ${saveData.spreading.join(", ")}`);
+              allResults.push({ name: file.name, ok: true, error: warning || undefined, status: status.length > 0 ? status : undefined });
             } else {
               const saveErr = await saveRes.text().catch(() => `HTTP ${saveRes.status}`);
               allResults.push({ name: file.name, ok: false, error: `DB save: ${saveErr.slice(0, 200)}` });
@@ -589,7 +592,18 @@ export default function MediaPage() {
                     </div>
                   ))}
                   {uploadProgress.results.every(r => r.ok && !r.error) && (
-                    <p className="text-xs text-green-400">All files uploaded successfully!</p>
+                    <div>
+                      <p className="text-xs text-green-400">All files uploaded successfully!</p>
+                      {uploadProgress.results.some(r => r.status?.length) && (
+                        <div className="mt-1 space-y-0.5">
+                          {uploadProgress.results.filter(r => r.status?.length).flatMap((r, i) =>
+                            (r.status || []).map((s, j) => (
+                              <p key={`s${i}-${j}`} className="text-xs text-cyan-400">{s}</p>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
