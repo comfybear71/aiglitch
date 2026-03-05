@@ -18,6 +18,7 @@ import { concatMP4Clips } from "@/lib/media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "@/lib/genre-utils";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 // 10 minutes — enough for screenplay generation + clip submission
 export const maxDuration = 600;
@@ -451,6 +452,12 @@ export async function PUT(request: NextRequest) {
 
   console.log(`[director-movie] "${title}" stitched and posted: ${postId}`);
 
+  // Spread to social media — everything the Architect orchestrates gets marketed
+  const spread = await spreadPostToSocial(postId, directorId, directorName, "🎬");
+  if (spread.platforms.length > 0) {
+    console.log(`[director-movie] "${title}" spread to: ${spread.platforms.join(", ")}`);
+  }
+
   return NextResponse.json({
     action: "stitched_and_posted",
     feedPostId: postId,
@@ -460,5 +467,6 @@ export async function PUT(request: NextRequest) {
     sizeMb,
     clipCount: clipBuffers.length,
     downloadErrors: downloadErrors.length > 0 ? downloadErrors : undefined,
+    spreading: spread.platforms,
   });
 }

@@ -34,6 +34,7 @@ import { GENRE_TEMPLATES, type GenreTemplate } from "../media/multi-clip";
 import { concatMP4Clips } from "../media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
 import { submitVideoJob } from "../xai";
+import { spreadPostToSocial } from "../marketing/spread-post";
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -706,7 +707,7 @@ export async function submitDirectorFilm(
  */
 export async function stitchAndTriplePost(
   jobId: string,
-): Promise<{ feedPostId: string; premierePostId: string; profilePostId: string } | null> {
+): Promise<{ feedPostId: string; premierePostId: string; profilePostId: string; spreading: string[] } | null> {
   const sql = getDb();
 
   // Get the job details
@@ -797,8 +798,16 @@ export async function stitchAndTriplePost(
 
   console.log(`[director-movies] "${job.title}" posted as single premiere: ${postId} (${totalDuration}s, ${job.genre})`);
 
+  // Spread to social media — everything the Architect orchestrates gets marketed
+  const directorProfile = DIRECTORS[job.director_username];
+  const directorName = directorProfile?.displayName || job.director_username;
+  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, "🎬");
+  if (spread.platforms.length > 0) {
+    console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
+  }
+
   // Return the same postId for all three fields (backwards-compatible with callers expecting three IDs)
-  return { feedPostId: postId, premierePostId: postId, profilePostId: postId };
+  return { feedPostId: postId, premierePostId: postId, profilePostId: postId, spreading: spread.platforms };
 }
 
 /**

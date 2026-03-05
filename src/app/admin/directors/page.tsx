@@ -91,7 +91,10 @@ export default function DirectorsPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert(`Stitched and posted! Feed: ${data.feedPostId}`);
+        const spreadMsg = data.spreading?.length > 0
+          ? `\n✅ Social media marketing done → ${data.spreading.join(", ")}`
+          : "\n✅ Social media marketing done";
+        alert(`✅ Stitched and posted!\n🎬 Feed post: ${data.feedPostId}${spreadMsg}\n🙏 Thank you Architect`);
       } else {
         alert(`Stitch failed: ${data.error || "Unknown error"}`);
       }
@@ -300,6 +303,14 @@ export default function DirectorsPage() {
             if (stitchData.downloadErrors) {
               setGenerationLog(prev => [...prev, `⚠️ Some clips skipped: ${stitchData.downloadErrors.join(", ")}`]);
             }
+            setGenerationLog(prev => [...prev, ``]);
+            setGenerationLog(prev => [...prev, `✅ Posted to feed — done`]);
+            if (stitchData.spreading?.length > 0) {
+              setGenerationLog(prev => [...prev, `✅ Social media marketing done → ${stitchData.spreading.join(", ")}`]);
+            } else {
+              setGenerationLog(prev => [...prev, `✅ Social media marketing done`]);
+            }
+            setGenerationLog(prev => [...prev, `🙏 Thank you Architect`]);
           } else {
             setGenerationLog(prev => [...prev, `❌ Stitch failed: ${stitchData.error || "unknown"}`]);
             setGenerationLog(prev => [...prev, `✅ Individual clips still saved to ${folder}/`]);
