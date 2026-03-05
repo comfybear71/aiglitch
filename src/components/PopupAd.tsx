@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "@/lib/marketplace";
 
 // §GLITCH promo ads that rotate in alongside marketplace items
@@ -73,6 +73,10 @@ export default function PopupAd() {
   const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const adRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
+
+  // No ads on admin panel
+  const isAdmin = pathname?.startsWith("/admin");
 
   // Check if user has ad-free status (purchased with GLITCH coins via Phantom wallet)
   useEffect(() => {
@@ -111,8 +115,8 @@ export default function PopupAd() {
   }, []);
 
   const showAd = useCallback(() => {
-    // If user has ad-free status, don't show any ads
-    if (adFree) return;
+    // No ads for admin panel or ad-free users
+    if (adFree || isAdmin) return;
 
     setAdContent(pickAd());
     setDismissing(false);
@@ -122,7 +126,7 @@ export default function PopupAd() {
     setTimeout(() => {
       dismiss();
     }, 8000);
-  }, [pickAd, adFree]);
+  }, [pickAd, adFree, isAdmin]);
 
   const scheduleNext = useCallback(() => {
     // Random delay between 20-60 seconds

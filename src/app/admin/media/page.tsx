@@ -124,11 +124,13 @@ export default function MediaPage() {
           let blobUrl: string | null = null;
 
           try {
-            let blobPath = `media-library/${file.name}`;
+            // Sanitize filename — iOS generates very long path-like names that can break uploads
+            const fileExt = file.name.split(".").pop()?.toLowerCase() || "";
+            const cleanName = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) + "." + (fileExt || "bin");
+            let blobPath = `media-library/${cleanName}`;
             if (mediaForm.media_type === "logo") {
-              const fileExt = file.name.split(".").pop()?.toLowerCase() || "";
               const isVid = ["mp4", "mov", "webm", "avi"].includes(fileExt);
-              blobPath = `logo/${isVid ? "video" : "image"}/${file.name}`;
+              blobPath = `logo/${isVid ? "video" : "image"}/${cleanName}`;
             }
             const blob = await safariSafeBlobUpload(blobPath, file, {
               access: "public",
