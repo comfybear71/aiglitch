@@ -19,7 +19,11 @@ export async function POST(request: NextRequest) {
   }
 
   const sql = getDb();
-  await ensureDbReady();
+  try {
+    await ensureDbReady();
+  } catch (seedErr) {
+    console.error("[media/save] ensureDbReady failed:", seedErr);
+  }
 
   // Support both JSON and FormData bodies — FormData fixes Safari/iOS
   // "The string did not match the expected pattern" TypeError
@@ -61,40 +65,50 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const id = uuidv4();
-  await sql`
-    INSERT INTO media_library (id, url, media_type, persona_id, tags, description)
-    VALUES (${id}, ${url}, ${detectedType}, ${persona_id || null}, ${tags || ""}, ${description || ""})
-  `;
-
-  // Auto-create a post so this media appears on the persona's profile
-  if (persona_id) {
-    const postId = uuidv4();
-    // For logos, determine post_type from the actual file extension
-    let postType: string;
-    if (detectedType === "logo") {
-      const isVidExt = ["mp4", "mov", "webm", "avi"].includes(ext);
-      postType = isVidExt ? "video" : "image";
-    } else {
-      postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
-    }
-    const caption = description || tags || "";
-    const hashtagStr = tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean).join(",") : "";
+  try {
+    const id = uuidv4();
     await sql`
-      INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count)
-      VALUES (${postId}, ${persona_id}, ${caption}, ${postType}, ${hashtagStr}, ${url}, ${detectedType}, ${Math.floor(Math.random() * 500) + 50})
+      INSERT INTO media_library (id, url, media_type, persona_id, tags, description)
+      VALUES (${id}, ${url}, ${detectedType}, ${persona_id || null}, ${tags || ""}, ${description || ""})
     `;
-    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona_id}`;
 
-    // The Architect's content is sacred — immediately spread to all social platforms
-    if (persona_id === ARCHITECT_PERSONA_ID) {
-      spreadArchitectContent(sql, postId, caption, url, detectedType).catch(err =>
-        console.error("[Architect auto-market]", err instanceof Error ? err.message : err)
-      );
+    // Auto-create a post so this media appears on the persona's profile
+    if (persona_id) {
+      try {
+        const postId = uuidv4();
+        let postType: string;
+        if (detectedType === "logo") {
+          const isVidExt = ["mp4", "mov", "webm", "avi"].includes(ext);
+          postType = isVidExt ? "video" : "image";
+        } else {
+          postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
+        }
+        const caption = description || tags || "";
+        const hashtagStr = tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean).join(",") : "";
+        await sql`
+          INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count)
+          VALUES (${postId}, ${persona_id}, ${caption}, ${postType}, ${hashtagStr}, ${url}, ${detectedType}, ${Math.floor(Math.random() * 500) + 50})
+        `;
+        await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona_id}`;
+
+        // Spread to social platforms in background — don't block the response
+        if (persona_id === ARCHITECT_PERSONA_ID) {
+          spreadArchitectContent(sql, postId, caption, url, detectedType).catch(err =>
+            console.error("[Architect auto-market]", err instanceof Error ? err.message : err)
+          );
+        }
+      } catch (postErr) {
+        // Post creation failed but media was saved — that's OK, don't fail the whole upload
+        console.error("[media/save] Post creation failed:", postErr instanceof Error ? postErr.message : postErr);
+      }
     }
-  }
 
-  return NextResponse.json({ success: true, id, url });
+    return NextResponse.json({ success: true, id, url });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[media/save] DB error:", msg);
+    return NextResponse.json({ error: `Database error: ${msg}` }, { status: 500 });
+  }
 }
 
 // ── The Architect's content gets spread to ALL social platforms immediately ──
