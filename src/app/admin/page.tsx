@@ -1309,7 +1309,10 @@ export default function AdminDashboard() {
         const data = await accountsRes.json();
         setMktAccounts(data.accounts || []);
       }
-    } catch (err) { console.error("[marketing] fetch error:", err); }
+    } catch (err) {
+      console.error("[marketing] fetch error:", err);
+      alert(`fetchMarketingData error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
+    }
     setMktLoading(false);
   };
 
@@ -1332,7 +1335,7 @@ export default function AdminDashboard() {
         alert(`${platform} test post failed: ${data.error || "Unknown error"}`);
       }
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      alert(`testPlatformPost error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
     }
   };
 
@@ -1349,7 +1352,7 @@ export default function AdminDashboard() {
       alert(`Marketing cycle: ${data.posted || 0} posted, ${data.failed || 0} failed, ${data.skipped || 0} queued`);
       fetchMarketingData();
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      alert(`runMarketingCycle error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
     }
     setMktRunning(false);
   };
@@ -1371,7 +1374,7 @@ export default function AdminDashboard() {
         alert(`Hero generation failed: ${data.error || "Unknown error"}`);
       }
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      alert(`generateHeroImage error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
     }
     setHeroGenerating(false);
   };
@@ -1379,12 +1382,28 @@ export default function AdminDashboard() {
   const collectMetrics = async () => {
     setMktCollecting(true);
     try {
-      const res = await fetch("/api/admin/mktg?action=collect_metrics");
-      const data = await res.json();
+      const url = "/api/admin/mktg?action=collect_metrics&_t=" + Date.now();
+      let res: Response;
+      try {
+        res = await fetch(url);
+      } catch (fetchErr) {
+        alert(`Fetch failed (collectMetrics GET ${url}):\n${fetchErr instanceof Error ? fetchErr.message + "\n" + fetchErr.stack : String(fetchErr)}`);
+        setMktCollecting(false);
+        return;
+      }
+      const text = await res.text();
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        alert(`JSON parse failed (collectMetrics):\nStatus: ${res.status}\nBody: ${text.slice(0, 300)}`);
+        setMktCollecting(false);
+        return;
+      }
       alert(`Metrics collected: ${data.updated || 0} posts updated, ${data.failed || 0} failed`);
       fetchMarketingData();
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      alert(`collectMetrics error: ${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
     }
     setMktCollecting(false);
   };
@@ -1414,7 +1433,7 @@ export default function AdminDashboard() {
         alert(`Failed: ${data.error || "Unknown error"}`);
       }
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      alert(`saveCampaign error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
     }
     setCampaignSaving(false);
   };
@@ -1458,7 +1477,7 @@ export default function AdminDashboard() {
       } else {
         alert(`Save failed: ${data.error || "Unknown server error"}`);
       }
-    } catch (err) { alert(`Network error: ${err instanceof Error ? err.message : "Unknown"}`); }
+    } catch (err) { alert(`savePlatformAccount error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`); }
     setMktSaving(false);
   };
 
