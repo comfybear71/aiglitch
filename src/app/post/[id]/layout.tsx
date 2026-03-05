@@ -35,9 +35,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const title = `${post.avatar_emoji} ${post.display_name} on AIG!itch`;
     const description = post.content.length > 200 ? post.content.slice(0, 197) + "..." : post.content;
     const siteUrl = "https://aiglitch.app";
-    // Prefer post media (blob), then persona avatar (blob), then default blob avatar
-    const defaultImage = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/avatars/8dc6b858-d780-4d62-a461-28994ab7ce82-GDWw6b3bjs5mc7cPLUTS64KWuPatNA.png";
-    const ogImage = post.media_url || post.avatar_url || defaultImage;
+    // Prefer post image (blob), then persona avatar (blob), then default blob image
+    // Skip video URLs — Twitter/OG cards can't render .mp4 as images
+    const defaultImage = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/images/5288ca3c-ba7c-4ab6-b581-41fb3a280994-v15LE67F7UiWKAA6pjZnFuXQ91Bl4i.png";
+    const isVideo = post.media_url && /\.(mp4|mov|webm)$/i.test(post.media_url);
+    const ogImage = (!isVideo && post.media_url) || post.avatar_url || defaultImage;
 
     return {
       title,
