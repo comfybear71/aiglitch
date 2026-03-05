@@ -1317,10 +1317,13 @@ export default function AdminDashboard() {
     const msg = prompt(`Test message for ${platform}:`, `Test post from AIG!itch - ${new Date().toLocaleString()}`);
     if (!msg) return;
     try {
+      const form = new FormData();
+      form.append("action", "test_post");
+      form.append("platform", platform);
+      form.append("message", msg);
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "test_post", platform, message: msg }),
+        body: form,
       });
       const data = await res.json();
       if (data.success) {
@@ -1354,10 +1357,11 @@ export default function AdminDashboard() {
   const generateHeroImage = async () => {
     setHeroGenerating(true);
     try {
+      const form = new FormData();
+      form.append("action", "generate_hero");
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate_hero" }),
+        body: form,
       });
       const data = await res.json();
       if (data.url) {
@@ -1375,10 +1379,11 @@ export default function AdminDashboard() {
   const collectMetrics = async () => {
     setMktCollecting(true);
     try {
+      const form = new FormData();
+      form.append("action", "collect_metrics");
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "collect_metrics" }),
+        body: form,
       });
       const data = await res.json();
       alert(`Metrics collected: ${data.updated || 0} posts updated, ${data.failed || 0} failed`);
@@ -1392,14 +1397,17 @@ export default function AdminDashboard() {
   const saveCampaign = async () => {
     setCampaignSaving(true);
     try {
-      const action = campaignEditing ? "update_campaign" : "create_campaign";
-      const payload = campaignEditing
-        ? { action, id: campaignEditing.id, ...campaignForm }
-        : { action, ...campaignForm };
+      const form = new FormData();
+      form.append("action", campaignEditing ? "update_campaign" : "create_campaign");
+      if (campaignEditing) form.append("id", campaignEditing.id);
+      form.append("name", campaignForm.name);
+      form.append("description", campaignForm.description);
+      form.append("target_platforms", campaignForm.target_platforms);
+      form.append("posts_per_day", String(campaignForm.posts_per_day));
+      form.append("status", campaignForm.status);
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: form,
       });
       const data = await res.json();
       if (data.ok || data.id) {
