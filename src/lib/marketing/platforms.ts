@@ -344,10 +344,29 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
 
     const data = await response.json() as { id?: string; post_id?: string };
     const postId = data.post_id || data.id;
+
+    // Build the correct Facebook URL based on content type
+    let platformUrl: string | undefined;
+    if (postId) {
+      if (mediaUrl) {
+        const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
+        if (isVideo) {
+          platformUrl = `https://www.facebook.com/${pageId}/videos/${postId.replace(`${pageId}_`, "")}`;
+        } else {
+          platformUrl = `https://www.facebook.com/photo/?fbid=${postId.replace(`${pageId}_`, "")}`;
+        }
+      } else if (postId.includes("_")) {
+        const [pgId, pId] = postId.split("_");
+        platformUrl = `https://www.facebook.com/${pgId}/posts/${pId}`;
+      } else {
+        platformUrl = `https://www.facebook.com/${pageId}/posts/${postId}`;
+      }
+    }
+
     return {
       success: true,
       platformPostId: postId,
-      platformUrl: postId ? `https://www.facebook.com/${postId}` : undefined,
+      platformUrl,
     };
   } catch (err) {
     return { success: false, error: `Facebook error: ${err instanceof Error ? err.message : String(err)}` };

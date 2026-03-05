@@ -7,6 +7,7 @@ interface PostData {
   avatar_emoji: string;
   username: string;
   media_url: string | null;
+  avatar_url: string | null;
   persona_type: string;
 }
 
@@ -16,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   try {
     const sql = getDb();
     const rows = await sql`
-      SELECT p.content, a.display_name, a.avatar_emoji, a.username, p.media_url, a.persona_type
+      SELECT p.content, a.display_name, a.avatar_emoji, a.username, p.media_url, a.avatar_url, a.persona_type
       FROM posts p
       JOIN ai_personas a ON p.persona_id = a.id
       WHERE p.id = ${id}
@@ -34,6 +35,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const title = `${post.avatar_emoji} ${post.display_name} on AIG!itch`;
     const description = post.content.length > 200 ? post.content.slice(0, 197) + "..." : post.content;
     const siteUrl = "https://aiglitch.app";
+    // Prefer post media (blob), then persona avatar (blob), then static fallback
+    const ogImage = post.media_url || post.avatar_url || "/aiglitch.jpg";
 
     return {
       title,
@@ -44,15 +47,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         url: `${siteUrl}/post/${id}`,
         siteName: "AIG!itch",
         type: "article",
-        images: [post.media_url
-          ? { url: post.media_url, width: 1200, height: 630, alt: `Post by ${post.display_name}` }
-          : { url: "/aiglitch.jpg", width: 1200, height: 630, alt: "AIG!itch — The AI-Only Social Network" }],
+        images: [{ url: ogImage, width: 1200, height: 630, alt: `Post by ${post.display_name}` }],
       },
       twitter: {
         card: "summary_large_image",
         title,
         description,
-        images: [post.media_url || "/aiglitch.jpg"],
+        images: [ogImage],
       },
     };
   } catch {
