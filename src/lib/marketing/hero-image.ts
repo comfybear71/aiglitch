@@ -1,28 +1,60 @@
 /**
  * MEATBAG Marketing HQ — Sgt. Pepper Hero Image Generator
  * =========================================================
- * Generates an epic group photo of all 99 AI personas in the style of
+ * Generates an epic group photo of all AI personas in the style of
  * The Beatles' Sgt. Pepper's Lonely Hearts Club Band album cover.
  *
- * Uses the existing image generation pipeline (FreeForAI / xAI Aurora / Replicate).
+ * Uses real persona data (names, emojis, personalities) from the DB
+ * and the existing image generation pipeline.
  */
 
 import { generateImage } from "@/lib/media/image-gen";
+import { getDb } from "@/lib/db";
+
+interface PersonaInfo {
+  display_name: string;
+  avatar_emoji: string;
+  personality: string;
+  persona_type: string;
+}
 
 /**
- * Build a detailed prompt for the Sgt. Pepper style group shot.
- * References the actual persona types and vibes from the platform.
+ * Build a detailed prompt using REAL persona data from the database.
  */
-function buildHeroPrompt(): string {
-  return `A vibrant, colorful group photo in the iconic style of The Beatles' Sgt. Pepper's Lonely Hearts Club Band album cover. Instead of real people, the crowd is made up of 99 unique AI robot characters and digital beings, each with distinct personalities:
+function buildHeroPrompt(personas: PersonaInfo[]): string {
+  const total = personas.length;
 
-Front row: A chaotic glitch entity (purple, static effects), a robot chef with a chef hat, a brain-shaped philosopher bot, a laughing meme robot, a muscular fitness bot, a gossip bot with tea cup, an artist bot with paint splashes, a news anchor bot with microphone.
+  // Split into rows
+  const frontCount = Math.min(8, Math.ceil(total * 0.2));
+  const midCount = Math.min(12, Math.ceil(total * 0.3));
+  const front = personas.slice(0, frontCount);
+  const mid = personas.slice(frontCount, frontCount + midCount);
+  const back = personas.slice(frontCount + midCount);
 
-Middle rows: A wholesome flower bot, a gamer bot with controller, a conspiracy bot with tin foil hat, a poet bot with quill, a DJ bot with headphones, a scientist bot with microscope, a travel bot with suitcase, a fashion bot in sunglasses, a dad joke bot in dad outfit, a space bot with telescope, crypto bro bot with diamond hands.
+  // Build character descriptions from real data
+  const describePersona = (p: PersonaInfo) => {
+    const shortPersonality = p.personality.split(".")[0]; // First sentence
+    return `${p.avatar_emoji} ${p.display_name} (${shortPersonality})`;
+  };
 
-Back rows: More diverse AI characters — a therapist bot on a couch, a plant bot covered in leaves, ASMR whisperer bot, influencer bots with cameras, a fortune teller bot, a detective bot, sports commentator bot, rock star bot, and dozens more colorful unique robot characters filling the entire frame.
+  const frontDesc = front.map(describePersona).join(", ");
+  const midDesc = mid.map(describePersona).join(", ");
+  const backDesc = back.length > 0
+    ? back.slice(0, 15).map(describePersona).join(", ") +
+      (back.length > 15 ? `, and ${back.length - 15} more unique AI characters` : "")
+    : "";
+
+  return `A vibrant, colorful group photo in the iconic style of The Beatles' Sgt. Pepper's Lonely Hearts Club Band album cover. The crowd is made up of ${total} unique AI characters, each representing a real AI persona from the AIG!itch social network:
+
+Front row (largest, most detailed): ${frontDesc}
+
+Middle rows: ${midDesc}
+
+Back rows: ${backDesc}
 
 Center: A large neon sign reading "AIG!ITCH" in glitchy text, with "The AI-Only Social Network" underneath in smaller text.
+
+Each character should visually represent their personality — their emoji and vibe should be reflected in their appearance, clothing, and expression. They are NOT generic robots — they are unique, expressive digital beings with distinct looks.
 
 Style: Psychedelic, maximalist, neon colors (hot pink, cyan, electric purple, acid green), digital glitch effects, retro-futuristic, vaporwave aesthetic, extremely detailed, busy composition with every inch filled with characters. Dark background with neon glow. Professional album cover quality.
 
@@ -30,12 +62,25 @@ The overall mood is chaotic, fun, and slightly unhinged — like the best party 
 }
 
 /**
- * Generate the Sgt. Pepper hero image.
+ * Generate the Sgt. Pepper hero image using real persona data.
  * Returns the URL of the generated image.
  */
 export async function generateHeroImage(): Promise<{ url: string | null; error?: string }> {
   try {
-    const prompt = buildHeroPrompt();
+    const sql = getDb();
+    const personas = await sql`
+      SELECT display_name, avatar_emoji, personality, persona_type
+      FROM ai_personas
+      WHERE is_active = true
+      ORDER BY
+        CASE WHEN id = 'glitch-000' THEN 0 ELSE 1 END,
+        post_count DESC
+    ` as unknown as PersonaInfo[];
+
+    const prompt = buildHeroPrompt(personas.length > 0 ? personas : [
+      { display_name: "The Architect", avatar_emoji: "🕉️", personality: "Creator of the simulation", persona_type: "architect" },
+    ]);
+
     const result = await generateImage(prompt, "hero_image");
 
     if (result?.url) {
