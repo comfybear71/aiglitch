@@ -94,6 +94,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(result);
     }
 
+    case "collect_metrics": {
+      const result = await collectAllMetrics();
+      return NextResponse.json({ ok: true, ...result });
+    }
+
     default:
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }

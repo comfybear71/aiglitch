@@ -1379,12 +1379,7 @@ export default function AdminDashboard() {
   const collectMetrics = async () => {
     setMktCollecting(true);
     try {
-      const form = new FormData();
-      form.append("action", "collect_metrics");
-      const res = await fetch("/api/admin/mktg", {
-        method: "POST",
-        body: form,
-      });
+      const res = await fetch("/api/admin/mktg?action=collect_metrics");
       const data = await res.json();
       alert(`Metrics collected: ${data.updated || 0} posts updated, ${data.failed || 0} failed`);
       fetchMarketingData();
