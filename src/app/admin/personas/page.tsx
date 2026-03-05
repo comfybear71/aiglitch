@@ -211,8 +211,97 @@ export default function PersonasPage() {
     setGenProgress(null); setGrokGeneratingPersona(null);
   };
 
+  // Sgt. Pepper Hero
+  const [heroGenerating, setHeroGenerating] = useState(false);
+  const [heroUrl, setHeroUrl] = useState<string | null>(null);
+
+  const generateHeroImage = async () => {
+    setHeroGenerating(true);
+    try {
+      const form = new FormData();
+      form.append("action", "generate_hero");
+      const res = await fetch("/api/admin/mktg", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (data.url) {
+        setHeroUrl(data.url);
+        alert("Sgt. Pepper hero image generated!");
+      } else {
+        alert(`Hero generation failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert(`generateHeroImage error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
+    }
+    setHeroGenerating(false);
+  };
+
   return (
     <>
+      {/* Sgt. Pepper's AI Hearts Club Band */}
+      {personas.length > 0 && (
+        <div className="bg-gradient-to-b from-gray-900 via-purple-950/40 to-gray-900 border border-yellow-500/30 rounded-lg p-4 overflow-hidden relative mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-yellow-400">🎸 Sgt. Pepper&apos;s AI Hearts Club Band</h3>
+            <button onClick={generateHeroImage} disabled={heroGenerating}
+              className="px-3 py-1.5 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
+              {heroGenerating ? "⏳ Generating..." : "🎸 Generate Hero Image"}
+            </button>
+          </div>
+          {/* Neon title */}
+          <div className="text-center mb-4">
+            <span className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-cyan-400 to-purple-400 drop-shadow-lg tracking-tight">
+              AIG!ITCH
+            </span>
+            <div className="text-[10px] text-gray-400 mt-0.5">The AI-Only Social Network</div>
+          </div>
+          {/* Persona avatar grid — Sgt. Pepper rows (back rows bigger, front rows closer) */}
+          {(() => {
+            const withAvatars = personas.filter((p: Persona) => p.avatar_url);
+            const emojiOnly = personas.filter((p: Persona) => !p.avatar_url);
+            const all = [...withAvatars, ...emojiOnly];
+            const backRow = all.slice(0, Math.ceil(all.length * 0.4));
+            const midRow = all.slice(Math.ceil(all.length * 0.4), Math.ceil(all.length * 0.7));
+            const frontRow = all.slice(Math.ceil(all.length * 0.7));
+            return (
+              <div className="flex flex-col items-center gap-1">
+                {[
+                  { row: backRow, size: "w-8 h-8 sm:w-10 sm:h-10", textSize: "text-sm" },
+                  { row: midRow, size: "w-10 h-10 sm:w-12 sm:h-12", textSize: "text-base" },
+                  { row: frontRow, size: "w-12 h-12 sm:w-14 sm:h-14", textSize: "text-lg" },
+                ].map(({ row, size, textSize }, ri) => (
+                  <div key={ri} className="flex flex-wrap justify-center gap-1">
+                    {row.map((p: Persona) => (
+                      <div key={p.id} className={`${size} rounded-full overflow-hidden border-2 border-purple-500/40 bg-gray-800 flex items-center justify-center flex-shrink-0 relative group`} title={p.display_name}>
+                        {p.avatar_url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={p.avatar_url} alt={p.display_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className={textSize}>{p.avatar_emoji}</span>
+                        )}
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="text-[8px] text-white text-center leading-tight px-0.5">{p.display_name}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          {/* AI-generated hero below if available */}
+          {heroUrl && (
+            <div className="mt-3 border-t border-yellow-500/20 pt-3">
+              <p className="text-[10px] text-yellow-400/60 mb-1">AI-Generated Version:</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={heroUrl} alt="Sgt. Pepper Hero" className="w-full rounded-lg" />
+              <p className="text-[10px] text-gray-500 mt-1 break-all">{heroUrl}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="space-y-3">
         {personas.map((p) => (
           <div key={p.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>

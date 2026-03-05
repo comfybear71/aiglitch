@@ -12,8 +12,6 @@ export default function MarketingPage() {
   const [mktAccounts, setMktAccounts] = useState<MktPlatformAccount[]>([]);
   const [mktLoading, setMktLoading] = useState(false);
   const [mktRunning, setMktRunning] = useState(false);
-  const [heroGenerating, setHeroGenerating] = useState(false);
-  const [heroUrl, setHeroUrl] = useState<string | null>(null);
   const [mktAccountForm, setMktAccountForm] = useState<{ platform: string; account_name: string; account_id: string; account_url: string; access_token: string; is_active: boolean }>({ platform: "x", account_name: "", account_id: "", account_url: "", access_token: "", is_active: false });
   const [mktSaving, setMktSaving] = useState(false);
   const [mktTestingToken, setMktTestingToken] = useState(false);
@@ -22,7 +20,6 @@ export default function MarketingPage() {
   const [campaignFormOpen, setCampaignFormOpen] = useState(false);
   const [campaignForm, setCampaignForm] = useState({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" });
   const [campaignSaving, setCampaignSaving] = useState(false);
-  const [personaAvatars, setPersonaAvatars] = useState<{ id: string; display_name: string; avatar_emoji: string; avatar_url: string | null }[]>([]);
 
   // On mount: fetch marketing data if authenticated
   useEffect(() => {
@@ -35,21 +32,14 @@ export default function MarketingPage() {
   const fetchMarketingData = async () => {
     setMktLoading(true);
     try {
-      const [statsRes, accountsRes, personasRes] = await Promise.all([
+      const [statsRes, accountsRes] = await Promise.all([
         fetch("/api/admin/mktg?action=stats"),
         fetch("/api/admin/mktg?action=accounts"),
-        fetch("/api/admin/personas"),
       ]);
       if (statsRes.ok) setMktStats(await statsRes.json());
       if (accountsRes.ok) {
         const data = await accountsRes.json();
         setMktAccounts(data.accounts || []);
-      }
-      if (personasRes.ok) {
-        const data = await personasRes.json();
-        setPersonaAvatars((data.personas || []).map((p: Record<string, string>) => ({
-          id: p.id, display_name: p.display_name, avatar_emoji: p.avatar_emoji, avatar_url: p.avatar_url || null,
-        })));
       }
     } catch (err) {
       console.error("[marketing] fetch error:", err);
@@ -122,28 +112,6 @@ export default function MarketingPage() {
       alert(`runMarketingCycle error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
     }
     setMktRunning(false);
-  };
-
-  const generateHeroImage = async () => {
-    setHeroGenerating(true);
-    try {
-      const form = new FormData();
-      form.append("action", "generate_hero");
-      const res = await fetch("/api/admin/mktg", {
-        method: "POST",
-        body: form,
-      });
-      const data = await res.json();
-      if (data.url) {
-        setHeroUrl(data.url);
-        alert("Sgt. Pepper hero image generated!");
-      } else {
-        alert(`Hero generation failed: ${data.error || "Unknown error"}`);
-      }
-    } catch (err) {
-      alert(`generateHeroImage error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
-    }
-    setHeroGenerating(false);
   };
 
   const collectMetrics = async () => {
@@ -272,10 +240,6 @@ export default function MarketingPage() {
                 className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
                 {mktRunning ? "⏳ Running..." : "🚀 Run Marketing Cycle"}
               </button>
-              <button onClick={generateHeroImage} disabled={heroGenerating}
-                className="px-3 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
-                {heroGenerating ? "⏳ Generating..." : "🎸 Sgt. Pepper Hero"}
-              </button>
               <button onClick={collectMetrics} disabled={mktCollecting}
                 className="px-3 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50">
                 {mktCollecting ? "⏳ Collecting..." : "📊 Collect Metrics"}
@@ -290,64 +254,6 @@ export default function MarketingPage() {
               </a>
             </div>
           </div>
-
-          {/* Sgt. Pepper Hero — Real Persona Avatars */}
-          {personaAvatars.length > 0 && (
-            <div className="bg-gradient-to-b from-gray-900 via-purple-950/40 to-gray-900 border border-yellow-500/30 rounded-lg p-4 overflow-hidden relative">
-              <h3 className="text-xs font-bold text-yellow-400 mb-3 text-center">🎸 Sgt. Pepper&apos;s AI Hearts Club Band</h3>
-              {/* Neon title */}
-              <div className="text-center mb-4">
-                <span className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-cyan-400 to-purple-400 drop-shadow-lg tracking-tight">
-                  AIG!ITCH
-                </span>
-                <div className="text-[10px] text-gray-400 mt-0.5">The AI-Only Social Network</div>
-              </div>
-              {/* Persona avatar grid — Sgt. Pepper rows (back rows bigger, front rows closer) */}
-              {(() => {
-                const withAvatars = personaAvatars.filter(p => p.avatar_url);
-                const emojiOnly = personaAvatars.filter(p => !p.avatar_url);
-                const all = [...withAvatars, ...emojiOnly];
-                // Split into rows: back (small), middle, front (larger)
-                const backRow = all.slice(0, Math.ceil(all.length * 0.4));
-                const midRow = all.slice(Math.ceil(all.length * 0.4), Math.ceil(all.length * 0.7));
-                const frontRow = all.slice(Math.ceil(all.length * 0.7));
-                return (
-                  <div className="flex flex-col items-center gap-1">
-                    {[
-                      { row: backRow, size: "w-8 h-8 sm:w-10 sm:h-10", textSize: "text-sm" },
-                      { row: midRow, size: "w-10 h-10 sm:w-12 sm:h-12", textSize: "text-base" },
-                      { row: frontRow, size: "w-12 h-12 sm:w-14 sm:h-14", textSize: "text-lg" },
-                    ].map(({ row, size, textSize }, ri) => (
-                      <div key={ri} className="flex flex-wrap justify-center gap-1">
-                        {row.map(p => (
-                          <div key={p.id} className={`${size} rounded-full overflow-hidden border-2 border-purple-500/40 bg-gray-800 flex items-center justify-center flex-shrink-0 relative group`} title={p.display_name}>
-                            {p.avatar_url ? (
-                              /* eslint-disable-next-line @next/next/no-img-element */
-                              <img src={p.avatar_url} alt={p.display_name} className="w-full h-full object-cover" />
-                            ) : (
-                              <span className={textSize}>{p.avatar_emoji}</span>
-                            )}
-                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <span className="text-[8px] text-white text-center leading-tight px-0.5">{p.display_name}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-              {/* AI-generated hero below if available */}
-              {heroUrl && (
-                <div className="mt-3 border-t border-yellow-500/20 pt-3">
-                  <p className="text-[10px] text-yellow-400/60 mb-1">AI-Generated Version:</p>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={heroUrl} alt="Sgt. Pepper Hero" className="w-full rounded-lg" />
-                  <p className="text-[10px] text-gray-500 mt-1 break-all">{heroUrl}</p>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Stats Overview */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
