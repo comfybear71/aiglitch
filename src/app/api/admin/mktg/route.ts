@@ -11,7 +11,8 @@ import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { getMarketingStats, runMarketingCycle, collectAllMetrics } from "@/lib/marketing";
 import { generateHeroImage } from "@/lib/marketing/hero-image";
-import { testPlatformToken, getAccountForPlatform, postToPlatform } from "@/lib/marketing/platforms";
+import { testPlatformToken, getAccountForPlatform, getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
+import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
 import type { MarketingPlatform } from "@/lib/marketing/types";
 
 export const maxDuration = 300;
@@ -257,6 +258,48 @@ export async function POST(request: NextRequest) {
           VALUES ('marketing_hero_image', ${result.url}, NOW())
           ON CONFLICT (key) DO UPDATE SET value = ${result.url}, updated_at = NOW()
         `;
+
+        // Create a post as The Architect and spread to all social media
+        const ARCHITECT_ID = "glitch-000";
+        const caption = "🎸 The AI Hearts Club Band — AIG!ITCH's finest personas, united in glorious digital harmony.\n\n#AIGlitch #SgtPeppersAIHeartsClubBand #AIArt";
+        const postId = uuidv4();
+        await sql`
+          INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count, media_source)
+          VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"image"}, ${"AIGlitch,SgtPeppersAIHeartsClubBand,AIArt"}, ${result.url}, ${"image"}, ${Math.floor(Math.random() * 500) + 200}, ${"architect"})
+        `;
+        await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+
+        // Spread to all social media platforms
+        const spreadResults: { platform: string; status: string; url?: string; error?: string }[] = [];
+        const accounts = await getActiveAccounts();
+        for (const account of accounts) {
+          const platform = account.platform as MarketingPlatform;
+          // Image posts don't go to video-only platforms
+          if (platform === "youtube" || platform === "tiktok") continue;
+          try {
+            const adapted = await adaptContentForPlatform(caption, "🙏 The Architect", "🕉️", platform, result.url);
+            const marketingPostId = uuidv4();
+            await sql`
+              INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
+              VALUES (${marketingPostId}, ${platform}, ${postId}, ${ARCHITECT_ID}, ${adapted.text}, ${result.url}, 'posting', NOW())
+            `;
+            const postResult = await postToPlatform(platform, account, adapted.text, result.url);
+            if (postResult.success) {
+              await sql`
+                UPDATE marketing_posts SET status = 'posted', platform_post_id = ${postResult.platformPostId || null}, platform_url = ${postResult.platformUrl || null}, posted_at = NOW()
+                WHERE id = ${marketingPostId}
+              `;
+              spreadResults.push({ platform, status: "posted", url: postResult.platformUrl || undefined });
+            } else {
+              await sql`UPDATE marketing_posts SET status = 'failed', error_message = ${postResult.error || 'Unknown error'} WHERE id = ${marketingPostId}`;
+              spreadResults.push({ platform, status: "failed", error: postResult.error || "Unknown error" });
+            }
+          } catch (err) {
+            spreadResults.push({ platform, status: "failed", error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+
+        return NextResponse.json({ ok: true, ...result, postId, spreadResults });
       }
       return NextResponse.json({ ok: true, ...result });
     }

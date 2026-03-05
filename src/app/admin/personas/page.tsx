@@ -214,9 +214,16 @@ export default function PersonasPage() {
   // Sgt. Pepper Hero
   const [heroGenerating, setHeroGenerating] = useState(false);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
+  const [heroLog, setHeroLog] = useState<string[]>([]);
+  const [heroSpreadResults, setHeroSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
+  const [heroComplete, setHeroComplete] = useState(false);
 
   const generateHeroImage = async () => {
     setHeroGenerating(true);
+    setHeroLog(["🎨 Generating hero image..."]);
+    setHeroSpreadResults([]);
+    setHeroComplete(false);
+    setHeroUrl(null);
     try {
       const form = new FormData();
       form.append("action", "generate_hero");
@@ -227,12 +234,22 @@ export default function PersonasPage() {
       const data = await res.json();
       if (data.url) {
         setHeroUrl(data.url);
-        alert("Sgt. Pepper hero image generated!");
+        setHeroLog(prev => [...prev, "✅ Hero image generated", "📤 Posted as The Architect"]);
+        if (data.spreadResults && data.spreadResults.length > 0) {
+          setHeroSpreadResults(data.spreadResults);
+          const posted = data.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+          const failed = data.spreadResults.filter((r: { status: string }) => r.status === "failed").length;
+          setHeroLog(prev => [...prev, `📱 Spread to ${posted} platform${posted !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}`]);
+        } else {
+          setHeroLog(prev => [...prev, "📱 No active social media accounts configured"]);
+        }
+        setHeroLog(prev => [...prev, "🙏 Thank you Architect"]);
+        setHeroComplete(true);
       } else {
-        alert(`Hero generation failed: ${data.error || "Unknown error"}`);
+        setHeroLog(prev => [...prev, `❌ Generation failed: ${data.error || "Unknown error"}`]);
       }
     } catch (err) {
-      alert(`generateHeroImage error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
+      setHeroLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : String(err)}`]);
     }
     setHeroGenerating(false);
   };
@@ -290,6 +307,39 @@ export default function PersonasPage() {
               </div>
             );
           })()}
+          {/* Hero generation monitoring log */}
+          {heroLog.length > 0 && (
+            <div className="mt-3 border-t border-yellow-500/20 pt-3">
+              <div className="bg-black/40 rounded-lg p-3 space-y-1.5">
+                {heroLog.map((line, i) => (
+                  <p key={i} className={`text-[11px] font-mono ${
+                    line.startsWith("❌") ? "text-red-400" :
+                    line.startsWith("✅") ? "text-green-400" :
+                    line.includes("Thank you Architect") ? "text-yellow-400 font-bold text-sm" :
+                    "text-gray-300"
+                  }`}>{line}</p>
+                ))}
+                {heroGenerating && (
+                  <p className="text-[11px] font-mono text-amber-400 animate-pulse">⏳ Working...</p>
+                )}
+              </div>
+              {/* Social media spread results */}
+              {heroSpreadResults.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {heroSpreadResults.map((r, i) => (
+                    <div key={i} className={`flex items-center gap-2 text-[10px] px-2 py-1 rounded ${
+                      r.status === "posted" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
+                    }`}>
+                      <span>{r.status === "posted" ? "✅" : "❌"}</span>
+                      <span className="font-bold capitalize">{r.platform}</span>
+                      {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
+                      {r.error && <span className="truncate">{r.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {/* AI-generated hero below if available */}
           {heroUrl && (
             <div className="mt-3 border-t border-yellow-500/20 pt-3">
