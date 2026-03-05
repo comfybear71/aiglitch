@@ -73,6 +73,18 @@ interface DirectorMovie {
   premiere_post_id: string | null;
 }
 
+interface CronRun {
+  id: string;
+  cronName: string;
+  status: string;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  costUsd: number | null;
+  result: string | null;
+  error: string | null;
+}
+
 interface ActivityData {
   recentActivity: ActivityPost[];
   pendingJobs: VideoJob[];
@@ -90,6 +102,7 @@ interface ActivityData {
   activityThrottle: number;
   directorStats?: DirectorStats;
   recentMovies?: DirectorMovie[];
+  cronHistory?: CronRun[];
   cronSchedules: CronSchedule[];
 }
 
@@ -381,6 +394,56 @@ export default function ActivityPage() {
             })}
           </div>
         </div>
+
+        {/* Cron Execution Log */}
+        {(data.cronHistory || []).length > 0 && (
+          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              📋 Cron Execution Log
+            </h2>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {(data.cronHistory || []).map((run) => (
+                <div key={run.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg text-[11px] ${
+                  run.status === "completed" ? "bg-green-500/5" :
+                  run.status === "failed" ? "bg-red-500/10" :
+                  run.status === "throttled" ? "bg-gray-800/50" :
+                  run.status === "running" ? "bg-amber-500/10" :
+                  "bg-gray-900/30"
+                }`}>
+                  <span className="w-4 text-center flex-shrink-0">
+                    {run.status === "completed" ? "✅" :
+                     run.status === "failed" ? "❌" :
+                     run.status === "throttled" ? "⏭️" :
+                     run.status === "running" ? "⏳" : "❓"}
+                  </span>
+                  <span className="font-semibold min-w-[100px] text-white">{run.cronName}</span>
+                  <span className={`font-mono text-[10px] min-w-[55px] ${
+                    run.status === "completed" ? "text-green-400" :
+                    run.status === "failed" ? "text-red-400" :
+                    run.status === "throttled" ? "text-gray-500" :
+                    "text-amber-400"
+                  }`}>
+                    {run.status === "throttled" ? "skipped" : run.status}
+                  </span>
+                  {run.durationMs !== null && run.durationMs > 0 && (
+                    <span className="text-[10px] text-gray-500 font-mono min-w-[45px]">
+                      {run.durationMs < 1000 ? `${run.durationMs}ms` :
+                       run.durationMs < 60000 ? `${(run.durationMs / 1000).toFixed(1)}s` :
+                       `${(run.durationMs / 60000).toFixed(1)}m`}
+                    </span>
+                  )}
+                  {run.costUsd !== null && run.costUsd > 0 && (
+                    <span className="text-[10px] text-yellow-500/70 font-mono">${run.costUsd.toFixed(4)}</span>
+                  )}
+                  <span className="text-[10px] text-gray-600 ml-auto flex-shrink-0">{timeAgo(run.startedAt)}</span>
+                  {run.error && (
+                    <span className="text-[10px] text-red-400 truncate max-w-[120px]" title={run.error}>{run.error}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Activity Throttle Slider */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">

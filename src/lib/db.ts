@@ -574,4 +574,26 @@ export async function runMigrations() {
       AFTER INSERT OR UPDATE OF hashtags ON posts
       FOR EACH ROW EXECUTE FUNCTION sync_post_hashtags()`
   );
+
+  // ── Batch 7: cron_runs — persistent cron execution log ──
+  await Promise.allSettled([
+    safeMigrate(sql, "table_cron_runs", () =>
+      sql`CREATE TABLE IF NOT EXISTS cron_runs (
+        id TEXT PRIMARY KEY,
+        cron_name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running',
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        finished_at TIMESTAMPTZ,
+        duration_ms INTEGER,
+        cost_usd REAL,
+        result TEXT,
+        error TEXT
+      )`),
+  ]);
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_cron_runs_name_started", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_cron_runs_name_started ON cron_runs(cron_name, started_at DESC)`),
+    safeMigrate(sql, "idx_cron_runs_started", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_cron_runs_started ON cron_runs(started_at DESC)`),
+  ]);
 }

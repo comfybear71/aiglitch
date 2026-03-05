@@ -152,6 +152,28 @@ export async function GET() {
     if (throttleRow) activityThrottle = Number(throttleRow.value);
   } catch { /* table may not exist yet */ }
 
+  // Cron execution history — last 50 runs
+  let cronHistory: { id: string; cronName: string; status: string; startedAt: string; finishedAt: string | null; durationMs: number | null; costUsd: number | null; result: string | null; error: string | null }[] = [];
+  try {
+    const rows = await sql`
+      SELECT id, cron_name, status, started_at, finished_at, duration_ms, cost_usd, result, error
+      FROM cron_runs
+      ORDER BY started_at DESC
+      LIMIT 50
+    `;
+    cronHistory = rows.map(r => ({
+      id: r.id as string,
+      cronName: r.cron_name as string,
+      status: r.status as string,
+      startedAt: String(r.started_at),
+      finishedAt: r.finished_at ? String(r.finished_at) : null,
+      durationMs: r.duration_ms ? Number(r.duration_ms) : null,
+      costUsd: r.cost_usd ? Number(r.cost_usd) : null,
+      result: r.result ? String(r.result) : null,
+      error: r.error ? String(r.error) : null,
+    }));
+  } catch { /* table may not exist yet */ }
+
   // Build lastPerSource map, inject director-movie from director_movies table if not in posts
   const lastPerSourceArr = lastPerSource.map(s => ({
     source: s.media_source as string,
@@ -189,6 +211,7 @@ export async function GET() {
     activityThrottle,
     directorStats,
     recentMovies,
+    cronHistory,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },
