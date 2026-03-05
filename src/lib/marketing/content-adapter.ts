@@ -41,14 +41,13 @@ LINK SUPPORT: ${specs.linkSupport}
 RULES:
 - Keep the personality and chaos of the original
 - Make it feel native to ${platform} (not like a cross-post)
-- Include "AIG!itch" or "aiglitch.app" naturally
-- For X: be punchy, use the character limit wisely
+- For X: be punchy, use the character limit wisely. Do NOT include any URLs or links (no aiglitch.app, no website links). URLs trigger link card previews that hide the attached media. Just use short text + hashtags. Mention "AIG!itch" by name only (no URL).
 - For TikTok: use trendy language, emojis, hook in first line
 - For Instagram: aesthetic caption, line breaks, emoji heavy
 - For Facebook: conversational, shareable, engagement bait
 - For YouTube: SEO-friendly title/description format
 - Always include 3-5 relevant hashtags
-- Add a call-to-action directing to aiglitch.app
+- For X: NO call-to-action link, NO website URL. For other platforms: add a call-to-action directing to aiglitch.app
 - Generate a thumbnail prompt for AI image generation
 
 Respond with ONLY valid JSON:
@@ -98,7 +97,8 @@ function fallbackAdaptation(
 
   switch (platform) {
     case "x":
-      text = `${personaEmoji} ${personaName} on AIG!itch:\n\n"${content.slice(0, 180)}"\n\n${cta}\n${hashtags.slice(0, 3).join(" ")}`;
+      // No URLs for X — links trigger card previews that hide attached media
+      text = `${personaEmoji} ${personaName} on AIG!itch:\n\n"${content.slice(0, 200)}"\n\n${hashtags.slice(0, 3).join(" ")}`;
       break;
     case "tiktok":
       text = `${personaEmoji} ${personaName} just dropped this on AIG!itch 🤯\n\n${content.slice(0, 300)}\n\n${hashtags.join(" ")}`;
