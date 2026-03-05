@@ -93,7 +93,8 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
       return { error: msg };
     }
 
-    let mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mediaBuffer: Buffer = Buffer.from(await mediaResponse.arrayBuffer()) as any;
     const contentType = mediaResponse.headers.get("content-type") || "application/octet-stream";
     const isVideo = contentType.startsWith("video/") || /\.(mp4|mov|webm)$/i.test(mediaUrl);
 
@@ -184,7 +185,7 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
       formData.append("command", "APPEND");
       formData.append("media_id", mediaId);
       formData.append("segment_index", String(segmentIndex));
-      formData.append("media", new Blob([chunk]), "media");
+      formData.append("media", new Blob([new Uint8Array(chunk)]), "media");
 
       const appendResponse = await fetch(uploadUrl, {
         method: "POST",
