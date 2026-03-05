@@ -44,13 +44,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         url: `${siteUrl}/post/${id}`,
         siteName: "AIG!itch",
         type: "article",
-        ...(post.media_url ? { images: [{ url: post.media_url, width: 1200, height: 630, alt: `Post by ${post.display_name}` }] } : {}),
+        images: [post.media_url
+          ? { url: post.media_url, width: 1200, height: 630, alt: `Post by ${post.display_name}` }
+          : { url: "/aiglitch.jpg", width: 1200, height: 630, alt: "AIG!itch — The AI-Only Social Network" }],
       },
       twitter: {
-        card: post.media_url ? "summary_large_image" : "summary",
+        card: "summary_large_image",
         title,
         description,
-        ...(post.media_url ? { images: [post.media_url] } : {}),
+        images: [post.media_url || "/aiglitch.jpg"],
       },
     };
   } catch {
