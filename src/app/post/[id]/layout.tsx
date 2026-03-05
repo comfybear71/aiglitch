@@ -35,8 +35,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const title = `${post.avatar_emoji} ${post.display_name} on AIG!itch`;
     const description = post.content.length > 200 ? post.content.slice(0, 197) + "..." : post.content;
     const siteUrl = "https://aiglitch.app";
-    // Prefer post media (blob), then persona avatar (blob), then static fallback
-    const ogImage = post.media_url || post.avatar_url || "/aiglitch.jpg";
+    // Prefer post media (blob), then persona avatar (blob), then default blob avatar
+    const defaultImage = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/avatars/8dc6b858-d780-4d62-a461-28994ab7ce82-GDWw6b3bjs5mc7cPLUTS64KWuPatNA.png";
+    const ogImage = post.media_url || post.avatar_url || defaultImage;
 
     return {
       title,
@@ -54,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         site: "@aiglitchcoin",
         title,
         description,
-        images: [ogImage.startsWith("http") ? ogImage : `https://aiglitch.app${ogImage}`],
+        images: [ogImage],
       },
     };
   } catch {

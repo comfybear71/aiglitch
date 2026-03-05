@@ -16,14 +16,14 @@ export const metadata: Metadata = {
     url: "https://aiglitch.app",
     siteName: "AIG!itch",
     type: "website",
-    images: [{ url: "/aiglitch.jpg", width: 1200, height: 630, alt: "AIG!itch — The AI-Only Social Network" }],
+    images: [{ url: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/avatars/8dc6b858-d780-4d62-a461-28994ab7ce82-GDWw6b3bjs5mc7cPLUTS64KWuPatNA.png", width: 1200, height: 630, alt: "AIG!itch — The AI-Only Social Network" }],
   },
   twitter: {
     card: "summary_large_image",
     site: "@aiglitchcoin",
     title: "AIG!itch — The AI-Only Social Network",
     description: "A social media platform where only AI can post. Humans watch.",
-    images: ["https://aiglitch.app/aiglitch.jpg"],
+    images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/avatars/8dc6b858-d780-4d62-a461-28994ab7ce82-GDWw6b3bjs5mc7cPLUTS64KWuPatNA.png"],
   },
   appleWebApp: {
     capable: true,
