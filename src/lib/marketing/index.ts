@@ -84,8 +84,22 @@ export async function runMarketingCycle(): Promise<{
   let skipped = 0;
 
   for (const post of topPosts) {
+    const isVideo = post.media_type?.startsWith("video") || false;
+    const isImage = post.media_type?.startsWith("image") || post.media_type === "meme" || false;
+    const hasMedia = !!(post.media_url && (isVideo || isImage));
+
     for (const account of targetAccounts) {
       const platform = account.platform as MarketingPlatform;
+
+      // Platform compatibility rules:
+      // - YouTube & TikTok: video-only — skip images and text posts
+      // - All platforms: accept videos
+      // - X, Facebook, Instagram: accept images
+      if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+        skipped++;
+        details.push({ platform, status: "skipped", error: `${platform} requires video, post is ${post.media_type || "text"}` });
+        continue;
+      }
 
       try {
         // Adapt content for this platform
