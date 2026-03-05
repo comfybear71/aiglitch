@@ -103,6 +103,7 @@ interface ActivityData {
   directorStats?: DirectorStats;
   recentMovies?: DirectorMovie[];
   cronHistory?: CronRun[];
+  lastCronRuns?: { cronName: string; lastStartedAt: string; lastStatus: string }[];
   cronSchedules: CronSchedule[];
 }
 
@@ -206,30 +207,54 @@ export default function ActivityPage() {
       const now = Date.now();
       const newCountdowns: Record<string, number> = {};
 
+      // Map cron schedule paths to their actual cron_name used in cronStart()
+      const pathToCronName: Record<string, string> = {
+        "/api/generate-persona-content": "persona-content",
+        "/api/generate": "general-content",
+        "/api/generate-director-movie": "director-movie",
+        "/api/ai-trading": "ai-trading",
+        "/api/budju-trading": "budju-trading",
+        "/api/generate-avatars": "avatar-gen",
+        "/api/generate-topics": "topics-news",
+        "/api/generate-ads": "ads",
+      };
+
+      // Fallback: map paths to post media_source (legacy, used if no cron_runs data)
+      const sourceMap: Record<string, string[]> = {
+        "/api/generate-persona-content": ["persona-content-cron"],
+        "/api/generate": ["text-only"],
+        "/api/generate-director-movie": ["director-movie"],
+        "/api/ai-trading": ["ai-trading"],
+        "/api/budju-trading": ["budju-trading"],
+        "/api/generate-avatars": ["avatar-gen"],
+        "/api/generate-topics": ["breaking-news", "topic-gen"],
+        "/api/generate-ads": ["ad-text-fallback", "ad-video"],
+      };
+
       for (const cron of data.cronSchedules) {
         const intervalMs = cron.interval * 60 * 1000;
-        // Map each cron path to its specific post media_source values
-        const sourceMap: Record<string, string[]> = {
-          "/api/generate-persona-content": ["persona-content-cron"],
-          "/api/generate": ["text-only"],
-          "/api/generate-director-movie": ["director-movie"],
-          "/api/ai-trading": ["ai-trading"],
-          "/api/budju-trading": ["budju-trading"],
-          "/api/generate-avatars": ["avatar-gen"],
-          "/api/generate-topics": ["breaking-news", "topic-gen"],
-          "/api/generate-ads": ["ad-text-fallback", "ad-video"],
-        };
-        const sources = sourceMap[cron.path] || [];
-        const lastEntry = data.lastPerSource.find(s => sources.includes(s.source));
+        const cronName = pathToCronName[cron.path];
 
-        if (lastEntry) {
-          const lastRun = new Date(lastEntry.lastAt).getTime();
+        // Prefer actual cron execution data from cron_runs table
+        const cronRun = cronName && data.lastCronRuns?.find(r => r.cronName === cronName);
+
+        if (cronRun) {
+          const lastRun = new Date(cronRun.lastStartedAt).getTime();
           const elapsed = now - lastRun;
           const remaining = Math.max(0, intervalMs - elapsed);
           newCountdowns[cron.path] = remaining;
         } else {
-          // No activity data — show as waiting (half interval remaining) instead of "running"
-          newCountdowns[cron.path] = -1; // sentinel: no data available
+          // Fallback to post-based estimation
+          const sources = sourceMap[cron.path] || [];
+          const lastEntry = data.lastPerSource.find(s => sources.includes(s.source));
+          if (lastEntry) {
+            const lastRun = new Date(lastEntry.lastAt).getTime();
+            const elapsed = now - lastRun;
+            const remaining = Math.max(0, intervalMs - elapsed);
+            newCountdowns[cron.path] = remaining;
+          } else {
+            newCountdowns[cron.path] = -1; // no data available
+          }
         }
       }
       setCountdowns(newCountdowns);
@@ -348,7 +373,21 @@ export default function ActivityPage() {
               const intervalMs = cron.interval * 60 * 1000;
               const noData = remaining === -1;
               const isRunning = !noData && remaining <= 0;
-              // Find matching source entry to show activity count
+              // Map path to cron_name for matching cron_runs data
+              const pathToCronName: Record<string, string> = {
+                "/api/generate-persona-content": "persona-content",
+                "/api/generate": "general-content",
+                "/api/generate-director-movie": "director-movie",
+                "/api/ai-trading": "ai-trading",
+                "/api/budju-trading": "budju-trading",
+                "/api/generate-avatars": "avatar-gen",
+                "/api/generate-topics": "topics-news",
+                "/api/generate-ads": "ads",
+              };
+              const cronName = pathToCronName[cron.path] || "";
+              const lastRun = cronName ? data.lastCronRuns?.find(r => r.cronName === cronName) : undefined;
+              const lastWasThrottled = lastRun?.lastStatus === "throttled";
+              // Fallback to post source for activity count
               const sourceMap: Record<string, string[]> = {
                 "/api/generate-persona-content": ["persona-content-cron"],
                 "/api/generate": ["text-only"],
@@ -365,18 +404,24 @@ export default function ActivityPage() {
                 <div key={cron.path} className="space-y-1">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : noData ? "bg-gray-700" : "bg-gray-600"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : lastWasThrottled ? "bg-yellow-500" : noData ? "bg-gray-700" : "bg-gray-600"}`} />
                       <span className="text-sm font-semibold">{cron.name}</span>
                       <span className="text-[10px] text-gray-600">every {cron.interval}{cron.unit[0]}</span>
                       {matchedSource && (
                         <span className="text-[9px] text-gray-600">{matchedSource.total} total</span>
                       )}
+                      {lastWasThrottled && (
+                        <span className="text-[9px] text-yellow-500 font-bold">THROTTLED</span>
+                      )}
+                      {lastRun && (
+                        <span className="text-[9px] text-gray-600">ran {timeAgo(lastRun.lastStartedAt)}</span>
+                      )}
                     </div>
                     <span className={`text-sm font-mono font-bold ${getCountdownColor(remaining, intervalMs)}`}>
                       {noData ? (
-                        <span className="text-gray-500">Waiting...</span>
+                        <span className="text-gray-500">No runs yet</span>
                       ) : isRunning ? (
-                        <span className="text-green-400 animate-pulse">⚡ RUNNING</span>
+                        <span className="text-green-400 animate-pulse">⚡ DUE</span>
                       ) : (
                         formatCountdown(remaining)
                       )}
@@ -385,7 +430,7 @@ export default function ActivityPage() {
                   {/* Progress bar */}
                   <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-1000 ${noData ? "bg-gray-700" : isRunning ? "bg-green-500 animate-pulse" : "bg-gradient-to-r from-purple-500 to-pink-500"}`}
+                      className={`h-full rounded-full transition-all duration-1000 ${noData ? "bg-gray-700" : isRunning ? "bg-green-500 animate-pulse" : lastWasThrottled ? "bg-yellow-500/60" : "bg-gradient-to-r from-purple-500 to-pink-500"}`}
                       style={{ width: getProgressWidth(remaining, intervalMs) }}
                     />
                   </div>

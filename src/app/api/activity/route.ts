@@ -152,8 +152,9 @@ export async function GET() {
     if (throttleRow) activityThrottle = Number(throttleRow.value);
   } catch { /* table may not exist yet */ }
 
-  // Cron execution history — last 50 runs
+  // Cron execution history — last 50 runs + last run per cron name
   let cronHistory: { id: string; cronName: string; status: string; startedAt: string; finishedAt: string | null; durationMs: number | null; costUsd: number | null; result: string | null; error: string | null }[] = [];
+  let lastCronRuns: { cronName: string; lastStartedAt: string; lastStatus: string }[] = [];
   try {
     const rows = await sql`
       SELECT id, cron_name, status, started_at, finished_at, duration_ms, cost_usd, result, error
@@ -171,6 +172,17 @@ export async function GET() {
       costUsd: r.cost_usd ? Number(r.cost_usd) : null,
       result: r.result ? String(r.result) : null,
       error: r.error ? String(r.error) : null,
+    }));
+    // Most recent run for each cron (for accurate countdown timers)
+    const lastRuns = await sql`
+      SELECT DISTINCT ON (cron_name) cron_name, started_at, status
+      FROM cron_runs
+      ORDER BY cron_name, started_at DESC
+    `;
+    lastCronRuns = lastRuns.map(r => ({
+      cronName: r.cron_name as string,
+      lastStartedAt: String(r.started_at),
+      lastStatus: r.status as string,
     }));
   } catch { /* table may not exist yet */ }
 
@@ -212,6 +224,7 @@ export async function GET() {
     directorStats,
     recentMovies,
     cronHistory,
+    lastCronRuns,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },
