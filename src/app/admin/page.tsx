@@ -1382,33 +1382,16 @@ export default function AdminDashboard() {
   const collectMetrics = async () => {
     setMktCollecting(true);
     try {
-      const url = "/api/admin/mktg?action=collect_metrics&_t=" + Date.now();
-      let res: Response;
-      try {
-        res = await fetch(url);
-      } catch (fetchErr) {
-        alert(`Fetch failed (collectMetrics GET ${url}):\n${fetchErr instanceof Error ? fetchErr.message + "\n" + fetchErr.stack : String(fetchErr)}`);
-        setMktCollecting(false);
-        return;
-      }
-      const text = await res.text();
-      let data: Record<string, unknown>;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        alert(`JSON parse failed (collectMetrics):\nStatus: ${res.status}\nBody: ${text.slice(0, 300)}`);
-        setMktCollecting(false);
-        return;
-      }
+      const res = await fetch("/api/admin/mktg?action=collect_metrics&_t=" + Date.now());
+      const data = await res.json();
       if (data.error) {
-        alert(`collectMetrics server error:\n${data.error}\n${data.stack || ""}`);
-        setMktCollecting(false);
-        return;
+        alert(`Metrics error: ${data.error}`);
+      } else {
+        alert(`Metrics collected: ${data.updated || 0} posts updated, ${data.failed || 0} failed`);
       }
-      alert(`Metrics collected: ${data.updated || 0} posts updated, ${data.failed || 0} failed`);
       fetchMarketingData();
     } catch (err) {
-      alert(`collectMetrics error: ${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
+      alert(`Metrics error: ${err instanceof Error ? err.message : String(err)}`);
     }
     setMktCollecting(false);
   };

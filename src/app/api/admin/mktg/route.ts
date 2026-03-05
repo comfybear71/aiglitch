@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
       } catch (err) {
         console.error("[collect_metrics GET] crash:", err);
         return NextResponse.json(
-          { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+          { error: err instanceof Error ? err.message : String(err) },
           { status: 500 }
         );
       }
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         console.error("[collect_metrics POST] crash:", err);
         return NextResponse.json(
-          { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+          { error: err instanceof Error ? err.message : String(err) },
           { status: 500 }
         );
       }
