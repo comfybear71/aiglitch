@@ -10,7 +10,7 @@ export default function MediaPage() {
   // Media state
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean }[] }>({ total: 0, done: 0, current: "", results: [] });
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean; error?: string }[] }>({ total: 0, done: 0, current: "", results: [] });
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
@@ -71,7 +71,7 @@ export default function MediaPage() {
   }, [authenticated]);
 
   // Server-side upload helper — used for small files and as fallback for failed client uploads
-  const serverUploadFile = async (file: File): Promise<boolean> => {
+  const serverUploadFile = async (file: File): Promise<{ ok: boolean; error?: string }> => {
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -83,17 +83,15 @@ export default function MediaPage() {
       const res = await fetch("/api/admin/media", { method: "POST", body: formData });
       if (res.ok) {
         const data = await res.json().catch(() => null);
-        if (data?.results?.length > 0) {
-          return !data.results[0].error;
+        if (data?.results?.length > 0 && data.results[0].error) {
+          return { ok: false, error: data.results[0].error };
         }
-        return true;
+        return { ok: true };
       }
       const errText = await res.text().catch(() => `HTTP ${res.status}`);
-      console.error(`Server upload failed for ${file.name}:`, errText);
-      return false;
+      return { ok: false, error: `Server ${res.status}: ${errText.slice(0, 200)}` };
     } catch (err) {
-      console.error(`Server upload error for ${file.name}:`, err);
-      return false;
+      return { ok: false, error: `Network error: ${err instanceof Error ? err.message : String(err)}` };
     }
   };
 
@@ -103,7 +101,7 @@ export default function MediaPage() {
     setUploading(true);
     setUploadProgress({ total: files.length, done: 0, current: files[0].name, results: [] });
 
-    const allResults: { name: string; ok: boolean }[] = [];
+    const allResults: { name: string; ok: boolean; error?: string }[] = [];
     const MAX_SERVER_SIZE = 4 * 1024 * 1024; // 4MB - Vercel serverless body limit
 
     for (let i = 0; i < files.length; i++) {
@@ -122,6 +120,7 @@ export default function MediaPage() {
         if (useClientUpload) {
           // Large files: use Vercel Blob client upload
           let blobUrl: string | null = null;
+          let blobError = "";
 
           try {
             // Sanitize filename — iOS generates very long path-like names that can break uploads
@@ -139,7 +138,7 @@ export default function MediaPage() {
             });
             blobUrl = blob.url;
           } catch (uploadErr) {
-            console.warn(`Blob client upload failed for ${file.name}:`, uploadErr);
+            blobError = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
             if (uploadErr && typeof uploadErr === "object" && "url" in uploadErr) {
               blobUrl = (uploadErr as { url: string }).url;
             }
@@ -161,23 +160,21 @@ export default function MediaPage() {
             if (saveRes.ok) {
               allResults.push({ name: file.name, ok: true });
             } else {
-              console.error(`DB save failed for ${file.name}:`, await saveRes.text());
-              allResults.push({ name: file.name, ok: false });
+              const saveErr = await saveRes.text().catch(() => `HTTP ${saveRes.status}`);
+              allResults.push({ name: file.name, ok: false, error: `DB save: ${saveErr.slice(0, 200)}` });
             }
           } else {
             // Client upload failed — try server upload as fallback (may work for files near the limit)
-            console.warn(`Client upload failed for ${file.name}, trying server fallback...`);
-            const fallbackOk = await serverUploadFile(file);
-            allResults.push({ name: file.name, ok: fallbackOk });
+            const fallback = await serverUploadFile(file);
+            allResults.push({ name: file.name, ok: fallback.ok, error: fallback.ok ? undefined : `Blob: ${blobError} → Server fallback: ${fallback.error}` });
           }
         } else {
           // Small files: use simple server upload
-          const ok = await serverUploadFile(file);
-          allResults.push({ name: file.name, ok });
+          const result = await serverUploadFile(file);
+          allResults.push({ name: file.name, ok: result.ok, error: result.error });
         }
       } catch (err) {
-        console.error(`Upload error for ${file.name}:`, err);
-        allResults.push({ name: file.name, ok: false });
+        allResults.push({ name: file.name, ok: false, error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -578,7 +575,10 @@ export default function MediaPage() {
               {!uploading && uploadProgress.results.length > 0 && (
                 <div className="max-h-32 overflow-y-auto space-y-1 mt-2">
                   {uploadProgress.results.filter(r => !r.ok).map((r, i) => (
-                    <div key={i} className="text-xs text-red-400 font-mono">Failed: {r.name}</div>
+                    <div key={i} className="text-xs text-red-400 font-mono">
+                      <span>Failed: {r.name}</span>
+                      {r.error && <div className="text-red-400/60 ml-2 break-all">{r.error}</div>}
+                    </div>
                   ))}
                   {uploadProgress.results.filter(r => !r.ok).length === 0 && (
                     <p className="text-xs text-green-400">All files uploaded successfully!</p>
