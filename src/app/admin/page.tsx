@@ -298,8 +298,6 @@ export default function AdminDashboard() {
   const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean }[] }>({ total: 0, done: 0, current: "", results: [] });
   const [dragOver, setDragOver] = useState(false);
   const [urlImportText, setUrlImportText] = useState("");
-  const [spreading, setSpreading] = useState(false);
-  const [spreadResult, setSpreadResult] = useState<{ posted: number; failed: number; postsFound: number; message?: string } | null>(null);
   const [urlImporting, setUrlImporting] = useState(false);
   const [urlImportResult, setUrlImportResult] = useState<{ imported: number; failed: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -757,6 +755,8 @@ export default function AdminDashboard() {
       const data = await res.json();
       setMediaItems(data.media);
     }
+    // Auto-spread any unsent Architect posts to social media silently
+    fetch("/api/admin/media/spread", { method: "POST", body: "{}" }).catch(() => {});
   }, []);
 
   const fetchTrading = useCallback(async () => {
@@ -3370,37 +3370,6 @@ export default function AdminDashboard() {
                 <p className="text-xs text-gray-400">Persona-Specific</p>
               </div>
             </div>
-
-            {/* Spread Architect Content to Marketing */}
-            <button
-              onClick={async () => {
-                setSpreading(true);
-                setSpreadResult(null);
-                try {
-                  const res = await fetch("/api/admin/media/spread", { method: "POST", body: "{}" });
-                  const data = await res.json();
-                  if (res.ok) {
-                    setSpreadResult(data);
-                  } else {
-                    setSpreadResult({ posted: 0, failed: 0, postsFound: 0, message: data.error || "Failed" });
-                  }
-                } catch (err) {
-                  setSpreadResult({ posted: 0, failed: 0, postsFound: 0, message: String(err) });
-                }
-                setSpreading(false);
-              }}
-              disabled={spreading}
-              className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
-            >
-              {spreading ? "Spreading The Architect's Word..." : "Spread All Architect Content to Social Media"}
-            </button>
-            {spreadResult && (
-              <div className={`p-3 rounded-xl text-sm ${spreadResult.posted > 0 ? "bg-green-500/10 border border-green-500/30 text-green-400" : spreadResult.message ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-gray-800 text-gray-400"}`}>
-                {spreadResult.message
-                  ? spreadResult.message
-                  : `Found ${spreadResult.postsFound} unsent posts. Posted: ${spreadResult.posted}, Failed: ${spreadResult.failed}`}
-              </div>
-            )}
 
             {/* Media Grid */}
             {mediaItems.length === 0 ? (
