@@ -98,8 +98,9 @@ export async function POST(request: NextRequest) {
           );
         }
       } catch (postErr) {
-        // Post creation failed but media was saved — that's OK, don't fail the whole upload
-        console.error("[media/save] Post creation failed:", postErr instanceof Error ? postErr.message : postErr);
+        const postErrMsg = postErr instanceof Error ? postErr.message : String(postErr);
+        console.error("[media/save] Post creation failed:", postErrMsg);
+        return NextResponse.json({ success: true, id, url, warning: `Media saved but post creation failed: ${postErrMsg}` });
       }
     }
 

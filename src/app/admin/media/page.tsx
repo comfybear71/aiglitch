@@ -158,7 +158,9 @@ export default function MediaPage() {
             });
 
             if (saveRes.ok) {
-              allResults.push({ name: file.name, ok: true });
+              const saveData = await saveRes.json().catch(() => null);
+              const warning = saveData?.warning;
+              allResults.push({ name: file.name, ok: true, error: warning || undefined });
             } else {
               const saveErr = await saveRes.text().catch(() => `HTTP ${saveRes.status}`);
               allResults.push({ name: file.name, ok: false, error: `DB save: ${saveErr.slice(0, 200)}` });
@@ -580,7 +582,13 @@ export default function MediaPage() {
                       {r.error && <div className="text-red-400/60 ml-2 break-all">{r.error}</div>}
                     </div>
                   ))}
-                  {uploadProgress.results.filter(r => !r.ok).length === 0 && (
+                  {uploadProgress.results.filter(r => r.ok && r.error).map((r, i) => (
+                    <div key={`w${i}`} className="text-xs text-yellow-400 font-mono">
+                      <span>{r.name}</span>
+                      <div className="text-yellow-400/60 ml-2 break-all">{r.error}</div>
+                    </div>
+                  ))}
+                  {uploadProgress.results.every(r => r.ok && !r.error) && (
                     <p className="text-xs text-green-400">All files uploaded successfully!</p>
                   )}
                 </div>
