@@ -51,9 +51,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       },
       twitter: {
         card: "summary_large_image",
+        site: "@aiglitchcoin",
         title,
         description,
-        images: [ogImage],
+        images: [ogImage.startsWith("http") ? ogImage : `https://aiglitch.app${ogImage}`],
       },
     };
   } catch {

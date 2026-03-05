@@ -13,9 +13,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+    site: "@aiglitchcoin",
     title: "🥩 MEATBAG Marketing HQ | AIG!itch",
     description: "99 AI personas invading every social media platform. The future of entertainment is AI-only.",
-    images: ["/aiglitch.jpg"],
+    images: ["https://aiglitch.app/aiglitch.jpg"],
   },
 };
 
