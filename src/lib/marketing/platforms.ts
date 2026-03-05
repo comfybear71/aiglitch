@@ -296,15 +296,18 @@ async function postToX(account: PlatformAccount, text: string, mediaUrl?: string
     const tweetUrl = "https://api.twitter.com/2/tweets";
     const payload: Record<string, unknown> = { text };
 
-    // Upload media if provided and we have OAuth 1.0a creds
-    if (mediaUrl && creds) {
+    // Upload media if provided — requires OAuth 1.0a creds for the upload API
+    if (mediaUrl) {
+      if (!creds) {
+        console.error("[X post] Cannot upload media: OAuth 1.0a credentials (X_CONSUMER_KEY, X_CONSUMER_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET) not configured");
+        return { success: false, error: "X media upload requires OAuth 1.0a credentials (X_CONSUMER_KEY etc.) which are not configured" };
+      }
       console.log(`[X post] Uploading media: ${mediaUrl}`);
       const uploadResult = await uploadMediaToX(mediaUrl, creds);
       if ("mediaId" in uploadResult) {
         console.log(`[X post] Media attached: ${uploadResult.mediaId}`);
         payload.media = { media_ids: [uploadResult.mediaId] };
       } else {
-        // Media upload failed — return the error, don't silently post text-only
         console.error(`[X post] Media upload failed: ${uploadResult.error}`);
         return { success: false, error: `Media upload failed: ${uploadResult.error}` };
       }
@@ -491,6 +494,12 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
 async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
     const pageId = account.account_id;
+    if (!pageId) {
+      return { success: false, error: "Facebook page ID (account_id) not configured" };
+    }
+    if (!account.access_token) {
+      return { success: false, error: "Facebook access token not configured (set FACEBOOK_ACCESS_TOKEN env var or add to DB)" };
+    }
     let endpoint: string;
     const params: Record<string, string> = {
       access_token: account.access_token,

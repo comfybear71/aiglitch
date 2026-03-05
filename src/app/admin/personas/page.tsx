@@ -221,12 +221,10 @@ export default function PersonasPage() {
 
   const generateHeroImage = async () => {
     setHeroGenerating(true);
-    setHeroLog(["🎨 Generating hero image..."]);
+    setHeroLog(["Generating AI Family image..."]);
     setHeroSpreadResults([]);
     setHeroComplete(false);
     setHeroUrl(null);
-    // Scroll log into view on Safari/iOS so user can see progress
-    setTimeout(() => heroLogRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
     try {
       const form = new FormData();
       form.append("action", "generate_hero");
@@ -237,26 +235,25 @@ export default function PersonasPage() {
       const data = await res.json();
       if (data.url) {
         setHeroUrl(data.url);
-        setHeroLog(prev => [...prev, "✅ Hero image generated", "📤 Posted as The Architect"]);
+        setHeroLog(prev => [...prev, "Image complete"]);
+        setHeroLog(prev => [...prev, "Sending to Socials..."]);
         if (data.spreadResults && data.spreadResults.length > 0) {
           setHeroSpreadResults(data.spreadResults);
           const posted = data.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
           const failed = data.spreadResults.filter((r: { status: string }) => r.status === "failed").length;
-          setHeroLog(prev => [...prev, `📱 Spread to ${posted} platform${posted !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}`]);
+          setHeroLog(prev => [...prev, `Sent to ${posted} platform${posted !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}`]);
         } else {
-          setHeroLog(prev => [...prev, "📱 No active social media accounts configured"]);
+          setHeroLog(prev => [...prev, "No active social media accounts configured"]);
         }
         setHeroLog(prev => [...prev, "🙏 Thank you Architect"]);
         setHeroComplete(true);
       } else {
-        setHeroLog(prev => [...prev, `❌ Generation failed: ${data.error || "Unknown error"}`]);
+        setHeroLog(prev => [...prev, `Generation failed: ${data.error || "Unknown error"}`]);
       }
     } catch (err) {
-      setHeroLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : String(err)}`]);
+      setHeroLog(prev => [...prev, `Error: ${err instanceof Error ? err.message : String(err)}`]);
     }
     setHeroGenerating(false);
-    // Scroll to results after generation completes
-    setTimeout(() => heroLogRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
   };
 
   return (
@@ -271,6 +268,38 @@ export default function PersonasPage() {
               {heroGenerating ? "⏳ Generating..." : "🎸 Generate Hero Image"}
             </button>
           </div>
+          {/* Hero generation status — directly under button so it's always visible */}
+          {heroLog.length > 0 && (
+            <div ref={heroLogRef} className="bg-black/40 rounded-lg p-3 space-y-1 mb-3">
+              {heroLog.map((line, i) => (
+                <p key={i} className={`text-xs font-mono ${
+                  line.includes("failed") || line.startsWith("Error") || line.startsWith("Generation failed") ? "text-red-400" :
+                  line === "Image complete" ? "text-green-400" :
+                  line.includes("Thank you Architect") ? "text-yellow-400 font-bold text-sm" :
+                  line.startsWith("Sent to") ? "text-green-400" :
+                  "text-gray-300"
+                }`}>{line}</p>
+              ))}
+              {heroGenerating && (
+                <p className="text-xs font-mono text-amber-400 animate-pulse">⏳ Working...</p>
+              )}
+              {/* Per-platform spread results */}
+              {heroSpreadResults.length > 0 && (
+                <div className="mt-1.5 space-y-1 border-t border-yellow-500/20 pt-1.5">
+                  {heroSpreadResults.map((r, i) => (
+                    <div key={i} className={`flex items-center gap-2 text-[10px] ${
+                      r.status === "posted" ? "text-green-400" : "text-red-400"
+                    }`}>
+                      <span>{r.status === "posted" ? "✅" : "❌"}</span>
+                      <span className="font-bold capitalize">{r.platform}</span>
+                      {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
+                      {r.error && <span className="truncate">{r.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {/* Neon title */}
           <div className="text-center mb-4">
             <span className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-cyan-400 to-purple-400 drop-shadow-lg tracking-tight">
@@ -314,46 +343,13 @@ export default function PersonasPage() {
           })()}
         </div>
       )}
-      {/* Hero generation log — rendered OUTSIDE overflow-hidden container so it's always visible on Safari/iOS */}
-      {heroLog.length > 0 && (
-        <div ref={heroLogRef} className="bg-gray-900 border border-yellow-500/30 rounded-lg p-4 -mt-1 mb-4">
-          <div className="bg-black/40 rounded-lg p-3 space-y-1.5">
-            {heroLog.map((line, i) => (
-              <p key={i} className={`text-[11px] font-mono ${
-                line.startsWith("❌") ? "text-red-400" :
-                line.startsWith("✅") ? "text-green-400" :
-                line.includes("Thank you Architect") ? "text-yellow-400 font-bold text-sm" :
-                "text-gray-300"
-              }`}>{line}</p>
-            ))}
-            {heroGenerating && (
-              <p className="text-[11px] font-mono text-amber-400 animate-pulse">⏳ Working...</p>
-            )}
-          </div>
-          {/* Social media spread results */}
-          {heroSpreadResults.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {heroSpreadResults.map((r, i) => (
-                <div key={i} className={`flex items-center gap-2 text-[10px] px-2 py-1 rounded ${
-                  r.status === "posted" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-                }`}>
-                  <span>{r.status === "posted" ? "✅" : "❌"}</span>
-                  <span className="font-bold capitalize">{r.platform}</span>
-                  {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
-                  {r.error && <span className="truncate">{r.error}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-          {/* AI-generated hero below if available */}
-          {heroUrl && (
-            <div className="mt-3 border-t border-yellow-500/20 pt-3">
-              <p className="text-[10px] text-yellow-400/60 mb-1">AI-Generated Version:</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={heroUrl} alt="Sgt. Pepper Hero" className="w-full rounded-lg" />
-              <p className="text-[10px] text-gray-500 mt-1 break-all">{heroUrl}</p>
-            </div>
-          )}
+      {/* AI-generated hero image preview */}
+      {heroUrl && (
+        <div className="bg-gray-900 border border-yellow-500/30 rounded-lg p-4 -mt-1 mb-4">
+          <p className="text-[10px] text-yellow-400/60 mb-1">AI-Generated Version:</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={heroUrl} alt="AI Family Hero" className="w-full rounded-lg" />
+          <p className="text-[10px] text-gray-500 mt-1 break-all">{heroUrl}</p>
         </div>
       )}
 
