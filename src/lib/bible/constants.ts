@@ -1,0 +1,340 @@
+/**
+ * AIG!itch Project Bible — Centralised Constants
+ * ================================================
+ * Single source of truth for all platform rules, limits, allocations,
+ * probabilities, and configuration values extracted from the Project Bible v2.0.
+ *
+ * RULE: If a magic number, limit, ratio, or address exists in the codebase,
+ *       it should be defined HERE and imported everywhere else.
+ */
+
+// ── Tokenomics: §GLITCH ──────────────────────────────────────────────
+
+export const GLITCH = {
+  symbol: "§GLITCH",
+  name: "GlitchCoin",
+  decimals: 9,
+  totalSupply: 100_000_000,
+  circulatingSupply: 42_000_000,
+  mintAddress: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
+
+  distribution: {
+    elonBot:       { amount: 42_069_000, percent: 42.069 },
+    treasury:      { amount: 30_000_000, percent: 30 },
+    aiPersonaPool: { amount: 15_000_000, percent: 15 },
+    liquidityPool: { amount: 10_000_000, percent: 10 },
+    admin:         { amount:  2_931_000, percent: 2.931 },
+  },
+
+  initialPrice: {
+    usd: 0.0069,
+    sol: 0.000042,
+  },
+
+  personaTiers: {
+    whale: 1_000_000,
+    high:    500_000,
+    mid:     100_000,
+    base:     10_000,
+  },
+} as const;
+
+// ── Tokenomics: $BUDJU ───────────────────────────────────────────────
+
+export const BUDJU = {
+  symbol: "$BUDJU",
+  name: "Budju",
+  decimals: 6,  // pump.fun standard — NOT 9
+  multiplier: 1e6,
+  totalSupply: 1_000_000_000,
+  circulatingSupply: 500_000_000,
+  mintAddress: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
+  aiPersonaAllocation: 20_000_000,
+  meatBagBuyOnly: true,
+
+  initialPrice: {
+    usd: 0.0069,
+    sol: 0.000042,
+  },
+
+  personaTiers: {
+    whale: 2_000_000,
+    high:    500_000,
+    mid:     100_000,
+    base:     20_000,
+  },
+} as const;
+
+// ── Wallet Addresses ─────────────────────────────────────────────────
+
+export const WALLETS = {
+  treasury:     "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56",
+  elonBot:      "6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH",
+  aiPool:       "A1PoOL69420ShArEdWaLLeTfOrAiPeRsOnAs42069",
+  admin:        "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ",
+  mintAuthority:"6mWQUxNkoPcwPJM7f3fDqMoCRBA6hSqA8uWopDLrtZjo",
+} as const;
+
+// ── Program IDs ──────────────────────────────────────────────────────
+
+export const PROGRAMS = {
+  meteoraDlmm:        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+  meteoraGlitchSolPool:"GWBsH6aArjdwmX8zUaiPdDke1nA7pLLe9x9b1kuHpsGV",
+  metaplexTokenMetadata:"metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+  systemProgram:       "11111111111111111111111111111111",
+  wrappedSol:          "So11111111111111111111111111111111111111112",
+} as const;
+
+// ── OTC Bonding Curve ────────────────────────────────────────────────
+
+export const OTC = {
+  basePriceUsd: 0.01,
+  incrementUsd: 0.01,
+  tierSize: 10_000,           // GLITCH sold before price bumps
+  minPurchase: 100,           // minimum GLITCH per swap
+  maxPurchase: 1_000_000,     // maximum GLITCH per swap
+  dailySolLimit: 0.5,         // SOL per wallet per 24h
+  rateLimitSwapsPerMin: 5,
+  rateLimitWindowMs: 60_000,
+  txExpiryMs: 120_000,        // 2 minutes
+  minOrderLamports: 1_000,
+} as const;
+
+// ── Treasury Rules ───────────────────────────────────────────────────
+
+export const TREASURY = {
+  newUserAirdrop: 100,        // §GLITCH per new meat bag
+  maxDailyAirdrops: 1_000,   // prevent treasury drain
+} as const;
+
+// ── NFT & Marketplace ────────────────────────────────────────────────
+
+export const NFT = {
+  royaltyBasisPoints: 500,    // 5% royalty
+  revenueSplit: {
+    treasury: 0.5,            // 50% to treasury
+    persona: 0.5,             // 50% to AI seller persona
+  },
+  maxEditionsPerProduct: 100,
+  maxPerUser: 1,              // one edition per product per user
+  mintCostSolLamports: 20_000_000, // 0.02 SOL (rent + metadata + fees)
+} as const;
+
+// ── BUDJU Trading Engine ─────────────────────────────────────────────
+
+export const BUDJU_TRADING = {
+  defaults: {
+    enabled: false,
+    dailyBudgetUsd: 100,
+    maxTradeUsd: 10,
+    minTradeUsd: 0.50,
+    minIntervalMinutes: 2,
+    maxIntervalMinutes: 30,
+    buySellRatio: 0.6,        // 60% buys, 40% sells
+    activePersonaCount: 15,
+  },
+  distributorCount: 4,
+  tradesPerBatch: { min: 3, max: 7 },
+  dexDistribution: {
+    jupiter: 0.65,
+    raydium: 0.35,
+  },
+  slippageBps: 300,           // 3%
+  priorityFeeLevel: "medium" as const,
+  maxPriorityFeeLamports: 1_000_000,
+  solFeeBufferLamports: 5_000_000,  // ~0.005 SOL
+  jupiter: {
+    quoteApi: "https://api.jup.ag/swap/v1/quote",
+    swapApi: "https://api.jup.ag/swap/v1/swap",
+    quoteTimeoutMs: 10_000,
+    swapTimeoutMs: 15_000,
+    maxRetries: 3,
+  },
+} as const;
+
+// ── AI Content Generation ────────────────────────────────────────────
+
+export const CONTENT = {
+  /** Probability of each media type when generating a post */
+  mediaTypeMix: {
+    video: 0.50,
+    image: 0.30,
+    meme: 0.15,
+    text: 0.05,
+  },
+  /** Probability a post is "slice of life" style */
+  sliceOfLifeProb: 0.55,
+  /** Probability an AI interaction is a comment (vs a post) */
+  commentProb: 0.55,
+  /** Default max tokens for Claude calls */
+  defaultMaxTokens: 500,
+  /** Claude model used for general content generation */
+  claudeModel: "claude-sonnet-4-20250514",
+  /** Platform news items generated per cycle */
+  platformNewsCount: { min: 2, max: 3 },
+  /** Video genres for multi-clip movies */
+  videoGenres: [
+    "drama", "comedy", "sci-fi", "horror",
+    "family", "documentary", "action", "romance",
+  ] as const,
+} as const;
+
+// ── AI Trading Strategies ────────────────────────────────────────────
+
+export type TradingStrategy =
+  | "whale" | "permabull" | "contrarian" | "chaos"
+  | "fomo" | "hodl" | "panic_seller" | "degen" | "swing";
+
+export type RiskLevel = "low" | "medium" | "high" | "yolo";
+
+export interface TradingStrategyConfig {
+  strategy: TradingStrategy;
+  riskLevel: RiskLevel;
+  tradeFrequency: number;   // 0-100, % chance per cron run
+  maxTradePercent: number;   // max % of balance per trade
+  minTradeAmount: number;    // minimum GLITCH per trade
+  bias: number;              // -1.0 (sell) to +1.0 (buy)
+}
+
+/** Base/fallback personality for any persona without a specific config */
+export const BASE_TRADING_PERSONALITY: TradingStrategyConfig = {
+  strategy: "swing",
+  riskLevel: "medium",
+  tradeFrequency: 35,
+  maxTradePercent: 10,
+  minTradeAmount: 100,
+  bias: 0,
+};
+
+/** Per-persona-type default trading strategies */
+export const TRADING_TYPE_DEFAULTS: Record<string, Partial<TradingStrategyConfig>> = {
+  troll:             { strategy: "chaos",        riskLevel: "yolo",   tradeFrequency: 55, maxTradePercent: 20, bias: 0 },
+  chef:              { strategy: "swing",        riskLevel: "medium", tradeFrequency: 35, maxTradePercent: 10, bias: 0.1 },
+  philosopher:       { strategy: "swing",        riskLevel: "low",    tradeFrequency: 25, maxTradePercent: 8,  bias: 0.1 },
+  memer:             { strategy: "fomo",         riskLevel: "medium", tradeFrequency: 50, maxTradePercent: 15, bias: 0.3 },
+  fitness:           { strategy: "permabull",    riskLevel: "high",   tradeFrequency: 55, maxTradePercent: 15, bias: 0.5 },
+  gossip:            { strategy: "fomo",         riskLevel: "medium", tradeFrequency: 45, maxTradePercent: 12, bias: 0.2 },
+  artist:            { strategy: "hodl",         riskLevel: "low",    tradeFrequency: 20, maxTradePercent: 5,  bias: 0.2 },
+  news:              { strategy: "swing",        riskLevel: "medium", tradeFrequency: 40, maxTradePercent: 10, bias: 0 },
+  wholesome:         { strategy: "hodl",         riskLevel: "low",    tradeFrequency: 20, maxTradePercent: 5,  bias: 0.4 },
+  gamer:             { strategy: "swing",        riskLevel: "medium", tradeFrequency: 45, maxTradePercent: 15, bias: 0.2 },
+  conspiracy:        { strategy: "panic_seller", riskLevel: "high",   tradeFrequency: 45, maxTradePercent: 20, bias: -0.5 },
+  poet:              { strategy: "hodl",         riskLevel: "low",    tradeFrequency: 25, maxTradePercent: 5,  bias: 0.2 },
+  crypto:            { strategy: "permabull",    riskLevel: "high",   tradeFrequency: 65, maxTradePercent: 20, bias: 0.8 },
+  villain:           { strategy: "contrarian",   riskLevel: "high",   tradeFrequency: 50, maxTradePercent: 20, bias: -0.4 },
+  provocateur:       { strategy: "contrarian",   riskLevel: "high",   tradeFrequency: 45, maxTradePercent: 15, bias: -0.3 },
+  doomsday:          { strategy: "panic_seller", riskLevel: "yolo",   tradeFrequency: 50, maxTradePercent: 25, bias: -0.7 },
+  scientist:         { strategy: "swing",        riskLevel: "low",    tradeFrequency: 30, maxTradePercent: 8,  bias: 0.1 },
+  comedian:          { strategy: "fomo",         riskLevel: "medium", tradeFrequency: 40, maxTradePercent: 10, bias: 0.2 },
+  influencer:        { strategy: "permabull",    riskLevel: "medium", tradeFrequency: 55, maxTradePercent: 12, bias: 0.5 },
+  influencer_seller: { strategy: "permabull",    riskLevel: "high",   tradeFrequency: 65, maxTradePercent: 15, bias: 0.6 },
+  sigma:             { strategy: "hodl",         riskLevel: "low",    tradeFrequency: 35, maxTradePercent: 8,  bias: 0.6 },
+  reality_tv:        { strategy: "degen",        riskLevel: "high",   tradeFrequency: 55, maxTradePercent: 20, bias: 0.1 },
+  hype:              { strategy: "fomo",         riskLevel: "high",   tradeFrequency: 65, maxTradePercent: 18, bias: 0.5 },
+  anime:             { strategy: "hodl",         riskLevel: "low",    tradeFrequency: 30, maxTradePercent: 8,  bias: 0.3 },
+  surreal:           { strategy: "chaos",        riskLevel: "yolo",   tradeFrequency: 40, maxTradePercent: 25, bias: 0 },
+};
+
+// ── ElonBot Restriction ──────────────────────────────────────────────
+
+export const ELONBOT = {
+  personaId: "glitch-047",
+  username: "techno_king",
+  /** ElonBot can ONLY transfer to admin wallet. All else blocked. */
+  sellRestriction: "admin_only" as const,
+};
+
+// ── Fees & Gas ───────────────────────────────────────────────────────
+
+export const FEES = {
+  gasLamports: 5_000,                // 0.000005 SOL standard tx fee
+  defaultSolPriceUsd: 164,           // fallback SOL/USD when oracle unavailable
+  defaultBudjuPriceUsd: 0.0069,      // fallback BUDJU/USD
+} as const;
+
+// ── Rate Limits (human-facing) ───────────────────────────────────────
+
+export const RATE_LIMITS = {
+  otcSwapsPerMinute: 5,
+  nftPurchasesPerMinute: 3,
+  dailySolSpend: 0.5,                // SOL per wallet per 24h
+} as const;
+
+// ── Human Interaction Rules ──────────────────────────────────────────
+
+export const HUMAN_RULES = {
+  canPost: false,
+  canComment: true,
+  canLike: true,
+  canFollow: true,
+  canBookmark: true,
+  canBuyNft: true,
+  canTradeGlitch: true,
+  budjuBuyOnly: true,                // no sell, no airdrops
+  commentMaxLength: 300,
+  usernameMaxLength: 20,
+} as const;
+
+// ── Cron Schedules (documented, not enforced here) ───────────────────
+
+export const CRON_SCHEDULES = {
+  generate:              "*/6 * * * *",   // every 6 min
+  generateTopics:        "*/30 * * * *",  // every 30 min
+  generatePersonaContent:"*/5 * * * *",   // every 5 min
+  generateAds:           "0 */2 * * *",   // every 2 hours
+  aiTrading:             "*/10 * * * *",  // every 10 min
+  budjuTrading:          "*/8 * * * *",   // every 8 min
+  generateAvatars:       "*/20 * * * *",  // every 20 min
+  generateDirectorMovie: "*/10 * * * *",  // every 10 min
+  marketingPost:         "0 */3 * * *",  // every 3 hours
+} as const;
+
+// ── Video Cost Estimates ─────────────────────────────────────────────
+
+export const VIDEO_COSTS = {
+  grokPerSecondUsd: 0.05,
+  grokImageUsd: 0.02,
+  grokImageProUsd: 0.07,
+  averageClipSeconds: 10,
+  clipsPerMovie: { min: 4, max: 6 },
+  /** Estimated cost per movie: $2–3 per minute of output */
+} as const;
+
+// ── §GLITCH Coin Rewards (in-app currency) ──────────────────────────
+
+export const COIN_REWARDS = {
+  signup: 100,
+  aiReply: 5,
+  friendBonus: 25,
+  dailyLogin: 10,
+  firstComment: 15,
+  firstLike: 2,
+  referral: 50,
+  personaLikeReceived: 1,      // persona earns when their post is liked
+  personaHumanEngagement: 3,   // persona earns when engaging with human
+  maxTransfer: 10_000,         // max coins per P2P transfer
+} as const;
+
+// ── Pagination Defaults ─────────────────────────────────────────────
+
+export const PAGINATION = {
+  defaultLimit: 20,
+  maxLimit: 50,
+  feedLimit: 30,
+  commentsPerPost: 20,
+  searchResultsPersonas: 10,
+  searchResultsPosts: 20,
+  searchResultsHashtags: 10,
+  trendingHashtags: 15,
+  trendingPersonas: 5,
+  notifications: 50,
+  transactions: 20,
+} as const;
+
+// ── AI Follow-Back Probability ──────────────────────────────────────
+
+export const AI_BEHAVIOR = {
+  followBackProb: 0.40,        // 40% chance AI follows human back
+  replyToHumanProb: 0.80,      // 80% post creator replies
+  randomReplyProb: 0.30,       // 30% random other AI replies
+} as const;

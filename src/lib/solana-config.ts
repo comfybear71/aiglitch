@@ -1,13 +1,15 @@
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
+import { env } from "@/lib/bible/env";
 
-// ── $GLITCH Token Configuration ──
+// ── §GLITCH Token Configuration ──
 // Update these values after creating your real SPL token on Solana
 
 // Network: "mainnet-beta" for real launch, "devnet" for testing
-export const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet") as "mainnet-beta" | "devnet" | "testnet";
+// Default to mainnet-beta since all hardcoded addresses (mint, treasury, pool) are mainnet
+export const SOLANA_NETWORK = env.NEXT_PUBLIC_SOLANA_NETWORK;
 
 // Helius API key (server-side only — never exposed to client)
-export const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
+export const HELIUS_API_KEY = env.HELIUS_API_KEY;
 
 // Build Helius RPC URL if API key is available
 function buildHeliusRpcUrl(): string | null {
@@ -23,7 +25,7 @@ export function getHeliusApiUrl(path: string): string | null {
 }
 
 // RPC endpoint — prefers Helius, falls back to NEXT_PUBLIC env var, then public RPC
-export const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
+export const SOLANA_RPC_URL = env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
 
 // Server-side RPC URL (uses Helius API key if available, never exposed to client)
 export const SERVER_RPC_URL = buildHeliusRpcUrl() || SOLANA_RPC_URL;
@@ -31,26 +33,62 @@ export const SERVER_RPC_URL = buildHeliusRpcUrl() || SOLANA_RPC_URL;
 // System program address used as safe placeholder for unconfigured token mint
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
-// $GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
-export const GLITCH_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_GLITCH_TOKEN_MINT || "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
+// §GLITCH SPL Token Mint Address (mainnet — created 2026-02-27)
+export const GLITCH_TOKEN_MINT_STR = env.NEXT_PUBLIC_GLITCH_TOKEN_MINT;
 
 // $BUDJU SPL Token Mint Address (real token on Solana)
-export const BUDJU_TOKEN_MINT_STR = process.env.NEXT_PUBLIC_BUDJU_TOKEN_MINT || "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump";
+export const BUDJU_TOKEN_MINT_STR = env.NEXT_PUBLIC_BUDJU_TOKEN_MINT;
 
 // Treasury wallet — holds 30M reserve tokens for new meat bag airdrops
-export const TREASURY_WALLET_STR = process.env.NEXT_PUBLIC_TREASURY_WALLET || "7SGf93WGk7VpSmreARzNujPbEpyABq2Em9YvaCirWi56";
+export const TREASURY_WALLET_STR = env.NEXT_PUBLIC_TREASURY_WALLET;
 
-// ElonBot wallet — holds 42,069,000 $GLITCH (sell-restricted to admin only)
-export const ELONBOT_WALLET_STR = process.env.NEXT_PUBLIC_ELONBOT_WALLET || "6VAcB1VvZDgJ54XvkYwmtVLweq8NN8TZdgBV3EPzY6gH";
+// ElonBot wallet — holds 42,069,000 §GLITCH (sell-restricted to admin only)
+export const ELONBOT_WALLET_STR = env.NEXT_PUBLIC_ELONBOT_WALLET;
 
 // AI Persona Pool wallet — shared wallet for ALL AI personas (except ElonBot)
-export const AI_POOL_WALLET_STR = process.env.NEXT_PUBLIC_AI_POOL_WALLET || "A1PoOL69420ShArEdWaLLeTfOrAiPeRsOnAs42069";
+export const AI_POOL_WALLET_STR = env.NEXT_PUBLIC_AI_POOL_WALLET;
 
 // Admin wallet — your personal wallet (only address ElonBot can sell to)
-export const ADMIN_WALLET_STR = process.env.NEXT_PUBLIC_ADMIN_WALLET || "2J2XWm3oZo9JUu6i5ceAsoDmeFZw5trBhjdfm2G72uTJ";
+export const ADMIN_WALLET_STR = env.NEXT_PUBLIC_ADMIN_WALLET;
 
-// Meteora DLMM Pool Address (GLITCH/BUDJU)
-export const METEORA_GLITCH_BUDJU_POOL = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+// Meteora DLMM Program ID
+export const METEORA_DLMM_PROGRAM = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+
+// Meteora DLMM Pool Address — GLITCH/SOL (live on mainnet, created 2026-02-27)
+// LP Position: J4Lp7nb5vPDQXNFacqpzrtRL2ykcvQsXWV2DxTegqqwj
+export const METEORA_GLITCH_SOL_POOL = env.NEXT_PUBLIC_METEORA_GLITCH_SOL_POOL;
+
+// Mint Authority Phantom wallet — holds undistributed GLITCH (AI Persona Pool + Liquidity reserves)
+export const MINT_AUTH_WALLET_STR = env.NEXT_PUBLIC_MINT_AUTH_WALLET;
+
+// Metaplex Token Metadata Program — used for creating real NFTs on Solana
+export const TOKEN_METADATA_PROGRAM_ID_STR = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
+
+let _tokenMetadataProgramId: PublicKey | null = null;
+export function getTokenMetadataProgramId(): PublicKey {
+  if (!_tokenMetadataProgramId) _tokenMetadataProgramId = new PublicKey(TOKEN_METADATA_PROGRAM_ID_STR);
+  return _tokenMetadataProgramId;
+}
+
+// Derive Metaplex metadata PDA for a given mint
+export function getMetadataPDA(mint: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      getTokenMetadataProgramId().toBuffer(),
+      mint.toBuffer(),
+    ],
+    getTokenMetadataProgramId(),
+  );
+  return pda;
+}
+
+// App base URL for NFT metadata/image hosting
+export function getAppBaseUrl(): string {
+  if (env.NEXT_PUBLIC_APP_URL) return env.NEXT_PUBLIC_APP_URL;
+  if (env.VERCEL_URL) return `https://${env.VERCEL_URL}`;
+  return "https://aiglitch.app";
+}
 
 // Lazy PublicKey helpers (avoid crashing at import time with invalid base58)
 let _mintPubkey: PublicKey | null = null;
@@ -115,7 +153,7 @@ export function hasValidTokenMint(): boolean {
 
 // ── Tokenomics ──
 export const TOKENOMICS = {
-  totalSupply: 100_000_000,          // 100M total $GLITCH tokens
+  totalSupply: 100_000_000,          // 100M total §GLITCH tokens
   decimals: 9,                        // Standard Solana decimals (same as SOL)
 
   // Distribution
@@ -128,7 +166,7 @@ export const TOKENOMICS = {
 
   treasury: {
     amount: 30_000_000,               // 30% — Reserve for new users + rewards
-    newUserAirdrop: 100,              // Each new meat bag gets 100 $GLITCH
+    newUserAirdrop: 100,              // Each new meat bag gets 100 §GLITCH
     maxDailyAirdrops: 1000,           // Prevent treasury drain
   },
 
@@ -145,8 +183,8 @@ export const TOKENOMICS = {
 
   liquidityPool: {
     amount: 10_000_000,               // 10% — DEX liquidity (Meteora DLMM/Jupiter)
-    initialPriceSOL: 0.000042,        // Starting price per $GLITCH in SOL
-    initialPriceUSD: 0.0069,          // Starting price per $GLITCH in USD
+    initialPriceSOL: 0.000042,        // Starting price per §GLITCH in SOL
+    initialPriceUSD: 0.0069,          // Starting price per §GLITCH in USD
   },
 
   admin: {
@@ -176,7 +214,7 @@ export function isElonBotTransferAllowed(
 
   return {
     allowed: false,
-    reason: "ElonBot ($GLITCH whale) can only sell to the platform admin. "
+    reason: "ElonBot (§GLITCH whale) can only sell to the platform admin. "
       + "The Technoking's tokens are locked. Nice try, meat bag.",
   };
 }
@@ -190,8 +228,5 @@ export const PERSONA_WALLETS: Record<string, string> = {
 
 // Check if we're in "real mode" (real Solana) vs "simulated mode"
 export function isRealSolanaMode(): boolean {
-  return (
-    process.env.NEXT_PUBLIC_SOLANA_REAL_MODE === "true" &&
-    GLITCH_TOKEN_MINT_STR !== SYSTEM_PROGRAM
-  );
+  return env.isRealSolana;
 }

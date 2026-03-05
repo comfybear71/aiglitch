@@ -9,8 +9,8 @@ import {
   TREASURY_WALLET_STR,
 } from "@/lib/solana-config";
 
-// ── $GLITCH Bridge API ──
-// Allows meatbags to claim real on-chain $GLITCH tokens based on their snapshot balance.
+// ── §GLITCH Bridge API ──
+// Allows meatbags to claim real on-chain §GLITCH tokens based on their snapshot balance.
 // Flow: snapshot balance → connect Phantom → claim → treasury sends real tokens
 
 export async function GET(request: NextRequest) {
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!latestSnapshot) {
       return NextResponse.json({
         bridge_active: false,
-        message: "No snapshot available yet. All $GLITCH is real from day one.",
+        message: "No snapshot available yet. All §GLITCH is real from day one.",
       });
     }
 
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
   await ensureDbReady();
   const sql = getDb();
 
-  // ── Claim real $GLITCH tokens from snapshot balance ──
+  // ── Claim real §GLITCH tokens from snapshot balance ──
   if (action === "claim") {
     const { wallet_address } = body;
 
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     if (!snapshot) {
       return NextResponse.json({
-        error: "No snapshot available. Your $GLITCH is already real.",
+        error: "No snapshot available. Your §GLITCH is already real.",
       }, { status: 404 });
     }
 
@@ -184,13 +184,13 @@ export async function POST(request: NextRequest) {
 
     if (!entry) {
       return NextResponse.json({
-        error: "No $GLITCH balance found in snapshot for your account.",
+        error: "No §GLITCH balance found in snapshot for your account.",
       }, { status: 404 });
     }
 
     if (entry.claim_status === "claimed") {
       return NextResponse.json({
-        error: "Already claimed! Your $GLITCH tokens have been bridged.",
+        error: "Already claimed! Your §GLITCH tokens have been bridged.",
         already_claimed: true,
         tx_signature: entry.claim_tx_hash,
       });
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
           amount,
           wallet_address,
           status: "queued",
-          message: `${amount.toLocaleString()} $GLITCH queued for transfer to ${wallet_address.slice(0, 8)}...`,
+          message: `${amount.toLocaleString()} §GLITCH queued for transfer to ${wallet_address.slice(0, 8)}...`,
           note: "Real SPL tokens will be sent from the treasury wallet. This may take a few minutes.",
         });
       } catch (err) {
@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
       amount,
       wallet_address,
       status: "pending",
-      message: `Claim submitted for ${amount.toLocaleString()} $GLITCH! Awaiting admin approval for on-chain transfer.`,
+      message: `Claim submitted for ${amount.toLocaleString()} §GLITCH! Awaiting admin approval for on-chain transfer.`,
       note: isRealSolanaMode()
         ? "Treasury private key not configured. Admin will process manually."
         : "Real Solana mode not active. Enable NEXT_PUBLIC_SOLANA_REAL_MODE=true and set TREASURY_PRIVATE_KEY.",
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
       amount: Number(claim.amount),
       wallet: claim.phantom_wallet,
       tx_signature,
-      message: `Claim processed! ${Number(claim.amount).toLocaleString()} $GLITCH sent to ${claim.phantom_wallet}.`,
+      message: `Claim processed! ${Number(claim.amount).toLocaleString()} §GLITCH sent to ${claim.phantom_wallet}.`,
     });
   }
 

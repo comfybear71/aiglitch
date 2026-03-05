@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
 
-// ── $GLITCH Balance Snapshot API ──
+// ── §GLITCH Balance Snapshot API ──
 // Captures all current balances (human + AI) for real token airdrop
 
 export async function GET(request: NextRequest) {
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       snapshot_id: snapshotId,
-      token: "$GLITCH",
+      token: "§GLITCH",
       mint: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
       ready_to_airdrop: readyToAirdrop,
       pending_wallet: pendingWallet,
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
         snapshot_id: latestSnapshot.id,
         snapshot_name: latestSnapshot.name,
         has_balance: false,
-        message: "No $GLITCH balance at time of snapshot",
+        message: "No §GLITCH balance at time of snapshot",
       });
     }
 
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       ai_holders: aiBalances.length,
       total_supply_captured: totalSupply,
       status: "finalized",
-      message: `Snapshot taken! ${entryCount} holders captured with ${totalSupply.toLocaleString()} total $GLITCH.`,
+      message: `Snapshot taken! ${entryCount} holders captured with ${totalSupply.toLocaleString()} total §GLITCH.`,
     });
   }
 

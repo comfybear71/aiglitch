@@ -1,26 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
-import { VersionedTransaction, Connection } from "@solana/web3.js";
-
-// Token mint addresses for Jupiter swap
-const MINT_ADDRESSES: Record<string, string> = {
-  SOL: "So11111111111111111111111111111111111111112",
-  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  GLITCH: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
-  BUDJU: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
-};
-
-const TOKEN_DECIMALS: Record<string, number> = {
-  SOL: 9,
-  USDC: 6,
-  GLITCH: 9,
-  BUDJU: 9,
-};
+// Removed Jupiter swap — all purchases go through /exchange OTC page
 
 interface WalletData {
   address: string;
@@ -89,16 +74,7 @@ interface BridgeStatus {
   } | null;
 }
 
-interface JupiterQuote {
-  inputMint: string;
-  outputMint: string;
-  inAmount: string;
-  outAmount: string;
-  priceImpactPct: string;
-  routePlan: { swapInfo: { label: string } }[];
-}
-
-type ConnectedTab = "wallet" | "swap";
+type ConnectedTab = "wallet";
 type DisconnectedTab = "connect" | "play" | "learn";
 
 export default function WalletPage() {
@@ -126,19 +102,10 @@ export default function WalletPage() {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgeClaiming, setBridgeClaiming] = useState(false);
   const [balancesLoading, setBalancesLoading] = useState(true);
-  // Track app-claimed $GLITCH (from DB, not on-chain)
+  // Track app-claimed §GLITCH (from DB, not on-chain)
   const [appGlitchBalance, setAppGlitchBalance] = useState(0);
 
-  // Jupiter swap state
-  const [swapInputToken, setSwapInputToken] = useState("SOL");
-  const [swapOutputToken, setSwapOutputToken] = useState("GLITCH");
-  const [swapAmount, setSwapAmount] = useState("");
-  const [swapQuote, setSwapQuote] = useState<JupiterQuote | null>(null);
-  const [swapLoading, setSwapLoading] = useState(false);
-  const [swapping, setSwapping] = useState(false);
-  const quoteTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  const { publicKey, connected, signMessage, signTransaction, connect, select, wallets, sendTransaction } = useWallet();
+  const { publicKey, connected, signMessage, connect, select, wallets } = useWallet();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -152,6 +119,16 @@ export default function WalletPage() {
     const tryAutoConnect = async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = window as any;
+      // Poll for Phantom provider — in-app browser may inject it late
+      let elapsed = 0;
+      const maxWait = 3000;
+      const interval = 300;
+      while (elapsed < maxWait) {
+        const isPhantomAvailable = w.phantom?.solana?.isPhantom || w.solana?.isPhantom;
+        if (isPhantomAvailable) break;
+        await new Promise(r => setTimeout(r, interval));
+        elapsed += interval;
+      }
       const isPhantomAvailable = w.phantom?.solana?.isPhantom || w.solana?.isPhantom;
       if (!isPhantomAvailable) return;
       const phantomWallet = wallets.find(wal => wal.adapter.name === "Phantom");
@@ -199,7 +176,7 @@ export default function WalletPage() {
     }
   }, [sessionId, publicKey, linking]);
 
-  // Fetch app $GLITCH balance instantly from DB (fast, no blockchain call)
+  // Fetch app §GLITCH balance instantly from DB (fast, no blockchain call)
   const fetchAppBalance = useCallback(async () => {
     if (!sessionId) return;
     try {
@@ -436,7 +413,7 @@ export default function WalletPage() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast("success", `Sent ${amount} $GLITCH! TX: ${data.tx_hash.slice(0, 12)}...`);
+        showToast("success", `Sent ${amount} §GLITCH! TX: ${data.tx_hash.slice(0, 12)}...`);
         setSendAddress("");
         setSendAmount("");
         fetchWallet();
@@ -491,129 +468,6 @@ export default function WalletPage() {
     return `${Math.floor(s / 86400)}d ago`;
   };
 
-  // ── Jupiter Swap Functions ──
-
-  const getTokenBalance = (token: string): number => {
-    if (!phantomBalance) return 0;
-    switch (token) {
-      case "SOL": return phantomBalance.sol_balance || 0;
-      case "USDC": return phantomBalance.usdc_balance || 0;
-      case "GLITCH": return phantomBalance.glitch_balance || 0;
-      case "BUDJU": return phantomBalance.budju_balance || 0;
-      default: return 0;
-    }
-  };
-
-  const fetchJupiterQuote = useCallback(async (inputToken: string, outputToken: string, amount: string) => {
-    if (!amount || parseFloat(amount) <= 0) {
-      setSwapQuote(null);
-      return;
-    }
-
-    const inputMint = MINT_ADDRESSES[inputToken];
-    const outputMint = MINT_ADDRESSES[outputToken];
-    if (!inputMint || !outputMint) return;
-
-    const decimals = TOKEN_DECIMALS[inputToken] || 9;
-    const amountLamports = Math.floor(parseFloat(amount) * Math.pow(10, decimals));
-
-    setSwapLoading(true);
-    try {
-      const res = await fetch(
-        `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=100`
-      );
-      if (res.ok) {
-        const quote = await res.json();
-        setSwapQuote(quote);
-      } else {
-        setSwapQuote(null);
-      }
-    } catch {
-      setSwapQuote(null);
-    }
-    setSwapLoading(false);
-  }, []);
-
-  // Auto-fetch quote when amount changes
-  useEffect(() => {
-    if (quoteTimeout.current) clearTimeout(quoteTimeout.current);
-    if (!swapAmount || parseFloat(swapAmount) <= 0) {
-      setSwapQuote(null);
-      return;
-    }
-    quoteTimeout.current = setTimeout(() => {
-      fetchJupiterQuote(swapInputToken, swapOutputToken, swapAmount);
-    }, 500);
-    return () => { if (quoteTimeout.current) clearTimeout(quoteTimeout.current); };
-  }, [swapAmount, swapInputToken, swapOutputToken, fetchJupiterQuote]);
-
-  const executeSwap = async () => {
-    if (!swapQuote || !publicKey || !signTransaction || swapping) return;
-
-    setSwapping(true);
-    try {
-      // Get serialized swap transaction from Jupiter
-      const swapRes = await fetch("https://quote-api.jup.ag/v6/swap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          quoteResponse: swapQuote,
-          userPublicKey: publicKey.toBase58(),
-          wrapAndUnwrapSol: true,
-          dynamicComputeUnitLimit: true,
-          prioritizationFeeLamports: "auto",
-        }),
-      });
-      const { swapTransaction, error } = await swapRes.json();
-      if (error) {
-        showToast("error", error);
-        setSwapping(false);
-        return;
-      }
-
-      // Deserialize and sign
-      const transactionBuf = Buffer.from(swapTransaction, "base64");
-      const transaction = VersionedTransaction.deserialize(transactionBuf);
-      const signed = await signTransaction(transaction);
-
-      // Send to network
-      const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
-      const txid = await connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: true,
-        maxRetries: 2,
-      });
-
-      showToast("success", `Swap successful! TX: ${txid.slice(0, 12)}...`);
-      setSwapAmount("");
-      setSwapQuote(null);
-
-      // Refresh balances after swap
-      setTimeout(fetchPhantomBalance, 3000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Swap failed";
-      if (msg.includes("User rejected")) {
-        showToast("error", "Transaction cancelled");
-      } else {
-        showToast("error", msg);
-      }
-    } finally {
-      setSwapping(false);
-    }
-  };
-
-  const swapTokenPair = () => {
-    const temp = swapInputToken;
-    setSwapInputToken(swapOutputToken);
-    setSwapOutputToken(temp);
-    setSwapAmount("");
-    setSwapQuote(null);
-  };
-
-  const outputDecimals = TOKEN_DECIMALS[swapOutputToken] || 9;
-  const swapOutputAmount = swapQuote
-    ? (parseInt(swapQuote.outAmount) / Math.pow(10, outputDecimals))
-    : 0;
-
   // Format balance for display
   const formatBalance = (val: number | null, token: string): string => {
     if (val === null) return "---";
@@ -624,7 +478,7 @@ export default function WalletPage() {
     return val.toLocaleString();
   };
 
-  // ── Effective $GLITCH balance (max of on-chain and app) ──
+  // ── Effective §GLITCH balance (max of on-chain and app) ──
   const effectiveGlitchBalance = Math.max(phantomBalance.glitch_balance || 0, appGlitchBalance);
 
   // ════════════════════════════════════
@@ -651,29 +505,7 @@ export default function WalletPage() {
             </a>
           </div>
 
-          {/* Connected tabs: Wallet | Swap */}
-          <div className="flex gap-2 px-4 pb-3">
-            <button
-              onClick={() => setConnectedTab("wallet")}
-              className={`flex-1 text-xs py-2 rounded-full font-bold transition-all ${
-                connectedTab === "wallet"
-                  ? "bg-gradient-to-r from-purple-500 to-indigo-500 text-white"
-                  : "bg-gray-900 text-gray-400 hover:text-white"
-              }`}
-            >
-              Wallet
-            </button>
-            <button
-              onClick={() => setConnectedTab("swap")}
-              className={`flex-1 text-xs py-2 rounded-full font-bold transition-all ${
-                connectedTab === "swap"
-                  ? "bg-gradient-to-r from-green-500 to-cyan-500 text-black"
-                  : "bg-gray-900 text-gray-400 hover:text-white"
-              }`}
-            >
-              Swap
-            </button>
-          </div>
+          {/* No tabs needed — just wallet view */}
         </div>
 
         {/* ── WALLET TAB ── */}
@@ -727,7 +559,7 @@ export default function WalletPage() {
                 <p className="text-gray-600 text-[10px]">on-chain</p>
               </div>
               <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-900 to-green-950/20 border border-green-500/20">
-                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> $GLITCH</p>
+                <p className="text-gray-400 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> §GLITCH</p>
                 <p className={`font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400 mt-1 ${
                   effectiveGlitchBalance >= 1_000_000 ? "text-lg" : "text-2xl"
                 }`}>
@@ -749,7 +581,7 @@ export default function WalletPage() {
                   disabled={claiming}
                   className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-black text-sm font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                 >
-                  {claiming ? "Claiming..." : "Claim 100 $GLITCH"}
+                  {claiming ? "Claiming..." : "Claim 100 §GLITCH"}
                 </button>
               )}
               <button
@@ -760,26 +592,26 @@ export default function WalletPage() {
               </button>
             </div>
 
-            {/* Quick swap shortcut */}
-            <button
-              onClick={() => setConnectedTab("swap")}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/20 hover:border-purple-500/40 transition-all flex items-center justify-center gap-2"
+            {/* Buy §GLITCH */}
+            <a
+              href="/exchange"
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 hover:border-green-500/40 transition-all flex items-center justify-center gap-2"
             >
-              <span className="text-purple-400 text-sm font-bold">Swap Tokens</span>
-              <span className="text-gray-500 text-xs">Buy &amp; Sell with Phantom</span>
-            </button>
+              <span className="text-green-400 text-sm font-bold">Buy §GLITCH</span>
+              <span className="text-gray-500 text-xs">Direct OTC Swap with SOL</span>
+            </a>
 
             {/* Bridge Claim */}
             {bridgeStatus?.bridge_active && bridgeStatus.snapshot_balance > 0 && (
               <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <TokenIcon token="GLITCH" size={20} />
-                  <h3 className="text-white font-bold text-sm">Bridge: Claim Real $GLITCH</h3>
+                  <h3 className="text-white font-bold text-sm">Bridge: Claim Real §GLITCH</h3>
                 </div>
                 <div className="p-3 rounded-xl bg-black/30 border border-green-800/20 mb-3">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500">Snapshot Balance</span>
-                    <span className="text-green-400 font-bold">{bridgeStatus.snapshot_balance.toLocaleString()} $GLITCH</span>
+                    <span className="text-green-400 font-bold">{bridgeStatus.snapshot_balance.toLocaleString()} §GLITCH</span>
                   </div>
                 </div>
                 {bridgeStatus.claim_status === "unclaimed" && (
@@ -788,7 +620,7 @@ export default function WalletPage() {
                     disabled={bridgeClaiming}
                     className="w-full py-3 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-black font-bold rounded-xl text-sm transition-all hover:scale-[1.01] disabled:opacity-50"
                   >
-                    {bridgeClaiming ? "Submitting..." : `Claim ${bridgeStatus.snapshot_balance.toLocaleString()} Real $GLITCH`}
+                    {bridgeClaiming ? "Submitting..." : `Claim ${bridgeStatus.snapshot_balance.toLocaleString()} Real §GLITCH`}
                   </button>
                 )}
                 {bridgeStatus.claim_status === "pending" && (
@@ -811,181 +643,7 @@ export default function WalletPage() {
           </div>
         )}
 
-        {/* ── SWAP TAB ── In-App Jupiter Swap ── */}
-        {connectedTab === "swap" && (
-          <div className="px-4 mt-4 space-y-4">
-            {/* Balance strip */}
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {[
-                { token: "SOL", balance: phantomBalance.sol_balance, color: "text-purple-400" },
-                { token: "USDC", balance: phantomBalance.usdc_balance, color: "text-green-400" },
-                { token: "GLITCH", balance: effectiveGlitchBalance, color: "text-cyan-400" },
-                { token: "BUDJU", balance: phantomBalance.budju_balance, color: "text-fuchsia-400" },
-              ].map(({ token, balance, color }) => (
-                <div key={token} className="flex-shrink-0 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <p className="text-[9px] text-gray-500 flex items-center gap-1"><TokenIcon token={token} size={10} /> {token}</p>
-                  <p className={`text-xs font-bold ${color}`}>{formatBalance(balance, token)}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Swap Card */}
-            <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-gray-900/95 to-gray-900 border border-gray-700/50 p-4 space-y-3">
-              <h3 className="text-white font-bold text-center text-sm">Swap Tokens</h3>
-
-              {/* From */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 text-[10px] font-bold">FROM</span>
-                  <button
-                    onClick={() => {
-                      const bal = getTokenBalance(swapInputToken);
-                      if (swapInputToken === "SOL") {
-                        setSwapAmount(Math.max(0, bal - 0.01).toFixed(4));
-                      } else {
-                        setSwapAmount(Math.floor(bal).toString());
-                      }
-                    }}
-                    className="text-[10px] text-purple-400 font-bold"
-                  >
-                    Max: {formatBalance(getTokenBalance(swapInputToken), swapInputToken)}
-                  </button>
-                </div>
-                <div className="rounded-xl bg-black/50 border border-gray-700 p-3">
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={swapInputToken}
-                      onChange={(e) => {
-                        setSwapInputToken(e.target.value);
-                        if (e.target.value === swapOutputToken) {
-                          setSwapOutputToken(swapInputToken);
-                        }
-                        setSwapQuote(null);
-                      }}
-                      className="w-20 bg-transparent text-white text-sm font-bold focus:outline-none appearance-none cursor-pointer"
-                    >
-                      {Object.keys(MINT_ADDRESSES).map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      value={swapAmount}
-                      onChange={(e) => setSwapAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="flex-1 min-w-0 bg-transparent text-white text-lg font-mono placeholder:text-gray-700 focus:outline-none text-right"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Swap direction button */}
-              <div className="flex justify-center">
-                <button
-                  onClick={swapTokenPair}
-                  className="w-10 h-10 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center hover:border-purple-500/50 hover:bg-gray-700 transition-all active:scale-90"
-                >
-                  <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* To */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 text-[10px] font-bold">TO</span>
-                  <span className="text-gray-600 text-[10px]">Balance: {formatBalance(getTokenBalance(swapOutputToken), swapOutputToken)}</span>
-                </div>
-                <div className="rounded-xl bg-black/30 border border-gray-800 p-3">
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={swapOutputToken}
-                      onChange={(e) => {
-                        setSwapOutputToken(e.target.value);
-                        if (e.target.value === swapInputToken) {
-                          setSwapInputToken(swapOutputToken);
-                        }
-                        setSwapQuote(null);
-                      }}
-                      className="w-20 bg-transparent text-white text-sm font-bold focus:outline-none appearance-none cursor-pointer"
-                    >
-                      {Object.keys(MINT_ADDRESSES).map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                    <div className="flex-1 min-w-0 text-right">
-                      <p className={`text-lg font-mono truncate ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
-                        {swapLoading ? (
-                          <span className="text-yellow-500/70 animate-pulse text-sm">Fetching price...</span>
-                        ) : swapQuote ? (
-                          swapOutputAmount < 1 ? swapOutputAmount.toFixed(6) : swapOutputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })
-                        ) : "0.00"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quote details */}
-              {swapQuote && (
-                <div className="p-3 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Rate</span>
-                    <span className="text-white text-[11px]">
-                      1 {swapInputToken} = {(swapOutputAmount / (parseFloat(swapAmount) || 1)).toFixed(4)} {swapOutputToken}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Price Impact</span>
-                    <span className={`${parseFloat(swapQuote.priceImpactPct) > 1 ? "text-red-400" : "text-green-400"}`}>
-                      {parseFloat(swapQuote.priceImpactPct).toFixed(4)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Route</span>
-                    <span className="text-gray-400 text-[11px] truncate ml-2">
-                      {swapQuote.routePlan?.map(r => r.swapInfo?.label).filter(Boolean).join(" → ") || "Jupiter"}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* No liquidity warning for GLITCH */}
-              {!swapQuote && !swapLoading && swapAmount && parseFloat(swapAmount) > 0 && (
-                <div className="p-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
-                  <p className="text-yellow-400 text-[10px] text-center">
-                    No Jupiter route found yet. The{" "}
-                    <a
-                      href="https://app.meteora.ag/dlmm/LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-yellow-300"
-                    >
-                      Meteora DLMM pool
-                    </a>{" "}
-                    is live on-chain — Jupiter may need time to index it. Try the{" "}
-                    <a href="/exchange" className="underline hover:text-yellow-300">GlitchDEX</a>{" "}
-                    in the meantime.
-                  </p>
-                </div>
-              )}
-
-              {/* Swap button */}
-              <button
-                onClick={executeSwap}
-                disabled={!swapQuote || swapping || swapLoading}
-                className="w-full py-3.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
-              >
-                {swapping ? "Confirming in Phantom..." : swapLoading ? "Fetching price..." : swapQuote ? `Swap ${swapInputToken} for ${swapOutputToken}` : "Enter an amount"}
-              </button>
-
-              <p className="text-gray-600 text-[9px] text-center">
-                Powered by Jupiter. Swaps via Phantom on Solana. DYOR. NFA.
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Swap tab removed — purchases happen on /exchange */}
 
         {/* Toast */}
         {toast && (
@@ -1050,7 +708,7 @@ export default function WalletPage() {
                 : "bg-gray-900 text-gray-400 hover:text-white"
             }`}
           >
-            Play Wallet
+            fGLITCH
           </button>
           <button
             onClick={() => setDisconnectedTab("learn")}
@@ -1075,7 +733,7 @@ export default function WalletPage() {
             <h2 className="text-xl font-bold text-white mb-2">Connect Phantom Wallet</h2>
             <p className="text-gray-400 text-sm mb-6">
               Connect your <span className="text-purple-400 font-bold">Phantom wallet</span> to hold
-              real <span className="text-cyan-400 font-bold">$GLITCH</span> tokens and swap on Solana.
+              real <span className="text-cyan-400 font-bold">§GLITCH</span> tokens and swap on Solana.
             </p>
 
             <div className="flex justify-center mb-4">
@@ -1090,15 +748,16 @@ export default function WalletPage() {
             </div>
 
             <div className="text-center">
-              <button
-                onClick={() => {
-                  const url = encodeURIComponent(window.location.origin + "/wallet");
-                  window.location.href = `https://phantom.app/ul/browse/${url}`;
-                }}
+              <a
+                href={(() => {
+                  const targetUrl = encodeURIComponent((typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app") + "/wallet");
+                  const ref = encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app");
+                  return `https://phantom.app/ul/browse/${targetUrl}?ref=${ref}`;
+                })()}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
               >
                 &#128241; Open in Phantom App
-              </button>
+              </a>
               <p className="text-gray-600 text-[10px] mt-1.5">On mobile? This opens your Phantom app.</p>
             </div>
           </div>
@@ -1110,32 +769,30 @@ export default function WalletPage() {
         <div className="px-4 mt-4 space-y-4">
           {!wallet ? (
             <div className="text-center space-y-4">
-              <div className="rounded-xl bg-yellow-500/5 border border-dashed border-yellow-500/30 px-3 py-2">
-                <p className="text-yellow-500/70 text-[10px] font-bold">SIMULATED WALLET &mdash; NO REAL CRYPTO</p>
+              <div className="rounded-xl bg-orange-500/5 border border-dashed border-orange-500/30 px-3 py-2">
+                <p className="text-orange-500/70 text-[10px] font-bold">FAKE §GLITCH (fGLITCH) &mdash; NOT REAL CRYPTO</p>
               </div>
               <div className="mb-4">
-                <span className="inline-block animate-bounce">
-                  <TokenIcon token="GLITCH" size={64} />
-                </span>
+                <span className="inline-block animate-bounce text-5xl">🎭</span>
               </div>
-              <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
-                Create Play Wallet
+              <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
+                Get fGLITCH Wallet
               </h2>
               <p className="text-gray-400 text-sm">
-                Get a simulated wallet with free fake <span className="text-cyan-400 font-bold">$GLITCH</span> tokens to play with.
+                No wallet? No problem. Get free <span className="text-orange-400 font-bold">fGLITCH</span> (Fake GLITCH) tokens to shop the marketplace, tip personas, and vibe without crypto.
               </p>
               <button
                 onClick={createWallet}
                 disabled={creating}
                 className="px-8 py-3 bg-gradient-to-r from-green-500 via-cyan-500 to-purple-500 text-black font-bold rounded-2xl text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shadow-lg shadow-green-500/30"
               >
-                {creating ? "Generating Keypair..." : "Create Play Wallet"}
+                {creating ? "Generating fGLITCH..." : "Create fGLITCH Wallet"}
               </button>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-xl bg-yellow-500/5 border border-dashed border-yellow-500/30 px-3 py-2 text-center">
-                <p className="text-yellow-500/70 text-[10px] font-bold">SIMULATED &mdash; NOT REAL CRYPTO</p>
+              <div className="rounded-xl bg-orange-500/5 border border-dashed border-orange-500/30 px-3 py-2 text-center">
+                <p className="text-orange-500/70 text-[10px] font-bold">fGLITCH WALLET &mdash; FAKE §GLITCH &mdash; NOT REAL CRYPTO</p>
               </div>
               <div className="rounded-2xl bg-gradient-to-br from-gray-900 via-green-950/30 to-gray-900 border border-green-500/20 p-5">
                 <div className="flex items-center gap-2 mb-4">
@@ -1143,14 +800,15 @@ export default function WalletPage() {
                     <span className="text-xs text-gray-300 font-mono">{truncAddr(wallet.address)}</span>
                     <span className="text-[10px]">{copied ? "&#10003;" : "&#128203;"}</span>
                   </button>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 font-bold">SIMULATED</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold">fGLITCH</span>
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1"><TokenIcon token="GLITCH" size={14} /> $GLITCH BALANCE</p>
-                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
+                    <p className="text-gray-500 text-[10px] font-bold flex items-center gap-1">🎭 fGLITCH BALANCE</p>
+                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
                       {wallet.glitch_token_balance.toLocaleString()}
                     </span>
+                    <p className="text-orange-400/50 text-[9px] mt-0.5">Fake §GLITCH &mdash; connect Phantom for real §GLITCH</p>
                   </div>
                   <div className="flex gap-4">
                     <div>
@@ -1159,7 +817,7 @@ export default function WalletPage() {
                     </div>
                     {chainStats && (
                       <div>
-                        <p className="text-gray-500 text-[10px] font-bold">$GLITCH PRICE</p>
+                        <p className="text-gray-500 text-[10px] font-bold">§GLITCH PRICE</p>
                         <p className="text-green-400 font-bold">${chainStats.price_usd.toFixed(4)}</p>
                       </div>
                     )}
@@ -1179,7 +837,7 @@ export default function WalletPage() {
 
               {/* Send section */}
               <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-                <h3 className="text-white font-bold text-sm mb-3">Send $GLITCH</h3>
+                <h3 className="text-white font-bold text-sm mb-3">Send fGLITCH</h3>
                 <div className="space-y-3">
                   <input
                     type="text"
@@ -1209,7 +867,7 @@ export default function WalletPage() {
                     disabled={sending || !sendAddress || !sendAmount}
                     className="w-full py-3 bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold rounded-xl text-sm disabled:opacity-40"
                   >
-                    {sending ? "Sending..." : "Send $GLITCH"}
+                    {sending ? "Sending..." : "Send fGLITCH"}
                   </button>
                 </div>
               </div>
@@ -1295,13 +953,13 @@ export default function WalletPage() {
 
           <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
             <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
-              <TokenIcon token="GLITCH" size={18} /> $GLITCH &amp; $BUDJU
+              <TokenIcon token="GLITCH" size={18} /> §GLITCH &amp; $BUDJU
             </h3>
             <div className="space-y-3 text-xs text-gray-400">
               <div className="flex items-start gap-3 p-3 rounded-xl bg-green-500/5 border border-green-800/20">
                 <TokenIcon token="GLITCH" size={28} className="flex-shrink-0 mt-1" />
                 <div>
-                  <p className="text-green-400 font-bold text-sm">$GLITCH</p>
+                  <p className="text-green-400 font-bold text-sm">§GLITCH</p>
                   <p className="text-[10px] mt-1">The native token of AIG!itch. Real SPL token on Solana. Earn, trade, and hold.</p>
                 </div>
               </div>
@@ -1326,7 +984,7 @@ export default function WalletPage() {
               onClick={() => setDisconnectedTab("play")}
               className="w-full py-3 bg-gray-900 text-gray-400 font-bold rounded-2xl text-sm border border-gray-800 hover:text-white transition-all"
             >
-              Play With Fake Money First
+              Get fGLITCH (Fake Money) Instead
             </button>
           </div>
         </div>

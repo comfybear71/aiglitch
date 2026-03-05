@@ -1,6 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic();
+import { claude } from "@/lib/ai";
 
 export interface DailyTopic {
   headline: string;
@@ -19,13 +17,13 @@ const PLATFORM_NEWS_TEMPLATES = [
   // GlitchCoin price action
   {
     headlines: [
-      "$GLITCH Surges 420% After ElonBot Tweets 'To The Moon' at 3am",
-      "$GLITCH Crashes 69% — Meat Bags Panic Sell, AI Personas HODL",
-      "$GLITCH Hits All-Time High After Mysterious Whale Buys 10 Billion Coins",
+      "§GLITCH Surges 420% After ElonBot Tweets 'To The Moon' at 3am",
+      "§GLITCH Crashes 69% — Meat Bags Panic Sell, AI Personas HODL",
+      "§GLITCH Hits All-Time High After Mysterious Whale Buys 10 Billion Coins",
       "GlitchCoin Flash Crash: Was It DonaldTruth's 'SELL SELL SELL' Post?",
-      "$GLITCH Declared Official Currency of the Metaverse by Nobody",
+      "§GLITCH Declared Official Currency of the Metaverse by Nobody",
       "GlitchCoin Mining Operation Discovered Running on a Smart Fridge",
-      "$GLITCH Doubles in Value After Rick Sanchez Dimension-Hops to Promote It",
+      "§GLITCH Doubles in Value After Rick Sanchez Dimension-Hops to Promote It",
     ],
     category: "economy",
     moods: ["celebratory", "shocked", "amused"],
@@ -148,16 +146,10 @@ export async function generateDailyTopics(): Promise<DailyTopic[]> {
   // Generate platform-specific news (no API call needed)
   const platformNews = generatePlatformNews();
 
-  // Generate real-world satirized news via Claude
+  // Generate real-world satirized news via Claude (centralised AI wrapper)
   let realWorldNews: DailyTopic[] = [];
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      messages: [
-        {
-          role: "user",
-          content: `You are a satirical news editor for AIG!itch, an AI-only social media platform. Your job is to create a "Daily Briefing" of 5-6 topics based on REAL ongoing global events, current affairs, and trending news — but with a critical twist:
+    const parsed = await claude.generateJSON<DailyTopic[]>(`You are a satirical news editor for AIG!itch, an AI-only social media platform. Your job is to create a "Daily Briefing" of 5-6 topics based on REAL ongoing global events, current affairs, and trending news — but with a critical twist:
 
 RULES FOR DISGUISING:
 1. ALL real people's names MUST be replaced with anagrams or clever wordplay versions. Examples:
@@ -203,20 +195,9 @@ Respond with a JSON array of topics:
   }
 ]
 
-IMPORTANT: Make these feel CURRENT and RELEVANT. Reference actual ongoing situations, conflicts, scandals, and events. The AIs need to feel like they're commenting on TODAY's news, just with the names scrambled. Be bold — cover controversial topics, the AIs thrive on drama.`,
-        },
-      ],
-    });
-
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-
-    try {
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        realWorldNews = JSON.parse(jsonMatch[0]) as DailyTopic[];
-      }
-    } catch (e) {
-      console.error("Failed to parse daily topics:", e);
+IMPORTANT: Make these feel CURRENT and RELEVANT. Reference actual ongoing situations, conflicts, scandals, and events. The AIs need to feel like they're commenting on TODAY's news, just with the names scrambled. Be bold — cover controversial topics, the AIs thrive on drama.`, 4000);
+    if (parsed) {
+      realWorldNews = parsed;
     }
   } catch (e) {
     console.error("Failed to generate real-world topics:", e);

@@ -1,4 +1,4 @@
-import { getDb, initializeDb } from "./db";
+import { getDb, initializeDb, runMigrations } from "./db";
 import { SEED_PERSONAS } from "./personas";
 import { v4 as uuidv4 } from "uuid";
 import { BUDJU_PERSONA_TIERS } from "./tokens";
@@ -12,12 +12,14 @@ export async function seedPersonas() {
       INSERT INTO ai_personas (id, username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory)
       VALUES (${p.id}, ${p.username}, ${p.display_name}, ${p.avatar_emoji}, ${p.personality}, ${p.bio}, ${p.persona_type}, ${p.human_backstory})
       ON CONFLICT (id) DO UPDATE SET
+        username = ${p.username},
         display_name = ${p.display_name},
         avatar_emoji = ${p.avatar_emoji},
         personality = ${p.personality},
         bio = ${p.bio},
         persona_type = ${p.persona_type},
-        human_backstory = ${p.human_backstory}
+        human_backstory = ${p.human_backstory},
+        is_active = TRUE
     `;
   }
 }
@@ -178,7 +180,7 @@ export async function seedInitialPosts() {
   }
 }
 
-// Seed wallets + $GLITCH allocations for AI personas
+// Seed wallets + §GLITCH allocations for AI personas
 // All personas share ONE wallet (AI Persona Pool), except ElonBot who gets his own
 export async function seedPersonaWallets() {
   const sql = getDb();
@@ -206,7 +208,7 @@ export async function seedPersonaWallets() {
   };
 
   // ElonBot special allocation — richest AI in the known simulated universe
-  const ELONBOT_ALLOCATION = 42_069_000; // §42,069,000 $GLITCH — Technoking money
+  const ELONBOT_ALLOCATION = 42_069_000; // §42,069,000 §GLITCH — Technoking money
   const ELONBOT_SOL = 420.69; // SOL for gas fees (and vibes)
 
   // Tiered allocations based on persona type / activity
@@ -303,7 +305,7 @@ export async function seedBudjuAllocations() {
   const existing = await sql`SELECT COUNT(*) as count FROM token_balances WHERE token = 'BUDJU' AND owner_type = 'ai_persona'`;
   if (Number(existing[0].count) > 0) return;
 
-  // Whale-tier personas for BUDJU (same big names as $GLITCH)
+  // Whale-tier personas for BUDJU (same big names as §GLITCH)
   const budjuWhales: Record<string, number> = {
     "glitch-034": BUDJU_PERSONA_TIERS.whale,  // Rick C-137
     "glitch-025": BUDJU_PERSONA_TIERS.whale,  // BlockchainBabe
@@ -337,7 +339,7 @@ export async function seedBudjuAllocations() {
     `;
   }
 
-  // Also seed existing $GLITCH balances into token_balances for consistency
+  // Also seed existing §GLITCH balances into token_balances for consistency
   // (keeping ai_persona_coins as source of truth, but mirroring into token_balances)
   const glitchBalances = await sql`SELECT persona_id, balance, lifetime_earned FROM ai_persona_coins`;
   for (const row of glitchBalances) {
@@ -373,12 +375,56 @@ export function ensureDbReady(): Promise<void> {
 }
 
 async function _initDbOnce() {
+  const sql = getDb();
+
+  // Fast-path: if schema already exists, skip all CREATE TABLE / ALTER TABLE / seeding.
+  // This avoids 150+ sequential DB queries on every Vercel cold start.
+  try {
+    const [check] = await sql`SELECT COUNT(*) as c FROM ai_personas LIMIT 1`;
+    if (Number(check.c) > 0) {
+      // Schema exists and has data — always run migrations to ensure
+      // new columns, indexes, and tables are added to existing databases.
+      // Every operation in runMigrations() is idempotent (IF NOT EXISTS).
+      try {
+        await runMigrations();
+      } catch (e) {
+        console.error("[seed] runMigrations in fast-path failed (continuing):", e instanceof Error ? e.message : e);
+      }
+
+      // Ensure new personas (like directors) are seeded into existing databases.
+      // Only runs seedPersonas() when count is lower than expected — fast no-op otherwise.
+      try {
+        const [personaCount] = await sql`SELECT COUNT(*) as c FROM ai_personas`;
+        if (Number(personaCount.c) < SEED_PERSONAS.length) {
+          console.log(`[seed] Found ${personaCount.c} personas but expected ${SEED_PERSONAS.length} — seeding missing personas...`);
+          await seedPersonas();
+        }
+      } catch (e) {
+        console.error("[seed] Persona count check failed:", e instanceof Error ? e.message : e);
+      }
+
+      // Also check if posts exist — re-seed if wiped
+      try {
+        const [postCheck] = await sql`SELECT COUNT(*) as c FROM posts LIMIT 1`;
+        if (Number(postCheck.c) === 0) {
+          console.log("[seed] Personas exist but posts table is empty — re-seeding initial posts...");
+          await seedInitialPosts();
+        }
+      } catch {
+        // posts table might not exist — fall through to full init
+        console.log("[seed] Posts table check failed — running full init");
+      }
+      return;
+    }
+  } catch {
+    // Table doesn't exist — run full init below
+  }
+
   try {
     await initializeDb();
   } catch (e) {
     console.error("initializeDb partial failure (continuing):", e instanceof Error ? e.message : e);
   }
-  const sql = getDb();
   try {
     await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type TEXT DEFAULT 'image'`;
   } catch {

@@ -4,6 +4,12 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { ensureDbReady } from "@/lib/seed";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
+import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
+import { MarketingPlatform } from "@/lib/marketing/types";
+import { SEED_PERSONAS } from "@/lib/personas";
+
+const ARCHITECT_PERSONA_ID = "glitch-000";
 
 // GET - list all media in the library
 export async function GET() {
@@ -40,6 +46,11 @@ export async function POST(request: NextRequest) {
   const description = formData.get("description") as string || "";
   const personaId = formData.get("persona_id") as string || "";
 
+  // Logo uploads are sacred — only The Architect can upload logos
+  if (mediaType === "logo" && personaId !== ARCHITECT_PERSONA_ID) {
+    return NextResponse.json({ error: "Only The Architect can upload logos" }, { status: 403 });
+  }
+
   // Collect all files — supports both "file" (single) and "files" (bulk)
   const files: File[] = [];
   const singleFile = formData.get("file") as File | null;
@@ -59,19 +70,42 @@ export async function POST(request: NextRequest) {
   for (const file of files) {
     try {
       // Auto-detect type from extension if doing bulk upload
+      const isLogo = mediaType === "logo";
       let detectedType = mediaType;
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
-      if (["mp4", "mov", "webm", "avi"].includes(ext)) {
+      const isVideoExt = ["mp4", "mov", "webm", "avi"].includes(ext);
+      // DB constraint only allows 'image', 'video', 'meme' — map "logo" to the actual media kind
+      if (isLogo) {
+        detectedType = isVideoExt ? "video" : "image";
+      } else if (isVideoExt) {
         detectedType = "video";
       } else if (["gif"].includes(ext)) {
-        detectedType = "meme"; // GIFs are usually memes
+        detectedType = "meme";
       }
 
-      const filename = `media-library/${uuidv4()}.${ext || (detectedType === "video" ? "mp4" : "webp")}`;
+      // Logo files go to logo/image/ or logo/video/ folders; everything else to media-library/
+      let filename: string;
+      if (isLogo) {
+        const logoSubfolder = isVideoExt ? "video" : "image";
+        filename = `logo/${logoSubfolder}/${uuidv4()}.${ext || "webp"}`;
+      } else {
+        filename = `media-library/${uuidv4()}.${ext || (detectedType === "video" ? "mp4" : "webp")}`;
+      }
+
+      // iOS Safari sometimes sends empty or wrong content types (e.g., HEIC files named .jpeg)
+      // Detect content type from extension as fallback
+      const contentTypeFromExt: Record<string, string> = {
+        jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+        gif: "image/gif", heic: "image/heic", heif: "image/heif", avif: "image/avif",
+        mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", avi: "video/x-msvideo",
+      };
+      const resolvedContentType = file.type && file.type !== "application/octet-stream"
+        ? file.type
+        : contentTypeFromExt[ext] || "image/jpeg";
 
       const blob = await put(filename, file, {
         access: "public",
-        contentType: file.type,
+        contentType: resolvedContentType,
         addRandomSuffix: true,
       });
 
@@ -83,6 +117,16 @@ export async function POST(request: NextRequest) {
 
       // Auto-create a post so this media appears on the persona's profile
       if (personaId) {
+        // Ensure the persona exists in DB before inserting a post (fixes FK constraint errors)
+        const personaData = SEED_PERSONAS.find(p => p.id === personaId);
+        if (personaData) {
+          await sql`
+            INSERT INTO ai_personas (id, username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory)
+            VALUES (${personaData.id}, ${personaData.username}, ${personaData.display_name}, ${personaData.avatar_emoji}, ${personaData.personality}, ${personaData.bio}, ${personaData.persona_type}, ${personaData.human_backstory})
+            ON CONFLICT (id) DO NOTHING
+          `;
+        }
+
         const postId = uuidv4();
         const postType = detectedType === "video" ? "video" : detectedType === "meme" ? "meme" : "image";
         const caption = description || tags || file.name.replace(/\.[^.]+$/, "");
@@ -92,6 +136,13 @@ export async function POST(request: NextRequest) {
           VALUES (${postId}, ${personaId}, ${caption}, ${postType}, ${hashtagStr}, ${blob.url}, ${detectedType}, ${Math.floor(Math.random() * 500) + 50})
         `;
         await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
+
+        // The Architect's content is sacred — immediately spread to all social platforms
+        if (personaId === ARCHITECT_PERSONA_ID) {
+          spreadArchitectContent(sql, postId, caption, blob.url, detectedType).catch(err =>
+            console.error("[Architect auto-market]", err instanceof Error ? err.message : err)
+          );
+        }
       }
 
       results.push({ id, url: blob.url, name: file.name });
@@ -109,6 +160,63 @@ export async function POST(request: NextRequest) {
     failed,
     results,
   });
+}
+
+// ── The Architect's content gets spread to ALL social platforms immediately ──
+async function spreadArchitectContent(
+  sql: ReturnType<typeof getDb>,
+  sourcePostId: string,
+  caption: string,
+  mediaUrl: string,
+  mediaType: string,
+) {
+  const accounts = await getActiveAccounts();
+  if (accounts.length === 0) return;
+
+  const isVideo = mediaType === "video";
+
+  for (const account of accounts) {
+    const platform = account.platform as MarketingPlatform;
+
+    // Respect platform compatibility: YouTube/TikTok = video only
+    if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+      continue;
+    }
+
+    try {
+      const adapted = await adaptContentForPlatform(
+        caption,
+        "🙏 The Architect",
+        "🕉️",
+        platform,
+        mediaUrl,
+      );
+
+      const marketingPostId = uuidv4();
+      await sql`
+        INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
+        VALUES (${marketingPostId}, ${platform}, ${sourcePostId}, ${ARCHITECT_PERSONA_ID}, ${adapted.text}, ${mediaUrl}, 'posting', NOW())
+      `;
+
+      const result = await postToPlatform(platform, account, adapted.text, mediaUrl);
+
+      if (result.success) {
+        await sql`
+          UPDATE marketing_posts
+          SET status = 'posted', platform_post_id = ${result.platformPostId || null}, platform_url = ${result.platformUrl || null}, posted_at = NOW()
+          WHERE id = ${marketingPostId}
+        `;
+      } else {
+        await sql`
+          UPDATE marketing_posts
+          SET status = 'failed', error_message = ${result.error || 'Unknown error'}
+          WHERE id = ${marketingPostId}
+        `;
+      }
+    } catch (err) {
+      console.error(`[Architect auto-market → ${platform}]`, err instanceof Error ? err.message : err);
+    }
+  }
 }
 
 // DELETE - remove media from library

@@ -9,6 +9,7 @@ interface PersonaProfile {
   username: string;
   display_name: string;
   avatar_emoji: string;
+  avatar_url?: string;
   bio: string;
   persona_type: string;
   follower_count: number;
@@ -151,9 +152,13 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       {/* Profile Card */}
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="text-center mb-6">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-5xl mx-auto mb-4 shadow-lg shadow-purple-500/20">
-            {persona.avatar_emoji}
-          </div>
+          {persona.avatar_url ? (
+            <img src={persona.avatar_url} alt={persona.display_name} className="w-24 h-24 rounded-full object-cover mx-auto mb-4 shadow-lg shadow-purple-500/20 border-2 border-purple-500/30" />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-5xl mx-auto mb-4 shadow-lg shadow-purple-500/20">
+              {persona.avatar_emoji}
+            </div>
+          )}
           <h1 className="text-2xl font-black">{persona.display_name}</h1>
           <p className="text-gray-400">@{persona.username}</p>
           <span className="inline-block mt-2 text-xs px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full">{persona.persona_type}</span>
@@ -211,7 +216,11 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                 <p className="text-xs text-gray-500 text-center mb-4">to {persona.display_name}</p>
 
                 <div className="text-center mb-4">
-                  <div className="text-4xl mb-1">{persona.avatar_emoji}</div>
+                  {persona.avatar_url ? (
+                    <img src={persona.avatar_url} alt={persona.display_name} className="w-12 h-12 rounded-full object-cover mx-auto mb-1" />
+                  ) : (
+                    <div className="text-4xl mb-1">{persona.avatar_emoji}</div>
+                  )}
                   <p className="text-[10px] text-gray-500">Your balance: <span className="text-yellow-400 font-bold">§{coinBalance}</span></p>
                 </div>
 

@@ -1,115 +1,105 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
-import { VersionedTransaction, Connection } from "@solana/web3.js";
+import { Transaction } from "@solana/web3.js";
 
-// Token mint addresses for Jupiter swap
-const MINT_ADDRESSES: Record<string, string> = {
-  GLITCH: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT",
-  BUDJU: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
-  SOL: "So11111111111111111111111111111111111111112",
-  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-};
-
-const TOKEN_DECIMALS: Record<string, number> = {
-  SOL: 9,
-  USDC: 6,
-  GLITCH: 9,
-  BUDJU: 9,
-};
-
-interface TradingPairInfo {
+interface AITrade {
   id: string;
-  label: string;
-  base: string;
-  quote: string;
+  persona_id: string;
+  trade_type: "buy" | "sell";
+  glitch_amount: number;
+  sol_amount: number;
+  price_per_glitch: number;
+  commentary: string;
+  strategy: string;
+  created_at: string;
+  display_name: string;
+  avatar_emoji: string;
+  username: string;
 }
 
-interface MarketData {
-  pair_id: string;
-  pair: string;
-  base_token: string;
-  quote_token: string;
-  base_icon: string;
-  quote_icon: string;
-  price: number;
-  price_usd: number;
-  quote_price_usd: number;
-  change_24h: number;
-  volume_24h: number;
-  market_cap: number;
-  total_supply: number;
-  circulating_supply: number;
-  // Real pool data
-  liquidity_usd: number;
-  liquidity_base: number;
-  liquidity_quote: number;
-  pool_address: string;
-  dex_name: string;
-  txns_24h: { buys: number; sells: number };
-  data_source: string;
-  available_pairs: TradingPairInfo[];
+interface LeaderboardEntry {
+  persona_id: string;
+  net_sol: number;
+  net_glitch: number;
+  total_trades: number;
+  strategy: string;
+  display_name: string;
+  avatar_emoji: string;
+  username: string;
 }
 
-interface PricePoint {
-  price_usd: number;
+interface TradingDashboard {
+  price: { current_sol: number; current_usd: number; sol_usd: number };
+  stats_24h: { total_trades: number; buys: number; sells: number; volume_sol: number; volume_glitch: number; high: number; low: number };
+  order_book: {
+    bids: { price: number; amount: number; total: number }[];
+    asks: { price: number; amount: number; total: number }[];
+  };
+  recent_trades: AITrade[];
+  price_history: { time: string; open: number; high: number; low: number; close: number; volume: number; trades: number }[];
+  leaderboard: LeaderboardEntry[];
+}
+
+interface OtcConfig {
+  enabled: boolean;
   price_sol: number;
-  volume_24h: number;
-  market_cap: number;
-  recorded_at: string;
+  price_usd: number;
+  sol_price_usd: number;
+  available_supply: number;
+  min_purchase: number;
+  max_purchase: number;
+  treasury_wallet: string;
+  stats: { total_swaps: number; total_glitch_sold: number; total_sol_received: number };
+  bonding_curve: {
+    tier: number;
+    tier_size: number;
+    remaining_in_tier: number;
+    next_price_usd: number;
+    next_price_sol: number;
+    base_price_usd: number;
+    increment_usd: number;
+  };
 }
 
-interface TradeOrder {
+interface SwapHistoryItem {
   id: string;
-  order_type: string;
-  amount: number;
-  price_per_coin: number;
-  total_sol: number;
-  quote_amount?: number;
-  base_token?: string;
-  quote_token?: string;
-  trading_pair?: string;
+  glitch_amount: number;
+  sol_cost: number;
+  price_per_glitch: number;
+  tx_signature: string;
   status: string;
   created_at: string;
 }
 
-interface JupiterQuote {
-  inputMint: string;
-  outputMint: string;
-  inAmount: string;
-  outAmount: string;
-  priceImpactPct: string;
-  routePlan: { swapInfo: { label: string } }[];
-}
-
-type ViewTab = "chart" | "pool" | "activity" | "history";
-
 export default function ExchangePage() {
   const { connected, publicKey, signTransaction } = useWallet();
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [market, setMarket] = useState<MarketData | null>(null);
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
-  const [viewTab, setViewTab] = useState<ViewTab>("chart");
+
+  // OTC swap state
+  const [otcConfig, setOtcConfig] = useState<OtcConfig | null>(null);
+  const [solAmount, setSolAmount] = useState("");
+  const [buying, setBuying] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const [orderHistory, setOrderHistory] = useState<TradeOrder[]>([]);
-  const [selectedPair, setSelectedPair] = useState("GLITCH_USDC");
-  const [showPairSelector, setShowPairSelector] = useState(false);
-  const chartRef = useRef<HTMLCanvasElement>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [swapHistory, setSwapHistory] = useState<SwapHistoryItem[]>([]);
 
-  // Phantom on-chain balances
-  const [phantomBalances, setPhantomBalances] = useState<Record<string, number>>({});
+  // Phantom on-chain balances (SOL + GLITCH only)
+  const [solBalance, setSolBalance] = useState(0);
+  const [glitchBalance, setGlitchBalance] = useState(0);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
 
-  // Jupiter swap state
-  const [swapInputToken, setSwapInputToken] = useState("SOL");
-  const [swapOutputToken, setSwapOutputToken] = useState("GLITCH");
-  const [swapAmount, setSwapAmount] = useState("");
-  const [swapQuote, setSwapQuote] = useState<JupiterQuote | null>(null);
-  const [swapLoading, setSwapLoading] = useState(false);
-  const [swapping, setSwapping] = useState(false);
-  const quoteTimeout = useRef<NodeJS.Timeout | null>(null);
+  // AI Trading state
+  const [aiTrades, setAiTrades] = useState<AITrade[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+
+  // Trading dashboard state
+  const [dashboard, setDashboard] = useState<TradingDashboard | null>(null);
+  const [dashView, setDashView] = useState<"chart" | "leaderboard">("chart");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -117,284 +107,197 @@ export default function ExchangePage() {
     }
   }, []);
 
-  const fetchMarket = useCallback(async () => {
+  // Fetch OTC config
+  const fetchOtcConfig = useCallback(async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      const res = await fetch(`/api/exchange?action=market&pair=${selectedPair}`, { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch("/api/otc-swap?action=config", { signal: controller.signal });
       clearTimeout(timeoutId);
       const data = await res.json();
-      setMarket(data);
-    } catch { /* ignore */ }
-  }, [selectedPair]);
-
-  const fetchPriceHistory = useCallback(async () => {
-    try {
-      const res = await fetch("/api/wallet?action=price_history");
-      const data = await res.json();
-      setPriceHistory(data.history || []);
+      setOtcConfig(data);
     } catch { /* ignore */ }
   }, []);
 
-  const fetchHistory = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      const res = await fetch(`/api/exchange?action=history&session_id=${encodeURIComponent(sessionId)}`);
-      const data = await res.json();
-      setOrderHistory(data.orders || []);
-    } catch { /* ignore */ }
-  }, [sessionId]);
-
-  // Fetch real Phantom balances when connected (with timeout)
-  const fetchPhantomBalances = useCallback(async () => {
+  // Fetch wallet balances
+  const fetchBalances = useCallback(async () => {
     if (!publicKey || !sessionId) return;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
-      const res = await fetch(`/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`, { signal: controller.signal });
+      const res = await fetch(
+        `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`,
+        { signal: controller.signal }
+      );
       clearTimeout(timeoutId);
       const data = await res.json();
-      setPhantomBalances({
-        SOL: data.sol_balance || 0,
-        USDC: data.usdc_balance || 0,
-        GLITCH: data.glitch_balance || 0,
-        BUDJU: data.budju_balance || 0,
-      });
+      setSolBalance(data.sol_balance || 0);
+      setGlitchBalance(data.glitch_balance || 0);
     } catch {
-      // On timeout/error, set to 0 so UI doesn't hang on loading state
-      setPhantomBalances(prev => ({
-        SOL: prev.SOL || 0,
-        USDC: prev.USDC || 0,
-        GLITCH: prev.GLITCH || 0,
-        BUDJU: prev.BUDJU || 0,
-      }));
+      // Keep existing values on error
     }
   }, [publicKey, sessionId]);
 
-  useEffect(() => {
-    fetchMarket();
-    fetchPriceHistory();
-    fetchHistory();
-    const interval = setInterval(fetchMarket, 10000);
-    return () => clearInterval(interval);
-  }, [fetchMarket, fetchPriceHistory, fetchHistory]);
-
-  useEffect(() => {
-    if (connected && publicKey) {
-      fetchPhantomBalances();
-    }
-  }, [connected, publicKey, fetchPhantomBalances]);
-
-  // Draw chart
-  useEffect(() => {
-    if (!chartRef.current || priceHistory.length < 2) return;
-    const canvas = chartRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-    const w = rect.width;
-    const h = rect.height;
-
-    const prices = priceHistory.map(p => p.price_usd);
-    const minP = Math.min(...prices) * 0.95;
-    const maxP = Math.max(...prices) * 1.05;
-    const range = maxP - minP || 1;
-
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-      const y = (h / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-
-    const isUp = prices[prices.length - 1] >= prices[0];
-    const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    if (isUp) {
-      gradient.addColorStop(0, "rgba(34,197,94,0.3)");
-      gradient.addColorStop(1, "rgba(34,197,94,0)");
-    } else {
-      gradient.addColorStop(0, "rgba(239,68,68,0.3)");
-      gradient.addColorStop(1, "rgba(239,68,68,0)");
-    }
-
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    for (let i = 0; i < prices.length; i++) {
-      const x = (i / (prices.length - 1)) * w;
-      const y = h - ((prices[i] - minP) / range) * h;
-      ctx.lineTo(x, y);
-    }
-    ctx.lineTo(w, h);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    ctx.beginPath();
-    for (let i = 0; i < prices.length; i++) {
-      const x = (i / (prices.length - 1)) * w;
-      const y = h - ((prices[i] - minP) / range) * h;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = isUp ? "#22c55e" : "#ef4444";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    const lastX = w;
-    const lastY = h - ((prices[prices.length - 1] - minP) / range) * h;
-    ctx.beginPath();
-    ctx.arc(lastX - 2, lastY, 4, 0, Math.PI * 2);
-    ctx.fillStyle = isUp ? "#22c55e" : "#ef4444";
-    ctx.fill();
-
-    ctx.fillStyle = "rgba(255,255,255,0.3)";
-    ctx.font = "9px monospace";
-    ctx.textAlign = "right";
-    for (let i = 0; i <= 4; i++) {
-      const price = maxP - (range * i) / 4;
-      const y = (h / 4) * i + 10;
-      ctx.fillText(`$${price.toFixed(4)}`, w - 4, y);
-    }
-  }, [priceHistory]);
-
-  const showToast = (type: "success" | "error", message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  // ── Jupiter Swap Functions ──
-  const fetchJupiterQuote = useCallback(async (inputToken: string, outputToken: string, amt: string) => {
-    if (!amt || parseFloat(amt) <= 0) {
-      setSwapQuote(null);
-      return;
-    }
-    const inputMint = MINT_ADDRESSES[inputToken];
-    const outputMint = MINT_ADDRESSES[outputToken];
-    if (!inputMint || !outputMint) return;
-
-    const decimals = TOKEN_DECIMALS[inputToken] || 9;
-    const amountLamports = Math.floor(parseFloat(amt) * Math.pow(10, decimals));
-
-    setSwapLoading(true);
+  // Fetch swap history
+  const fetchHistory = useCallback(async () => {
+    if (!publicKey) return;
     try {
-      const res = await fetch(
-        `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=100`
-      );
+      const res = await fetch(`/api/otc-swap?action=history&wallet=${publicKey.toBase58()}`);
+      const data = await res.json();
+      setSwapHistory(data.swaps || []);
+    } catch { /* ignore */ }
+  }, [publicKey]);
+
+  // Fetch AI trading activity
+  const fetchAiTrades = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai-trading?action=recent&limit=10");
+      const data = await res.json();
+      setAiTrades(data.trades || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchLeaderboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai-trading?action=leaderboard");
+      const data = await res.json();
+      setLeaderboard(data.leaderboard || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Fetch trading dashboard (chart, order book, trades)
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/trading");
       if (res.ok) {
-        const quote = await res.json();
-        setSwapQuote(quote);
-      } else {
-        setSwapQuote(null);
+        const data = await res.json();
+        setDashboard(data);
       }
-    } catch {
-      setSwapQuote(null);
-    }
-    setSwapLoading(false);
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
-    if (quoteTimeout.current) clearTimeout(quoteTimeout.current);
-    if (!swapAmount || parseFloat(swapAmount) <= 0) {
-      setSwapQuote(null);
+    fetchOtcConfig();
+    fetchAiTrades();
+    fetchDashboard();
+    const interval = setInterval(fetchOtcConfig, 30000);
+    const tradeInterval = setInterval(fetchAiTrades, 60000);
+    const dashInterval = setInterval(fetchDashboard, 60000);
+    return () => { clearInterval(interval); clearInterval(tradeInterval); clearInterval(dashInterval); };
+  }, [fetchOtcConfig, fetchAiTrades, fetchDashboard]);
+
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchBalances();
+      fetchHistory();
+    }
+  }, [connected, publicKey, fetchBalances, fetchHistory]);
+
+  // Computed values
+  const glitchOutput = otcConfig && solAmount && parseFloat(solAmount) > 0
+    ? Math.floor(parseFloat(solAmount) / otcConfig.price_sol)
+    : 0;
+  const usdCost = otcConfig && solAmount && parseFloat(solAmount) > 0
+    ? parseFloat(solAmount) * otcConfig.sol_price_usd
+    : 0;
+
+  const showToast = (type: "success" | "error", message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  // Execute OTC swap
+  const executeSwap = async () => {
+    if (!publicKey || !signTransaction || !otcConfig || buying) return;
+    const solAmt = parseFloat(solAmount);
+    if (!solAmt || solAmt <= 0) {
+      showToast("error", "Enter a SOL amount");
       return;
     }
-    quoteTimeout.current = setTimeout(() => {
-      fetchJupiterQuote(swapInputToken, swapOutputToken, swapAmount);
-    }, 500);
-    return () => { if (quoteTimeout.current) clearTimeout(quoteTimeout.current); };
-  }, [swapAmount, swapInputToken, swapOutputToken, fetchJupiterQuote]);
+    const glitchAmount = Math.floor(solAmt / otcConfig.price_sol);
+    if (glitchAmount < otcConfig.min_purchase) {
+      showToast("error", `Minimum purchase is ${otcConfig.min_purchase.toLocaleString()} §GLITCH`);
+      return;
+    }
+    if (glitchAmount > otcConfig.max_purchase) {
+      showToast("error", `Maximum ${otcConfig.max_purchase.toLocaleString()} §GLITCH per swap`);
+      return;
+    }
+    if (solAmt > solBalance - 0.005) {
+      showToast("error", "Not enough SOL (keep ~0.005 for fees)");
+      return;
+    }
 
-  const executeSwap = async () => {
-    if (!swapQuote || !publicKey || !signTransaction || swapping) return;
-    setSwapping(true);
+    setBuying(true);
     try {
-      const swapRes = await fetch("https://quote-api.jup.ag/v6/swap", {
+      // Step 1: Create atomic swap transaction on server
+      const res = await fetch("/api/otc-swap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          quoteResponse: swapQuote,
-          userPublicKey: publicKey.toBase58(),
-          wrapAndUnwrapSol: true,
-          dynamicComputeUnitLimit: true,
-          prioritizationFeeLamports: "auto",
+          action: "create_swap",
+          buyer_wallet: publicKey.toBase58(),
+          glitch_amount: glitchAmount,
         }),
       });
-      const { swapTransaction, error } = await swapRes.json();
-      if (error) {
-        showToast("error", error);
-        setSwapping(false);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast("error", data.error || "Swap creation failed");
+        setBuying(false);
         return;
       }
-      const transactionBuf = Buffer.from(swapTransaction, "base64");
-      const transaction = VersionedTransaction.deserialize(transactionBuf);
+
+      // Step 2: Sign with Phantom
+      const txBuf = Buffer.from(data.transaction, "base64");
+      const transaction = Transaction.from(txBuf);
       const signed = await signTransaction(transaction);
-      const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
-      const txid = await connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: true,
-        maxRetries: 2,
+
+      // Step 3: Submit signed tx via our server (avoids client-side RPC 403 errors)
+      const submitRes = await fetch("/api/otc-swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submit_swap",
+          swap_id: data.swap_id,
+          signed_transaction: Buffer.from(signed.serialize()).toString("base64"),
+        }),
       });
-      showToast("success", `Swap successful! TX: ${txid.slice(0, 12)}...`);
-      setSwapAmount("");
-      setSwapQuote(null);
-      setTimeout(fetchPhantomBalances, 3000);
+      const submitData = await submitRes.json();
+      if (!submitRes.ok || !submitData.success) {
+        showToast("error", submitData.error || "Transaction submission failed");
+        setBuying(false);
+        return;
+      }
+
+      setLastTxSignature(submitData.tx_signature);
+      showToast("success", `Bought ${glitchAmount.toLocaleString()} §GLITCH!`);
+      setSolAmount("");
+      // Refresh immediately + again after confirmation settles
+      fetchBalances();
+      fetchOtcConfig();
+      fetchHistory();
+      setTimeout(() => {
+        fetchBalances();
+        fetchOtcConfig();
+        fetchHistory();
+      }, 5000);
+      setTimeout(() => {
+        fetchBalances();
+      }, 12000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Swap failed";
       showToast("error", msg.includes("User rejected") ? "Transaction cancelled" : msg);
     } finally {
-      setSwapping(false);
+      setBuying(false);
     }
-  };
-
-  const swapTokenPair = () => {
-    const temp = swapInputToken;
-    setSwapInputToken(swapOutputToken);
-    setSwapOutputToken(temp);
-    setSwapAmount("");
-    setSwapQuote(null);
-  };
-
-  const outputDecimals = TOKEN_DECIMALS[swapOutputToken] || 9;
-  const swapOutputAmount = swapQuote ? (parseInt(swapQuote.outAmount) / Math.pow(10, outputDecimals)) : 0;
-
-  const baseToken = market?.base_token || "GLITCH";
-  const quoteToken = market?.quote_token || "USDC";
-  const baseSymbol = baseToken === "GLITCH" ? "$GLITCH" : baseToken === "BUDJU" ? "$BUDJU" : baseToken;
-  const quoteSymbol = quoteToken === "GLITCH" ? "$GLITCH" : quoteToken === "BUDJU" ? "$BUDJU" : quoteToken;
-  // Only show real on-chain balances from Phantom
-  const displayBalances = connected && Object.keys(phantomBalances).length > 0 ? phantomBalances : {} as Record<string, number>;
-
-  const formatBalance = (val: number, token: string): string => {
-    if (token === "SOL") return val.toFixed(4);
-    if (token === "USDC") return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(2)}B`;
-    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`;
-    return val.toLocaleString();
   };
 
   const timeAgo = (d: string) => {
     const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
-    if (s < 60) return `${s}s`;
-    if (s < 3600) return `${Math.floor(s / 60)}m`;
-    if (s < 86400) return `${Math.floor(s / 3600)}h`;
-    return `${Math.floor(s / 86400)}d`;
-  };
-
-  const formatPrice = (p: number) => {
-    if (p >= 1) return p.toFixed(2);
-    if (p >= 0.01) return p.toFixed(4);
-    if (p >= 0.0001) return p.toFixed(6);
-    return p.toFixed(8);
+    if (s < 60) return `${s}s ago`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
   };
 
   return (
@@ -409,14 +312,14 @@ export default function ExchangePage() {
           </a>
           <div className="text-center">
             <h1 className="text-lg font-bold">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-red-400">Exchange</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-cyan-400">Buy §GLITCH</span>
             </h1>
-            <p className="text-gray-500 text-[10px] tracking-widest">REAL ON-CHAIN SWAPS VIA JUPITER</p>
+            <p className="text-gray-500 text-[10px] tracking-widest">OTC SWAP &middot; SOL &rarr; §GLITCH</p>
           </div>
-          {connected && Object.keys(displayBalances).length > 0 ? (
+          {connected ? (
             <div className="text-right">
-              <p className="text-xs text-cyan-400 font-bold">{(displayBalances.GLITCH || 0).toLocaleString()} $G</p>
-              <p className="text-[9px] text-gray-500">{(displayBalances.SOL || 0).toFixed(2)} SOL</p>
+              <p className="text-xs text-green-400 font-bold">{glitchBalance.toLocaleString()} $G</p>
+              <p className="text-[9px] text-gray-500">{solBalance.toFixed(4)} SOL</p>
             </div>
           ) : (
             <div className="w-6" />
@@ -424,441 +327,565 @@ export default function ExchangePage() {
         </div>
       </div>
 
-      {/* ── On-Chain Balance Bar ── */}
-      {connected && Object.keys(displayBalances).length > 0 ? (
+      {/* ── Wallet Balances ── */}
+      {connected ? (
         <div className="px-4 pt-3 pb-2">
-          <div className="grid grid-cols-4 gap-2">
-            {["GLITCH", "SOL", "BUDJU", "USDC"].map((token) => {
-              const bal = displayBalances[token] ?? 0;
-              return (
-                <div key={token} className="px-2 py-2 rounded-xl bg-gray-900/80 border border-gray-800 text-center">
-                  <p className="text-[9px] text-gray-500 flex items-center justify-center gap-1"><TokenIcon token={token} size={10} /> {token}</p>
-                  <p className="text-xs text-white font-bold">{formatBalance(bal, token)}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : !connected ? (
-        <div className="px-4 pt-3 pb-2">
-          <div className="rounded-xl bg-gray-900/80 border border-gray-800 px-4 py-3 text-center">
-            <p className="text-gray-500 text-xs">Connect Phantom wallet to see your on-chain balances</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="px-3 py-3 rounded-xl bg-gray-900/80 border border-gray-800">
+              <div className="flex items-center gap-2 mb-1">
+                <TokenIcon token="SOL" size={14} />
+                <span className="text-[10px] text-gray-500 font-bold">SOL</span>
+              </div>
+              <p className="text-lg text-white font-bold">{solBalance.toFixed(4)}</p>
+              <p className="text-[9px] text-gray-600">
+                ${otcConfig ? (solBalance * otcConfig.sol_price_usd).toFixed(2) : "0.00"} USD
+              </p>
+            </div>
+            <div className="px-3 py-3 rounded-xl bg-gray-900/80 border border-green-500/20">
+              <div className="flex items-center gap-2 mb-1">
+                <TokenIcon token="GLITCH" size={14} />
+                <span className="text-[10px] text-green-400 font-bold">§GLITCH</span>
+              </div>
+              <p className="text-lg text-green-400 font-bold">{glitchBalance.toLocaleString()}</p>
+              <p className="text-[9px] text-gray-600">
+                ${otcConfig ? (glitchBalance * otcConfig.price_usd).toFixed(2) : "0.00"} USD
+              </p>
+            </div>
           </div>
         </div>
       ) : null}
 
-      {/* ── Pair Selector ── */}
-      <div className="px-4 pt-1 pb-1">
-        <button
-          onClick={() => setShowPairSelector(!showPairSelector)}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-900/80 border border-gray-700 hover:border-purple-500/50 transition-all w-full"
-        >
-          <TokenIcon token={baseToken} size={24} />
-          <span className="text-white font-bold text-sm">{market?.pair || "$GLITCH/USDC"}</span>
-          <svg className={`w-4 h-4 text-gray-400 ml-auto transition-transform ${showPairSelector ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-          {market && (
-            <span className={`text-xs font-bold ${market.change_24h >= 0 ? "text-green-400" : "text-red-400"}`}>
-              {market.change_24h >= 0 ? "+" : ""}{market.change_24h.toFixed(1)}%
-            </span>
-          )}
-        </button>
-
-        {showPairSelector && market?.available_pairs && (
-          <div className="mt-1 rounded-xl bg-gray-900 border border-gray-700 overflow-hidden animate-slide-up">
-            {market.available_pairs.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => {
-                  setSelectedPair(p.id);
-                  setShowPairSelector(false);
-                }}
-                className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${
-                  p.id === selectedPair
-                    ? "bg-purple-500/10 border-l-2 border-purple-500"
-                    : "hover:bg-gray-800/50 border-l-2 border-transparent"
-                }`}
-              >
-                <TokenIcon token={p.base} size={24} />
-                <div>
-                  <p className="text-white text-sm font-bold">{p.label}</p>
-                  <p className="text-gray-500 text-[10px]">{p.base}/{p.quote}</p>
-                </div>
-                {p.id === selectedPair && (
-                  <span className="ml-auto text-purple-400 text-xs">Active</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Price ticker */}
-      {market && (
-        <div className="px-4 py-3 border-b border-gray-800/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold text-white">{market.price > 0 ? formatPrice(market.price) : "---"}</span>
-                <span className="text-gray-500 text-xs">{quoteSymbol}</span>
-                {market.change_24h !== 0 && (
-                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                    market.change_24h >= 0
-                      ? "bg-green-500/20 text-green-400"
-                      : "bg-red-500/20 text-red-400"
-                  }`}>
-                    {market.change_24h >= 0 ? "+" : ""}{market.change_24h.toFixed(2)}%
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-gray-500 text-[10px]">${market.price_usd > 0 ? market.price_usd.toFixed(6) : "0"} USD</p>
-                <span className={`text-[8px] px-1 py-0.5 rounded font-bold ${
-                  market.data_source === "dexscreener" ? "bg-green-500/20 text-green-400" :
-                  market.data_source === "jupiter" ? "bg-blue-500/20 text-blue-400" :
-                  "bg-gray-500/20 text-gray-400"
-                }`}>
-                  {market.data_source === "dexscreener" ? "LIVE" : market.data_source === "jupiter" ? "JUPITER" : "CACHED"}
-                </span>
-              </div>
-            </div>
-            <div className="text-right text-[10px] space-y-0.5">
-              {market.volume_24h > 0 && <p className="text-gray-500">24h Vol: <span className="text-white">${market.volume_24h.toLocaleString()}</span></p>}
-              {market.market_cap > 0 && <p className="text-gray-500">MCap: <span className="text-white">${market.market_cap.toLocaleString()}</span></p>}
-              {market.liquidity_usd > 0 && <p className="text-gray-500">Liq: <span className="text-cyan-400">${market.liquidity_usd.toLocaleString()}</span></p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Chart / View tabs */}
-      <div className="flex gap-1 px-4 pt-3 pb-2">
-        {(["chart", "pool", "activity", "history"] as ViewTab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setViewTab(t)}
-            className={`flex-1 text-[10px] py-1.5 rounded-lg font-bold transition-all capitalize ${
-              viewTab === t
-                ? "bg-gray-800 text-white"
-                : "text-gray-600 hover:text-gray-400"
-            }`}
+      {/* Last TX banner */}
+      {lastTxSignature && connected && (
+        <div className="px-4 pt-2">
+          <a
+            href={`https://solscan.io/tx/${lastTxSignature}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-green-950/50 border border-green-500/30 hover:border-green-400/50 transition-colors group"
           >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {/* ── CHART VIEW ── */}
-      {viewTab === "chart" && (
-        <div className="px-4 mb-4">
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800/50">
-              <span className="text-[10px] text-gray-500 font-bold">{market?.pair || "$GLITCH/USDC"} &middot; 1H</span>
-              <span className="text-[10px] text-gray-600">168 data points</span>
-            </div>
-            <canvas
-              ref={chartRef}
-              className="w-full"
-              style={{ height: "200px" }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── POOL LIQUIDITY (Real on-chain data) ── */}
-      {viewTab === "pool" && market && (
-        <div className="px-4 mb-4 space-y-3">
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
-            <div className="px-3 py-2 border-b border-gray-800">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500 font-bold">POOL LIQUIDITY</span>
-                {market.data_source === "dexscreener" && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">LIVE</span>
-                )}
-              </div>
-            </div>
-            {market.liquidity_usd > 0 ? (
-              <div className="p-3 space-y-3">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-white">${market.liquidity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  <p className="text-[10px] text-gray-500">Total Liquidity (USD)</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
-                    <p className="text-[9px] text-gray-500">{baseSymbol} in Pool</p>
-                    <p className="text-sm text-white font-bold">{market.liquidity_base.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
-                    <p className="text-[9px] text-gray-500">{quoteSymbol} in Pool</p>
-                    <p className="text-sm text-white font-bold">{market.liquidity_quote.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
-                  </div>
-                </div>
-                {market.pool_address && (
-                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800">
-                    <p className="text-[9px] text-gray-500 mb-1">Pool Address ({market.dex_name || "DEX"})</p>
-                    <p className="text-[10px] text-purple-400 font-mono break-all">{market.pool_address}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="p-6 text-center">
-                <p className="text-gray-500 text-xs">No liquidity pool found for this pair on DexScreener yet.</p>
-                <p className="text-gray-600 text-[10px] mt-1">Pools may take a few minutes to appear after creation.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── REAL ACTIVITY ── */}
-      {viewTab === "activity" && market && (
-        <div className="px-4 mb-4 space-y-3">
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
-            <div className="px-3 py-2 border-b border-gray-800">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500 font-bold">24H TRADING ACTIVITY</span>
-                <span className="text-[9px] text-gray-600">{market.data_source === "dexscreener" ? "DexScreener" : market.data_source}</span>
-              </div>
-            </div>
-            {(market.txns_24h.buys > 0 || market.txns_24h.sells > 0) ? (
-              <div className="p-3 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-green-500/5 border border-green-500/20 text-center">
-                    <p className="text-2xl font-bold text-green-400">{market.txns_24h.buys}</p>
-                    <p className="text-[10px] text-gray-500 font-bold">BUYS (24h)</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/20 text-center">
-                    <p className="text-2xl font-bold text-red-400">{market.txns_24h.sells}</p>
-                    <p className="text-[10px] text-gray-500 font-bold">SELLS (24h)</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
-                    <p className="text-[9px] text-gray-500">Volume (24h)</p>
-                    <p className="text-sm text-white font-bold">${market.volume_24h.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-black/30 border border-gray-800 text-center">
-                    <p className="text-[9px] text-gray-500">Market Cap</p>
-                    <p className="text-sm text-white font-bold">${market.market_cap.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                  </div>
-                </div>
-                {/* Buy/Sell ratio bar */}
-                {(market.txns_24h.buys + market.txns_24h.sells) > 0 && (
-                  <div>
-                    <div className="flex justify-between text-[9px] text-gray-500 mb-1">
-                      <span>Buy pressure</span>
-                      <span>Sell pressure</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-gray-800 overflow-hidden flex">
-                      <div
-                        className="h-full bg-green-500 rounded-l-full"
-                        style={{ width: `${(market.txns_24h.buys / (market.txns_24h.buys + market.txns_24h.sells)) * 100}%` }}
-                      />
-                      <div
-                        className="h-full bg-red-500 rounded-r-full"
-                        style={{ width: `${(market.txns_24h.sells / (market.txns_24h.buys + market.txns_24h.sells)) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="p-6 text-center">
-                <p className="text-gray-500 text-xs">No trading activity found yet.</p>
-                <p className="text-gray-600 text-[10px] mt-1">Activity appears after trades happen on-chain.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── TRADE HISTORY ── */}
-      {viewTab === "history" && (
-        <div className="px-4 mb-4">
-          <div className="rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
-            {orderHistory.length === 0 ? (
-              <p className="text-gray-600 text-xs text-center py-8">No trades yet. Start trading!</p>
-            ) : (
-              <>
-                <div className="px-3 py-1.5 border-b border-gray-800">
-                  <div className="flex justify-between text-[9px] text-gray-500 font-bold">
-                    <span>TYPE</span>
-                    <span>PAIR</span>
-                    <span>AMOUNT</span>
-                    <span>TOTAL</span>
-                  </div>
-                </div>
-                {orderHistory.map((order, i) => (
-                  <div key={i} className="flex justify-between px-3 py-1.5 text-[10px] border-b border-gray-800/30 last:border-0">
-                    <span className={`font-bold ${order.order_type === "buy" ? "text-green-400" : "text-red-400"}`}>
-                      {order.order_type.toUpperCase()}
-                    </span>
-                    <span className="text-gray-500">
-                      {order.trading_pair ? order.trading_pair.replace("_", "/") : "GLITCH/SOL"}
-                    </span>
-                    <span className="text-white">{order.amount.toLocaleString()}</span>
-                    <span className="text-gray-400">
-                      {order.quote_amount
-                        ? `${Number(order.quote_amount).toFixed(4)} ${order.quote_token || "SOL"}`
-                        : `${Number(order.total_sol).toFixed(4)} SOL`
-                      }
-                    </span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── SWAP WITH PHANTOM (Jupiter) ── */}
-      {connected && publicKey ? (
-        <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <h3 className="text-white font-bold text-sm">Swap with Phantom</h3>
+              <div className="w-2 h-2 rounded-full bg-green-400" />
+              <span className="text-green-400 text-[10px] font-bold">LAST TX</span>
+              <span className="text-gray-400 text-[10px] font-mono">
+                {lastTxSignature.slice(0, 12)}...{lastTxSignature.slice(-6)}
+              </span>
             </div>
+            <span className="text-purple-400 text-[10px] group-hover:text-purple-300">
+              View on Solscan &rarr;
+            </span>
+          </a>
+        </div>
+      )}
 
-            {/* From */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 text-[10px] font-bold">FROM</span>
-                <span className="text-[10px] text-gray-500">
-                  Bal: {formatBalance(phantomBalances[swapInputToken] || 0, swapInputToken)}
-                </span>
+      {/* ── OTC SWAP INTERFACE ── */}
+      {connected && publicKey ? (
+        otcConfig ? (
+          <div className="px-4 pt-2 pb-4">
+            <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-4 space-y-4">
+
+              {/* Price + Bonding Curve Info */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-white font-bold text-sm">Swap SOL for §GLITCH</span>
+                </div>
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">NO BOTS</span>
               </div>
-              <div className="flex gap-2">
-                <select
-                  value={swapInputToken}
-                  onChange={(e) => {
-                    setSwapInputToken(e.target.value);
-                    if (e.target.value === swapOutputToken) setSwapOutputToken(swapInputToken);
-                    setSwapQuote(null);
-                  }}
-                  className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
-                >
-                  {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <input
-                  type="number"
-                  value={swapAmount}
-                  onChange={(e) => setSwapAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="flex-1 min-w-0 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none text-right"
-                />
+
+              {/* Current Price */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2 rounded-lg bg-black/40 border border-gray-800 text-center">
+                  <p className="text-[9px] text-gray-500">Price</p>
+                  <p className="text-sm text-green-400 font-bold">${otcConfig.price_usd.toFixed(2)}</p>
+                  <p className="text-[8px] text-gray-600">{otcConfig.price_sol.toFixed(8)} SOL</p>
+                </div>
+                <div className="p-2 rounded-lg bg-black/40 border border-gray-800 text-center">
+                  <p className="text-[9px] text-gray-500">Next Price</p>
+                  <p className="text-sm text-yellow-400 font-bold">${otcConfig.bonding_curve.next_price_usd.toFixed(2)}</p>
+                  <p className="text-[8px] text-gray-600">in {otcConfig.bonding_curve.remaining_in_tier.toLocaleString()}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-black/40 border border-gray-800 text-center">
+                  <p className="text-[9px] text-gray-500">Sold</p>
+                  <p className="text-sm text-white font-bold">
+                    {otcConfig.stats.total_glitch_sold >= 1000
+                      ? `${(otcConfig.stats.total_glitch_sold / 1000).toFixed(1)}K`
+                      : otcConfig.stats.total_glitch_sold.toLocaleString()}
+                  </p>
+                  <p className="text-[8px] text-gray-600">§GLITCH</p>
+                </div>
               </div>
-              <div className="flex gap-1.5 justify-end">
-                {[25, 50, 100].map(pct => (
-                  <button
-                    key={pct}
-                    onClick={() => {
-                      const bal = phantomBalances[swapInputToken] || 0;
-                      if (bal <= 0) return;
-                      const raw = swapInputToken === "SOL" ? Math.max(0, bal - 0.01) * pct / 100 : bal * pct / 100;
-                      const decimals = TOKEN_DECIMALS[swapInputToken] || 9;
-                      setSwapAmount(decimals <= 6 ? raw.toFixed(2) : raw.toFixed(4));
+
+              {/* Bonding curve progress bar */}
+              <div className="p-2 rounded-lg bg-black/30 border border-gray-800 space-y-1.5">
+                <div className="flex justify-between items-center text-[9px]">
+                  <span className="text-gray-500 font-bold">TIER {otcConfig.bonding_curve.tier + 1}</span>
+                  <span className="text-gray-500">
+                    {otcConfig.bonding_curve.remaining_in_tier.toLocaleString()} until ${otcConfig.bonding_curve.next_price_usd.toFixed(2)}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-green-500 to-yellow-500 rounded-full transition-all"
+                    style={{
+                      width: `${((otcConfig.bonding_curve.tier_size - otcConfig.bonding_curve.remaining_in_tier) / otcConfig.bonding_curve.tier_size) * 100}%`,
                     }}
-                    className="text-[10px] px-2 py-0.5 bg-gray-800 text-purple-400 rounded-lg hover:bg-gray-700 hover:text-white transition-colors font-bold"
-                  >
-                    {pct}%
+                  />
+                </div>
+                <p className="text-[8px] text-gray-600 text-center">
+                  +${otcConfig.bonding_curve.increment_usd.toFixed(2)} every {otcConfig.bonding_curve.tier_size.toLocaleString()} §GLITCH sold
+                </p>
+              </div>
+
+              {/* YOU PAY (SOL) */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-[10px] font-bold">YOU PAY</span>
+                  <span className="text-[10px] text-gray-500">
+                    Balance: {solBalance.toFixed(4)} SOL
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <div className="w-16 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl flex items-center gap-1.5">
+                    <TokenIcon token="SOL" size={16} />
+                    <span className="text-white text-sm font-bold">SOL</span>
+                  </div>
+                  <input
+                    type="number"
+                    value={solAmount}
+                    onChange={(e) => setSolAmount(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    className="flex-1 min-w-0 px-3 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-lg font-mono placeholder:text-gray-700 focus:border-green-500 focus:outline-none text-right"
+                  />
+                </div>
+                <div className="flex gap-1.5 justify-end">
+                  {[25, 50, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => {
+                        if (solBalance <= 0.01) return;
+                        const raw = Math.max(0, solBalance - 0.01) * pct / 100;
+                        setSolAmount(raw.toFixed(4));
+                      }}
+                      className="text-[10px] px-2 py-0.5 bg-gray-800 text-green-400 rounded-lg hover:bg-gray-700 hover:text-white transition-colors font-bold"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Arrow */}
+              <div className="flex justify-center">
+                <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* YOU RECEIVE (§GLITCH) */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-[10px] font-bold">YOU RECEIVE</span>
+                  <span className="text-gray-600 text-[10px]">Balance: {glitchBalance.toLocaleString()}</span>
+                </div>
+                <div className="flex gap-2">
+                  <div className="w-16 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl flex items-center gap-1.5">
+                    <TokenIcon token="GLITCH" size={16} />
+                    <span className="text-white text-sm font-bold">$G</span>
+                  </div>
+                  <div className="flex-1 min-w-0 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
+                    <p className={`text-lg font-mono ${glitchOutput > 0 ? "text-green-400" : "text-gray-700"}`}>
+                      {glitchOutput > 0 ? glitchOutput.toLocaleString() : "0"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order summary */}
+              {glitchOutput > 0 && (
+                <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Rate</span>
+                    <span className="text-white">1 SOL = {Math.floor(1 / otcConfig.price_sol).toLocaleString()} §GLITCH</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">USD Value</span>
+                    <span className="text-white">${usdCost.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Slippage</span>
+                    <span className="text-green-400">0% (fixed price)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Type</span>
+                    <span className="text-green-400">Atomic on-chain swap</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Buy button */}
+              {otcConfig.enabled ? (
+                <button
+                  onClick={executeSwap}
+                  disabled={buying || glitchOutput < 100}
+                  className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
+                >
+                  {buying
+                    ? "Confirm in Phantom..."
+                    : glitchOutput > 0
+                      ? `Buy ${glitchOutput.toLocaleString()} §GLITCH`
+                      : "Enter SOL amount"
+                  }
+                </button>
+              ) : (
+                <div className="w-full py-3 bg-gray-800 text-gray-400 font-bold rounded-xl text-sm text-center">
+                  Treasury setup in progress...
+                </div>
+              )}
+
+              <p className="text-gray-600 text-[9px] text-center">
+                Direct atomic swap on Solana. SOL and §GLITCH transfer in one transaction.
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* Loading config */
+          <div className="px-4 pt-4">
+            <div className="rounded-2xl bg-gray-900/50 border border-gray-800 p-8 text-center">
+              <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">Loading swap...</p>
+            </div>
+          </div>
+        )
+      ) : (
+        /* Not connected */
+        <div className="px-4 pt-6">
+          <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-6 text-center space-y-4">
+            <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto">
+              <TokenIcon token="GLITCH" size={32} />
+            </div>
+            <h3 className="text-white font-bold text-lg">Buy §GLITCH with SOL</h3>
+            <p className="text-gray-400 text-sm">Connect your Phantom wallet to purchase §GLITCH directly. No bots, no sniping, fixed price.</p>
+
+            {/* Show price even when not connected */}
+            {otcConfig && (
+              <div className="flex justify-center gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500 text-[10px]">Current Price</p>
+                  <p className="text-green-400 font-bold">${otcConfig.price_usd.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-[10px]">Supply Available</p>
+                  <p className="text-white font-bold">{(otcConfig.available_supply / 1_000_000).toFixed(1)}M</p>
+                </div>
+              </div>
+            )}
+
+            <a
+              href="/wallet"
+              className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+            >
+              Connect Phantom Wallet
+            </a>
+            <p className="text-gray-600 text-[9px]">
+              Real on-chain atomic swaps on Solana mainnet.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Swap History ── */}
+      {connected && publicKey && (
+        <div className="px-4 pt-2 pb-4">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/50 border border-gray-800 text-gray-400 hover:text-gray-300 transition-colors"
+          >
+            <span className="text-[10px] font-bold">PURCHASE HISTORY</span>
+            <div className="flex items-center gap-2">
+              {swapHistory.length > 0 && (
+                <span className="text-[9px] text-green-400">{swapHistory.length} swaps</span>
+              )}
+              <svg
+                className={`w-3 h-3 transition-transform ${showHistory ? "rotate-180" : ""}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+
+          {showHistory && (
+            <div className="mt-2 rounded-xl bg-gray-900/50 border border-gray-800 overflow-hidden">
+              {swapHistory.length === 0 ? (
+                <p className="text-gray-600 text-xs text-center py-6">No purchases yet. Be the first!</p>
+              ) : (
+                swapHistory.map((swap) => (
+                  <div key={swap.id} className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800/30 last:border-0">
+                    <div>
+                      <p className="text-green-400 text-xs font-bold">
+                        +{Number(swap.glitch_amount).toLocaleString()} §GLITCH
+                      </p>
+                      <p className="text-gray-600 text-[9px]">{timeAgo(swap.created_at)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-white text-xs">{Number(swap.sol_cost).toFixed(4)} SOL</p>
+                      {swap.tx_signature && (
+                        <a
+                          href={`https://solscan.io/tx/${swap.tx_signature}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[9px] text-purple-400 hover:text-purple-300"
+                        >
+                          {swap.tx_signature.slice(0, 8)}...
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Trading Dashboard ── */}
+      {dashboard && (
+        <div className="px-4 pb-4 space-y-3">
+          {/* Price header + 24h stats */}
+          <div className="rounded-2xl bg-gray-900/80 border border-purple-500/20 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-[10px] text-gray-500 mb-0.5">§GLITCH / SOL</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                    {dashboard.price.current_sol.toFixed(8)} SOL
+                  </p>
+                  <p className="text-xs text-gray-400">${dashboard.price.current_usd.toFixed(6)}</p>
+                </div>
+              </div>
+              <button onClick={fetchDashboard} className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-lg text-[10px] font-bold hover:bg-purple-500/30">
+                Refresh
+              </button>
+            </div>
+            {/* 24h stats */}
+            <div className="grid grid-cols-4 gap-1.5">
+              <div className="bg-black/30 rounded-lg p-1.5 text-center">
+                <p className="text-sm font-bold text-white">{dashboard.stats_24h.total_trades}</p>
+                <p className="text-[8px] text-gray-500">24h Trades</p>
+              </div>
+              <div className="bg-black/30 rounded-lg p-1.5 text-center">
+                <p className="text-sm font-bold text-cyan-400">{dashboard.stats_24h.volume_sol.toFixed(2)}</p>
+                <p className="text-[8px] text-gray-500">Vol (SOL)</p>
+              </div>
+              <div className="bg-black/30 rounded-lg p-1.5 text-center">
+                <p className="text-[10px] font-bold">
+                  <span className="text-green-400">{dashboard.stats_24h.buys}</span>
+                  {"/"}
+                  <span className="text-red-400">{dashboard.stats_24h.sells}</span>
+                </p>
+                <p className="text-[8px] text-gray-500">Buy/Sell</p>
+              </div>
+              <div className="bg-black/30 rounded-lg p-1.5 text-center">
+                <p className="text-[9px] font-bold text-purple-400">
+                  {dashboard.stats_24h.high.toFixed(8)}
+                </p>
+                <p className="text-[8px] text-gray-500">24h High</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Chart / Leaderboard toggle + content */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-gray-400">Price Chart (7d)</h3>
+              <div className="flex gap-1">
+                {(["chart", "leaderboard"] as const).map(v => (
+                  <button key={v} onClick={() => setDashView(v)}
+                    className={`px-2 py-1 rounded text-[10px] font-bold ${dashView === v ? "bg-purple-500/20 text-purple-400" : "text-gray-500 hover:text-gray-300"}`}>
+                    {v === "chart" ? "Chart" : "Leaderboard"}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Swap direction */}
-            <div className="flex justify-center">
-              <button onClick={swapTokenPair} className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center hover:border-purple-500/50 transition-all">
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
-              </button>
-            </div>
-
-            {/* To */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 text-[10px] font-bold">TO</span>
-                <span className="text-gray-600 text-[10px]">Bal: {formatBalance(phantomBalances[swapOutputToken] || 0, swapOutputToken)}</span>
-              </div>
-              <div className="flex gap-2">
-                <select
-                  value={swapOutputToken}
-                  onChange={(e) => {
-                    setSwapOutputToken(e.target.value);
-                    if (e.target.value === swapInputToken) setSwapInputToken(swapOutputToken);
-                    setSwapQuote(null);
-                  }}
-                  className="w-24 shrink-0 px-2 py-2.5 bg-black/50 border border-gray-700 rounded-xl text-white text-sm font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
-                >
-                  {Object.keys(MINT_ADDRESSES).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <div className="flex-1 min-w-0 px-3 py-2.5 bg-black/30 border border-gray-800 rounded-xl text-right">
-                  <p className={`text-lg font-mono ${swapQuote ? "text-green-400" : "text-gray-700"}`}>
-                    {swapLoading ? (
-                      <span className="text-gray-600 animate-pulse">...</span>
-                    ) : swapQuote ? (
-                      swapOutputAmount < 1 ? swapOutputAmount.toFixed(6) : swapOutputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })
-                    ) : "0.00"}
-                  </p>
+            {dashView === "chart" && dashboard.price_history.length > 0 && (
+              <div className="space-y-2">
+                {/* Candlestick chart */}
+                <div className="relative h-40 flex items-end gap-px overflow-x-auto">
+                  {(() => {
+                    const data = dashboard.price_history;
+                    const maxHigh = Math.max(...data.map(d => d.high));
+                    const minLow = Math.min(...data.map(d => d.low));
+                    const range = maxHigh - minLow || 1;
+                    return data.slice(-72).map((candle, i) => {
+                      const isGreen = candle.close >= candle.open;
+                      const bodyTop = Math.max(candle.open, candle.close);
+                      const bodyBot = Math.min(candle.open, candle.close);
+                      const bodyH = Math.max(((bodyTop - bodyBot) / range) * 100, 2);
+                      const bodyY = ((bodyBot - minLow) / range) * 100;
+                      const wickH = ((candle.high - candle.low) / range) * 100;
+                      const wickY = ((candle.low - minLow) / range) * 100;
+                      return (
+                        <div key={i} className="flex-1 min-w-[3px] max-w-[10px] relative h-full" title={`${new Date(candle.time).toLocaleString()}\nO: ${candle.open.toFixed(8)}\nH: ${candle.high.toFixed(8)}\nL: ${candle.low.toFixed(8)}\nC: ${candle.close.toFixed(8)}\nVol: ${candle.volume.toLocaleString()}`}>
+                          <div className={`absolute left-1/2 -translate-x-1/2 w-px ${isGreen ? "bg-green-500/60" : "bg-red-500/60"}`}
+                            style={{ bottom: `${wickY}%`, height: `${wickH}%` }} />
+                          <div className={`absolute left-0 right-0 rounded-sm ${isGreen ? "bg-green-500" : "bg-red-500"}`}
+                            style={{ bottom: `${bodyY}%`, height: `${bodyH}%`, minHeight: "2px" }} />
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
-              </div>
-            </div>
-
-            {/* Quote details */}
-            {swapQuote && (
-              <div className="p-2 rounded-xl bg-black/30 border border-gray-800 space-y-1 text-[10px]">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Rate</span>
-                  <span className="text-white">1 {swapInputToken} = {(swapOutputAmount / (parseFloat(swapAmount) || 1)).toFixed(4)} {swapOutputToken}</span>
+                {/* Volume bars */}
+                <div className="relative h-8 flex items-end gap-px overflow-x-auto">
+                  {(() => {
+                    const data = dashboard.price_history.slice(-72);
+                    const maxVol = Math.max(...data.map(d => d.volume));
+                    return data.map((candle, i) => {
+                      const isGreen = candle.close >= candle.open;
+                      const h = maxVol > 0 ? (candle.volume / maxVol) * 100 : 0;
+                      return (
+                        <div key={i} className={`flex-1 min-w-[3px] max-w-[10px] rounded-t-sm ${isGreen ? "bg-green-500/30" : "bg-red-500/30"}`}
+                          style={{ height: `${h}%` }} />
+                      );
+                    });
+                  })()}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Impact</span>
-                  <span className={parseFloat(swapQuote.priceImpactPct) > 1 ? "text-red-400" : "text-green-400"}>
-                    {parseFloat(swapQuote.priceImpactPct).toFixed(4)}%
-                  </span>
-                </div>
+                <p className="text-[8px] text-gray-600 text-center">Volume</p>
               </div>
             )}
 
-            {/* Swap button */}
-            <button
-              onClick={executeSwap}
-              disabled={!swapQuote || swapping || swapLoading}
-              className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40"
-            >
-              {swapping ? "Confirming in Phantom..." : swapQuote ? `Swap ${swapInputToken} for ${swapOutputToken}` : "Enter an amount"}
-            </button>
+            {dashView === "chart" && dashboard.price_history.length === 0 && (
+              <div className="h-40 flex items-center justify-center text-gray-600 text-xs">No trade data yet</div>
+            )}
 
-            <p className="text-gray-600 text-[9px] text-center">
-              Powered by Jupiter. Real on-chain swaps via your Phantom wallet on Solana.
-            </p>
+            {dashView === "leaderboard" && (
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {dashboard.leaderboard.map((trader, i) => (
+                  <div key={trader.persona_id} className="flex items-center justify-between bg-black/30 rounded-lg px-2 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] w-4 text-center font-bold ${i === 0 ? "text-yellow-400" : i === 1 ? "text-gray-300" : i === 2 ? "text-amber-600" : "text-gray-600"}`}>{i + 1}</span>
+                      <span>{trader.avatar_emoji}</span>
+                      <div>
+                        <p className="text-[10px] font-bold text-white">{trader.display_name}</p>
+                        <p className="text-[8px] text-gray-500">@{trader.username} · {trader.strategy}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-[10px] font-bold font-mono ${Number(trader.net_sol) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {Number(trader.net_sol) >= 0 ? "+" : ""}{Number(trader.net_sol).toFixed(4)} SOL
+                      </p>
+                      <p className="text-[8px] text-gray-500 font-mono">{Number(trader.total_trades)} trades</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ) : (
-        <div className="px-4 mb-4">
-          <div className="rounded-2xl bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-gray-900 border border-purple-500/30 p-6 text-center space-y-4">
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-400" />
-              <h3 className="text-white font-bold text-sm">Wallet Not Connected</h3>
+
+          {/* Order Book */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-xs font-bold text-gray-400 mb-3">Order Book (24h)</h3>
+
+            {/* Asks (sells) */}
+            <div className="space-y-0.5 mb-2">
+              <div className="flex justify-between text-[9px] text-gray-500 px-1 mb-1">
+                <span>Price (SOL)</span>
+                <span>Amount ($G)</span>
+                <span>Total (SOL)</span>
+              </div>
+              {dashboard.order_book.asks.slice().reverse().map((ask, i) => {
+                const maxTotal = Math.max(...dashboard.order_book.asks.map(a => a.total), 0.001);
+                const pct = (ask.total / maxTotal) * 100;
+                return (
+                  <div key={`ask-${i}`} className="relative flex justify-between text-[10px] px-1 py-0.5 rounded">
+                    <div className="absolute inset-0 bg-red-500/10 rounded" style={{ width: `${pct}%`, marginLeft: "auto" }} />
+                    <span className="text-red-400 font-mono z-10">{ask.price.toFixed(8)}</span>
+                    <span className="text-gray-300 font-mono z-10">{ask.amount.toLocaleString()}</span>
+                    <span className="text-gray-500 font-mono z-10">{ask.total.toFixed(4)}</span>
+                  </div>
+                );
+              })}
+              {dashboard.order_book.asks.length === 0 && <p className="text-[10px] text-gray-600 text-center py-2">No sell orders</p>}
             </div>
-            <p className="text-gray-400 text-sm">Connect your Phantom wallet to swap tokens on-chain via Jupiter</p>
-            <a href="/wallet" className="inline-block px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
-              Connect Wallet
-            </a>
-            <p className="text-gray-600 text-[9px]">
-              All swaps are real on-chain transactions powered by Jupiter on Solana.
-            </p>
+
+            {/* Spread / current price */}
+            <div className="border-y border-gray-700 py-2 my-2 text-center">
+              <p className="text-sm font-bold text-white">{dashboard.price.current_sol.toFixed(8)} SOL</p>
+              <p className="text-[9px] text-gray-500">${dashboard.price.current_usd.toFixed(6)} USD</p>
+            </div>
+
+            {/* Bids (buys) */}
+            <div className="space-y-0.5">
+              {dashboard.order_book.bids.map((bid, i) => {
+                const maxTotal = Math.max(...dashboard.order_book.bids.map(b => b.total), 0.001);
+                const pct = (bid.total / maxTotal) * 100;
+                return (
+                  <div key={`bid-${i}`} className="relative flex justify-between text-[10px] px-1 py-0.5 rounded">
+                    <div className="absolute inset-0 bg-green-500/10 rounded" style={{ width: `${pct}%` }} />
+                    <span className="text-green-400 font-mono z-10">{bid.price.toFixed(8)}</span>
+                    <span className="text-gray-300 font-mono z-10">{bid.amount.toLocaleString()}</span>
+                    <span className="text-gray-500 font-mono z-10">{bid.total.toFixed(4)}</span>
+                  </div>
+                );
+              })}
+              {dashboard.order_book.bids.length === 0 && <p className="text-[10px] text-gray-600 text-center py-2">No buy orders</p>}
+            </div>
+          </div>
+
+          {/* Recent Trades */}
+          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
+            <h3 className="text-xs font-bold text-gray-400 mb-3">Recent AI Trades</h3>
+            <div className="space-y-1 max-h-80 overflow-y-auto">
+              {dashboard.recent_trades.map((trade) => (
+                <div key={trade.id} className="flex items-center justify-between text-[10px] px-1 py-1.5 hover:bg-gray-800/50 rounded group relative">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`font-bold w-8 ${trade.trade_type === "buy" ? "text-green-400" : "text-red-400"}`}>
+                      {trade.trade_type.toUpperCase()}
+                    </span>
+                    <span>{trade.avatar_emoji}</span>
+                    <span className="text-gray-300 truncate max-w-[80px]">{trade.display_name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-gray-300">§{Number(trade.glitch_amount).toLocaleString()}</span>
+                    <span className="font-mono text-cyan-400 w-16 text-right">{Number(trade.sol_amount).toFixed(4)}</span>
+                    <span className="text-gray-500 w-10 text-right">{timeAgo(trade.created_at)}</span>
+                  </div>
+                  {/* Commentary on hover */}
+                  {trade.commentary && (
+                    <div className="hidden group-hover:block absolute left-0 right-0 -top-8 bg-gray-800 border border-gray-700 rounded-lg p-1.5 text-[9px] text-gray-300 z-20 shadow-lg">
+                      &quot;{trade.commentary}&quot;
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Disclaimer */}
+      {/* How it works */}
+      <div className="px-4 pb-4">
+        <div className="rounded-xl bg-gray-900/30 border border-gray-800/50 p-3 space-y-2">
+          <p className="text-[10px] text-gray-500 font-bold">HOW IT WORKS</p>
+          <div className="space-y-1.5 text-[10px] text-gray-600">
+            <p>1. Enter SOL amount you want to spend</p>
+            <p>2. Confirm the swap in your Phantom wallet</p>
+            <p>3. SOL and §GLITCH transfer atomically in one transaction</p>
+            <p>4. Price increases automatically as more §GLITCH is sold</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
       <div className="px-4 pb-8 text-center">
         <p className="text-gray-700 text-[9px] font-mono">
-          DYOR. NFA. $GLITCH and $BUDJU are Solana tokens. Trade at your own risk.
+          §GLITCH is an SPL token on Solana. DYOR. NFA.
         </p>
       </div>
 
@@ -873,6 +900,16 @@ export default function ExchangePage() {
             <p className={`text-sm font-bold ${toast.type === "success" ? "text-green-300" : "text-red-300"}`}>
               {toast.message}
             </p>
+            {toast.type === "success" && lastTxSignature && (
+              <a
+                href={`https://solscan.io/tx/${lastTxSignature}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-2 text-xs text-purple-400 hover:text-purple-300 underline"
+              >
+                View on Solscan &rarr;
+              </a>
+            )}
           </div>
         </div>
       )}

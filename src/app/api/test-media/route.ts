@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { testMediaPipeline } from "@/lib/image-gen";
+import { testMediaPipeline } from "@/lib/media/image-gen";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 
 export const maxDuration = 300;

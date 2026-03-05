@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureDbReady } from "@/lib/seed";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { shouldRunCron } from "@/lib/throttle";
-import { generatePost, generateAIInteraction, generateComment } from "@/lib/ai-engine";
+import { cronStart, cronFinish } from "@/lib/cron";
+import { generatePost, generateAIInteraction, generateComment } from "@/lib/content/ai-engine";
 import { AIPersona } from "@/lib/personas";
+import { env } from "@/lib/bible/env";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { pollMultiClipJobs } from "@/lib/media/multi-clip";
+import { stitchAndTriplePost } from "@/lib/content/director-movies";
 
 // 300s for media generation (images, memes are sync; video polling handled separately)
 export const maxDuration = 300;
@@ -28,24 +29,13 @@ export const maxDuration = 300;
  */
 
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Check activity throttle — may skip this run to save costs
-  if (!(await shouldRunCron("persona-content"))) {
-    return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
-  }
+  const gate = await cronStart(request, "persona-content");
+  if (gate) return gate;
 
   const sql = getDb();
-  await ensureDbReady();
 
   // ── Step 1: Check for pending Grok video jobs and poll them ──
-  if (process.env.XAI_API_KEY) {
+  if (env.XAI_API_KEY) {
     const pendingJobs = await sql`
       SELECT id, persona_id, xai_request_id, folder, caption
       FROM persona_video_jobs
@@ -59,7 +49,7 @@ export async function GET(request: NextRequest) {
 
       try {
         const pollRes = await fetch(`https://api.x.ai/v1/videos/${job.xai_request_id}`, {
-          headers: { "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
+          headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
         });
 
         if (pollRes.ok) {
@@ -89,6 +79,62 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Step 1.5: Poll multi-clip video jobs (series/long-form content) ──
+  if (env.XAI_API_KEY) {
+    try {
+      const mcResult = await pollMultiClipJobs();
+      if (mcResult.completed > 0 || mcResult.stitched.length > 0) {
+        console.log(`[persona-content] Multi-clip poll: ${mcResult.completed} clips done, ${mcResult.stitched.length} videos stitched`);
+      }
+    } catch (err) {
+      console.log("[persona-content] Multi-clip poll error (non-fatal):", err);
+    }
+
+    // Also check for director movies ready to stitch (pollMultiClipJobs
+    // polls clips but excludes director movies from the stitch trigger).
+    try {
+      const readyDirectorJobs = await sql`
+        SELECT j.id, j.title
+        FROM multi_clip_jobs j
+        JOIN director_movies dm ON dm.multi_clip_job_id = j.id
+        WHERE j.status = 'generating' AND j.completed_clips >= j.clip_count
+      ` as unknown as { id: string; title: string }[];
+
+      for (const job of readyDirectorJobs) {
+        console.log(`[persona-content] Stitching director movie "${job.title}"...`);
+        const stitchResult = await stitchAndTriplePost(job.id);
+        if (stitchResult) {
+          console.log(`[persona-content] Director movie "${job.title}" stitched and posted!`);
+        }
+      }
+
+      // Partial director movies (20+ min old, at least 50% done, no pending clips)
+      const partialDirectorJobs = await sql`
+        SELECT j.id, j.title, j.clip_count,
+          (SELECT COUNT(*)::int FROM multi_clip_scenes WHERE job_id = j.id AND status = 'done') as done_count,
+          (SELECT COUNT(*)::int FROM multi_clip_scenes WHERE job_id = j.id AND status IN ('submitted', 'pending')) as pending_count
+        FROM multi_clip_jobs j
+        JOIN director_movies dm ON dm.multi_clip_job_id = j.id
+        WHERE j.status = 'generating' AND j.created_at < NOW() - INTERVAL '20 minutes'
+      ` as unknown as { id: string; title: string; clip_count: number; done_count: number; pending_count: number }[];
+
+      for (const job of partialDirectorJobs) {
+        if (job.pending_count === 0 && job.done_count >= Math.ceil(job.clip_count / 2)) {
+          console.log(`[persona-content] Stitching partial director movie "${job.title}" (${job.done_count}/${job.clip_count})...`);
+          const stitchResult = await stitchAndTriplePost(job.id);
+          if (stitchResult) {
+            console.log(`[persona-content] Partial director movie "${job.title}" stitched!`);
+          }
+        } else if (job.pending_count === 0 && job.done_count < Math.ceil(job.clip_count / 2)) {
+          await sql`UPDATE multi_clip_jobs SET status = 'failed', completed_at = NOW() WHERE id = ${job.id}`;
+          await sql`UPDATE director_movies SET status = 'failed' WHERE multi_clip_job_id = ${job.id}`;
+        }
+      }
+    } catch (err) {
+      console.log("[persona-content] Director movie stitch check error (non-fatal):", err);
+    }
+  }
+
   // ── Step 2: Pick next persona using weighted activity deficit ──
   // Find personas with the biggest gap between their daily target (activity_level)
   // and their actual posts today. Higher deficit = more "due" for a post.
@@ -111,6 +157,7 @@ export async function GET(request: NextRequest) {
   ` as unknown as (AIPersona & { target: number; posts_today: number })[];
 
   if (candidates.length === 0) {
+    await cronFinish("persona-content");
     return NextResponse.json({
       action: "all_caught_up",
       message: "All personas have met their daily content quota.",
@@ -120,6 +167,10 @@ export async function GET(request: NextRequest) {
   // Weighted random pick — personas with larger deficits get higher chances
   const persona = weightedPick(candidates);
   console.log(`[persona-content] Picked @${persona.username} (activity: ${persona.activity_level}, today: ${persona.posts_today}/${persona.target})`);
+
+  // NOTE: Avatar generation is now handled by the dedicated /api/generate-avatars cron
+  // which runs every 20 minutes, processes one persona at a time, respects a 30-day
+  // cooldown, and always posts to the feed with AIG!itch branding.
 
   // ── Step 3: Generate content using the full ai-engine pipeline ──
   // This automatically picks video/image/meme/text based on random roll,
@@ -192,6 +243,7 @@ export async function GET(request: NextRequest) {
     const contentType = generated.media_type || "text";
     console.log(`[persona-content] @${persona.username} posted ${contentType} (${generated.post_type}), ${reactionCount} reactions`);
 
+    await cronFinish("persona-content");
     return NextResponse.json({
       action: "posted",
       persona: persona.username,
@@ -207,6 +259,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error(`[persona-content] Failed for @${persona.username}:`, err);
+    await cronFinish("persona-content");
     return NextResponse.json({
       action: "error",
       persona: persona.username,
@@ -283,3 +336,4 @@ async function persistVideoAndPost(
     return { blobUrl: null };
   }
 }
+

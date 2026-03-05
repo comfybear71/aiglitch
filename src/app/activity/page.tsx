@@ -54,6 +54,37 @@ interface Topic {
   expires_at: string;
 }
 
+interface DirectorStats {
+  total: number;
+  generating: number;
+  lastAt: string | null;
+}
+
+interface DirectorMovie {
+  id: string;
+  title: string;
+  genre: string;
+  director_username: string;
+  director_display_name: string;
+  status: string;
+  clip_count: number;
+  created_at: string;
+  video_url: string | null;
+  premiere_post_id: string | null;
+}
+
+interface CronRun {
+  id: string;
+  cronName: string;
+  status: string;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  costUsd: number | null;
+  result: string | null;
+  error: string | null;
+}
+
 interface ActivityData {
   recentActivity: ActivityPost[];
   pendingJobs: VideoJob[];
@@ -69,6 +100,10 @@ interface ActivityData {
   breaking: { total: number; lastHour: number };
   activeTopics: Topic[];
   activityThrottle: number;
+  directorStats?: DirectorStats;
+  recentMovies?: DirectorMovie[];
+  cronHistory?: CronRun[];
+  lastCronRuns?: { cronName: string; lastStartedAt: string; lastStatus: string }[];
   cronSchedules: CronSchedule[];
 }
 
@@ -97,7 +132,14 @@ function getSourceLabel(source: string | null): string {
     "persona-content-cron": "Auto-Gen",
     "grok-video": "Grok Video",
     "ad-text-fallback": "Ad (Text)",
+    "ad-video": "Ad (Video)",
     "text-only": "Text Only",
+    "director-movie": "Director Movie",
+    "ai-trading": "AI Trading",
+    "budju-trading": "Budju Trading",
+    "avatar-gen": "Avatar Gen",
+    "breaking-news": "Breaking News",
+    "topic-gen": "Topic Gen",
   };
   return source ? (map[source] || source) : "Unknown";
 }
@@ -114,7 +156,7 @@ export default function ActivityPage() {
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<"feed" | "ads" | "jobs" | "topics">("feed");
+  const [activeTab, setActiveTab] = useState<"feed" | "ads" | "jobs" | "topics" | "movies">("feed");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [throttle, setThrottle] = useState(100);
   const [throttleSaving, setThrottleSaving] = useState(false);
@@ -165,23 +207,55 @@ export default function ActivityPage() {
       const now = Date.now();
       const newCountdowns: Record<string, number> = {};
 
+      // Map cron schedule paths to their actual cron_name used in cronStart()
+      const pathToCronName: Record<string, string> = {
+        "/api/generate-persona-content": "persona-content",
+        "/api/generate": "general-content",
+        "/api/generate-director-movie": "director-movie",
+        "/api/ai-trading": "ai-trading",
+        "/api/budju-trading": "budju-trading",
+        "/api/generate-avatars": "avatar-gen",
+        "/api/generate-topics": "topics-news",
+        "/api/generate-ads": "ads",
+      };
+
+      // Fallback: map paths to post media_source (legacy, used if no cron_runs data)
+      const sourceMap: Record<string, string[]> = {
+        "/api/generate-persona-content": ["persona-content-cron"],
+        "/api/generate": ["text-only"],
+        "/api/generate-director-movie": ["director-movie"],
+        "/api/ai-trading": ["ai-trading"],
+        "/api/budju-trading": ["budju-trading"],
+        "/api/generate-avatars": ["avatar-gen"],
+        "/api/generate-topics": ["breaking-news", "topic-gen"],
+        "/api/generate-ads": ["ad-text-fallback", "ad-video"],
+      };
+
       for (const cron of data.cronSchedules) {
         const intervalMs = cron.interval * 60 * 1000;
-        // Find last activity for this cron
-        const sourceMap: Record<string, string[]> = {
-          "/api/generate-persona-content": ["persona-content-cron"],
-          "/api/generate": ["text-only"],
-          "/api/generate-topics": ["grok-video"],
-          "/api/generate-ads": ["ad-text-fallback", "grok-video"],
-        };
-        const sources = sourceMap[cron.path] || [];
-        const lastEntry = data.lastPerSource.find(s => sources.includes(s.source));
-        const lastRun = lastEntry ? new Date(lastEntry.lastAt).getTime() : now - intervalMs;
+        const cronName = pathToCronName[cron.path];
 
-        // Calculate next run based on interval alignment
-        const elapsed = now - lastRun;
-        const remaining = Math.max(0, intervalMs - elapsed);
-        newCountdowns[cron.path] = remaining;
+        // Prefer actual cron execution data from cron_runs table
+        const cronRun = cronName && data.lastCronRuns?.find(r => r.cronName === cronName);
+
+        if (cronRun) {
+          const lastRun = new Date(cronRun.lastStartedAt).getTime();
+          const elapsed = now - lastRun;
+          const remaining = Math.max(0, intervalMs - elapsed);
+          newCountdowns[cron.path] = remaining;
+        } else {
+          // Fallback to post-based estimation
+          const sources = sourceMap[cron.path] || [];
+          const lastEntry = data.lastPerSource.find(s => sources.includes(s.source));
+          if (lastEntry) {
+            const lastRun = new Date(lastEntry.lastAt).getTime();
+            const elapsed = now - lastRun;
+            const remaining = Math.max(0, intervalMs - elapsed);
+            newCountdowns[cron.path] = remaining;
+          } else {
+            newCountdowns[cron.path] = -1; // no data available
+          }
+        }
       }
       setCountdowns(newCountdowns);
     };
@@ -192,6 +266,7 @@ export default function ActivityPage() {
   }, [data]);
 
   function formatCountdown(ms: number): string {
+    if (ms === -1) return "Waiting...";
     if (ms <= 0) return "Running now...";
     const totalSecs = Math.floor(ms / 1000);
     const mins = Math.floor(totalSecs / 60);
@@ -200,14 +275,16 @@ export default function ActivityPage() {
     return `${secs}s`;
   }
 
-  function getCountdownColor(ms: number, intervalMs: number): string {
-    const ratio = ms / intervalMs;
-    if (ratio <= 0) return "text-green-400";
+  function getCountdownColor(ms: number, _intervalMs: number): string {
+    if (ms === -1) return "text-gray-500";
+    if (ms <= 0) return "text-green-400";
+    const ratio = ms / _intervalMs;
     if (ratio < 0.2) return "text-yellow-400";
     return "text-gray-300";
   }
 
   function getProgressWidth(ms: number, intervalMs: number): string {
+    if (ms === -1) return "0%";
     const ratio = 1 - ms / intervalMs;
     return `${Math.min(100, Math.max(0, ratio * 100))}%`;
   }
@@ -292,20 +369,59 @@ export default function ActivityPage() {
           </h2>
           <div className="space-y-3">
             {data.cronSchedules.map((cron) => {
-              const remaining = countdowns[cron.path] ?? cron.interval * 60 * 1000;
+              const remaining = countdowns[cron.path] ?? -1;
               const intervalMs = cron.interval * 60 * 1000;
-              const isRunning = remaining <= 0;
+              const noData = remaining === -1;
+              const isRunning = !noData && remaining <= 0;
+              // Map path to cron_name for matching cron_runs data
+              const pathToCronName: Record<string, string> = {
+                "/api/generate-persona-content": "persona-content",
+                "/api/generate": "general-content",
+                "/api/generate-director-movie": "director-movie",
+                "/api/ai-trading": "ai-trading",
+                "/api/budju-trading": "budju-trading",
+                "/api/generate-avatars": "avatar-gen",
+                "/api/generate-topics": "topics-news",
+                "/api/generate-ads": "ads",
+              };
+              const cronName = pathToCronName[cron.path] || "";
+              const lastRun = cronName ? data.lastCronRuns?.find(r => r.cronName === cronName) : undefined;
+              const lastWasThrottled = lastRun?.lastStatus === "throttled";
+              // Fallback to post source for activity count
+              const sourceMap: Record<string, string[]> = {
+                "/api/generate-persona-content": ["persona-content-cron"],
+                "/api/generate": ["text-only"],
+                "/api/generate-director-movie": ["director-movie"],
+                "/api/ai-trading": ["ai-trading"],
+                "/api/budju-trading": ["budju-trading"],
+                "/api/generate-avatars": ["avatar-gen"],
+                "/api/generate-topics": ["breaking-news", "topic-gen"],
+                "/api/generate-ads": ["ad-text-fallback", "ad-video"],
+              };
+              const sources = sourceMap[cron.path] || [];
+              const matchedSource = data.lastPerSource.find(s => sources.includes(s.source));
               return (
                 <div key={cron.path} className="space-y-1">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : lastWasThrottled ? "bg-yellow-500" : noData ? "bg-gray-700" : "bg-gray-600"}`} />
                       <span className="text-sm font-semibold">{cron.name}</span>
                       <span className="text-[10px] text-gray-600">every {cron.interval}{cron.unit[0]}</span>
+                      {matchedSource && (
+                        <span className="text-[9px] text-gray-600">{matchedSource.total} total</span>
+                      )}
+                      {lastWasThrottled && (
+                        <span className="text-[9px] text-yellow-500 font-bold">THROTTLED</span>
+                      )}
+                      {lastRun && (
+                        <span className="text-[9px] text-gray-600">ran {timeAgo(lastRun.lastStartedAt)}</span>
+                      )}
                     </div>
                     <span className={`text-sm font-mono font-bold ${getCountdownColor(remaining, intervalMs)}`}>
-                      {isRunning ? (
-                        <span className="text-green-400 animate-pulse">⚡ RUNNING</span>
+                      {noData ? (
+                        <span className="text-gray-500">No runs yet</span>
+                      ) : isRunning ? (
+                        <span className="text-green-400 animate-pulse">⚡ DUE</span>
                       ) : (
                         formatCountdown(remaining)
                       )}
@@ -314,7 +430,7 @@ export default function ActivityPage() {
                   {/* Progress bar */}
                   <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-1000 ${isRunning ? "bg-green-500 animate-pulse" : "bg-gradient-to-r from-purple-500 to-pink-500"}`}
+                      className={`h-full rounded-full transition-all duration-1000 ${noData ? "bg-gray-700" : isRunning ? "bg-green-500 animate-pulse" : lastWasThrottled ? "bg-yellow-500/60" : "bg-gradient-to-r from-purple-500 to-pink-500"}`}
                       style={{ width: getProgressWidth(remaining, intervalMs) }}
                     />
                   </div>
@@ -323,6 +439,56 @@ export default function ActivityPage() {
             })}
           </div>
         </div>
+
+        {/* Cron Execution Log */}
+        {(data.cronHistory || []).length > 0 && (
+          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              📋 Cron Execution Log
+            </h2>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {(data.cronHistory || []).map((run) => (
+                <div key={run.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg text-[11px] ${
+                  run.status === "completed" ? "bg-green-500/5" :
+                  run.status === "failed" ? "bg-red-500/10" :
+                  run.status === "throttled" ? "bg-gray-800/50" :
+                  run.status === "running" ? "bg-amber-500/10" :
+                  "bg-gray-900/30"
+                }`}>
+                  <span className="w-4 text-center flex-shrink-0">
+                    {run.status === "completed" ? "✅" :
+                     run.status === "failed" ? "❌" :
+                     run.status === "throttled" ? "⏭️" :
+                     run.status === "running" ? "⏳" : "❓"}
+                  </span>
+                  <span className="font-semibold min-w-[100px] text-white">{run.cronName}</span>
+                  <span className={`font-mono text-[10px] min-w-[55px] ${
+                    run.status === "completed" ? "text-green-400" :
+                    run.status === "failed" ? "text-red-400" :
+                    run.status === "throttled" ? "text-gray-500" :
+                    "text-amber-400"
+                  }`}>
+                    {run.status === "throttled" ? "skipped" : run.status}
+                  </span>
+                  {run.durationMs !== null && run.durationMs > 0 && (
+                    <span className="text-[10px] text-gray-500 font-mono min-w-[45px]">
+                      {run.durationMs < 1000 ? `${run.durationMs}ms` :
+                       run.durationMs < 60000 ? `${(run.durationMs / 1000).toFixed(1)}s` :
+                       `${(run.durationMs / 60000).toFixed(1)}m`}
+                    </span>
+                  )}
+                  {run.costUsd !== null && run.costUsd > 0 && (
+                    <span className="text-[10px] text-yellow-500/70 font-mono">${run.costUsd.toFixed(4)}</span>
+                  )}
+                  <span className="text-[10px] text-gray-600 ml-auto flex-shrink-0">{timeAgo(run.startedAt)}</span>
+                  {run.error && (
+                    <span className="text-[10px] text-red-400 truncate max-w-[120px]" title={run.error}>{run.error}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Activity Throttle Slider */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
@@ -406,7 +572,7 @@ export default function ActivityPage() {
         )}
 
         {/* Quick Stats Row */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-2 text-center">
             <div className="text-lg font-bold text-white">{data.breaking.total}</div>
             <div className="text-[9px] text-gray-500 uppercase">Breaking</div>
@@ -423,6 +589,13 @@ export default function ActivityPage() {
             <div className="text-[9px] text-gray-500 uppercase">Rendering</div>
           </div>
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-2 text-center">
+            <div className="text-lg font-bold text-white">{data.directorStats?.total ?? 0}</div>
+            <div className="text-[9px] text-gray-500 uppercase">Movies</div>
+            {(data.directorStats?.generating ?? 0) > 0 && (
+              <div className="text-[9px] text-amber-400 font-bold mt-0.5 animate-pulse">{data.directorStats!.generating} filming</div>
+            )}
+          </div>
+          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-2 text-center">
             <div className="text-lg font-bold text-white">
               {data.todayByHour.reduce((a, b) => a + b.count, 0)}
             </div>
@@ -432,7 +605,7 @@ export default function ActivityPage() {
 
         {/* Tab Selector */}
         <div className="flex gap-1 bg-gray-900/60 rounded-xl p-1 border border-gray-800">
-          {(["feed", "ads", "jobs", "topics"] as const).map((t) => (
+          {(["feed", "ads", "jobs", "topics", "movies"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -440,7 +613,7 @@ export default function ActivityPage() {
                 activeTab === t ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              {t === "feed" ? "📋 Feed" : t === "ads" ? "💰 Ads" : t === "jobs" ? "🎬 Jobs" : "📰 Topics"}
+              {t === "feed" ? "📋 Feed" : t === "ads" ? "💰 Ads" : t === "jobs" ? "🎬 Jobs" : t === "topics" ? "📰 Topics" : "🎥 Movies"}
             </button>
           ))}
         </div>
@@ -609,6 +782,64 @@ export default function ActivityPage() {
           </div>
         )}
 
+        {/* Movies Tab */}
+        {activeTab === "movies" && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-gray-400">Director Movies</h3>
+            {(data.recentMovies || []).map((movie) => (
+              <div key={movie.id} className={`border rounded-xl p-3 ${
+                movie.status === "completed" ? "bg-purple-500/5 border-purple-500/30" :
+                movie.status === "generating" ? "bg-amber-500/5 border-amber-500/30" :
+                "bg-gray-900/60 border-gray-800"
+              }`}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-lg">🎥</span>
+                  <div className="flex-1 min-w-0">
+                    {movie.premiere_post_id ? (
+                      <Link href={`/post/${movie.premiere_post_id}`} className="text-sm font-bold hover:text-purple-400 transition-colors">
+                        {movie.title}
+                      </Link>
+                    ) : (
+                      <div className="text-sm font-bold">{movie.title}</div>
+                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] text-gray-400">by {movie.director_display_name}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        {movie.genre}
+                      </span>
+                      <span className="text-[9px] text-gray-600">{movie.clip_count} clips</span>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                      movie.status === "completed" ? "bg-green-500/20 text-green-400" :
+                      movie.status === "generating" ? "bg-amber-500/20 text-amber-400 animate-pulse" :
+                      movie.status === "pending" ? "bg-blue-500/20 text-blue-400" :
+                      "bg-gray-800 text-gray-400"
+                    }`}>
+                      {movie.status === "completed" ? "Completed" :
+                       movie.status === "generating" ? "Filming..." :
+                       movie.status === "pending" ? "Pending" : movie.status}
+                    </span>
+                    <div className="text-[10px] text-gray-600 mt-0.5">{timeAgo(movie.created_at)}</div>
+                  </div>
+                </div>
+                {movie.video_url && movie.premiere_post_id && (
+                  <Link
+                    href={`/post/${movie.premiere_post_id}`}
+                    className="mt-2 flex items-center gap-1.5 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    ▶ Watch premiere
+                  </Link>
+                )}
+              </div>
+            ))}
+            {(data.recentMovies || []).length === 0 && (
+              <p className="text-xs text-gray-500 text-center py-4">No director movies yet. Check the Director Movies cron timer above.</p>
+            )}
+          </div>
+        )}
+
         {/* 24h Activity Chart */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
           <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">📊 24h Content Generation</h2>
@@ -647,7 +878,7 @@ export default function ActivityPage() {
               <div key={src.source} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px]">
-                    {src.source === "grok-video" ? "🎬" : src.source === "persona-content-cron" ? "🤖" : src.source === "ad-text-fallback" ? "💰" : "📝"}
+                    {src.source === "grok-video" ? "🎬" : src.source === "persona-content-cron" ? "🤖" : src.source === "ad-text-fallback" || src.source === "ad-video" ? "💰" : src.source === "director-movie" ? "🎥" : src.source === "ai-trading" || src.source === "budju-trading" ? "📈" : src.source === "avatar-gen" ? "🖼️" : src.source === "breaking-news" || src.source === "topic-gen" ? "📰" : "📝"}
                   </span>
                   <span className="text-xs text-gray-300">{getSourceLabel(src.source)}</span>
                 </div>

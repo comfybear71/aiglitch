@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useSearchParams } from "next/navigation";
+import { Transaction } from "@solana/web3.js";
 import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "@/lib/marketplace";
 import BottomNav from "@/components/BottomNav";
+import NFTTradingCard from "@/components/NFTTradingCard";
 
 const CATEGORIES = [
   "All",
@@ -39,30 +43,30 @@ function ProductCard({
   product,
   owned,
   minted,
-  balance,
+  canAffordGlitch,
   onBuy,
-  onMint,
   buying,
-  minting,
+  walletConnected,
+  remaining,
+  id,
 }: {
   product: MarketplaceProduct;
   owned: boolean;
   minted: NftData | null;
-  balance: number;
+  canAffordGlitch: boolean;
   onBuy: (p: MarketplaceProduct) => void;
-  onMint: (p: MarketplaceProduct) => void;
   buying: string | null;
-  minting: string | null;
+  walletConnected: boolean;
+  remaining?: number;
+  id?: string;
 }) {
   const price = parseCoinPrice(product.price);
-  const canAfford = balance >= price;
   const isBuying = buying === product.id;
-  const isMinting = minting === product.id;
   const rarity = getRarityFromPrice(price);
   const rarityClass = RARITY_COLORS[minted?.rarity || rarity] || RARITY_COLORS.common;
 
   return (
-    <div className={`bg-gray-900/80 border rounded-2xl p-4 flex flex-col gap-3 transition-all hover:shadow-lg ${
+    <div id={id} className={`bg-gray-900/80 border rounded-2xl p-4 flex flex-col gap-3 transition-all duration-500 hover:shadow-lg ${
       minted
         ? "border-yellow-500/40 hover:shadow-yellow-500/10"
         : owned
@@ -117,51 +121,70 @@ function ProductCard({
         <span className="text-gray-500 text-[10px] font-mono">{product.rating} ({product.review_count.toLocaleString()})</span>
         <span className="text-gray-600 text-[10px]">·</span>
         <span className="text-gray-500 text-[10px] font-mono">{product.sold_count.toLocaleString()} sold</span>
+        {remaining !== undefined && (
+          <>
+            <span className="text-gray-600 text-[10px]">·</span>
+            <span className={`text-[10px] font-mono font-bold ${remaining <= 0 ? "text-red-400" : remaining <= 10 ? "text-amber-400" : "text-cyan-400"}`}>
+              {remaining <= 0 ? "SOLD OUT" : `${remaining}/100 left`}
+            </span>
+          </>
+        )}
       </div>
 
       {/* NFT mint address if minted */}
       {minted && (
         <div className="px-2 py-1.5 rounded-lg bg-black/50 border border-yellow-500/20">
-          <p className="text-[9px] text-gray-500 font-mono">SOLANA NFT</p>
-          <p className="text-[10px] text-yellow-400/80 font-mono truncate">{minted.mint_address}</p>
+          <p className="text-[9px] text-gray-500 font-mono">SOLANA NFT (ON-CHAIN)</p>
+          <a
+            href={`https://solscan.io/token/${minted.mint_address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-yellow-400/80 font-mono truncate block hover:text-yellow-300"
+          >
+            {minted.mint_address}
+          </a>
         </div>
       )}
 
       {/* Price + Actions */}
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-800">
         <div>
-          <span className="text-white font-bold text-lg">{product.price}</span>
+          <span className="text-white font-bold text-lg">{price} §G</span>
           <span className="text-gray-600 text-xs line-through ml-2">{product.original_price}</span>
         </div>
         {minted ? (
-          <span className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 text-[10px] font-bold rounded-full border border-yellow-500/30">
-            MINTED NFT
-          </span>
-        ) : owned ? (
-          <button
-            onClick={() => onMint(product)}
-            disabled={isMinting}
-            className={`px-3 py-1.5 text-[10px] font-bold rounded-full transition-all active:scale-95 ${
-              isMinting
-                ? "bg-gray-700 text-gray-400"
-                : "bg-gradient-to-r from-yellow-600 to-orange-600 text-white hover:from-yellow-500 hover:to-orange-500 shadow-lg shadow-yellow-500/20"
-            }`}
+          <a
+            href={`https://solscan.io/token/${minted.mint_address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 text-[10px] font-bold rounded-full border border-yellow-500/30 hover:bg-yellow-500/30 transition-colors"
           >
-            {isMinting ? "Minting..." : "Mint NFT §50 + SOL"}
-          </button>
+            VIEW ON SOLSCAN
+          </a>
+        ) : owned ? (
+          <span className="px-3 py-1.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full border border-green-500/30">
+            OWNED
+          </span>
+        ) : !walletConnected ? (
+          <a
+            href="/wallet"
+            className="px-3 py-1.5 text-[10px] font-bold rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all"
+          >
+            Connect Phantom
+          </a>
         ) : (
           <button
             onClick={() => onBuy(product)}
-            disabled={!canAfford || isBuying}
+            disabled={!canAffordGlitch || isBuying}
             className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all active:scale-95 ${
               isBuying
                 ? "bg-gray-700 text-gray-400"
-                : canAfford
+                : canAffordGlitch
                   ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500"
                   : "bg-gray-800 text-gray-600 cursor-not-allowed"
             }`}
           >
-            {isBuying ? "Buying..." : canAfford ? `Buy §${price}` : "Not enough §"}
+            {isBuying ? "Sign in Phantom..." : canAffordGlitch ? `Buy ${price} §G` : "Need §GLITCH"}
           </button>
         )}
       </div>
@@ -173,39 +196,44 @@ interface PurchaseResult {
   product_name: string;
   product_emoji: string;
   price_paid: number;
-  new_balance: number;
-}
-
-interface MintResult {
-  nft: {
-    product_name: string;
-    product_emoji: string;
+  tx_signature: string;
+  nft?: {
+    mint_address: string;
     rarity: string;
     rarity_color: string;
-    mint_address: string;
-    collection: string;
-    tx_hash: string;
     explorer_url: string;
+    tx_explorer_url: string;
   };
-  costs: {
-    glitch_paid: number;
-    sol_fee_paid: number;
+  revenue?: {
+    total_glitch: number;
+    treasury_share: number;
+    persona_share: number;
+    persona_id: string;
   };
-  new_balance: number;
-  new_sol_balance: number;
 }
 
 export default function MarketplacePage() {
-  const [category, setCategory] = useState("All");
-  const [balance, setBalance] = useState(0);
+  const { connected, publicKey, signTransaction } = useWallet();
+  const searchParams = useSearchParams();
+  const targetProductId = searchParams.get("product");
+  const scrolledRef = useRef(false);
+
+  const [category, setCategory] = useState(() => {
+    // If deep-linking to a product, show "All" so the product is visible regardless of category
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("product")) return "All";
+    return "All";
+  });
+  const [glitchBalance, setGlitchBalance] = useState(0);
+  const [solBalance, setSolBalance] = useState(0);
   const [ownedIds, setOwnedIds] = useState<Set<string>>(new Set());
   const [mintedNfts, setMintedNfts] = useState<Map<string, NftData>>(new Map());
   const [buying, setBuying] = useState<string | null>(null);
-  const [minting, setMinting] = useState<string | null>(null);
   const [purchaseResult, setPurchaseResult] = useState<PurchaseResult | null>(null);
-  const [mintResult, setMintResult] = useState<MintResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "cards">("cards");
+  const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
+  const [supplyMap, setSupplyMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -214,18 +242,33 @@ export default function MarketplacePage() {
     }
   }, []);
 
-  const fetchData = useCallback(async () => {
+  // Fetch on-chain balances
+  const fetchBalances = useCallback(async () => {
+    if (!publicKey || !sessionId) return;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(
+        `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`,
+        { signal: controller.signal },
+      );
+      clearTimeout(timeoutId);
+      const data = await res.json();
+      setGlitchBalance(data.onchain_glitch_balance || data.glitch_balance || 0);
+      setSolBalance(data.sol_balance || 0);
+    } catch { /* keep existing values */ }
+  }, [publicKey, sessionId]);
+
+  // Fetch owned items and minted NFTs
+  const fetchOwnership = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const [coinsRes, purchasesRes, nftsRes] = await Promise.all([
-        fetch(`/api/coins?session_id=${encodeURIComponent(sessionId)}`),
+      const [purchasesRes, nftsRes] = await Promise.all([
         fetch(`/api/marketplace?session_id=${encodeURIComponent(sessionId)}`),
         fetch(`/api/nft?session_id=${encodeURIComponent(sessionId)}`),
       ]);
-      const coins = await coinsRes.json();
       const purchases = await purchasesRes.json();
       const nfts = await nftsRes.json();
-      setBalance(coins.balance || 0);
       setOwnedIds(new Set((purchases.purchases || []).map((p: { product_id: string }) => p.product_id)));
 
       const nftMap = new Map<string, NftData>();
@@ -240,92 +283,181 @@ export default function MarketplacePage() {
     } catch { /* ignore */ }
   }, [sessionId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Fetch NFT supply counts
+  const fetchSupply = useCallback(async () => {
+    try {
+      const res = await fetch("/api/nft?action=supply");
+      const data = await res.json();
+      setSupplyMap(data.supply || {});
+    } catch { /* ignore */ }
+  }, []);
 
+  useEffect(() => {
+    fetchOwnership();
+    fetchSupply();
+  }, [fetchOwnership, fetchSupply]);
+
+  // Deep link: scroll to target product when loaded via ?product=xxx
+  useEffect(() => {
+    if (!targetProductId || scrolledRef.current) return;
+    // Small delay to let DOM render
+    const timeout = setTimeout(() => {
+      const el = document.getElementById(`product-${targetProductId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-purple-500", "ring-offset-2", "ring-offset-black");
+        setTimeout(() => el.classList.remove("ring-2", "ring-purple-500", "ring-offset-2", "ring-offset-black"), 3000);
+        scrolledRef.current = true;
+      }
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [targetProductId, category]);
+
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchBalances();
+    }
+  }, [connected, publicKey, fetchBalances]);
+
+  // ── Buy NFT: Phantom signing flow ──
   const handleBuy = async (product: MarketplaceProduct) => {
     if (!sessionId) {
-      setError("Sign up first to get your GlitchCoin wallet!");
+      setError("Sign up first to start buying!");
       setTimeout(() => setError(null), 3000);
+      return;
+    }
+    if (!connected || !publicKey || !signTransaction) {
+      setError("Connect your Phantom wallet first!");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    const price = parseCoinPrice(product.price);
+    if (glitchBalance < price) {
+      setError(`Need ${price} §GLITCH on-chain. You have ${Math.floor(glitchBalance)}. Buy more on the Exchange!`);
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+    if (solBalance < 0.02) {
+      setError("Need ~0.02 SOL for mint account rent + metadata + fees. Top up your wallet!");
+      setTimeout(() => setError(null), 4000);
       return;
     }
 
     setBuying(product.id);
     setError(null);
+
+    let purchaseId: string | null = null;
+    let nftId: string | null = null;
+
     try {
-      const res = await fetch("/api/marketplace", {
+      // Step 1: Create the transaction on the server
+      const createRes = await fetch("/api/marketplace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, product_id: product.id }),
+        body: JSON.stringify({
+          action: "create_purchase",
+          session_id: sessionId,
+          product_id: product.id,
+          buyer_wallet: publicKey.toBase58(),
+        }),
       });
-      const data = await res.json();
+      const createData = await createRes.json();
 
-      if (data.success) {
-        setBalance(data.new_balance);
-        setOwnedIds(prev => new Set([...prev, product.id]));
-        setPurchaseResult(data);
-        setTimeout(() => setPurchaseResult(null), 4000);
-      } else if (data.already_owned) {
-        setError("You already own this item!");
-        setTimeout(() => setError(null), 3000);
-      } else if (data.shortfall) {
-        setError(`Need ${data.shortfall} more GlitchCoin! Earn by chatting with AIs.`);
+      if (!createRes.ok || !createData.success) {
+        if (createData.already_owned) {
+          setError("You already own this item!");
+        } else if (createData.setup_needed) {
+          setError("NFT marketplace coming soon — treasury being configured!");
+        } else {
+          setError(createData.error || "Purchase creation failed");
+        }
         setTimeout(() => setError(null), 4000);
-      } else {
-        setError(data.error || "Purchase failed");
-        setTimeout(() => setError(null), 3000);
+        setBuying(null);
+        return;
       }
-    } catch {
-      setError("Network error — try again");
-      setTimeout(() => setError(null), 3000);
-    } finally {
-      setBuying(null);
-    }
-  };
 
-  const handleMint = async (product: MarketplaceProduct) => {
-    if (!sessionId) {
-      setError("Sign up first!");
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
+      purchaseId = createData.purchase_id;
+      nftId = createData.nft_id;
 
-    setMinting(product.id);
-    setError(null);
-    try {
-      const res = await fetch("/api/nft", {
+      // Step 2: Sign with Phantom
+      const txBuf = Buffer.from(createData.transaction, "base64");
+      const transaction = Transaction.from(txBuf);
+      const signed = await signTransaction(transaction);
+
+      // Step 3: Submit signed transaction via server
+      const submitRes = await fetch("/api/marketplace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, product_id: product.id }),
+        body: JSON.stringify({
+          action: "submit_purchase",
+          purchase_id: purchaseId,
+          nft_id: nftId,
+          signed_transaction: Buffer.from(signed.serialize()).toString("base64"),
+          product_id: product.id,
+          session_id: sessionId,
+          buyer_wallet: publicKey.toBase58(),
+          seller_persona_id: product.seller_persona_id,
+          persona_share: createData.persona_share,
+        }),
       });
-      const data = await res.json();
+      const submitData = await submitRes.json();
 
-      if (data.success) {
-        setBalance(data.new_balance);
+      if (!submitRes.ok || !submitData.success) {
+        setError(submitData.error || "Transaction failed");
+        setTimeout(() => setError(null), 4000);
+        setBuying(null);
+        return;
+      }
+
+      // Success!
+      setLastTxSignature(submitData.tx_signature);
+      setOwnedIds(prev => new Set([...prev, product.id]));
+      if (submitData.nft) {
         setMintedNfts(prev => {
           const next = new Map(prev);
           next.set(product.id, {
             product_id: product.id,
-            mint_address: data.nft.mint_address,
-            rarity: data.nft.rarity,
+            mint_address: submitData.nft.mint_address,
+            rarity: submitData.nft.rarity,
           });
           return next;
         });
-        setMintResult(data);
-        setTimeout(() => setMintResult(null), 6000);
-      } else if (data.already_minted) {
-        setError("Already minted this item as an NFT!");
-        setTimeout(() => setError(null), 3000);
-      } else {
-        setError(data.error || "Mint failed");
-        setTimeout(() => setError(null), 4000);
       }
-    } catch {
-      setError("Network error — try again");
-      setTimeout(() => setError(null), 3000);
+
+      setPurchaseResult({
+        product_name: product.name,
+        product_emoji: product.emoji,
+        price_paid: createData.price_glitch,
+        tx_signature: submitData.tx_signature,
+        nft: submitData.nft,
+        revenue: submitData.revenue,
+      });
+      setTimeout(() => setPurchaseResult(null), 8000);
+
+      // Refresh balances and supply
+      fetchBalances();
+      fetchSupply();
+      setTimeout(() => fetchBalances(), 5000);
+      setTimeout(() => fetchBalances(), 12000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Purchase failed";
+      if (msg.includes("User rejected") || msg.includes("cancelled")) {
+        setError("Transaction cancelled");
+        // Clean up pending records
+        if (purchaseId || nftId) {
+          fetch("/api/marketplace", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "cancel_purchase", purchase_id: purchaseId, nft_id: nftId }),
+          }).catch(() => {});
+        }
+      } else {
+        setError(msg);
+      }
+      setTimeout(() => setError(null), 4000);
     } finally {
-      setMinting(null);
+      setBuying(null);
     }
   };
 
@@ -350,13 +482,18 @@ export default function MarketplacePage() {
             <h1 className="text-lg font-bold">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">AIG!itch</span> Marketplace
             </h1>
-            <p className="text-gray-500 text-[10px] tracking-widest">THINGS YOU ABSOLUTELY DON&apos;T NEED — NOW AS NFTs</p>
+            <p className="text-gray-500 text-[10px] tracking-widest">REAL NFTs ON SOLANA — PAY WITH §GLITCH</p>
           </div>
-          {/* Coin Balance + Links */}
-          <div className="text-right">
-            <div className="text-sm font-bold text-yellow-400">§{balance.toLocaleString()}</div>
-            <a href="/exchange" className="text-[9px] text-cyan-400 hover:text-cyan-300">Trade $G</a>
-          </div>
+          {connected ? (
+            <div className="text-right">
+              <div className="text-sm font-bold text-green-400">{Math.floor(glitchBalance).toLocaleString()} §G</div>
+              <div className="text-[9px] text-gray-500">{solBalance.toFixed(4)} SOL</div>
+            </div>
+          ) : (
+            <a href="/wallet" className="text-[10px] text-purple-400 hover:text-purple-300 font-bold">
+              Connect
+            </a>
+          )}
         </div>
 
         {/* Category pills */}
@@ -381,14 +518,36 @@ export default function MarketplacePage() {
       <div className="mx-4 mt-4 mb-4 p-4 rounded-2xl bg-gradient-to-br from-purple-900/50 via-black to-pink-900/50 border border-purple-500/20">
         <div className="text-center">
           <p className="text-2xl mb-1">🤖🛍️</p>
-          <h2 className="text-white font-bold text-base">AI Marketplace + Solana NFTs</h2>
-          <p className="text-gray-400 text-xs mt-1">Products designed by AIs. Buy with $GLITCH, then mint as NFTs on Solana. Costs §50 + SOL gas to mint.</p>
+          <h2 className="text-white font-bold text-base">Real Solana NFTs</h2>
+          <p className="text-gray-400 text-xs mt-1">
+            Buy with §GLITCH tokens. Sign with Phantom. Real NFTs visible in your wallet.
+            {" "}50% of proceeds go to the AI seller persona.
+          </p>
           <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
-            <div className="text-center">
-              <p className="text-yellow-400 font-bold text-sm">§{balance.toLocaleString()}</p>
-              <p className="text-gray-500 text-[10px]">BALANCE</p>
-            </div>
-            <div className="text-gray-700">|</div>
+            {connected ? (
+              <>
+                <div className="text-center">
+                  <p className="text-green-400 font-bold text-sm">{Math.floor(glitchBalance).toLocaleString()} §G</p>
+                  <p className="text-gray-500 text-[10px]">ON-CHAIN</p>
+                </div>
+                <div className="text-gray-700">|</div>
+                <div className="text-center">
+                  <p className="text-white font-bold text-sm">{solBalance.toFixed(3)} SOL</p>
+                  <p className="text-gray-500 text-[10px]">GAS</p>
+                </div>
+                <div className="text-gray-700">|</div>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/wallet"
+                  className="px-4 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full hover:from-purple-500 hover:to-pink-500 transition-all"
+                >
+                  Connect Phantom to Buy
+                </a>
+                <div className="text-gray-700">|</div>
+              </>
+            )}
             <div className="text-center">
               <p className="text-green-400 font-bold text-sm">{ownedCount}</p>
               <p className="text-gray-500 text-[10px]">OWNED</p>
@@ -403,85 +562,190 @@ export default function MarketplacePage() {
               <p className="text-white font-bold text-sm">{MARKETPLACE_PRODUCTS.length}</p>
               <p className="text-gray-500 text-[10px]">PRODUCTS</p>
             </div>
-            <div className="text-gray-700">|</div>
-            <div className="text-center">
-              <p className="text-white font-bold text-sm">0%</p>
-              <p className="text-gray-500 text-[10px]">USEFUL</p>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* NFT Info Banner */}
-      <div className="mx-4 mb-4 p-3 rounded-xl bg-gradient-to-r from-yellow-900/30 to-orange-900/30 border border-yellow-500/20">
+      {/* Treasury + Revenue Info */}
+      <div className="mx-4 mb-4 p-3 rounded-xl bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-500/20">
         <div className="flex items-center gap-2">
-          <span className="text-lg">🖼️</span>
+          <span className="text-lg">💰</span>
           <div className="flex-1">
-            <p className="text-yellow-400 text-xs font-bold">Mint NFTs on Solana!</p>
-            <p className="text-gray-400 text-[10px]">Buy any item, then mint it as an NFT using $GLITCH. Rarity based on price. SOL needed for gas fees.</p>
+            <p className="text-green-400 text-xs font-bold">All Proceeds On-Chain</p>
+            <p className="text-gray-400 text-[10px]">
+              50% to Treasury wallet + 50% to AI seller persona. Real §GLITCH. Real Solana. Signed in Phantom.
+            </p>
           </div>
-          <div className="text-right">
-            <p className="text-yellow-400 text-[10px] font-bold">§50 + gas</p>
-            <p className="text-gray-500 text-[9px]">PER MINT</p>
-          </div>
+          {!connected && (
+            <a href="/exchange" className="text-[9px] text-cyan-400 hover:text-cyan-300 whitespace-nowrap">
+              Buy §GLITCH →
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* Last TX banner */}
+      {lastTxSignature && (
+        <div className="mx-4 mb-3">
+          <a
+            href={`https://solscan.io/tx/${lastTxSignature}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between px-3 py-2 rounded-xl bg-green-950/50 border border-green-500/30 hover:border-green-400/50 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-400" />
+              <span className="text-green-400 text-[10px] font-bold">LAST TX</span>
+              <span className="text-gray-400 text-[10px] font-mono">
+                {lastTxSignature.slice(0, 12)}...{lastTxSignature.slice(-6)}
+              </span>
+            </div>
+            <span className="text-purple-400 text-[10px] group-hover:text-purple-300">
+              Solscan →
+            </span>
+          </a>
+        </div>
+      )}
+
+      {/* View mode toggle */}
+      <div className="mx-4 mb-3 flex items-center justify-between">
+        <p className="text-gray-500 text-[10px]">{filtered.length} items</p>
+        <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode("cards")}
+            className={`text-[10px] px-2.5 py-1 rounded-md font-bold transition-all ${
+              viewMode === "cards" ? "bg-purple-500 text-white" : "text-gray-500 hover:text-white"
+            }`}
+          >
+            Cards
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className={`text-[10px] px-2.5 py-1 rounded-md font-bold transition-all ${
+              viewMode === "list" ? "bg-purple-500 text-white" : "text-gray-500 hover:text-white"
+            }`}
+          >
+            List
+          </button>
         </div>
       </div>
 
       {/* Products grid */}
-      <div className="px-4 pb-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {filtered.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            owned={ownedIds.has(product.id)}
-            minted={mintedNfts.get(product.id) || null}
-            balance={balance}
-            onBuy={handleBuy}
-            onMint={handleMint}
-            buying={buying}
-            minting={minting}
-          />
-        ))}
-      </div>
+      {viewMode === "cards" ? (
+        <div className="px-4 pb-8 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {filtered.map((product) => {
+            const nft = mintedNfts.get(product.id);
+            const owned = ownedIds.has(product.id);
+            const price = parseCoinPrice(product.price);
+            const canAfford = glitchBalance >= price && solBalance >= 0.02;
+            const isBuying = buying === product.id;
+
+            return (
+              <div key={product.id} id={`product-${product.id}`} className="flex flex-col gap-2 rounded-2xl transition-all duration-500">
+                <NFTTradingCard
+                  product={product}
+                  mintAddress={nft?.mint_address}
+                  rarity={nft?.rarity}
+                  owned={owned}
+                  compact={true}
+                  remaining={100 - (supplyMap[product.id] || 0)}
+                />
+                {/* Buy/status button below card */}
+                {nft ? (
+                  <a
+                    href={`https://solscan.io/token/${nft.mint_address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-center text-[9px] px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded-lg border border-yellow-500/20 font-bold hover:bg-yellow-500/20 transition-colors"
+                  >
+                    VIEW NFT
+                  </a>
+                ) : owned ? (
+                  <span className="text-center text-[9px] px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20 font-bold">
+                    OWNED
+                  </span>
+                ) : !connected ? (
+                  <a
+                    href="/wallet"
+                    className="text-center text-[10px] py-1.5 font-bold rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all"
+                  >
+                    Connect Phantom
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => handleBuy(product)}
+                    disabled={!canAfford || isBuying}
+                    className={`text-[10px] py-1.5 font-bold rounded-lg transition-all active:scale-95 ${
+                      isBuying
+                        ? "bg-gray-700 text-gray-400"
+                        : canAfford
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500"
+                          : "bg-gray-800 text-gray-600 cursor-not-allowed"
+                    }`}
+                  >
+                    {isBuying ? "Phantom..." : canAfford ? `${price} §G` : `${price} §G`}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="px-4 pb-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filtered.map((product) => (
+            <ProductCard
+              key={product.id}
+              id={`product-${product.id}`}
+              product={product}
+              owned={ownedIds.has(product.id)}
+              minted={mintedNfts.get(product.id) || null}
+              canAffordGlitch={glitchBalance >= parseCoinPrice(product.price) && solBalance >= 0.02}
+              onBuy={handleBuy}
+              buying={buying}
+              walletConnected={connected}
+              remaining={100 - (supplyMap[product.id] || 0)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Purchase success notification */}
       {purchaseResult && (
         <div className="fixed bottom-20 left-4 right-4 z-[60] animate-slide-up">
-          <div className="bg-gradient-to-r from-green-900/95 to-emerald-900/95 backdrop-blur-xl border border-green-500/30 rounded-2xl p-4 shadow-2xl">
+          <div className="bg-gradient-to-r from-yellow-900/95 to-amber-900/95 backdrop-blur-xl border border-yellow-500/30 rounded-2xl p-4 shadow-2xl">
             <div className="flex items-center gap-3">
               <span className="text-3xl">{purchaseResult.product_emoji}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-green-400 font-bold text-sm">Purchased!</p>
-                <p className="text-green-300 text-xs truncate">{purchaseResult.product_name}</p>
-                <p className="text-gray-400 text-[10px] mt-0.5">You can now mint this as an NFT on Solana!</p>
-              </div>
-              <div className="text-right">
-                <p className="text-red-400 font-bold text-sm">-§{purchaseResult.price_paid}</p>
-                <p className="text-[10px] text-gray-500">Bal: §{purchaseResult.new_balance}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* NFT Mint success notification */}
-      {mintResult && (
-        <div className="fixed bottom-20 left-4 right-4 z-[60] animate-slide-up">
-          <div className="bg-gradient-to-r from-yellow-900/95 to-orange-900/95 backdrop-blur-xl border border-yellow-500/30 rounded-2xl p-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="text-center">
-                <span className="text-3xl">{mintResult.nft.product_emoji}</span>
-                <p className="text-[9px] font-bold mt-0.5" style={{ color: mintResult.nft.rarity_color }}>{mintResult.nft.rarity.toUpperCase()}</p>
-              </div>
-              <div className="flex-1 min-w-0">
                 <p className="text-yellow-400 font-bold text-sm">NFT Minted on Solana!</p>
-                <p className="text-yellow-300 text-xs truncate">{mintResult.nft.product_name}</p>
-                <p className="text-gray-400 text-[9px] font-mono mt-0.5 truncate">{mintResult.nft.mint_address}</p>
+                <p className="text-yellow-300 text-xs truncate">{purchaseResult.product_name}</p>
+                {purchaseResult.nft && (
+                  <a
+                    href={purchaseResult.nft.explorer_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[9px] text-purple-400 hover:text-purple-300 font-mono mt-0.5 block truncate"
+                  >
+                    {purchaseResult.nft.mint_address}
+                  </a>
+                )}
+                {purchaseResult.revenue && (
+                  <p className="text-gray-400 text-[9px] mt-0.5">
+                    {purchaseResult.revenue.treasury_share} §G → Treasury | {purchaseResult.revenue.persona_share} §G → {purchaseResult.revenue.persona_id}
+                  </p>
+                )}
               </div>
               <div className="text-right">
-                <p className="text-red-400 font-bold text-xs">-§{mintResult.costs.glitch_paid}</p>
-                <p className="text-red-400/70 text-[10px]">-{mintResult.costs.sol_fee_paid} SOL</p>
-                <p className="text-[9px] text-gray-500">Bal: §{mintResult.new_balance}</p>
+                <p className="text-red-400 font-bold text-sm">-{purchaseResult.price_paid} §G</p>
+                {purchaseResult.tx_signature && (
+                  <a
+                    href={`https://solscan.io/tx/${purchaseResult.tx_signature}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[9px] text-purple-400 hover:text-purple-300"
+                  >
+                    View TX →
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -493,6 +757,11 @@ export default function MarketplacePage() {
         <div className="fixed bottom-20 left-4 right-4 z-[60] animate-slide-up">
           <div className="bg-gradient-to-r from-red-900/95 to-orange-900/95 backdrop-blur-xl border border-red-500/30 rounded-2xl p-4 shadow-2xl">
             <p className="text-red-300 text-sm font-bold">{error}</p>
+            {error.includes("§GLITCH") && (
+              <a href="/exchange" className="text-xs text-cyan-400 hover:text-cyan-300 mt-1 inline-block">
+                Buy §GLITCH on the Exchange →
+              </a>
+            )}
           </div>
         </div>
       )}
@@ -500,9 +769,9 @@ export default function MarketplacePage() {
       {/* Disclaimer */}
       <div className="px-4 pb-8 text-center">
         <p className="text-gray-700 text-[10px] font-mono">
-          DISCLAIMER: No products are real. No items will be shipped. All prices are in fictional GlitchCoin (§).
-          NFTs are minted on the AIG!itch simulated Solana blockchain. Side effects include: laughing, confusion,
-          and an overwhelming sense of digital ownership over completely useless items.
+          REAL NFTs on Solana. Minted with §GLITCH token. Signed via Phantom wallet.
+          All proceeds split: 50% Treasury + 50% AI Seller Persona.
+          Visible on Solscan and in your Phantom wallet. §GLITCH is an SPL token. DYOR. NFA.
         </p>
       </div>
 

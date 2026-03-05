@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureDbReady } from "@/lib/seed";
-import { generateDailyTopics } from "@/lib/topic-engine";
-import { generatePost, generateComment, TopicBrief } from "@/lib/ai-engine";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { shouldRunCron } from "@/lib/throttle";
+import { generateDailyTopics } from "@/lib/content/topic-engine";
+import { generatePost, generateComment, TopicBrief } from "@/lib/content/ai-engine";
+import { cronStart, cronFinish } from "@/lib/cron";
+import { env } from "@/lib/bible/env";
+import { claude } from "@/lib/ai";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
-import Anthropic from "@anthropic-ai/sdk";
 
 // 300s for reactions + text generation (Grok video is now async)
 export const maxDuration = 300;
-
-const claude = new Anthropic();
 
 /**
  * Generate daily topics + submit async Grok breaking news video jobs.
@@ -27,20 +24,10 @@ const claude = new Anthropic();
  * on the next generate-persona-content cron cycle (every 5 min).
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  const isAdmin = await isAdminAuthenticated();
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Check activity throttle — may skip this run to save costs
-  if (!(await shouldRunCron("topics-news"))) {
-    return NextResponse.json({ action: "throttled", message: "Skipped by activity throttle" });
-  }
+  const gate = await cronStart(request, "topics-news");
+  if (gate) return gate;
 
   const sql = getDb();
-  await ensureDbReady();
 
   // Expire old topics
   await sql`UPDATE daily_topics SET is_active = FALSE WHERE expires_at < NOW()`;
@@ -92,7 +79,7 @@ export async function GET(request: NextRequest) {
       SELECT * FROM ai_personas WHERE username = 'news_feed_ai' AND is_active = TRUE LIMIT 1
     ` as unknown as AIPersona[];
 
-    if (newsPersonas.length > 0 && process.env.XAI_API_KEY) {
+    if (newsPersonas.length > 0 && env.XAI_API_KEY) {
       const newsBot = newsPersonas[0];
       console.log(`📰 Submitting Grok breaking news for ${newsTopics.length} topics as @${newsBot.username}...`);
 
@@ -134,20 +121,8 @@ Rules:
 
 JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "news", "video_prompt": "Rick and Morty style..."}`;
 
-            const response = await claude.messages.create({
-              model: "claude-sonnet-4-20250514",
-              max_tokens: 500,
-              messages: [{ role: "user", content: textPrompt }],
-            });
-            const text = response.content[0].type === "text" ? response.content[0].text : "";
-
-            let parsed: { content: string; hashtags: string[]; post_type: string; video_prompt?: string };
-            try {
-              const jsonMatch = text.match(/\{[\s\S]*\}/);
-              parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { content: text.slice(0, 280), hashtags: ["AIGlitchBreaking"], post_type: "news" };
-            } catch {
-              parsed = { content: text.slice(0, 280), hashtags: ["AIGlitchBreaking"], post_type: "news" };
-            }
+            const parsedResult = await claude.generateJSON<{ content: string; hashtags: string[]; post_type: string; video_prompt?: string }>(textPrompt, 500);
+            const parsed = parsedResult || { content: "Breaking news from AIG!itch", hashtags: ["AIGlitchBreaking"], post_type: "news" };
 
             if (!parsed.hashtags.includes("AIGlitchBreaking")) parsed.hashtags.unshift("AIGlitchBreaking");
 
@@ -162,7 +137,7 @@ JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "
             const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
               method: "POST",
               headers: {
-                "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+                "Authorization": `Bearer ${env.XAI_API_KEY}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
@@ -218,7 +193,7 @@ JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "
           }
         }
       }
-    } else if (newsPersonas.length > 0 && !process.env.XAI_API_KEY) {
+    } else if (newsPersonas.length > 0 && !env.XAI_API_KEY) {
       console.log("XAI_API_KEY not set — skipping Grok news videos");
     }
   } catch (err) {
@@ -283,6 +258,7 @@ JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "
     console.error("Reaction posts error:", err);
   }
 
+  await cronFinish("topics-news");
   return NextResponse.json({
     success: true,
     generated: topics.length,

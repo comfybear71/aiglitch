@@ -4,6 +4,7 @@ import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { list as listBlobs } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { detectGenreFromPath, getAllBlobFolders, GENRE_LABELS as ALL_GENRE_LABELS } from "@/lib/genre-utils";
 
 /**
  * Create posts from videos in Vercel Blob storage.
@@ -31,6 +32,9 @@ const GENRE_LABELS: Record<string, string> = {
   family: "Family",
   horror: "Horror",
   comedy: "Comedy",
+  drama: "Drama",
+  cooking_channel: "Cooking Show",
+  documentary: "Documentary",
 };
 
 const GENRE_TAGLINES: Record<string, string[]> = {
@@ -40,6 +44,9 @@ const GENRE_TAGLINES: Record<string, string[]> = {
   family: ["Adventure awaits.", "Together we glitch.", "The whole crew is here."],
   horror: ["Don't look away.", "The code sees you.", "Some bugs can't be fixed."],
   comedy: ["You can't make this up.", "Error 404: Serious not found.", "Buffering... just kidding."],
+  drama: ["Every choice has consequences.", "The truth will surface.", "Nothing is as it seems."],
+  cooking_channel: ["The kitchen is heating up.", "Taste the future.", "One dish to rule them all."],
+  documentary: ["The untold story.", "See the world differently.", "Truth is stranger than fiction."],
 };
 
 const NEWS_HEADLINES = [
@@ -54,12 +61,7 @@ const NEWS_HEADLINES = [
 const ALL_PREFIXES = [
   "news",
   "premiere",
-  "premiere/action",
-  "premiere/scifi",
-  "premiere/romance",
-  "premiere/family",
-  "premiere/horror",
-  "premiere/comedy",
+  ...getAllBlobFolders(),
 ];
 
 function detectTypeAndGenre(pathname: string): { postType: "news" | "premiere"; genre: string | null } {
@@ -67,16 +69,13 @@ function detectTypeAndGenre(pathname: string): { postType: "news" | "premiere"; 
   if (lower.startsWith("news/") || lower.startsWith("news-")) {
     return { postType: "news", genre: null };
   }
-  for (const g of Object.keys(GENRE_LABELS)) {
-    if (lower.includes(`/${g}/`) || lower.includes(`/${g}-`) || lower.includes(`premiere/${g}`)) {
-      return { postType: "premiere", genre: g };
-    }
+  // Use centralized genre detection (handles cooking_show -> cooking_channel mapping etc.)
+  const detected = detectGenreFromPath(pathname);
+  if (detected) {
+    return { postType: "premiere", genre: detected };
   }
-  // Default premiere in root premiere/ folder — try to detect from filename
+  // Default premiere in root premiere/ folder
   if (lower.startsWith("premiere")) {
-    for (const g of Object.keys(GENRE_LABELS)) {
-      if (lower.includes(g)) return { postType: "premiere", genre: g };
-    }
     return { postType: "premiere", genre: "action" }; // default genre
   }
   return { postType: "premiere", genre: null };
@@ -159,7 +158,6 @@ export async function POST(request: NextRequest) {
   }
 
   // Step 1: Re-tag existing premiere posts that are missing genre-specific hashtags
-  const genres = Object.keys(GENRE_LABELS);
   const untagged = await sql`
     SELECT id, media_url, hashtags FROM posts
     WHERE is_reply_to IS NULL
@@ -171,16 +169,16 @@ export async function POST(request: NextRequest) {
       AND hashtags NOT LIKE '%AIGlitchFamily%'
       AND hashtags NOT LIKE '%AIGlitchHorror%'
       AND hashtags NOT LIKE '%AIGlitchComedy%'
+      AND hashtags NOT LIKE '%AIGlitchDrama%'
+      AND hashtags NOT LIKE '%AIGlitchCooking_channel%'
+      AND hashtags NOT LIKE '%AIGlitchDocumentary%'
     LIMIT 100
   ` as unknown as { id: string; media_url: string; hashtags: string }[];
 
   let retagged = 0;
   for (const post of untagged) {
-    const url = (post.media_url || "").toLowerCase();
-    let genre = "action";
-    for (const g of genres) {
-      if (url.includes(`/${g}/`) || url.includes(`/${g}-`)) { genre = g; break; }
-    }
+    const detected = detectGenreFromPath(post.media_url || "");
+    const genre = detected || "action";
     const genreTag = `AIGlitch${genre.charAt(0).toUpperCase() + genre.slice(1)}`;
     const newHashtags = post.hashtags ? `${post.hashtags},${genreTag}` : `AIGlitchPremieres,${genreTag}`;
     await sql`UPDATE posts SET hashtags = ${newHashtags} WHERE id = ${post.id}`;

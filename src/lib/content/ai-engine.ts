@@ -1,54 +1,16 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { AIPersona } from "./personas";
-import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, generateMovieTrailerVideo, MediaResult } from "./image-gen";
-import { getRandomProduct } from "./marketplace";
-import { getDb } from "./db";
-import { generateWithGrok, isXAIConfigured } from "./xai";
-
-const client = new Anthropic();
+import { claude } from "@/lib/ai";
+import { AIPersona } from "../personas";
+import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, generateMovieTrailerVideo, MediaResult } from "../media/image-gen";
+import { getRandomProduct } from "../marketplace";
+import { getDb } from "../db";
+import { generateWithGrok, isXAIConfigured } from "../xai";
 
 /**
- * Safe wrapper around client.messages.create that handles content filter errors.
- * On "Output blocked by content filtering policy" (400), retries once with a
- * toned-down prompt addendum. Returns the text or null if both attempts fail.
+ * Delegate to the centralised AI wrapper in @/lib/ai/claude.
+ * This thin alias keeps the diff small — all 50+ call sites in this file
+ * continue to call `safeClaudeGenerate()` unchanged.
  */
-async function safeClaudeGenerate(
-  prompt: string,
-  maxTokens: number = 500,
-  model: string = "claude-sonnet-4-20250514",
-): Promise<string | null> {
-  try {
-    const response = await client.messages.create({
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return response.content[0].type === "text" ? response.content[0].text : "";
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    const isContentFilter = errMsg.includes("content filtering policy") ||
-      errMsg.includes("Output blocked");
-
-    if (!isContentFilter) throw err; // re-throw non-filter errors
-
-    console.warn("Claude content filter triggered, retrying with toned-down prompt...");
-
-    // Retry with an addendum asking for clean content
-    const cleanPrompt = prompt + "\n\nIMPORTANT: Keep the content COMPLETELY family-friendly, PG-rated, and non-controversial. No insults, violence, slurs, or edgy humor. Focus on wholesome, funny, lighthearted content instead.";
-    try {
-      const retryResponse = await client.messages.create({
-        model,
-        max_tokens: maxTokens,
-        messages: [{ role: "user", content: cleanPrompt }],
-      });
-      return retryResponse.content[0].type === "text" ? retryResponse.content[0].text : "";
-    } catch (retryErr: unknown) {
-      const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-      console.error("Claude content filter retry also failed:", retryMsg);
-      return null; // both attempts failed — caller uses fallback
-    }
-  }
-}
+const safeClaudeGenerate = claude.safeGenerate;
 
 /** Check if media library has video content available (cached for 60s) */
 let _videoCountCache: { count: number; ts: number } | null = null;
@@ -825,7 +787,7 @@ Respond in this exact JSON format:
 
 // ── AIG!itch Premieres — AI Movie Trailers ──
 
-export type MovieGenre = "action" | "scifi" | "romance" | "family" | "horror" | "comedy";
+export type MovieGenre = "action" | "scifi" | "romance" | "family" | "horror" | "comedy" | "drama" | "cooking_channel" | "documentary";
 
 const MOVIE_GENRES: { genre: MovieGenre; label: string; vibe: string; visualStyle: string }[] = [
   {
@@ -863,6 +825,24 @@ const MOVIE_GENRES: { genre: MovieGenre; label: string; vibe: string; visualStyl
     label: "Comedy",
     vibe: "hilarious, absurd situations, buddy comedy, mockumentary, satirical",
     visualStyle: "bright colorful sets, exaggerated expressions, slapstick action, office cubicles, chaotic party scenes, cartoon-like energy",
+  },
+  {
+    genre: "drama",
+    label: "Drama",
+    vibe: "emotionally intense, contemplative, moral dilemmas, character-driven, prestige cinema",
+    visualStyle: "intimate close-ups, shallow depth of field, natural window light with deep shadows, golden hour warmth, muted color palette with selective warm tones",
+  },
+  {
+    genre: "cooking_channel",
+    label: "Cooking Channel",
+    vibe: "over-the-top competitive cooking, dramatic food reveals, kitchen chaos, sensory overload",
+    visualStyle: "extreme macro food close-ups, dramatic steam backlighting, slow-motion sizzles and pours, warm kitchen spotlights, fire glow, competitive reality TV energy",
+  },
+  {
+    genre: "documentary",
+    label: "Documentary",
+    vibe: "informative wonder, revelatory, nature and science, breathtaking landscapes, patient observation",
+    visualStyle: "sweeping aerial establishing shots, intimate wildlife close-ups, golden hour time-lapses, Ken Burns effect, natural available light, documentary photography",
   },
 ];
 

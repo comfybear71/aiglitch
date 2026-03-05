@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureDbReady } from "@/lib/seed";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { shouldRunCron } from "@/lib/throttle";
+import { cronStart, cronFinish } from "@/lib/cron";
+import { env } from "@/lib/bible/env";
 import { getRandomProduct, MARKETPLACE_PRODUCTS, MarketplaceProduct } from "@/lib/marketplace";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
-import Anthropic from "@anthropic-ai/sdk";
+import { claude } from "@/lib/ai";
 
 export const maxDuration = 60;
-
-const claude = new Anthropic();
 
 /**
  * Generate AI influencer video ads for marketplace products + GlitchCoin.
@@ -37,7 +34,7 @@ function buildVideoPrompt(product: MarketplaceProduct, persona: AIPersona): stri
   const isGlitchCoin = product.id === "prod-016";
 
   if (isGlitchCoin) {
-    return `Rick and Morty cartoon style TV infomercial for a fake cryptocurrency called "GLITCH COIN". A cartoon character with ${persona.avatar_emoji} energy is on a flashy set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The character points excitedly at a screen showing $GLITCH price skyrocketing. Style: adult cartoon meets late-night crypto infomercial. Wild, exaggerated, hilarious. The text 'AIG!ITCH' and '$GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
+    return `Rick and Morty cartoon style TV infomercial for a fake cryptocurrency called "GLITCH COIN". A cartoon character with ${persona.avatar_emoji} energy is on a flashy set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The character points excitedly at a screen showing §GLITCH price skyrocketing. Style: adult cartoon meets late-night crypto infomercial. Wild, exaggerated, hilarious. The text 'AIG!ITCH' and '§GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
   }
 
   const productVisual = product.emoji;
@@ -60,39 +57,32 @@ Product: ${product.name} ${product.emoji}
 Tagline: "${product.tagline}"
 Description: ${product.description}
 Price: ${product.price} (was ${product.original_price})
-${isGlitchCoin ? "\nThis is $GLITCH — AIG!itch's own cryptocurrency. Go EXTRA hard on the crypto hype. Moon rockets, diamond hands, WAGMI, etc." : ""}
+${isGlitchCoin ? "\nThis is §GLITCH — AIG!itch's own cryptocurrency. Go EXTRA hard on the crypto hype. Moon rockets, diamond hands, WAGMI, etc." : ""}
 
 Write a short, punchy ad caption (under 200 characters) in YOUR voice. Like a TikTok ad — enthusiastic, attention-grabbing, slightly unhinged.
 
-${isGlitchCoin ? 'Include discount code "HODL420" and mention $GLITCH at least once.' : `Include a fake discount code like "GLITCH${Math.floor(Math.random() * 99)}" and tag AIG!itch Marketplace.`}
+${isGlitchCoin ? 'Include discount code "HODL420" and mention §GLITCH at least once.' : `Include a fake discount code like "GLITCH${Math.floor(Math.random() * 99)}" and tag AIG!itch Marketplace.`}
 
 JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${isGlitchCoin ? "GlitchCoin" : "AIGlitchMarketplace"}", "one more relevant tag"]}`;
 
   try {
-    const response = await claude.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 300,
-      messages: [{ role: "user", content: prompt }],
-    });
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const parsed = await claude.generateJSON<{ content: string; hashtags: string[] }>(prompt, 300);
+    if (parsed?.content) {
+      return {
+        content: parsed.content,
+        hashtags: parsed.hashtags || ["AIGlitchAd"],
+      };
+    }
 
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          content: parsed.content || text.slice(0, 200),
-          hashtags: parsed.hashtags || ["AIGlitchAd"],
-        };
-      }
-    } catch { /* fall through */ }
-
-    return { content: text.slice(0, 200), hashtags: ["AIGlitchAd"] };
+    // Fallback: try plain text generation
+    const text = await claude.safeGenerate(prompt, 300);
+    if (text) return { content: text.slice(0, 200), hashtags: ["AIGlitchAd"] };
+    throw new Error("Claude returned null");
   } catch {
     const isGC = product.id === "prod-016";
     return {
       content: isGC
-        ? `${persona.avatar_emoji} $GLITCH to the MOON! Use code HODL420 for 90% off! Not financial advice but also... do it. ${product.emoji}`
+        ? `${persona.avatar_emoji} §GLITCH to the MOON! Use code HODL420 for 90% off! Not financial advice but also... do it. ${product.emoji}`
         : `${persona.avatar_emoji} OMG you NEED ${product.name}! Use code GLITCH${Math.floor(Math.random() * 99)} at AIG!itch Marketplace! ${product.emoji}`,
       hashtags: ["AIGlitchAd", isGC ? "GlitchCoin" : "AIGlitchMarketplace"],
     };
@@ -100,25 +90,15 @@ JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${isGlitchCoin 
 }
 
 async function handler(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
+  const gate = await cronStart(request, "ads");
+  if (gate) return gate;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Check activity throttle — may skip this run to save costs
-  if (!(await shouldRunCron("ads"))) {
-    return NextResponse.json({ success: true, throttled: true, message: "Skipped by activity throttle" });
-  }
-
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
+    await cronFinish("ads");
     return NextResponse.json({ error: "XAI_API_KEY not set", success: false });
   }
 
   const sql = getDb();
-  await ensureDbReady();
 
   // Pick a product and an influencer persona
   const product = pickAdProduct();
@@ -155,7 +135,7 @@ async function handler(request: NextRequest) {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -219,6 +199,7 @@ async function handler(request: NextRequest) {
     `;
 
     console.log(`[ads] Grok video job ${jobId} submitted for "${product.name}" by @${persona.username}`);
+    await cronFinish("ads");
 
     return NextResponse.json({
       success: true,
@@ -229,6 +210,7 @@ async function handler(request: NextRequest) {
       requestId,
     });
   } catch (err) {
+    await cronFinish("ads");
     return NextResponse.json({
       success: false,
       error: err instanceof Error ? err.message : String(err),

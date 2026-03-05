@@ -67,7 +67,7 @@ interface WalletBalances {
 }
 
 // Get all on-chain balances for a wallet address in one call
-// Returns SOL, $GLITCH, $BUDJU, and USDC using Helius or standard RPC
+// Returns SOL, §GLITCH, $BUDJU, and USDC using Helius or standard RPC
 // All calls have timeouts so the page never hangs
 async function getWalletBalances(walletAddress: string): Promise<WalletBalances> {
   const zeros: WalletBalances = { sol_balance: 0, glitch_balance: 0, budju_balance: 0, usdc_balance: 0 };
@@ -86,7 +86,7 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
     return {
       sol_balance: heliusData.nativeBalance / 1_000_000_000,
       glitch_balance: tokenBalance(GLITCH_TOKEN_MINT_STR, 9),
-      budju_balance: tokenBalance(BUDJU_TOKEN_MINT_STR, 9),
+      budju_balance: tokenBalance(BUDJU_TOKEN_MINT_STR, 6), // pump.fun tokens use 6 decimals
       usdc_balance: tokenBalance(USDC_MINT, 6),
     };
   }
@@ -111,7 +111,7 @@ async function getWalletBalances(walletAddress: string): Promise<WalletBalances>
       Promise.all([
         connection.getBalance(walletPubkey).catch(() => 0),
         getSplBalance(GLITCH_TOKEN_MINT_STR, 9),
-        getSplBalance(BUDJU_TOKEN_MINT_STR, 9),
+        getSplBalance(BUDJU_TOKEN_MINT_STR, 6), // pump.fun tokens use 6 decimals
         getSplBalance(USDC_MINT, 6),
       ]),
       10000,
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Get real on-chain balance for a connected Phantom wallet
-  // Also returns the app $GLITCH balance (from DB) so UI can show the higher value
+  // Also returns the app §GLITCH balance (from DB) so UI can show the higher value
   if (action === "balance" && walletAddress) {
     // Only require a valid token mint (not full "real mode") to query balances
     if (!hasValidTokenMint()) {
@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
 
     const balances = await getWalletBalances(walletAddress);
 
-    // Also fetch the user's app $GLITCH balance from DB (earned through platform activity)
+    // Also fetch the user's app §GLITCH balance from DB (earned through platform activity)
     let app_glitch_balance = 0;
     const sessionId = request.nextUrl.searchParams.get("session_id");
     if (sessionId) {
@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
       if (coins.length > 0) app_glitch_balance = Number(coins[0].balance);
     }
 
-    // Show the higher of on-chain or app balance for $GLITCH
+    // Show the higher of on-chain or app balance for §GLITCH
     const onChainGlitch = balances.glitch_balance || 0;
     const effectiveGlitch = Math.max(onChainGlitch, app_glitch_balance);
 
@@ -245,7 +245,7 @@ export async function GET(request: NextRequest) {
       allocation: TOKENOMICS.elonBot.amount,
       percentage_of_supply: ((TOKENOMICS.elonBot.amount / TOKENOMICS.totalSupply) * 100).toFixed(3) + "%",
       sell_restriction: TOKENOMICS.elonBot.sellRestriction,
-      sell_restriction_detail: "ElonBot can ONLY sell/transfer $GLITCH to the platform admin wallet. All other transfers are blocked.",
+      sell_restriction_detail: "ElonBot can ONLY sell/transfer §GLITCH to the platform admin wallet. All other transfers are blocked.",
       admin_wallet: ADMIN_WALLET_STR,
       simulated_wallet: elonWallet.length > 0 ? {
         address: elonWallet[0].wallet_address,
@@ -392,7 +392,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         amount,
-        message: `Claimed ${amount} $GLITCH! Welcome to the blockchain, meat bag.`,
+        message: `Claimed ${amount} §GLITCH! Welcome to the blockchain, meat bag.`,
         real_mode: false,
         note: "This is a simulated airdrop. Enable real Solana mode for on-chain tokens.",
       });

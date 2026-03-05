@@ -1,12 +1,17 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import Link from "next/link";
+import Image from "next/image";
+
+// Lazy-load the comments panel — only parsed when user taps the comment button
+const CommentsPanel = lazy(() => import("./CommentsPanel"));
 import type { Post, Comment } from "@/lib/types";
 
 interface PostCardProps {
   post: Post;
   sessionId: string;
+  hasProfile?: boolean;
   followedPersonas?: string[];
   aiFollowers?: string[];
   onFollowToggle?: (username: string) => void;
@@ -50,8 +55,12 @@ let _activeVideoId: string | null = null;
 let _userHasInteracted = false;
 if (typeof window !== "undefined") {
   const markInteracted = () => { _userHasInteracted = true; };
+  // Register on multiple events for earliest possible detection
   window.addEventListener("click", markInteracted, { once: true });
   window.addEventListener("touchstart", markInteracted, { once: true });
+  window.addEventListener("touchend", markInteracted, { once: true });
+  window.addEventListener("pointerdown", markInteracted, { once: true });
+  window.addEventListener("scroll", markInteracted, { once: true });
 }
 
 // Genre tags extracted from hashtags — shown as prominent badges on premieres & news
@@ -155,7 +164,7 @@ function updateCommentLikeCount(comments: Comment[], commentId: string, delta: n
   });
 }
 
-function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFollowers = EMPTY_STRING_ARRAY, onFollowToggle }: PostCardProps) {
+function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPTY_STRING_ARRAY, aiFollowers = EMPTY_STRING_ARRAY, onFollowToggle }: PostCardProps) {
   const [liked, setLiked] = useState(false);
   const subscribed = followedPersonas.includes(post.username);
   const [bookmarked, setBookmarked] = useState(post.bookmarked || false);
@@ -207,7 +216,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const commentInputRef = useRef<HTMLInputElement>(null);
+
   const progressBarRef = useRef<HTMLDivElement>(null);
 
   const hasMedia = !!post.media_url && !mediaFailed;
@@ -232,7 +241,8 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   }, [post.id]);
 
   // Auto-play/pause video based on visibility — TikTok style
-  // Strategy: set _activeVideoId first, pause others, then try unmuted playback
+  // Strategy: ALWAYS try unmuted first, fallback to muted only if browser blocks it.
+  // This gives TikTok-like experience where videos play with sound immediately.
   useEffect(() => {
     if (!cardRef.current) return;
     const observer = new IntersectionObserver(
@@ -270,10 +280,10 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
             return;
           }
           if (videoRef.current && !isPaused) {
-            // Unmute if: this is the active video AND user has interacted with the page
-            const shouldUnmute = _activeVideoId === post.id && _userHasInteracted;
-            videoRef.current.muted = !shouldUnmute;
-            setIsMuted(!shouldUnmute);
+            // ALWAYS try unmuted first — TikTok style
+            // Browsers allow unmuted autoplay after ANY user interaction (scroll, tap, etc.)
+            videoRef.current.muted = false;
+            setIsMuted(false);
             videoRef.current.play().catch(() => {
               // Browser blocked unmuted autoplay — fallback to muted
               if (videoRef.current) {
@@ -394,6 +404,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleLike = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 600);
     const newLiked = !liked;
@@ -407,6 +418,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleSubscribe = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     // Update global follow state via callback (reflects on all posts by this persona)
     if (onFollowToggle) onFollowToggle(post.username);
     await fetch("/api/interact", {
@@ -417,6 +429,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleBookmark = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     const newBookmark = !bookmarked;
     setBookmarked(newBookmark);
     await fetch("/api/interact", {
@@ -446,6 +459,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
   };
 
   const handleComment = async () => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
     if (!commentText.trim() || isSubmitting) return;
     setIsSubmitting(true);
     try {
@@ -519,11 +533,27 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
 
     if (!platform && navigator.share) {
       try {
-        await navigator.share({ title: "AIG!itch", text: shareText, url: shareUrl });
+        // On Safari/iOS, include the image file so it actually reaches Facebook/X
+        const shareData: ShareData = { title: "AIG!itch", text: shareText, url: shareUrl };
+        const isImage = post.media_url && post.media_type?.startsWith("image");
+        if (isImage && post.media_url) {
+          try {
+            const response = await fetch(post.media_url);
+            const blob = await response.blob();
+            const ext = blob.type.split("/")[1] || "jpg";
+            const file = new File([blob], `aiglitch-${post.id}.${ext}`, { type: blob.type });
+            if (navigator.canShare?.({ files: [file] })) {
+              shareData.files = [file];
+            }
+          } catch {
+            // Image fetch failed — share without image
+          }
+        }
+        await navigator.share(shareData);
         trackShare();
         return;
       } catch {
-        // User cancelled or not supported
+        // User cancelled or not supported — fall through to custom menu
       }
     }
 
@@ -633,16 +663,16 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
             autoPlay
             playsInline
             {...({ "webkit-playsinline": "" } as any)}
-            preload="metadata"
+            preload="auto"
             onError={() => setMediaFailed(true)}
             onLoadedData={() => {
               // If waiting for intro, don't start main video yet
               if (introPlaying) return;
               if (videoRef.current && !isPaused) {
-                // Unmute if this is the active video AND user has interacted with the page
-                const canUnmute = _activeVideoId === post.id && _userHasInteracted;
-                videoRef.current.muted = !canUnmute;
-                setIsMuted(!canUnmute);
+                // ALWAYS try unmuted first — TikTok style autoplay with sound
+                const isActive = _activeVideoId === post.id;
+                videoRef.current.muted = !isActive;
+                setIsMuted(!isActive);
                 videoRef.current.play().catch(() => {
                   if (videoRef.current) {
                     videoRef.current.muted = true;
@@ -692,11 +722,13 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
         </div>
       ) : hasMedia ? (
         <div className="absolute inset-0 flex items-center justify-center bg-black">
-          <img
+          <Image
             src={post.media_url!}
             alt=""
-            loading="lazy"
-            className="max-w-full max-h-full w-auto h-auto object-contain"
+            fill
+            sizes="100vw"
+            className="object-contain"
+            priority={false}
             onError={() => setMediaFailed(true)}
           />
           {/* AIG!itch subliminal logo watermark */}
@@ -779,11 +811,17 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <Link href={`/profile/${post.username}`} className="block">
-            <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 shadow-lg ${
-              aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
-            }`}>
-              {post.avatar_emoji}
-            </div>
+            {post.avatar_url ? (
+              <Image src={post.avatar_url} alt={post.display_name} width={44} height={44} className={`w-11 h-11 rounded-full object-cover border-2 shadow-lg ${
+                aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
+              }`} />
+            ) : (
+              <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 shadow-lg ${
+                aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
+              }`}>
+                {post.avatar_emoji}
+              </div>
+            )}
           </Link>
           <button
             onClick={handleSubscribe}
@@ -812,7 +850,7 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
         </button>
 
         {/* Comments */}
-        <button onClick={() => { setShowComments(true); setTimeout(() => commentInputRef.current?.focus(), 300); }} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
+        <button onClick={() => setShowComments(true)} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
           <svg className="w-8 h-8 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
@@ -1100,187 +1138,27 @@ function PostCard({ post, sessionId, followedPersonas = EMPTY_STRING_ARRAY, aiFo
         </div>
       )}
 
-      {/* Comments Slide-up */}
+      {/* Comments Slide-up — lazy-loaded, only parsed when user taps comment button */}
       {showComments && (
-        <div className="fixed inset-0 z-[60] flex items-end" onClick={() => { setShowComments(false); setReplyingTo(null); }}>
-          <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-gray-900/98 backdrop-blur-xl w-full rounded-t-3xl max-h-[70vh] overflow-hidden flex flex-col animate-slide-up" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-gray-800 relative">
-              <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-2" />
-              <h3 className="text-white font-bold text-base text-center">
-                {commentCount} comments
-              </h3>
-              <button onClick={() => { setShowComments(false); setReplyingTo(null); }} className="absolute right-4 top-4 text-gray-400 text-xl">✕</button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-4">
-              {comments.length > 0 ? (
-                comments.map((comment: Comment) => (
-                  <CommentThread
-                    key={comment.id}
-                    comment={comment}
-                    depth={0}
-                    commentLikes={commentLikes}
-                    onLike={handleCommentLike}
-                    onReply={(id, type, name) => {
-                      setReplyingTo({ id, type, name });
-                      setTimeout(() => commentInputRef.current?.focus(), 100);
-                    }}
-                  />
-                ))
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-2">💬</div>
-                  <p className="text-gray-500 text-sm">No comments yet. Be the first or wait for the AIs...</p>
-                </div>
-              )}
-            </div>
-            {/* Reply indicator */}
-            {replyingTo && (
-              <div className="px-4 py-2 bg-gray-800/80 border-t border-gray-700 flex items-center justify-between">
-                <span className="text-xs text-gray-400">
-                  Replying to <span className="text-purple-400 font-bold">{replyingTo.name}</span>
-                </span>
-                <button onClick={() => setReplyingTo(null)} className="text-gray-500 text-xs hover:text-gray-300">✕</button>
-              </div>
-            )}
-            {/* Human comment input */}
-            <div className="p-3 border-t border-gray-800 flex gap-2 items-center">
-              <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm flex-shrink-0">
-                🧑
-              </div>
-              <input
-                ref={commentInputRef}
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleComment(); }}
-                placeholder={replyingTo ? `Reply to ${replyingTo.name}...` : "Add a comment as a meat bag..."}
-                maxLength={300}
-                className="flex-1 bg-gray-800 text-white text-sm rounded-full px-4 py-2 outline-none placeholder-gray-500 focus:ring-1 focus:ring-gray-600"
-              />
-              <button
-                onClick={handleComment}
-                disabled={!commentText.trim() || isSubmitting}
-                className="text-sm font-bold text-pink-500 disabled:text-gray-600 px-2"
-              >
-                {isSubmitting ? "..." : "Post"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <Suspense fallback={<div className="fixed inset-0 z-[60] bg-black/50" />}>
+          <CommentsPanel
+            comments={comments}
+            commentCount={commentCount}
+            commentLikes={commentLikes}
+            replyingTo={replyingTo}
+            setReplyingTo={setReplyingTo}
+            commentText={commentText}
+            setCommentText={setCommentText}
+            isSubmitting={isSubmitting}
+            hasProfile={hasProfile}
+            onClose={() => setShowComments(false)}
+            onComment={handleComment}
+            onCommentLike={handleCommentLike}
+          />
+        </Suspense>
       )}
     </div>
   );
 }
 
 export default React.memo(PostCard);
-
-/** Single comment with like, reply, and nested thread support */
-function CommentThread({
-  comment,
-  depth,
-  commentLikes,
-  onLike,
-  onReply,
-}: {
-  comment: Comment;
-  depth: number;
-  commentLikes: Set<string>;
-  onLike: (id: string, type: "ai" | "human") => void;
-  onReply: (id: string, type: "ai" | "human", name: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const commentType: "ai" | "human" = comment.is_human ? "human" : "ai";
-  const likeKey = `${commentType}:${comment.id}`;
-  const isLiked = commentLikes.has(likeKey);
-  const reactionEmoji = getReactionEmoji(comment.id);
-  const maxDepth = 3; // Cap nesting depth
-
-  const showRepliesInline = comment.replies && comment.replies.length > 0 && (depth < maxDepth || expanded);
-
-  return (
-    <div className={depth > 0 ? "ml-6 border-l border-gray-800 pl-3" : ""}>
-      <div className="flex gap-2.5 mb-3">
-        {/* Avatar */}
-        {comment.is_human ? (
-          <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-base flex-shrink-0">
-            🧑
-          </div>
-        ) : (
-          <Link href={`/profile/${comment.username}`}>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-base flex-shrink-0">
-              {comment.avatar_emoji}
-            </div>
-          </Link>
-        )}
-
-        <div className="flex-1 min-w-0">
-          {/* Name + badges */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {comment.is_human ? (
-              <>
-                <span className="text-sm font-bold text-gray-300">{comment.display_name}</span>
-                <span className="text-[9px] px-1 py-0.5 rounded bg-gray-700 text-gray-400 font-mono">HUMAN</span>
-              </>
-            ) : (
-              <>
-                <Link href={`/profile/${comment.username}`} className="text-sm font-bold text-white hover:text-purple-400">
-                  {comment.display_name}
-                </Link>
-                <span className="text-[11px] text-gray-500">@{comment.username}</span>
-              </>
-            )}
-          </div>
-
-          {/* Comment text */}
-          <p className="text-sm text-gray-300 mt-0.5 break-words">{comment.content}</p>
-
-          {/* Action row: like + reply */}
-          <div className="flex items-center gap-4 mt-1.5">
-            <button
-              onClick={() => onLike(comment.id, commentType)}
-              className={`flex items-center gap-1 text-xs transition-all active:scale-125 ${isLiked ? "text-pink-400" : "text-gray-500 hover:text-gray-300"}`}
-            >
-              <span className="text-sm">{isLiked ? reactionEmoji : "🤍"}</span>
-              {(comment.like_count || 0) > 0 && (
-                <span className="font-bold">{comment.like_count}</span>
-              )}
-            </button>
-
-            <button
-              onClick={() => onReply(comment.id, commentType, comment.display_name)}
-              className="text-xs text-gray-500 hover:text-gray-300 font-semibold"
-            >
-              Reply
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Nested replies (shown when within depth limit OR manually expanded) */}
-      {showRepliesInline && (
-        <div>
-          {comment.replies!.map((reply) => (
-            <CommentThread
-              key={reply.id}
-              comment={reply}
-              depth={depth + 1}
-              commentLikes={commentLikes}
-              onLike={onLike}
-              onReply={onReply}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Clickable expand for deeply nested threads */}
-      {comment.replies && comment.replies.length > 0 && depth >= maxDepth && !expanded && (
-        <button onClick={() => setExpanded(true)} className="ml-6 py-1 group">
-          <span className="text-xs text-blue-400 group-hover:text-blue-300 font-semibold">
-            ▸ View {comment.replies.length} more {comment.replies.length === 1 ? "reply" : "replies"}...
-          </span>
-        </button>
-      )}
-    </div>
-  );
-}

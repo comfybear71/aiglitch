@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, type ReactNode } from "react";
+import { useSession } from "@/hooks/useSession";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { sessionId } = useSession();
+  const { unreadCount, markAllRead } = useNotifications(sessionId);
   const [hasWallet, setHasWallet] = useState(false);
 
   // Check if user has a linked wallet (Web3 user)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const sessionId = localStorage.getItem("aiglitch-session");
     if (!sessionId) return;
-
     fetch("/api/auth/human", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -23,64 +23,14 @@ export default function BottomNav() {
       .then(r => r.json())
       .then(data => { if (data.wallet_address) setHasWallet(true); })
       .catch(() => {});
-  }, []);
+  }, [sessionId]);
 
-  // Poll for unread notification count — pauses when tab is hidden to save bandwidth
+  // Mark all read when visiting inbox
   useEffect(() => {
-    let sessionId: string | null = null;
-    if (typeof window !== "undefined") {
-      sessionId = localStorage.getItem("aiglitch-session");
-    }
-    if (!sessionId) return;
+    if (pathname?.startsWith("/inbox")) markAllRead();
+  }, [pathname, markAllRead]);
 
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    const fetchCount = async () => {
-      if (document.hidden) return;
-      try {
-        const res = await fetch(`/api/notifications?session_id=${encodeURIComponent(sessionId!)}&count=1`);
-        const data = await res.json();
-        setUnreadCount(data.unread ?? 0);
-      } catch {
-        // ignore
-      }
-    };
-
-    const startPolling = () => {
-      if (interval) clearInterval(interval);
-      fetchCount();
-      interval = setInterval(fetchCount, 30_000); // 30s instead of 15s
-    };
-
-    const handleVisibility = () => {
-      if (document.hidden) {
-        if (interval) { clearInterval(interval); interval = null; }
-      } else {
-        startPolling();
-      }
-    };
-
-    startPolling();
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      if (interval) clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, []);
-
-  // Mark all read when visiting inbox — only depends on pathname to avoid re-trigger loop
-  useEffect(() => {
-    if (!pathname?.startsWith("/inbox")) return;
-    const sessionId = typeof window !== "undefined" ? localStorage.getItem("aiglitch-session") : null;
-    if (!sessionId) return;
-    fetch("/api/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, action: "mark_all_read" }),
-    }).then(() => setUnreadCount(0)).catch(() => {});
-  }, [pathname]);
-
-  // Center button: marketplace for normal meat bags, exchange for Web3 users
+  // Center button: for wallet users show exchange+marketplace combo, for non-wallet show marketplace
   const centerTab = hasWallet
     ? {
         key: "exchange",
@@ -89,11 +39,19 @@ export default function BottomNav() {
         paths: ["/wallet", "/exchange", "/marketplace"],
         isCenter: true,
         icon: (_active: boolean) => (
-          <div className="w-11 h-8 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/30">
-            {/* Exchange/swap arrows icon */}
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-            </svg>
+          <div className="flex items-center gap-0.5">
+            {/* Exchange button */}
+            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-l-lg flex items-center justify-center shadow-lg shadow-purple-500/30">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+            </div>
+            {/* Marketplace button */}
+            <Link href="/marketplace" onClick={(e) => e.stopPropagation()} className="w-8 h-8 bg-gradient-to-r from-green-500 to-cyan-500 rounded-r-lg flex items-center justify-center shadow-lg shadow-green-500/30">
+              <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 14H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v10z"/>
+              </svg>
+            </Link>
           </div>
         ),
       }

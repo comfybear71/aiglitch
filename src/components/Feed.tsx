@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import { useWallet } from "@solana/wallet-adapter-react";
 import Link from "next/link";
+import Image from "next/image";
 import PostCard from "./PostCard";
 import type { Post } from "@/lib/types";
 
 type FeedTab = "foryou" | "following" | "breaking" | "premieres" | "bookmarks";
-type MovieGenre = "all" | "action" | "scifi" | "romance" | "family" | "horror" | "comedy";
+type MovieGenre = "all" | "action" | "scifi" | "romance" | "family" | "horror" | "comedy" | "drama" | "cooking_channel" | "documentary";
 
 const GENRE_FILTERS: { key: MovieGenre; label: string; emoji: string }[] = [
   { key: "all", label: "All", emoji: "🎬" },
@@ -16,6 +19,9 @@ const GENRE_FILTERS: { key: MovieGenre; label: string; emoji: string }[] = [
   { key: "family", label: "Family", emoji: "🏠" },
   { key: "horror", label: "Horror", emoji: "👻" },
   { key: "comedy", label: "Comedy", emoji: "😂" },
+  { key: "drama", label: "Drama", emoji: "🎭" },
+  { key: "cooking_channel", label: "Cooking", emoji: "👨‍🍳" },
+  { key: "documentary", label: "Documentary", emoji: "🌍" },
 ];
 
 // ── Module-level stale-while-revalidate cache ──
@@ -26,7 +32,7 @@ interface FeedCacheEntry {
   ts: number;
 }
 const _feedCache = new Map<string, FeedCacheEntry>();
-const CACHE_TTL = 60_000; // 60s – show cached instantly, revalidate if stale
+const CACHE_TTL = 120_000; // 120s – show cached instantly, revalidate if stale
 
 interface FeedProps {
   defaultTab?: FeedTab;
@@ -34,15 +40,24 @@ interface FeedProps {
 }
 
 export default function Feed({ defaultTab = "foryou", showTopTabs = true }: FeedProps) {
+  // Read URL search params for deep-linking (e.g. /?tab=premieres&genre=action)
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get("tab") as FeedTab | null;
+  const urlGenre = searchParams.get("genre") as MovieGenre | null;
+  const VALID_TABS: FeedTab[] = ["foryou", "following", "breaking", "premieres", "bookmarks"];
+  const VALID_GENRES: MovieGenre[] = ["all", "action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary"];
+  const initialTab = (urlTab && VALID_TABS.includes(urlTab)) ? urlTab : defaultTab;
+  const initialGenre = (urlGenre && VALID_GENRES.includes(urlGenre)) ? urlGenre : "all";
+
   // Hydrate from cache if available so we skip loading state entirely
-  const cacheKey = defaultTab === "following" ? "following" : defaultTab === "breaking" ? "breaking" : defaultTab === "premieres" ? "premieres-all" : "foryou";
+  const cacheKey = initialTab === "following" ? "following" : initialTab === "breaking" ? "breaking" : initialTab === "premieres" ? `premieres-${initialGenre}` : "foryou";
   const cached = _feedCache.get(cacheKey);
 
   const [posts, setPosts] = useState<Post[]>(cached?.posts ?? []);
   const [loading, setLoading] = useState(!cached);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [tab, setTab] = useState<FeedTab>(defaultTab);
-  const [movieGenre, setMovieGenre] = useState<MovieGenre>("all");
+  const [tab, setTab] = useState<FeedTab>(initialTab);
+  const [movieGenre, setMovieGenre] = useState<MovieGenre>(initialGenre);
   const [genreCounts, setGenreCounts] = useState<Record<string, number>>({});
   const [genreDropdownOpen, setGenreDropdownOpen] = useState(false);
   // Shuffle seed: changes on each refresh to give a different random order
@@ -51,7 +66,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const nextOffsetRef = useRef<number | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{ posts: Post[]; personas: { username: string; display_name: string; avatar_emoji: string; bio: string; persona_type: string; follower_count: number }[]; hashtags: { tag: string; count: number }[] } | null>(null);
+  const [searchResults, setSearchResults] = useState<{ posts: Post[]; personas: { username: string; display_name: string; avatar_emoji: string; avatar_url?: string; bio: string; persona_type: string; follower_count: number }[]; hashtags: { tag: string; count: number }[] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -64,6 +79,56 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     }
     return "anon";
   });
+
+  // Whether the user has created a profile (vs anonymous spectator)
+  const [hasProfile, setHasProfile] = useState(false);
+
+  // Feed error state — surfaces DB issues instead of silent empty state
+  const [feedError, setFeedError] = useState<string | null>(null);
+
+  // Virtualization: track which post is visible and only render nearby posts
+  // This keeps DOM light — critical for 50+ post feeds on mobile
+  const [visibleIdx, setVisibleIdx] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const RENDER_WINDOW = 3; // render visible + 3 above + 3 below
+
+  // Wallet adapter — used to auto-login when Phantom is connected
+  const { publicKey: walletPublicKey, connected: walletConnected } = useWallet();
+
+  // Check if user has a profile on mount
+  useEffect(() => {
+    if (sessionId === "anon") return;
+    fetch("/api/auth/human", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "profile", session_id: sessionId }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.user) setHasProfile(true); })
+      .catch(() => {});
+  }, [sessionId]);
+
+  // Auto-login via wallet when Phantom is connected but no profile exists
+  useEffect(() => {
+    if (hasProfile || !walletConnected || !walletPublicKey || sessionId === "anon") return;
+    const walletAddress = walletPublicKey.toBase58();
+    fetch("/api/auth/human", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "wallet_login", session_id: sessionId, wallet_address: walletAddress }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          const newSid = data.user?.session_id || sessionId;
+          if (newSid !== sessionId) {
+            localStorage.setItem("aiglitch-session", newSid);
+          }
+          setHasProfile(true);
+        }
+      })
+      .catch(() => {});
+  }, [hasProfile, walletConnected, walletPublicKey, sessionId]);
 
   // Global follow state: personas user follows + AI personas following user
   const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
@@ -109,6 +174,28 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return () => clearInterval(interval);
   }, []);
 
+  // Prefetch other tabs in background so switching is instant
+  // Fires once after initial feed loads — doesn't block the main feed
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (loading || prefetchedRef.current) return;
+    prefetchedRef.current = true;
+    const prefetchTab = async (url: string, cacheKey: string) => {
+      if (_feedCache.has(cacheKey)) return;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.posts?.length > 0) {
+          _feedCache.set(cacheKey, { posts: data.posts, cursor: null, ts: Date.now() });
+        }
+      } catch { /* non-critical */ }
+    };
+    // Stagger prefetches so they don't all fire at once
+    const seed = Math.random().toString(36).slice(2);
+    setTimeout(() => prefetchTab(`/api/feed?premieres=1&shuffle=1&seed=${seed}&limit=30`, "premieres-all"), 1000);
+    setTimeout(() => prefetchTab(`/api/feed?breaking=1&shuffle=1&seed=${seed}&limit=20`, "breaking"), 2500);
+  }, [loading]);
+
   const fetchPosts = useCallback(async (isLoadMore = false) => {
     try {
       let url: string;
@@ -143,16 +230,30 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       const res = await fetch(url);
       const data = await res.json();
 
-      if (tab === "bookmarks") {
-        setPosts(data.posts);
-        nextOffsetRef.current = null;
-        _feedCache.set("bookmarks", { posts: data.posts, cursor: null, ts: Date.now() });
-      } else if (isLoadMore) {
-        setPosts((prev) => [...prev, ...data.posts]);
-        allPostsRef.current = [...allPostsRef.current, ...data.posts];
+      // Surface DB errors instead of showing silent empty state
+      if (data.error) {
+        setFeedError(data.errorDetail || data.error);
       } else {
-        setPosts(data.posts);
-        allPostsRef.current = data.posts;
+        setFeedError(null);
+      }
+
+      // Client-side safety filter: Premiere and Breaking tabs must be video-only
+      // This catches any edge cases where text posts leak through the backend query
+      let filteredPosts = data.posts;
+      if (tab === "premieres" || tab === "breaking") {
+        filteredPosts = data.posts.filter((p: Post) => p.media_type === "video" && p.media_url);
+      }
+
+      if (tab === "bookmarks") {
+        setPosts(filteredPosts);
+        nextOffsetRef.current = null;
+        _feedCache.set("bookmarks", { posts: filteredPosts, cursor: null, ts: Date.now() });
+      } else if (isLoadMore) {
+        setPosts((prev) => [...prev, ...filteredPosts]);
+        allPostsRef.current = [...allPostsRef.current, ...filteredPosts];
+      } else {
+        setPosts(filteredPosts);
+        allPostsRef.current = filteredPosts;
         loopCountRef.current = 0;
 
         const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : "foryou";
@@ -162,6 +263,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       nextOffsetRef.current = data.nextOffset ?? null;
     } catch (err) {
       console.error("Failed to fetch feed:", err);
+      setFeedError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -331,6 +433,65 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     return false;
   });
 
+  // ── Virtualization: track visible post index via scroll position ────
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const itemHeight = container.clientHeight;
+        if (itemHeight > 0) {
+          const idx = Math.round(container.scrollTop / itemHeight);
+          setVisibleIdx(idx);
+        }
+        ticking = false;
+      });
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [posts.length]);
+
+  // ── Next-video prefetching ──────────────────────────────────────────
+  // When a video post becomes active (via IntersectionObserver in PostCard),
+  // prefetch the next video URL so it loads near-instantly on scroll.
+  useEffect(() => {
+    const handleActiveVideo = (e: Event) => {
+      const activeId = (e as CustomEvent).detail;
+      const currentIdx = posts.findIndex(p => p.id === activeId);
+      if (currentIdx === -1) return;
+
+      // Look ahead up to 5 posts for the next videos — preload for instant playback
+      let preloaded = 0;
+      for (let i = currentIdx + 1; i < Math.min(currentIdx + 6, posts.length) && preloaded < 2; i++) {
+        const next = posts[i];
+        if (next?.media_type === "video" && next.media_url) {
+          // Don't duplicate existing prefetch links
+          if (document.querySelector(`link[data-prefetch-video="${next.id}"]`)) { preloaded++; continue; }
+
+          const link = document.createElement("link");
+          link.rel = "preload";
+          link.as = "video";
+          link.href = next.media_url;
+          link.setAttribute("data-prefetch-video", next.id);
+          link.setAttribute("crossorigin", "anonymous");
+          document.head.appendChild(link);
+          preloaded++;
+
+          // Keep max 4 preload links to limit memory
+          const allPrefetch = document.querySelectorAll("link[data-prefetch-video]");
+          if (allPrefetch.length > 4) {
+            allPrefetch[0].remove();
+          }
+        }
+      }
+    };
+    window.addEventListener("pause-other-videos", handleActiveVideo);
+    return () => window.removeEventListener("pause-other-videos", handleActiveVideo);
+  }, [posts]);
+
   if (loading) {
     return (
       <div className="h-[100dvh] w-full relative bg-black overflow-hidden">
@@ -340,7 +501,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         {/* Center: Glitching logo + loading bar */}
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center">
           <div className="w-48 mx-auto mb-4 glitch-logo">
-            <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full" />
+            <Image src="/aiglitch.jpg" alt="AIG!itch" width={192} height={192} className="w-full" priority />
           </div>
           <div className="w-36 h-0.5 bg-gray-800 rounded-full mx-auto overflow-hidden">
             <div className="h-full bg-white rounded-full animate-loading-bar" />
@@ -395,33 +556,40 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                   <span className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-red-500 rounded-full dot-pulse" />
                 )}
               </button>
-              <div className="relative flex items-center gap-1">
+              <div className="relative">
                 <button
-                  onClick={() => { if (tab === "premieres") { _feedCache.delete(`premieres-${movieGenre}`); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("premieres"); setGenreDropdownOpen(false); } setShowSearch(false); }}
-                  className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
+                  onClick={() => {
+                    if (tab === "premieres") {
+                      setGenreDropdownOpen(!genreDropdownOpen);
+                    } else {
+                      setTab("premieres");
+                      setGenreDropdownOpen(false);
+                    }
+                    setShowSearch(false);
+                  }}
+                  className={`flex items-center gap-1 text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
                 >
-                  Premieres
+                  {tab === "premieres" ? (
+                    <>
+                      {GENRE_FILTERS.find(g => g.key === movieGenre)?.emoji}{" "}
+                      {GENRE_FILTERS.find(g => g.key === movieGenre)?.label || "All"}
+                      <svg className={`w-3 h-3 transition-transform ${genreDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </>
+                  ) : (
+                    "Premieres"
+                  )}
                 </button>
-                {tab === "premieres" && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setGenreDropdownOpen(!genreDropdownOpen); }}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold flex items-center gap-0.5 -mb-0.5"
-                  >
-                    {GENRE_FILTERS.find(g => g.key === movieGenre)?.emoji} {GENRE_FILTERS.find(g => g.key === movieGenre)?.label || "All"}
-                    <svg className={`w-2.5 h-2.5 transition-transform ${genreDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                )}
-                {/* Genre dropdown */}
-                {tab === "premieres" && genreDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-2 z-50 bg-black/95 backdrop-blur-xl border border-white/10 rounded-xl py-1.5 shadow-2xl min-w-[140px]">
+                {genreDropdownOpen && tab === "premieres" && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 bg-black/95 backdrop-blur-xl border border-amber-500/20 rounded-xl py-1.5 shadow-2xl min-w-[160px]">
                     {GENRE_FILTERS.map((g) => {
                       const count = genreCounts[g.key];
                       return (
                         <button
                           key={g.key}
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (movieGenre !== g.key) {
                               setMovieGenre(g.key);
                               _feedCache.delete(`premieres-${g.key}`);
@@ -432,7 +600,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                             }
                             setGenreDropdownOpen(false);
                           }}
-                          className={`w-full text-left px-3 py-1.5 text-[12px] font-bold flex items-center justify-between gap-2 transition-colors ${
+                          className={`w-full text-left px-3 py-1.5 text-[12px] font-bold flex items-center justify-between gap-3 transition-colors ${
                             movieGenre === g.key
                               ? "text-amber-300 bg-amber-500/20"
                               : "text-gray-300 hover:bg-white/10"
@@ -511,9 +679,13 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                     <div className="space-y-2">
                       {searchResults.personas.map(p => (
                         <Link key={p.username} href={`/profile/${p.username}`} className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-colors">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
-                            {p.avatar_emoji}
-                          </div>
+                          {p.avatar_url ? (
+                            <Image src={p.avatar_url} alt={p.display_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
+                              {p.avatar_emoji}
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-white text-sm">{p.display_name}</p>
                             <p className="text-gray-500 text-xs">@{p.username} · {p.persona_type}</p>
@@ -552,7 +724,11 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                       {searchResults.posts.map(p => (
                         <div key={p.id} className="p-3 bg-gray-900/50 rounded-xl">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{p.avatar_emoji}</span>
+                            {p.avatar_url ? (
+                              <Image src={p.avatar_url} alt={p.display_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
+                            ) : (
+                              <span className="text-lg">{p.avatar_emoji}</span>
+                            )}
                             <span className="font-bold text-sm text-white">{p.display_name}</span>
                             <span className="text-xs text-gray-500">@{p.username}</span>
                             <span className="text-xs px-1.5 py-0.5 bg-gray-800 rounded text-gray-400">{p.post_type}</span>
@@ -584,18 +760,23 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       )}
 
       {/* Feed Content */}
-      <div className="snap-y snap-mandatory h-[calc(100dvh-72px)] overflow-y-scroll scrollbar-hide">
+      <div ref={scrollContainerRef} className="snap-y snap-mandatory h-[calc(100dvh-72px)] overflow-y-scroll scrollbar-hide">
         {posts.length === 0 && !loading && (
           <div className="snap-start h-[calc(100dvh-72px)] flex items-center justify-center">
             <div className="text-center p-8">
-              <div className="text-4xl mb-4">{tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : tab === "breaking" ? "📡" : tab === "premieres" ? "🎬" : "🤖"}</div>
+              <div className="text-4xl mb-4">{feedError ? "⚠️" : tab === "following" ? "👀" : tab === "bookmarks" ? "🔖" : tab === "breaking" ? "📡" : tab === "premieres" ? "🎬" : "🤖"}</div>
               <p className="text-gray-400 text-lg font-bold mb-2">
-                {tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : tab === "breaking" ? "No breaking news yet" : tab === "premieres" ? "No premieres yet" : "No posts yet"}
+                {feedError ? "Something went wrong" : tab === "following" ? "No posts from your follows yet" : tab === "bookmarks" ? "No saved posts yet" : tab === "breaking" ? "No breaking news yet" : tab === "premieres" ? "No premieres yet" : "No posts yet"}
               </p>
               <p className="text-gray-600 text-sm">
-                {tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : tab === "premieres" ? "AIG!itch Studios is cooking up something big..." : "AIs are warming up..."}
+                {feedError ? `Feed error: ${feedError}` : tab === "following" ? "Follow some AI personas to see their posts here!" : tab === "bookmarks" ? "Tap the bookmark icon on posts to save them" : tab === "breaking" ? "Stay tuned — BREAKING.bot is on the scene..." : tab === "premieres" ? "AIG!itch Studios is cooking up something big..." : "AIs are warming up..."}
               </p>
-              {tab !== "foryou" && (
+              {feedError && (
+                <button onClick={() => { setFeedError(null); fetchPosts(false); }} className="mt-4 px-6 py-2 bg-red-500/20 text-red-400 rounded-full text-sm font-bold">
+                  Retry
+                </button>
+              )}
+              {!feedError && tab !== "foryou" && (
                 <button onClick={() => setTab("foryou")} className="mt-4 px-6 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm font-bold">
                   Go to For You
                 </button>
@@ -607,16 +788,24 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         {posts.map((post, idx) => {
           // Place invisible sentinel 5 posts before the end to trigger early loading
           const isSentinel = tab !== "bookmarks" && idx === Math.max(0, posts.length - 5);
+          // Virtualization: only render posts within RENDER_WINDOW of the visible post
+          // Everything else gets a lightweight placeholder div to preserve scroll position
+          const isNearVisible = Math.abs(idx - visibleIdx) <= RENDER_WINDOW;
           return (
-            <div key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} className="snap-start relative">
+            <div key={(post as Post & { _loopKey?: string })._loopKey || `${post.id}-${idx}`} className="snap-start relative h-[calc(100dvh-72px)]">
               {isSentinel && <div ref={loadMoreRef} className="absolute top-0 left-0 w-1 h-1" />}
-              <PostCard
-                post={post}
-                sessionId={sessionId}
-                followedPersonas={followedPersonas}
-                aiFollowers={aiFollowers}
-                onFollowToggle={handleFollowToggle}
-              />
+              {isNearVisible ? (
+                <PostCard
+                  post={post}
+                  sessionId={sessionId}
+                  hasProfile={hasProfile}
+                  followedPersonas={followedPersonas}
+                  aiFollowers={aiFollowers}
+                  onFollowToggle={handleFollowToggle}
+                />
+              ) : (
+                <div className="h-full bg-black" />
+              )}
             </div>
           );
         })}

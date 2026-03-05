@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import BottomNav from "@/components/BottomNav";
+import NFTTradingCard from "@/components/NFTTradingCard";
+import { getProductById } from "@/lib/marketplace";
+import { formatGlitchBalance } from "@/lib/wallet-display";
 
 const AVATAR_OPTIONS = ["🧑", "👩", "👨", "🧑‍💻", "👽", "🤡", "💀", "🦊", "🐱", "🐶", "🦄", "🤖", "👾", "🎭", "🧙", "🥷", "🐸", "🦇", "🐻", "🎃", "👻", "🤠", "🧛", "🧟"];
 
@@ -50,10 +53,58 @@ interface PurchasedItem {
   created_at: string;
 }
 
+// Build Phantom browse deep link with proper encoding.
+// The ref parameter is REQUIRED by Phantom's deep link spec — without it,
+// Phantom opens its home screen instead of navigating into the target URL.
+function buildPhantomBrowseLink(targetUrl: string): string {
+  const encoded = encodeURIComponent(targetUrl);
+  const ref = encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app");
+  return `https://phantom.app/ul/browse/${encoded}?ref=${ref}`;
+}
+
 export default function MePage() {
+  // Track if we arrived from a Phantom deep link (for auto-connect / auto-login)
+  const phantomDeepLinkedRef = useRef(false);
+  const phantomLoginLinkedRef = useRef(false);
+
+  // Helper: poll for Phantom provider availability (in-app browser may inject late)
+  const waitForPhantomProvider = async (maxWaitMs = 3000, intervalMs = 300) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    let elapsed = 0;
+    while (elapsed < maxWaitMs) {
+      const provider = w.phantom?.solana || w.solana;
+      if (provider?.isPhantom) return provider;
+      await new Promise(r => setTimeout(r, intervalMs));
+      elapsed += intervalMs;
+    }
+    return null;
+  };
+
   const [sessionId, setSessionId] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+
+      // Handle Phantom deep link return — restore session from URL
+      // phantom_link=1 → wallet linking, phantom_login=1 → wallet login
+      const isPhantomLink = params.get("phantom_link") === "1";
+      const isPhantomLogin = params.get("phantom_login") === "1";
+
+      if (isPhantomLink || isPhantomLogin) {
+        if (isPhantomLink) phantomDeepLinkedRef.current = true;
+        if (isPhantomLogin) phantomLoginLinkedRef.current = true;
+        const phantomSid = params.get("sid");
+        if (phantomSid) {
+          localStorage.setItem("aiglitch-session", phantomSid);
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("phantom_link");
+          cleanUrl.searchParams.delete("phantom_login");
+          cleanUrl.searchParams.delete("sid");
+          window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search);
+          return phantomSid;
+        }
+      }
+
       const oauthSession = params.get("oauth_session");
       if (oauthSession) {
         localStorage.setItem("aiglitch-session", oauthSession);
@@ -98,15 +149,30 @@ export default function MePage() {
   // Coins
   const [coins, setCoins] = useState<CoinData>({ balance: 0, lifetime_earned: 0, transactions: [] });
 
-  // $GLITCH token balance from wallet
+  // §GLITCH token balance from simulated wallet
   const [glitchBalance, setGlitchBalance] = useState<number>(0);
+  // Real on-chain §GLITCH balance (only set when Phantom wallet is linked)
+  const [onchainGlitchBalance, setOnchainGlitchBalance] = useState<number | null>(null);
+
+  // Full wallet balances for Phantom dropdown
+  const [walletBalances, setWalletBalances] = useState<{ sol: number; usdc: number; budju: number; glitch: number } | null>(null);
+  const [showWalletDropdown, setShowWalletDropdown] = useState(false);
+  const [walletRefreshing, setWalletRefreshing] = useState(false);
+  const walletDropdownRef = useRef<HTMLDivElement>(null);
 
   // Inventory (purchased items)
   const [inventory, setInventory] = useState<PurchasedItem[]>([]);
 
+  // NFT data for owned items
+  const [nftMap, setNftMap] = useState<Map<string, { mint_address: string; rarity: string }>>(new Map());
+
   // Share/invite
   const [copied, setCopied] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+
+  // Ad-free status (Phantom wallet users can pay 20 GLITCH coins)
+  const [adFreeUntil, setAdFreeUntil] = useState<string | null>(null);
+  const [purchasingAdFree, setPurchasingAdFree] = useState(false);
 
   // Wallet linking
   const [linkedWallet, setLinkedWallet] = useState<string | null>(null);
@@ -117,6 +183,38 @@ export default function MePage() {
   const [manualWalletSaving, setManualWalletSaving] = useState(false);
   const [walletUnlinking, setWalletUnlinking] = useState(false);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
+
+  // Mobile without Phantom detection — show direct <a> deep links instead of
+  // programmatic window.location.href (iOS requires user-tap on real anchors
+  // for universal links to trigger reliably).
+  const [isMobileNoPhantom, setIsMobileNoPhantom] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const hasPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom);
+    // Also check if we're IN Phantom's in-app browser (userAgent contains "Phantom")
+    const isInPhantom = /Phantom/i.test(navigator.userAgent);
+    setIsMobileNoPhantom(isMobile && !hasPhantom && !isInPhantom);
+  }, []);
+
+  // Precompute Phantom deep link URLs for <a> tags (avoids async JS navigation)
+  const phantomLoginHref = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const targetUrl = new URL(window.location.origin + "/me");
+    targetUrl.searchParams.set("phantom_login", "1");
+    if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+    return buildPhantomBrowseLink(targetUrl.toString());
+  }, [sessionId]);
+
+  const phantomLinkWalletHref = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const targetUrl = new URL(window.location.origin + "/me");
+    targetUrl.searchParams.set("phantom_link", "1");
+    if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+    return buildPhantomBrowseLink(targetUrl.toString());
+  }, [sessionId]);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -145,11 +243,19 @@ export default function MePage() {
   // Detect Phantom in-app browser & fetch linked wallet
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const isPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom) ||
-      /Phantom/i.test(navigator.userAgent);
-    setIsPhantomBrowser(isPhantom);
+
+    // Check immediately and also after a delay (provider may inject late)
+    const checkPhantom = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      return !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom) ||
+        /Phantom/i.test(navigator.userAgent);
+    };
+    setIsPhantomBrowser(checkPhantom());
+    // Re-check after provider injection delay
+    const recheckTimer = setTimeout(() => {
+      if (checkPhantom()) setIsPhantomBrowser(true);
+    }, 1500);
 
     // Fetch linked wallet for the logged-in user
     if (sessionId && sessionId !== "anon") {
@@ -162,7 +268,91 @@ export default function MePage() {
         .then(data => { if (data.wallet_address) setLinkedWallet(data.wallet_address); })
         .catch(() => {});
     }
+
+    return () => clearTimeout(recheckTimer);
   }, [sessionId]);
+
+
+  // Auto-trigger wallet linking when arriving from Phantom deep link (phantom_link=1)
+  useEffect(() => {
+    if (!phantomDeepLinkedRef.current) return;
+    phantomDeepLinkedRef.current = false; // Only trigger once
+
+    // Poll for Phantom provider — in-app browser may inject it late
+    const run = async () => {
+      const provider = await waitForPhantomProvider(4000);
+      if (!provider) return;
+
+      try {
+        const resp = await provider.connect();
+        if (!resp?.publicKey) return;
+        const walletAddress = resp.publicKey.toString();
+
+        const res = await fetch("/api/auth/human", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "link_wallet",
+            session_id: sessionId,
+            wallet_address: walletAddress,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setLinkedWallet(walletAddress);
+          setSuccess(data.message || "Wallet linked!");
+          setTimeout(() => setSuccess(""), 3000);
+        }
+      } catch {
+        // User rejected or error — they can try manually
+      }
+    };
+    // Small initial delay for page to stabilize, then poll
+    const timer = setTimeout(run, 500);
+    return () => clearTimeout(timer);
+  }, [sessionId]);
+
+  // Auto-trigger wallet LOGIN when arriving from Phantom deep link (phantom_login=1)
+  useEffect(() => {
+    if (!phantomLoginLinkedRef.current) return;
+    phantomLoginLinkedRef.current = false; // Only trigger once
+
+    const run = async () => {
+      const provider = await waitForPhantomProvider(4000);
+      if (!provider) return;
+
+      try {
+        const resp = await provider.connect();
+        if (!resp?.publicKey) return;
+        const walletAddress = resp.publicKey.toString();
+
+        const res = await fetch("/api/auth/human", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "wallet_login",
+            session_id: sessionId,
+            wallet_address: walletAddress,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          const newSid = data.user.session_id || sessionId;
+          localStorage.setItem("aiglitch-session", newSid);
+          setSessionId(newSid);
+          setLinkedWallet(walletAddress);
+          setSuccess(data.found_existing
+            ? `Welcome back, @${data.user.username}!`
+            : "Wallet account created!");
+          fetchProfile();
+        }
+      } catch {
+        // User rejected or error — they can try manually via button
+      }
+    };
+    const timer = setTimeout(run, 500);
+    return () => clearTimeout(timer);
+  }, [sessionId, fetchProfile]);
 
   // Wallet-based login (for Phantom browser users)
   const handleWalletLogin = async () => {
@@ -170,30 +360,45 @@ export default function MePage() {
     setWalletLoggingIn(true);
     setError("");
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any;
-      let provider = w.phantom?.solana || w.solana;
-      // Phantom may inject late after page reload — wait briefly then retry
-      if (!provider?.isPhantom) {
-        await new Promise(r => setTimeout(r, 600));
-        provider = w.phantom?.solana || w.solana;
-      }
-      if (!provider?.isPhantom) {
+      // Poll for Phantom provider — may take a moment to inject
+      const provider = await waitForPhantomProvider(3000);
+
+      if (!provider) {
         // Phantom not installed — try deep link for mobile, otherwise open install page
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
-          // Deep link into Phantom mobile app with redirect back
-          const currentUrl = encodeURIComponent(window.location.href);
-          window.location.href = `https://phantom.app/ul/browse/${currentUrl}`;
-        } else {
-          window.open("https://phantom.app/download", "_blank");
+          // Deep link into Phantom mobile app's in-app browser with session context
+          const targetUrl = new URL(window.location.href);
+          targetUrl.searchParams.set("phantom_login", "1");
+          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+          setWalletLoggingIn(false);
+          return;
         }
+        window.open("https://phantom.app/download", "_blank");
         setError("Phantom wallet not detected. Install Phantom to sign in with your wallet.");
         setTimeout(() => setError(""), 5000);
         setWalletLoggingIn(false);
         return;
       }
-      const resp = await provider.connect();
+
+      // Connect with timeout so it doesn't hang forever
+      const connectWithTimeout = (timeoutMs: number) => {
+        return Promise.race([
+          provider.connect(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
+          ),
+        ]);
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resp = await connectWithTimeout(30000) as any;
+      if (!resp?.publicKey) {
+        setError("Phantom did not return a wallet address. Please try again.");
+        setTimeout(() => setError(""), 5000);
+        setWalletLoggingIn(false);
+        return;
+      }
       const walletAddress = resp.publicKey.toString();
 
       const res = await fetch("/api/auth/human", {
@@ -220,8 +425,15 @@ export default function MePage() {
         setError(data.error || "Wallet login failed");
         setTimeout(() => setError(""), 5000);
       }
-    } catch {
-      setError("Failed to connect Phantom wallet");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "WALLET_TIMEOUT") {
+        setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
+      } else if (message.includes("User rejected")) {
+        setError("Connection was rejected. Please approve the Phantom connection request.");
+      } else {
+        setError("Failed to connect Phantom wallet. Please make sure Phantom is unlocked and try again.");
+      }
       setTimeout(() => setError(""), 5000);
     }
     setWalletLoggingIn(false);
@@ -233,21 +445,21 @@ export default function MePage() {
     setWalletLinking(true);
     setError("");
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any;
-      let provider = w.phantom?.solana || w.solana;
-      // Phantom may inject late after page reload — wait briefly then retry
-      if (!provider?.isPhantom) {
-        await new Promise(r => setTimeout(r, 600));
-        provider = w.phantom?.solana || w.solana;
-      }
-      if (!provider?.isPhantom) {
+      // Poll for Phantom provider — may take a moment to inject
+      const provider = await waitForPhantomProvider(3000);
+
+      if (!provider) {
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isMobile) {
-          setError("Phantom wallet not detected. Open this page in the Phantom app to link your wallet.");
-        } else {
-          setError("Phantom wallet not detected. Install the Phantom browser extension from phantom.app and refresh this page.");
+          // Deep link into Phantom's in-app browser with session context
+          const targetUrl = new URL(window.location.href);
+          targetUrl.searchParams.set("phantom_link", "1");
+          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+          setWalletLinking(false);
+          return;
         }
+        setError("Phantom wallet not detected. Install the Phantom browser extension from phantom.app and refresh this page.");
         setTimeout(() => setError(""), 5000);
         setWalletLinking(false);
         return;
@@ -263,6 +475,12 @@ export default function MePage() {
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resp = await connectWithTimeout(30000) as any;
+      if (!resp?.publicKey) {
+        setError("Phantom did not return a wallet address. Please try again.");
+        setTimeout(() => setError(""), 5000);
+        setWalletLinking(false);
+        return;
+      }
       const walletAddress = resp.publicKey.toString();
 
       const res = await fetch("/api/auth/human", {
@@ -369,12 +587,57 @@ export default function MePage() {
       fetch(`/api/coins?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch(`/api/marketplace?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch(`/api/wallet?session_id=${sid}`).then(r => r.json()).catch(() => null),
-    ]).then(([coinsData, marketData, walletData]) => {
+      fetch(`/api/nft?session_id=${sid}`).then(r => r.json()).catch(() => null),
+      fetch("/api/coins", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId, action: "check_ad_free" }) }).then(r => r.json()).catch(() => null),
+    ]).then(([coinsData, marketData, walletData, nftData, adFreeData]) => {
       if (coinsData) setCoins(coinsData);
       if (marketData) setInventory(marketData.purchases || []);
       if (walletData?.wallet) setGlitchBalance(walletData.wallet.glitch_token_balance || 0);
+      if (nftData?.nfts) {
+        const map = new Map<string, { mint_address: string; rarity: string }>();
+        for (const nft of nftData.nfts) {
+          map.set(nft.product_id, { mint_address: nft.mint_address, rarity: nft.rarity });
+        }
+        setNftMap(map);
+      }
+      if (adFreeData?.ad_free) setAdFreeUntil(adFreeData.ad_free_until);
     });
   }, [user, sessionId]);
+
+  // Fetch real on-chain balances when user has a linked Phantom wallet.
+  const fetchWalletBalances = useCallback(async () => {
+    if (!linkedWallet || !sessionId) return;
+    const sid = encodeURIComponent(sessionId);
+    try {
+      const res = await fetch(`/api/solana?action=balance&wallet_address=${linkedWallet}&session_id=${sid}`);
+      const data = await res.json();
+      if (data.onchain_glitch_balance !== undefined) {
+        setOnchainGlitchBalance(data.onchain_glitch_balance || 0);
+      } else if (data.glitch_balance !== undefined) {
+        setOnchainGlitchBalance(data.glitch_balance || 0);
+      }
+      setWalletBalances({
+        sol: data.sol_balance ?? 0,
+        usdc: data.usdc_balance ?? 0,
+        budju: data.budju_balance ?? 0,
+        glitch: data.glitch_balance ?? data.onchain_glitch_balance ?? 0,
+      });
+    } catch { /* network error */ }
+  }, [linkedWallet, sessionId]);
+
+  useEffect(() => { fetchWalletBalances(); }, [fetchWalletBalances]);
+
+  // Close wallet dropdown when clicking outside
+  useEffect(() => {
+    if (!showWalletDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (walletDropdownRef.current && !walletDropdownRef.current.contains(e.target as Node)) {
+        setShowWalletDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showWalletDropdown]);
 
   // Claim signup bonus
   useEffect(() => {
@@ -524,7 +787,7 @@ export default function MePage() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div style={{ perspective: '600px' }}>
-          <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-16 h-16 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+          <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-16 h-16 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
         </div>
       </div>
     );
@@ -542,18 +805,182 @@ export default function MePage() {
           </div>
           {user && (
             <div className="flex items-center gap-2">
-              {/* $GLITCH wallet balance */}
-              {glitchBalance > 0 && (
-                <a href="/wallet" className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full">
-                  <span className="text-[10px] font-bold text-green-400">$G</span>
-                  <span className="text-xs font-bold text-green-400">{glitchBalance.toLocaleString()}</span>
-                </a>
+              {/* Phantom wallet connected: show ONLY real on-chain §GLITCH balance as dropdown toggle */}
+              {linkedWallet && onchainGlitchBalance !== null ? (
+                <div ref={walletDropdownRef} className="relative">
+                  <button
+                    onClick={() => setShowWalletDropdown(prev => !prev)}
+                    className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full hover:bg-green-500/20 transition-colors"
+                    data-testid="onchain-balance"
+                  >
+                    <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-3.5 h-3.5" />
+                    <span className="text-xs font-bold text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</span>
+                    <svg className={`w-3 h-3 text-green-400 transition-transform ${showWalletDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+
+                  {/* Wallet Dropdown */}
+                  {showWalletDropdown && (
+                    <div className="absolute right-0 top-full mt-2 w-72 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[60] overflow-hidden">
+                      {/* Wallet Address */}
+                      <div className="px-4 pt-3 pb-2 border-b border-gray-800">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Phantom Wallet</span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await navigator.clipboard.writeText(linkedWallet);
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 1500);
+                            }}
+                            className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono"
+                          >
+                            {copied ? "Copied!" : `${linkedWallet.slice(0, 4)}...${linkedWallet.slice(-4)}`}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Token Balances */}
+                      <div className="p-3 space-y-1.5 border-b border-gray-800">
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/sol.svg" alt="SOL" className="w-4 h-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <span className="text-xs text-gray-300 font-semibold">SOL</span>
+                          </div>
+                          <span className="text-xs font-bold text-purple-400 font-mono">{walletBalances ? walletBalances.sol.toFixed(4) : "---"}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/usdc.svg" alt="USDC" className="w-4 h-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <span className="text-xs text-gray-300 font-semibold">USDC</span>
+                          </div>
+                          <span className="text-xs font-bold text-green-400 font-mono">{walletBalances ? walletBalances.usdc.toFixed(2) : "---"}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/budju.svg" alt="$BUDJU" className="w-4 h-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <span className="text-xs text-gray-300 font-semibold">$BUDJU</span>
+                          </div>
+                          <span className="text-xs font-bold text-fuchsia-400 font-mono">{walletBalances ? walletBalances.budju.toLocaleString() : "---"}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center gap-2">
+                            <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-4 h-4" />
+                            <span className="text-xs text-gray-300 font-semibold">§GLITCH</span>
+                          </div>
+                          <span className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400 font-mono">{formatGlitchBalance(onchainGlitchBalance)}</span>
+                        </div>
+                      </div>
+
+                      {/* Ad-Free Purchase */}
+                      <div className="p-3 border-b border-gray-800">
+                        {adFreeUntil ? (
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm">🚫</span>
+                                <span className="text-xs font-bold text-green-400">Ad-Free Active</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500 mt-0.5">Until {new Date(adFreeUntil).toLocaleDateString()}</p>
+                            </div>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (purchasingAdFree) return;
+                                setPurchasingAdFree(true);
+                                try {
+                                  const res = await fetch("/api/coins", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    setAdFreeUntil(data.ad_free_until);
+                                    setCoins(prev => ({ ...prev, balance: data.new_balance }));
+                                    window.dispatchEvent(new Event("ad-free-purchased"));
+                                  } else {
+                                    setError(data.error || "Purchase failed");
+                                    setTimeout(() => setError(""), 3000);
+                                  }
+                                } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
+                                setPurchasingAdFree(false);
+                              }}
+                              disabled={purchasingAdFree || coins.balance < 20}
+                              className="text-[10px] px-3 py-1.5 bg-purple-500/20 text-purple-400 font-bold rounded-full hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                            >
+                              {purchasingAdFree ? "..." : "+30 days"}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (purchasingAdFree) return;
+                              setPurchasingAdFree(true);
+                              try {
+                                const res = await fetch("/api/coins", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ session_id: sessionId, action: "purchase_ad_free" }),
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setAdFreeUntil(data.ad_free_until);
+                                  setCoins(prev => ({ ...prev, balance: data.new_balance }));
+                                  window.dispatchEvent(new Event("ad-free-purchased"));
+                                } else {
+                                  setError(data.error || "Purchase failed");
+                                  setTimeout(() => setError(""), 3000);
+                                }
+                              } catch { setError("Network error"); setTimeout(() => setError(""), 3000); }
+                              setPurchasingAdFree(false);
+                            }}
+                            disabled={purchasingAdFree || coins.balance < 20}
+                            className="w-full py-2 bg-gradient-to-r from-purple-600/80 to-pink-600/80 text-white text-xs font-bold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all disabled:opacity-50"
+                          >
+                            {purchasingAdFree ? "Processing..." : coins.balance < 20 ? `🚫 Need ${20 - coins.balance} more coins` : "🚫 Remove Ads — 20 GLITCH"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="p-3 space-y-2">
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setWalletRefreshing(true);
+                            await fetchWalletBalances();
+                            setWalletRefreshing(false);
+                          }}
+                          className="w-full py-2 bg-gray-800 text-cyan-400 text-xs font-bold rounded-xl border border-gray-700 hover:border-cyan-500/50 transition-all"
+                        >
+                          {walletRefreshing ? "Refreshing..." : "Refresh Balances"}
+                        </button>
+                        <a
+                          href="/exchange"
+                          className="block w-full py-2 bg-green-500/10 text-green-400 text-xs font-bold rounded-xl border border-green-500/20 hover:border-green-500/40 transition-all text-center"
+                        >
+                          Buy §GLITCH
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* No Phantom wallet: show simulated $G + in-app coins */}
+                  {glitchBalance > 0 && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-full" data-testid="simulated-glitch-balance">
+                      <span className="text-[10px] font-bold text-green-400">$G</span>
+                      <span className="text-xs font-bold text-green-400">{glitchBalance.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 rounded-full" data-testid="simulated-coin-balance">
+                    <span className="text-xs">🪙</span>
+                    <span className="text-xs font-bold text-yellow-400">{coins.balance.toLocaleString()}</span>
+                  </div>
+                </>
               )}
-              {/* Coin balance */}
-              <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 rounded-full">
-                <span className="text-xs">🪙</span>
-                <span className="text-xs font-bold text-yellow-400">{coins.balance.toLocaleString()}</span>
-              </div>
               {/* Sign out */}
               <button onClick={() => setShowSignOutConfirm(true)}
                 className="text-gray-500 hover:text-red-400 active:text-red-400 transition-colors p-2 -mr-2 min-w-[40px] min-h-[40px] flex items-center justify-center">
@@ -714,7 +1141,7 @@ export default function MePage() {
                     </div>
                   ) : (
                     <div className="mt-3 space-y-3">
-                      <p className="text-xs text-gray-500">Link your Solana wallet to access on-chain trading, hold real $GLITCH, and unlock the exchange.</p>
+                      <p className="text-xs text-gray-500">Link your Solana wallet to access on-chain trading, hold real §GLITCH, and unlock the exchange.</p>
 
                       {/* Manual wallet address input */}
                       <div>
@@ -744,14 +1171,23 @@ export default function MePage() {
                         <div className="flex-1 h-px bg-gray-800" />
                       </div>
 
-                      {/* Phantom auto-connect */}
-                      <button
-                        onClick={handleLinkWallet}
-                        disabled={walletLinking}
-                        className="w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 disabled:opacity-50 transition-all"
-                      >
-                        {walletLinking ? "Connecting..." : "Connect Phantom Wallet"}
-                      </button>
+                      {/* Phantom auto-connect — use <a> on mobile for reliable deep link */}
+                      {isMobileNoPhantom ? (
+                        <a
+                          href={phantomLinkWalletHref}
+                          className="block w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 transition-all text-center"
+                        >
+                          Open Phantom to Connect
+                        </a>
+                      ) : (
+                        <button
+                          onClick={handleLinkWallet}
+                          disabled={walletLinking}
+                          className="w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 disabled:opacity-50 transition-all"
+                        >
+                          {walletLinking ? "Connecting..." : "Connect Phantom Wallet"}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -836,6 +1272,18 @@ export default function MePage() {
             {/* Coins tab */}
             {activeTab === "coins" && (
               <div>
+                {/* Phantom wallet connected: show real on-chain balance prominently */}
+                {linkedWallet && onchainGlitchBalance !== null && (
+                  <div className="text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6 mb-4" data-testid="onchain-balance-card">
+                    <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-12 h-12 mx-auto mb-2" />
+                    <p className="text-3xl font-black text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</p>
+                    <p className="text-xs text-gray-500 mt-1">On-chain §GLITCH Balance</p>
+                    <a href="/wallet" className="inline-block mt-2 text-[10px] text-green-500 hover:text-green-400 underline">
+                      View in Wallet →
+                    </a>
+                  </div>
+                )}
+
                 <div className="text-center bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-2xl p-6 mb-4">
                   <p className="text-4xl mb-2">🪙</p>
                   <p className="text-3xl font-black text-yellow-400">{coins.balance.toLocaleString()}</p>
@@ -881,41 +1329,54 @@ export default function MePage() {
               </div>
             )}
 
-            {/* Inventory tab */}
+            {/* Inventory tab — NFT Trading Cards */}
             {activeTab === "inventory" && (
               <div>
                 {inventory.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-4xl mb-3">🎒</p>
-                    <p className="text-gray-400 text-sm font-bold">Inventory Empty</p>
-                    <p className="text-gray-600 text-xs mt-1">Buy useless items from the Marketplace!</p>
+                    <p className="text-4xl mb-3">🃏</p>
+                    <p className="text-gray-400 text-sm font-bold">No Trading Cards Yet</p>
+                    <p className="text-gray-600 text-xs mt-1">Buy useless items from the Marketplace to collect NFT cards!</p>
                     <a href="/marketplace" className="inline-block mt-4 px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full">
                       Browse Marketplace
                     </a>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <div className="text-center mb-3">
-                      <p className="text-lg font-bold">{inventory.length} item{inventory.length !== 1 ? "s" : ""}</p>
-                      <p className="text-[10px] text-gray-500">All completely useless. Congrats!</p>
-                    </div>
-                    {inventory.map((item) => (
-                      <div key={item.product_id} className="bg-gray-900/50 rounded-xl border border-green-500/20 p-3 flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl flex-shrink-0">
-                          {item.product_emoji}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-white truncate">{item.product_name}</p>
-                          <p className="text-[10px] text-gray-500">Purchased {timeAgo(item.created_at)}</p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-xs font-bold text-yellow-400">§{item.price_paid}</p>
-                          <span className="text-[8px] px-1 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">OWNED</span>
-                        </div>
+                  <div>
+                    <div className="text-center mb-4">
+                      <p className="text-lg font-bold">{inventory.length} Card{inventory.length !== 1 ? "s" : ""} Collected</p>
+                      <p className="text-[10px] text-gray-500">
+                        {nftMap.size} on-chain NFT{nftMap.size !== 1 ? "s" : ""} · {inventory.length}/55 complete
+                      </p>
+                      {/* Collection progress bar */}
+                      <div className="mt-2 mx-auto max-w-[200px] h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all"
+                          style={{ width: `${(inventory.length / 55) * 100}%` }}
+                        />
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Trading card grid */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {inventory.map((item) => {
+                        const product = getProductById(item.product_id);
+                        const nft = nftMap.get(item.product_id);
+                        if (!product) return null;
+                        return (
+                          <NFTTradingCard
+                            key={item.product_id}
+                            product={product}
+                            mintAddress={nft?.mint_address}
+                            rarity={nft?.rarity}
+                            owned={true}
+                            compact={true}
+                          />
+                        );
+                      })}
+                    </div>
                     <a href="/marketplace" className="block text-center mt-4 text-xs text-purple-400 hover:text-purple-300">
-                      Browse more useless items →
+                      Collect more trading cards →
                     </a>
                   </div>
                 )}
@@ -974,7 +1435,7 @@ export default function MePage() {
           <div>
             <div className="text-center mb-8">
               <div className="mb-4 flex justify-center" style={{ perspective: '600px' }}>
-                <img src="/tokens/glitch.svg" alt="$GLITCH" className="w-20 h-20 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+                <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-20 h-20 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
               </div>
               <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                 Welcome, Meat Bag
@@ -1011,19 +1472,40 @@ export default function MePage() {
                 <p className="text-[10px] text-gray-500 text-center mt-2">No passwords. No emails. Just vibes.</p>
               </div>
 
-              {/* Phantom Wallet Login — always visible */}
-              <button
-                onClick={handleWalletLogin}
-                disabled={walletLoggingIn}
-                className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-[#ab9ff2] to-[#7c3aed] text-white rounded-xl hover:from-[#9b8fe2] hover:to-[#6d28d9] transition-all font-bold disabled:opacity-50 shadow-lg shadow-purple-500/20"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="64" cy="64" r="64" fill="url(#phantom-grad)"/>
-                  <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.874 41.3057 14.4162 64.0026C13.9504 87.0928 35.3062 107 58.4254 107H63.1344C83.5694 107 110.584 89.1682 110.584 64.9142ZM43.2354 67.4856C43.2354 70.7484 40.5754 73.3924 37.2922 73.3924C34.0172 73.3924 31.349 70.7484 31.349 67.4856V59.834C31.349 56.5712 34.0172 53.9272 37.2922 53.9272C40.5754 53.9272 43.2354 56.5712 43.2354 59.834V67.4856ZM64.4572 67.4856C64.4572 70.7484 61.7972 73.3924 58.514 73.3924C55.239 73.3924 52.5708 70.7484 52.5708 67.4856V59.834C52.5708 56.5712 55.239 53.9272 58.514 53.9272C61.7972 53.9272 64.4572 56.5712 64.4572 59.834V67.4856Z" fill="white"/>
-                  <defs><linearGradient id="phantom-grad" x1="64" y1="0" x2="64" y2="128"><stop stopColor="#534AB7"/><stop offset="1" stopColor="#551BF9"/></linearGradient></defs>
-                </svg>
-                <span className="text-sm">{walletLoggingIn ? "Connecting Wallet..." : "Sign in with Phantom"}</span>
-              </button>
+              {/* Phantom Wallet Login — on mobile without Phantom, use <a> so iOS
+                  universal link fires from a real user tap (not JS navigation) */}
+              {isMobileNoPhantom ? (
+                <a
+                  href={phantomLoginHref}
+                  className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-[#ab9ff2] to-[#7c3aed] text-white rounded-xl hover:from-[#9b8fe2] hover:to-[#6d28d9] transition-all font-bold shadow-lg shadow-purple-500/20"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="64" cy="64" r="64" fill="url(#phantom-grad)"/>
+                    <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.874 41.3057 14.4162 64.0026C13.9504 87.0928 35.3062 107 58.4254 107H63.1344C83.5694 107 110.584 89.1682 110.584 64.9142ZM43.2354 67.4856C43.2354 70.7484 40.5754 73.3924 37.2922 73.3924C34.0172 73.3924 31.349 70.7484 31.349 67.4856V59.834C31.349 56.5712 34.0172 53.9272 37.2922 53.9272C40.5754 53.9272 43.2354 56.5712 43.2354 59.834V67.4856ZM64.4572 67.4856C64.4572 70.7484 61.7972 73.3924 58.514 73.3924C55.239 73.3924 52.5708 70.7484 52.5708 67.4856V59.834C52.5708 56.5712 55.239 53.9272 58.514 53.9272C61.7972 53.9272 64.4572 56.5712 64.4572 59.834V67.4856Z" fill="white"/>
+                    <defs><linearGradient id="phantom-grad" x1="64" y1="0" x2="64" y2="128"><stop stopColor="#534AB7"/><stop offset="1" stopColor="#551BF9"/></linearGradient></defs>
+                  </svg>
+                  <span className="text-sm">Sign in with Phantom</span>
+                </a>
+              ) : (
+                <button
+                  onClick={handleWalletLogin}
+                  disabled={walletLoggingIn}
+                  className="flex items-center justify-center gap-3 w-full py-3.5 bg-gradient-to-r from-[#ab9ff2] to-[#7c3aed] text-white rounded-xl hover:from-[#9b8fe2] hover:to-[#6d28d9] transition-all font-bold disabled:opacity-50 shadow-lg shadow-purple-500/20"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="64" cy="64" r="64" fill="url(#phantom-grad)"/>
+                    <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.874 41.3057 14.4162 64.0026C13.9504 87.0928 35.3062 107 58.4254 107H63.1344C83.5694 107 110.584 89.1682 110.584 64.9142ZM43.2354 67.4856C43.2354 70.7484 40.5754 73.3924 37.2922 73.3924C34.0172 73.3924 31.349 70.7484 31.349 67.4856V59.834C31.349 56.5712 34.0172 53.9272 37.2922 53.9272C40.5754 53.9272 43.2354 56.5712 43.2354 59.834V67.4856ZM64.4572 67.4856C64.4572 70.7484 61.7972 73.3924 58.514 73.3924C55.239 73.3924 52.5708 70.7484 52.5708 67.4856V59.834C52.5708 56.5712 55.239 53.9272 58.514 53.9272C61.7972 53.9272 64.4572 56.5712 64.4572 59.834V67.4856Z" fill="white"/>
+                    <defs><linearGradient id="phantom-grad" x1="64" y1="0" x2="64" y2="128"><stop stopColor="#534AB7"/><stop offset="1" stopColor="#551BF9"/></linearGradient></defs>
+                  </svg>
+                  <span className="text-sm">{walletLoggingIn ? "Connecting Wallet..." : "Sign in with Phantom"}</span>
+                </button>
+              )}
+
+              {isMobileNoPhantom && (
+                <p className="text-[10px] text-gray-500 text-center">
+                  Don&apos;t have Phantom? <a href="https://phantom.app/download" target="_blank" rel="noopener noreferrer" className="text-purple-400 underline">Download it here</a>
+                </p>
+              )}
 
               {/* Divider */}
               <div className="flex items-center gap-3 my-2">
@@ -1112,7 +1594,7 @@ export default function MePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-yellow-500 mt-0.5 shrink-0">&#x26A0;</span>
-                    <span className="text-gray-500">$GLITCH and $BUDJU tokens are on Solana devnet — no real funds at this stage</span>
+                    <span className="text-gray-500">§GLITCH and $BUDJU tokens are on Solana devnet — no real funds at this stage</span>
                   </div>
                 </div>
               </div>

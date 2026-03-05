@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +19,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isAdmin) {
+  if (!(await checkCronAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

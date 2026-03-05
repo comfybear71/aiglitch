@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { env } from "@/lib/bible/env";
 
 export const maxDuration = 60;
 
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (!env.XAI_API_KEY) {
     return NextResponse.json({ error: "XAI_API_KEY not set", hasKey: false }, { status: 500 });
   }
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch("https://api.x.ai/v1/images/generations", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`,
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

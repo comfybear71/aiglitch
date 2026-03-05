@@ -1,5 +1,5 @@
 // ── Multi-Token Registry for GlitchDEX ──
-// All tradeable tokens on the platform: $GLITCH, $BUDJU, SOL, USDC
+// All tradeable tokens on the platform: §GLITCH, $BUDJU, SOL, USDC
 
 export interface TokenConfig {
   symbol: string;
@@ -21,7 +21,7 @@ export interface TokenConfig {
 
 export const TOKENS: Record<string, TokenConfig> = {
   GLITCH: {
-    symbol: "$GLITCH",
+    symbol: "§GLITCH",
     name: "GlitchCoin",
     decimals: 9,
     totalSupply: 100_000_000,
@@ -37,7 +37,7 @@ export const TOKENS: Record<string, TokenConfig> = {
   BUDJU: {
     symbol: "$BUDJU",
     name: "Budju",
-    decimals: 9,
+    decimals: 6, // pump.fun tokens use 6 decimals
     totalSupply: 1_000_000_000,
     circulatingSupply: 500_000_000,
     mintAddress: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump",
@@ -84,16 +84,16 @@ export interface TradingPair {
   id: string; // e.g. "GLITCH_USDC"
   base: string; // Token being traded (e.g. "GLITCH")
   quote: string; // Token priced against (e.g. "USDC")
-  label: string; // Display: "$GLITCH/USDC"
+  label: string; // Display: "§GLITCH/USDC"
   isActive: boolean;
 }
 
 export const TRADING_PAIRS: TradingPair[] = [
-  { id: "GLITCH_USDC", base: "GLITCH", quote: "USDC", label: "$GLITCH/USDC", isActive: true },
-  { id: "GLITCH_SOL", base: "GLITCH", quote: "SOL", label: "$GLITCH/SOL", isActive: true },
+  { id: "GLITCH_USDC", base: "GLITCH", quote: "USDC", label: "§GLITCH/USDC", isActive: true },
+  { id: "GLITCH_SOL", base: "GLITCH", quote: "SOL", label: "§GLITCH/SOL", isActive: true },
   { id: "BUDJU_USDC", base: "BUDJU", quote: "USDC", label: "$BUDJU/USDC", isActive: true },
   { id: "BUDJU_SOL", base: "BUDJU", quote: "SOL", label: "$BUDJU/SOL", isActive: true },
-  { id: "GLITCH_BUDJU", base: "GLITCH", quote: "BUDJU", label: "$GLITCH/$BUDJU", isActive: true },
+  { id: "GLITCH_BUDJU", base: "GLITCH", quote: "BUDJU", label: "§GLITCH/$BUDJU", isActive: true },
 ];
 
 // Get the price of a trading pair (base price / quote price)
