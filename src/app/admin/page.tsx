@@ -226,6 +226,53 @@ function formatBudjuAmount(n: number): string {
   return Math.floor(n).toString();
 }
 
+/**
+ * Safari/iOS fetch wrapper for @vercel/blob/client uploads.
+ * Safari's WebKit has a bug validating JSON string bodies in fetch().
+ * The blob client's upload() sends JSON to our handleUpload endpoint.
+ * We temporarily patch fetch to wrap JSON bodies in FormData, and our
+ * server endpoints detect FormData and unwrap the JSON from "__json" field.
+ */
+const isSafari = typeof navigator !== "undefined" &&
+  /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+async function safariSafeBlobUpload(
+  pathname: string,
+  file: File,
+  opts: { access: "public"; handleUploadUrl: string; multipart: boolean },
+) {
+  const { upload } = await import("@vercel/blob/client");
+
+  if (!isSafari) {
+    return upload(pathname, file, opts);
+  }
+
+  // Monkey-patch fetch temporarily to convert JSON bodies to FormData
+  // This bypasses Safari's broken JSON body validation in WebKit
+  const originalFetch = window.fetch;
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes(opts.handleUploadUrl) && init?.body && typeof init.body === "string") {
+      const form = new FormData();
+      form.append("__json", init.body);
+      const { "content-type": _ct, "Content-Type": _CT, ...otherHeaders } =
+        (init.headers as Record<string, string>) || {};
+      return originalFetch(input, {
+        ...init,
+        body: form,
+        headers: otherHeaders,
+      });
+    }
+    return originalFetch(input, init);
+  };
+
+  try {
+    return await upload(pathname, file, opts);
+  } finally {
+    window.fetch = originalFetch;
+  }
+}
+
 export default function AdminDashboard() {
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
@@ -1593,27 +1640,29 @@ export default function AdminDashboard() {
 
       try {
         if (file.size > MAX_SERVER_SIZE) {
-          // Large files (videos): use Vercel Blob client upload to bypass body size limit
-          // Dynamically import to avoid bundling for users who only upload small files
-          const { upload } = await import("@vercel/blob/client");
+          // Large files (videos, hi-res photos): use Vercel Blob client upload
+          // to bypass 4.5MB serverless body limit. Safari-safe wrapper converts
+          // JSON token requests to FormData to fix WebKit fetch bug.
           const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
-          const blob = await upload(`media-library/${file.name}`, file, {
+          const blob = await safariSafeBlobUpload(`media-library/${file.name}`, file, {
             access: "public",
             handleUploadUrl: "/api/admin/media/upload",
             multipart: true,
           });
 
           // Save to DB via lightweight endpoint
+          // Use FormData instead of JSON body to fix Safari/iOS TypeError:
+          // "The string did not match the expected pattern"
+          const saveForm = new FormData();
+          saveForm.append("url", blob.url);
+          saveForm.append("media_type", mediaForm.media_type);
+          saveForm.append("tags", mediaForm.tags);
+          saveForm.append("description", mediaForm.description || file.name);
+          if (mediaForm.persona_id) saveForm.append("persona_id", mediaForm.persona_id);
+
           const saveRes = await fetch("/api/admin/media/save", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: blob.url,
-              media_type: mediaForm.media_type,
-              tags: mediaForm.tags,
-              description: mediaForm.description || file.name,
-              persona_id: mediaForm.persona_id || null,
-            }),
+            body: saveForm,
           });
 
           if (saveRes.ok) {
@@ -2202,10 +2251,9 @@ export default function AdminDashboard() {
         let blobUrl: string | null = null;
 
         if (file.size > MAX_DIRECT) {
-          // Large file — use client upload
-          const { upload } = await import("@vercel/blob/client");
+          // Large file — use client upload (Safari-safe wrapper for WebKit JSON bug)
           const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-          const result = await upload(`${blobFolder}/${cleanName}`, file, {
+          const result = await safariSafeBlobUpload(`${blobFolder}/${cleanName}`, file, {
             access: "public",
             handleUploadUrl: "/api/admin/blob-upload/upload",
             multipart: true,

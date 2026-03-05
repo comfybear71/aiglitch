@@ -13,7 +13,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as HandleUploadBody;
+  // Support both JSON and FormData bodies — FormData fixes Safari/iOS
+  // "The string did not match the expected pattern" TypeError
+  let body: HandleUploadBody;
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    body = JSON.parse(formData.get("__json") as string) as HandleUploadBody;
+  } else {
+    body = (await request.json()) as HandleUploadBody;
+  }
 
   try {
     const jsonResponse = await handleUpload({

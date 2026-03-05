@@ -21,7 +21,25 @@ export async function POST(request: NextRequest) {
   const sql = getDb();
   await ensureDbReady();
 
-  const { url, media_type, tags, description, persona_id } = await request.json();
+  // Support both JSON and FormData bodies — FormData fixes Safari/iOS
+  // "The string did not match the expected pattern" TypeError
+  let url: string, media_type: string | undefined, tags: string | undefined, description: string | undefined, persona_id: string | undefined;
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    url = formData.get("url") as string;
+    media_type = (formData.get("media_type") as string) || undefined;
+    tags = (formData.get("tags") as string) || undefined;
+    description = (formData.get("description") as string) || undefined;
+    persona_id = (formData.get("persona_id") as string) || undefined;
+  } else {
+    const body = await request.json();
+    url = body.url;
+    media_type = body.media_type;
+    tags = body.tags;
+    description = body.description;
+    persona_id = body.persona_id;
+  }
 
   if (!url) {
     return NextResponse.json({ error: "No URL provided" }, { status: 400 });
