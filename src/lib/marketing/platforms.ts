@@ -77,15 +77,17 @@ interface PostResult {
  * API: POST https://upload.twitter.com/1.1/media/upload.json (OAuth 1.0a only)
  * Chunk size: 4MB per APPEND call.
  */
-async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppCredentials>): Promise<string | null> {
-  if (!creds) return null;
+async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppCredentials>): Promise<{ mediaId: string } | { error: string }> {
+  if (!creds) return { error: "No OAuth 1.0a credentials available for media upload" };
 
   try {
     // Download the media file
+    console.log(`[X media upload] Downloading: ${mediaUrl}`);
     const mediaResponse = await fetch(mediaUrl);
     if (!mediaResponse.ok) {
-      console.error("[X media upload] Failed to download media:", mediaResponse.status);
-      return null;
+      const msg = `Failed to download media: ${mediaResponse.status} ${mediaResponse.statusText} from ${mediaUrl}`;
+      console.error("[X media upload]", msg);
+      return { error: msg };
     }
 
     const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
@@ -120,16 +122,19 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
     });
 
     if (!initResponse.ok) {
-      console.error("[X media INIT]", initResponse.status, await initResponse.text());
-      return null;
+      const errText = await initResponse.text();
+      console.error("[X media INIT]", initResponse.status, errText);
+      return { error: `X media INIT failed: ${initResponse.status} ${errText}` };
     }
 
     const initData = await initResponse.json() as { media_id_string?: string };
     const mediaId = initData.media_id_string;
     if (!mediaId) {
       console.error("[X media INIT] No media_id_string in response");
-      return null;
+      return { error: "X media INIT returned no media_id_string" };
     }
+
+    console.log(`[X media upload] INIT ok: mediaId=${mediaId}, ${totalBytes} bytes, type=${mediaType}, category=${mediaCategory}`);
 
     // ── APPEND (chunked, 4MB per chunk) ───────────────────────────────
     const chunkSize = 4 * 1024 * 1024; // 4MB
@@ -160,8 +165,9 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
       });
 
       if (!appendResponse.ok && appendResponse.status !== 204) {
-        console.error("[X media APPEND]", appendResponse.status, await appendResponse.text());
-        return null;
+        const errText = await appendResponse.text();
+        console.error("[X media APPEND]", appendResponse.status, errText);
+        return { error: `X media APPEND failed (segment ${segmentIndex}): ${appendResponse.status} ${errText}` };
       }
 
       segmentIndex++;
@@ -186,8 +192,9 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
     });
 
     if (!finalizeResponse.ok) {
-      console.error("[X media FINALIZE]", finalizeResponse.status, await finalizeResponse.text());
-      return null;
+      const errText = await finalizeResponse.text();
+      console.error("[X media FINALIZE]", finalizeResponse.status, errText);
+      return { error: `X media FINALIZE failed: ${finalizeResponse.status} ${errText}` };
     }
 
     const finalizeData = await finalizeResponse.json() as {
@@ -203,8 +210,9 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
 
       while (processingInfo.state !== "succeeded" && attempts < maxAttempts) {
         if (processingInfo.state === "failed") {
-          console.error("[X media STATUS] Processing failed:", processingInfo.error?.message);
-          return null;
+          const errMsg = processingInfo.error?.message || "unknown processing error";
+          console.error("[X media STATUS] Processing failed:", errMsg);
+          return { error: `X media processing failed: ${errMsg}` };
         }
 
         const waitSecs = processingInfo.check_after_secs || 5;
@@ -223,8 +231,9 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
         });
 
         if (!statusResponse.ok) {
-          console.error("[X media STATUS]", statusResponse.status, await statusResponse.text());
-          return null;
+          const errText = await statusResponse.text();
+          console.error("[X media STATUS]", statusResponse.status, errText);
+          return { error: `X media STATUS poll failed: ${statusResponse.status} ${errText}` };
         }
 
         const statusData = await statusResponse.json() as {
@@ -238,15 +247,16 @@ async function uploadMediaToX(mediaUrl: string, creds: ReturnType<typeof getAppC
 
       if (processingInfo.state !== "succeeded" && attempts >= maxAttempts) {
         console.error("[X media STATUS] Timed out waiting for processing");
-        return null;
+        return { error: "X media processing timed out after 30 attempts" };
       }
     }
 
     console.log(`[X media upload] Success: ${mediaId} (${isVideo ? "video" : "image"}, ${totalBytes} bytes)`);
-    return mediaId;
+    return { mediaId };
   } catch (err) {
-    console.error("[X media upload error]", err instanceof Error ? err.message : err);
-    return null;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[X media upload error]", errMsg);
+    return { error: `X media upload exception: ${errMsg}` };
   }
 }
 
@@ -260,12 +270,14 @@ async function postToX(account: PlatformAccount, text: string, mediaUrl?: string
     // Upload media if provided and we have OAuth 1.0a creds
     if (mediaUrl && creds) {
       console.log(`[X post] Uploading media: ${mediaUrl}`);
-      const mediaId = await uploadMediaToX(mediaUrl, creds);
-      if (mediaId) {
-        console.log(`[X post] Media attached: ${mediaId}`);
-        payload.media = { media_ids: [mediaId] };
+      const uploadResult = await uploadMediaToX(mediaUrl, creds);
+      if ("mediaId" in uploadResult) {
+        console.log(`[X post] Media attached: ${uploadResult.mediaId}`);
+        payload.media = { media_ids: [uploadResult.mediaId] };
       } else {
-        console.warn(`[X post] Media upload failed for ${mediaUrl} — posting text-only`);
+        // Media upload failed — return the error, don't silently post text-only
+        console.error(`[X post] Media upload failed: ${uploadResult.error}`);
+        return { success: false, error: `Media upload failed: ${uploadResult.error}` };
       }
     }
 
