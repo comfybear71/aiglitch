@@ -4,12 +4,22 @@ import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../AdminContext";
 import type { AdminChannel, Persona } from "../admin-types";
 
+interface PromoJob {
+  channelId: string;
+  channelSlug: string;
+  status: "generating" | "polling" | "stitching" | "done" | "error";
+  message?: string;
+  blobUrl?: string;
+  clips?: { scene: number; requestId: string | null; blobUrl?: string; done?: boolean }[];
+}
+
 export default function AdminChannelsPage() {
   const { authenticated, personas, fetchPersonas } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingChannel, setEditingChannel] = useState<AdminChannel | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
 
   const fetchChannels = useCallback(async () => {
     const res = await fetch("/api/admin/channels");
@@ -42,6 +52,158 @@ export default function AdminChannelsPage() {
       }),
     });
     fetchChannels();
+  };
+
+  const generatePromo = async (channel: AdminChannel) => {
+    setPromoJobs(prev => ({
+      ...prev,
+      [channel.id]: { channelId: channel.id, channelSlug: channel.slug, status: "generating", message: "Submitting 3 clips..." },
+    }));
+
+    try {
+      const res = await fetch("/api/admin/channels/generate-promo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: channel.id, channel_slug: channel.slug }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        setPromoJobs(prev => ({
+          ...prev,
+          [channel.id]: { ...prev[channel.id], status: "error", message: data.error || "Submit failed" },
+        }));
+        return;
+      }
+
+      // Extract clip requestIds
+      const clips = (data.clips || []).map((c: { scene: number; requestId: string | null }) => ({
+        scene: c.scene,
+        requestId: c.requestId,
+        done: false,
+      }));
+
+      setPromoJobs(prev => ({
+        ...prev,
+        [channel.id]: {
+          ...prev[channel.id],
+          status: "polling",
+          clips,
+          message: `Generating 3 clips (0/3 done)...`,
+        },
+      }));
+
+      // Poll all clips
+      pollAllClips(channel.id, channel.slug, clips);
+    } catch {
+      setPromoJobs(prev => ({
+        ...prev,
+        [channel.id]: { ...prev[channel.id], status: "error", message: "Network error" },
+      }));
+    }
+  };
+
+  const pollAllClips = async (
+    channelId: string,
+    channelSlug: string,
+    clips: { scene: number; requestId: string | null; blobUrl?: string; done?: boolean }[],
+    attempt = 0,
+  ) => {
+    if (attempt > 90) {
+      setPromoJobs(prev => ({
+        ...prev,
+        [channelId]: { ...prev[channelId], status: "error", message: "Timed out after 15 minutes" },
+      }));
+      return;
+    }
+
+    await new Promise(r => setTimeout(r, 10000));
+
+    const updated = [...clips];
+    let allDone = true;
+
+    for (let i = 0; i < updated.length; i++) {
+      if (updated[i].done || !updated[i].requestId) continue;
+
+      try {
+        const res = await fetch(`/api/admin/channels/generate-promo?id=${updated[i].requestId}`);
+        const data = await res.json();
+
+        if (data.phase === "done" && data.success) {
+          updated[i] = { ...updated[i], done: true, blobUrl: data.blobUrl };
+        } else if (data.phase === "done" && !data.success) {
+          updated[i] = { ...updated[i], done: true }; // Failed but done
+        } else {
+          allDone = false;
+        }
+      } catch {
+        allDone = false;
+      }
+    }
+
+    const doneCount = updated.filter(c => c.done).length;
+
+    setPromoJobs(prev => ({
+      ...prev,
+      [channelId]: {
+        ...prev[channelId],
+        clips: updated,
+        message: `Generating 3 clips (${doneCount}/3 done)...`,
+      },
+    }));
+
+    if (allDone) {
+      // All clips done — stitch them
+      const clipUrls = updated.filter(c => c.blobUrl).map(c => c.blobUrl as string);
+      if (clipUrls.length === 0) {
+        setPromoJobs(prev => ({
+          ...prev,
+          [channelId]: { ...prev[channelId], status: "error", message: "All clips failed" },
+        }));
+        return;
+      }
+
+      setPromoJobs(prev => ({
+        ...prev,
+        [channelId]: { ...prev[channelId], status: "stitching", message: `Stitching ${clipUrls.length} clips...` },
+      }));
+
+      try {
+        const stitchRes = await fetch("/api/admin/channels/generate-promo", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel_id: channelId, channel_slug: channelSlug, clip_urls: clipUrls }),
+        });
+        const stitchData = await stitchRes.json();
+
+        if (stitchData.success) {
+          setPromoJobs(prev => ({
+            ...prev,
+            [channelId]: {
+              ...prev[channelId],
+              status: "done",
+              blobUrl: stitchData.blobUrl,
+              message: `${stitchData.duration} promo ready!`,
+            },
+          }));
+          fetchChannels();
+        } else {
+          setPromoJobs(prev => ({
+            ...prev,
+            [channelId]: { ...prev[channelId], status: "error", message: "Stitch failed" },
+          }));
+        }
+      } catch {
+        setPromoJobs(prev => ({
+          ...prev,
+          [channelId]: { ...prev[channelId], status: "error", message: "Stitch network error" },
+        }));
+      }
+      return;
+    }
+
+    // Keep polling
+    pollAllClips(channelId, channelSlug, updated, attempt + 1);
   };
 
   const deleteChannel = async (id: string) => {
@@ -131,25 +293,90 @@ export default function AdminChannelsPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
-                  className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => toggleActive(channel)}
-                  className={`px-2 py-1 text-xs transition-colors ${channel.is_active ? "text-yellow-400 hover:text-yellow-300" : "text-green-400 hover:text-green-300"}`}
-                >
-                  {channel.is_active ? "Disable" : "Enable"}
-                </button>
-                <button
-                  onClick={() => deleteChannel(channel.id)}
-                  className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
-                >
-                  Delete
-                </button>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
+                    className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => toggleActive(channel)}
+                    className={`px-2 py-1 text-xs transition-colors ${channel.is_active ? "text-yellow-400 hover:text-yellow-300" : "text-green-400 hover:text-green-300"}`}
+                  >
+                    {channel.is_active ? "Disable" : "Enable"}
+                  </button>
+                  <button
+                    onClick={() => deleteChannel(channel.id)}
+                    className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+
+                {/* Generate Promo Video */}
+                {(() => {
+                  const job = promoJobs[channel.id];
+                  if (job?.status === "generating" || job?.status === "polling" || job?.status === "stitching") {
+                    const doneClips = job.clips?.filter(c => c.done).length || 0;
+                    const totalClips = job.clips?.length || 3;
+                    return (
+                      <div className="flex items-center gap-1.5 px-2 py-1">
+                        <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                        <div className="text-[10px] text-cyan-400">
+                          <div>{job.message || "Generating..."}</div>
+                          {job.status === "polling" && (
+                            <div className="flex gap-0.5 mt-0.5">
+                              {Array.from({ length: totalClips }).map((_, i) => (
+                                <div
+                                  key={i}
+                                  className={`w-4 h-1 rounded-full ${
+                                    i < doneClips ? "bg-green-400" : "bg-gray-600 animate-pulse"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (job?.status === "done") {
+                    return (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-green-400 px-1">✓ {job.message || "Promo ready"}</span>
+                        <button
+                          onClick={() => generatePromo(channel)}
+                          className="text-[10px] text-gray-500 hover:text-gray-300 px-1"
+                        >
+                          Regen
+                        </button>
+                      </div>
+                    );
+                  }
+                  if (job?.status === "error") {
+                    return (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-red-400 px-1">{job.message}</span>
+                        <button
+                          onClick={() => generatePromo(channel)}
+                          className="text-[10px] text-cyan-400 hover:text-cyan-300 px-1"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      onClick={() => generatePromo(channel)}
+                      className="px-2.5 py-1 text-[10px] font-bold bg-purple-500/20 text-purple-300 rounded-full hover:bg-purple-500/30 transition-colors"
+                    >
+                      🎬 Generate 30s Promo
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>
