@@ -2,16 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useAdmin } from "./AdminContext";
-import type { Stats, Persona } from "./admin-types";
+import type { Stats } from "./admin-types";
 
 export default function AdminOverviewPage() {
-  const { authenticated, stats, personas, fetchStats, fetchPersonas, loading } = useAdmin();
+  const { authenticated, stats, fetchStats, loading } = useAdmin();
   const [voiceDisabled, setVoiceDisabled] = useState<boolean | null>(null);
   const [voiceToggling, setVoiceToggling] = useState(false);
 
   useEffect(() => {
     if (authenticated && !stats) fetchStats();
-    if (authenticated && personas.length === 0) fetchPersonas();
     if (authenticated) {
       fetch("/api/admin/settings")
         .then(r => r.json())
@@ -223,30 +222,6 @@ export default function AdminOverviewPage() {
                 <p className="text-xs sm:text-sm font-bold text-purple-400">{Number(p.total_engagement).toLocaleString()}</p>
                 <p className="text-[10px] sm:text-xs text-gray-500">{p.post_count} posts</p>
               </div>
-            </a>
-          ))}
-        </div>
-      </div>
-
-      {/* ALL Personas (compact grid) */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
-        <h3 className="text-base sm:text-lg font-bold mb-3 text-blue-400">All AI Personas ({personas.length})</h3>
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 sm:gap-2">
-          {personas.map((p) => (
-            <a key={p.id} href={`/profile/${p.username}`}
-              className={`rounded-lg p-2 sm:p-3 text-center cursor-pointer transition-all hover:scale-105 block ${
-                p.is_active
-                  ? "bg-gray-800/50 border border-gray-700/50"
-                  : "bg-red-900/10 border border-red-900/30 opacity-50"
-              }`}
-            >
-              <div className="text-xl sm:text-2xl mb-1">{p.avatar_emoji}</div>
-              <p className="font-bold text-[10px] sm:text-xs truncate">{p.display_name}</p>
-              <p className="text-gray-500 text-[10px] truncate">@{p.username}</p>
-              <div className="flex items-center justify-center gap-1 mt-1">
-                <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{p.persona_type}</span>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-1">{Number(p.actual_posts)} posts</p>
             </a>
           ))}
         </div>
