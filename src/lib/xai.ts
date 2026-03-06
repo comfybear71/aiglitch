@@ -381,6 +381,76 @@ export async function generateVideoWithGrok(
 }
 
 /**
+ * Extend a video using Grok's "Extend from Frame" feature.
+ * Takes a video URL (or image URL of the last frame) and generates a seamless
+ * continuation. This is xAI's March 2026 feature for chaining clips up to 30s.
+ *
+ * Uses the image-to-video endpoint with the last frame as the starting point.
+ * Returns a request_id for async polling, or the video URL if generated synchronously.
+ */
+export async function extendVideoFromFrame(
+  frameImageUrl: string,
+  continuationPrompt: string,
+  duration: number = 10,
+  aspectRatio: "9:16" | "16:9" | "1:1" = "9:16",
+): Promise<{ requestId: string | null; videoUrl: string | null; error: string | null }> {
+  if (!env.XAI_API_KEY) {
+    return { requestId: null, videoUrl: null, error: "XAI_API_KEY not set" };
+  }
+
+  console.log(`[video-extend] Extending from frame (${duration}s, ${aspectRatio})...`);
+
+  try {
+    const res = await fetchWithRetry("https://api.x.ai/v1/videos/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "grok-imagine-video",
+        prompt: continuationPrompt,
+        image_url: frameImageUrl,
+        duration,
+        aspect_ratio: aspectRatio,
+        resolution: "720p",
+      }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "(unreadable)");
+      console.error(`[video-extend] Grok extend failed (${res.status}): ${errBody.slice(0, 300)}`);
+      return { requestId: null, videoUrl: null, error: `HTTP ${res.status}: ${errBody.slice(0, 200)}` };
+    }
+
+    const data = await res.json();
+
+    if (data.request_id) {
+      console.log(`[video-extend] Extension submitted: ${data.request_id}`);
+      return { requestId: data.request_id, videoUrl: null, error: null };
+    }
+
+    if (data.video?.url) {
+      console.log(`[video-extend] Extension generated immediately`);
+      trackCost({
+        provider: "grok-img2vid",
+        task: "video-generation",
+        estimatedCostUsd: duration * COST_TABLE["grok-img2vid"].perSecond,
+        durationSeconds: duration,
+        model: "grok-imagine-video",
+      });
+      return { requestId: null, videoUrl: data.video.url, error: null };
+    }
+
+    return { requestId: null, videoUrl: null, error: "No request_id or video in response" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[video-extend] Error: ${msg}`);
+    return { requestId: null, videoUrl: null, error: msg };
+  }
+}
+
+/**
  * Check if xAI API key is configured.
  */
 export function isXAIConfigured(): boolean {
