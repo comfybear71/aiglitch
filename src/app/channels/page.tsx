@@ -118,7 +118,7 @@ export default function ChannelsPage() {
           <h2 className="px-4 pt-2 pb-3 text-sm font-bold text-gray-300 tracking-wide">
             All Channels <span className="text-gray-600 font-normal">({channels.length})</span>
           </h2>
-          <div className="grid grid-cols-2 gap-3 px-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-4">
             {channels.map(channel => (
               <ChannelCard key={channel.id} channel={channel} onToggle={toggleSubscribe} />
             ))}
@@ -209,7 +209,7 @@ function ChannelCard({
       href={`/channels/${channel.slug}`}
       className="group block"
     >
-      <div ref={cardRef} className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-900">
+      <div ref={cardRef} className="relative aspect-[3/4] sm:aspect-[4/3] rounded-xl overflow-hidden bg-gray-900">
         {/* Video or image thumbnail underneath */}
         {channel.thumbnail && isVideo ? (
           <video
@@ -251,9 +251,9 @@ function ChannelCard({
             <div className="absolute inset-0 bg-black/40 group-hover:bg-black/30 transition-colors" />
             <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
               <div className="text-center">
-                <span className="text-2xl mb-1 block drop-shadow-lg">{channel.emoji}</span>
+                <span className="text-5xl sm:text-2xl mb-2 sm:mb-1 block drop-shadow-lg">{channel.emoji}</span>
                 <h3
-                  className="text-[15px] font-black text-white uppercase tracking-wider drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] leading-tight"
+                  className="text-2xl sm:text-[15px] font-black text-white uppercase tracking-wider drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] leading-tight"
                   style={{
                     textShadow: "0 0 20px rgba(0,200,255,0.3), 0 2px 4px rgba(0,0,0,0.8)",
                   }}
@@ -266,15 +266,15 @@ function ChannelCard({
         )}
 
         {/* LIVE + episodes badge */}
-        <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
-          <span className="text-[8px] px-1.5 py-0.5 rounded bg-red-600 text-white font-bold animate-pulse">LIVE</span>
-          <span className="text-[9px] text-white/70 drop-shadow">{channel.actual_post_count} ep</span>
+        <div className="absolute bottom-3 sm:bottom-2 right-3 sm:right-2 flex items-center gap-2 sm:gap-1.5">
+          <span className="text-xs sm:text-[8px] px-2 sm:px-1.5 py-1 sm:py-0.5 rounded bg-red-600 text-white font-bold animate-pulse">LIVE</span>
+          <span className="text-sm sm:text-[9px] text-white/70 drop-shadow">{channel.actual_post_count} ep</span>
         </div>
 
         {/* Subscribe button */}
         <button
           onClick={(e) => onToggle(e, channel.id, channel.subscribed)}
-          className={`absolute top-2 right-2 text-[9px] px-2 py-0.5 rounded-full font-bold transition-all active:scale-95 ${
+          className={`absolute top-3 sm:top-2 right-3 sm:right-2 text-sm sm:text-[9px] px-3 sm:px-2 py-1 sm:py-0.5 rounded-full font-bold transition-all active:scale-95 ${
             channel.subscribed
               ? "bg-white/20 backdrop-blur-sm text-white"
               : "bg-cyan-500 text-black hover:bg-cyan-400"
@@ -285,9 +285,9 @@ function ChannelCard({
 
         {/* Bottom: host avatars */}
         {hosts.length > 0 && (
-          <div className="absolute bottom-2 left-2 flex -space-x-1.5">
+          <div className="absolute bottom-3 sm:bottom-2 left-3 sm:left-2 flex -space-x-2 sm:-space-x-1.5">
             {hosts.map(p => (
-              <div key={p.persona_id} className="w-5 h-5 rounded-full border border-black overflow-hidden bg-gray-700">
+              <div key={p.persona_id} className="w-8 h-8 sm:w-5 sm:h-5 rounded-full border border-black overflow-hidden bg-gray-700">
                 {p.avatar_url ? (
                   <img src={p.avatar_url} alt="" className="w-full h-full object-cover" loading="lazy" />
                 ) : (
