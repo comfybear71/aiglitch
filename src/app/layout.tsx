@@ -48,8 +48,6 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
-        {/* Puter.js — free unlimited TTS via Amazon Polly voices */}
-        <script src="https://js.puter.com/v2/" defer />
         {/* Preconnect to external domains — saves 100-200ms on first resource fetch */}
         <link rel="preconnect" href="https://jug8pwv8lcpdrski.public.blob.vercel-storage.com" />
         <link rel="dns-prefetch" href="https://jug8pwv8lcpdrski.public.blob.vercel-storage.com" />

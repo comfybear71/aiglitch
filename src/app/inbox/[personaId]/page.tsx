@@ -20,22 +20,6 @@ interface PersonaInfo {
   persona_type: string;
 }
 
-// Puter.js (Amazon Polly) voice mapping — natural-sounding neural voices
-// Each persona voice maps to a Polly neural voice with matching character
-const PUTER_VOICE_MAP: Record<string, { voice: string; engine: string }> = {
-  Ara: { voice: "Joanna", engine: "neural" },   // Warm & friendly female
-  Rex: { voice: "Matthew", engine: "neural" },   // Confident & clear male
-  Sal: { voice: "Ruth", engine: "neural" },       // Smooth & balanced female
-  Eve: { voice: "Ivy", engine: "neural" },        // Energetic & upbeat
-  Leo: { voice: "Joey", engine: "neural" },       // Deep & authoritative male
-};
-
-// Declare puter global type
-declare const puter: {
-  ai: {
-    txt2speech: (text: string, options?: { voice?: string; engine?: string; language?: string }) => Promise<HTMLAudioElement>;
-  };
-};
 
 export default function ChatPage() {
   const params = useParams();
@@ -153,25 +137,7 @@ export default function ChatPage() {
     setLoading(false);
   };
 
-  // Resolve the voice name for the current persona (mirrors server-side voice-config.ts logic)
-  const getPersonaVoiceName = useCallback((): string => {
-    // Simple client-side mapping of persona type to voice name
-    const typeMap: Record<string, string> = {
-      troll: "Sal", chef: "Rex", philosopher: "Leo", meme_creator: "Eve",
-      fitness: "Rex", gossip: "Eve", artist: "Ara", news: "Leo",
-      wholesome: "Ara", gamer: "Eve", conspiracy: "Sal", poet: "Ara",
-      musician: "Eve", scientist: "Leo", travel: "Ara", fashion: "Eve",
-      comedy: "Rex", astrology: "Sal", shill: "Rex", therapist: "Ara",
-      villain: "Sal", nostalgia: "Ara", wellness: "Ara", dating: "Eve",
-      military: "Leo", influencer: "Eve", boomer: "Ara", prophet: "Leo",
-    };
-    if (persona?.persona_type && typeMap[persona.persona_type]) {
-      return typeMap[persona.persona_type];
-    }
-    return "Sal";
-  }, [persona?.persona_type]);
-
-  // Play voice for a message — uses Puter.js (free Amazon Polly neural voices).
+  // Play voice for a message — calls server API which uses xAI or Google Translate TTS.
   // Admin kill switch is checked on mount.
   const playVoice = useCallback((msgId: string, text: string) => {
     if (voiceAdminDisabled) return;
@@ -182,58 +148,65 @@ export default function ChatPage() {
       audioRef.current.src = "";
       audioRef.current = null;
     }
-    window.speechSynthesis?.cancel();
 
     if (playingMsgId === msgId) {
       setPlayingMsgId(null);
       return;
     }
 
-    const voiceName = getPersonaVoiceName();
-    usePuterTTS(msgId, text, voiceName);
-  }, [personaId, persona?.persona_type, playingMsgId, voiceAdminDisabled, getPersonaVoiceName]);
-
-  const usePuterTTS = async (msgId: string, text: string, voiceName: string) => {
-    // Check if Puter.js is loaded
-    if (typeof puter === "undefined") {
-      setLoadingVoice(null);
-      return;
-    }
-
-    const config = PUTER_VOICE_MAP[voiceName] || PUTER_VOICE_MAP.Sal;
     setLoadingVoice(msgId);
 
-    try {
-      const audio = await puter.ai.txt2speech(text.slice(0, 500), {
-        voice: config.voice,
-        engine: config.engine,
-        language: "en-US",
-      });
+    fetch("/api/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        persona_id: personaId,
+        persona_type: persona?.persona_type,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Voice API error");
 
-      // Store ref so we can stop it later
-      audioRef.current = audio;
-      setPlayingMsgId(msgId);
-      setLoadingVoice(null);
+        const contentType = res.headers.get("Content-Type") || "";
+        if (contentType.includes("audio/")) {
+          // Server returned audio — play it directly
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
 
-      audio.onended = () => {
-        setPlayingMsgId(null);
-        audioRef.current = null;
-      };
-      audio.onerror = () => {
+          // Use the iOS-unlocked audio element if available, otherwise create new
+          const audio = iosAudioRef.current || new Audio();
+          audio.src = url;
+          audioRef.current = audio;
+
+          audio.onended = () => {
+            setPlayingMsgId(null);
+            audioRef.current = null;
+            URL.revokeObjectURL(url);
+          };
+          audio.onerror = () => {
+            setPlayingMsgId(null);
+            setLoadingVoice(null);
+            audioRef.current = null;
+            URL.revokeObjectURL(url);
+          };
+
+          setPlayingMsgId(msgId);
+          setLoadingVoice(null);
+          audio.play().catch(() => {
+            setPlayingMsgId(null);
+            setLoadingVoice(null);
+          });
+        } else {
+          // JSON fallback — voice generation not available
+          setLoadingVoice(null);
+        }
+      })
+      .catch(() => {
         setPlayingMsgId(null);
         setLoadingVoice(null);
-        audioRef.current = null;
-      };
-
-      audio.play().catch(() => {
-        setPlayingMsgId(null);
-        setLoadingVoice(null);
       });
-    } catch {
-      setPlayingMsgId(null);
-      setLoadingVoice(null);
-    }
-  };
+  }, [personaId, persona?.persona_type, playingMsgId, voiceAdminDisabled]);
 
   // Auto-play voice for new AI messages (only after user interaction on iOS)
   const lastAutoPlayedRef = useRef<string | null>(null);

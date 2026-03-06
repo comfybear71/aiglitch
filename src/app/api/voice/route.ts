@@ -59,14 +59,8 @@ export async function POST(request: NextRequest) {
   const apiKey = env.XAI_API_KEY;
 
   if (!apiKey) {
-    // No API key — tell client to use browser TTS
-    const voiceConfig = getVoiceForPersona(persona_id || "", persona_type);
-    return NextResponse.json({
-      fallback: true,
-      voice: voiceConfig.voice,
-      text: trimmedText,
-      message: "No XAI_API_KEY set — use browser speech synthesis",
-    });
+    // No xAI key — use free Google Translate TTS as fallback
+    return generateGoogleTTS(trimmedText);
   }
 
   const voiceConfig = getVoiceForPersona(persona_id || "", persona_type);
@@ -174,13 +168,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (audioChunks.length === 0) {
-      // No audio generated — fallback
-      return NextResponse.json({
-        fallback: true,
-        voice: voiceConfig.voice,
-        text: trimmedText,
-        message: "No audio generated — use browser speech synthesis",
-      });
+      // No audio generated — fallback to Google TTS
+      return generateGoogleTTS(trimmedText);
     }
 
     // Combine base64 PCM chunks into a single buffer
@@ -207,13 +196,78 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Voice generation error:", error);
-    // Graceful fallback to browser TTS
-    return NextResponse.json({
-      fallback: true,
-      voice: voiceConfig.voice,
-      text: trimmedText,
-      message: "Voice API error — use browser speech synthesis",
+    // Graceful fallback to Google Translate TTS
+    return generateGoogleTTS(trimmedText);
+  }
+}
+
+// Free Google Translate TTS fallback — no API key needed, decent quality
+// Splits long text into chunks (Google TTS has a ~200 char limit per request)
+async function generateGoogleTTS(text: string): Promise<NextResponse> {
+  const cacheKey = `gtts:${text}`;
+  const cached = getCachedAudio(cacheKey);
+  if (cached) {
+    const arrayBuffer = cached.buffer.slice(cached.byteOffset, cached.byteOffset + cached.byteLength);
+    return new NextResponse(arrayBuffer as ArrayBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Content-Length": cached.byteLength.toString(),
+        "Cache-Control": "public, max-age=3600",
+        "X-Voice-Source": "google-translate",
+      },
     });
+  }
+
+  try {
+    // Split text into chunks of ~200 chars at word boundaries
+    const chunks: string[] = [];
+    let remaining = text;
+    while (remaining.length > 0) {
+      if (remaining.length <= 200) {
+        chunks.push(remaining);
+        break;
+      }
+      let splitAt = remaining.lastIndexOf(" ", 200);
+      if (splitAt <= 0) splitAt = 200;
+      chunks.push(remaining.slice(0, splitAt));
+      remaining = remaining.slice(splitAt).trim();
+    }
+
+    // Fetch audio for each chunk
+    const audioBuffers: Buffer[] = [];
+    for (const chunk of chunks) {
+      const encoded = encodeURIComponent(chunk);
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=en&client=tw-ob`;
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      });
+      if (!res.ok) throw new Error(`Google TTS returned ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      audioBuffers.push(buf);
+    }
+
+    const combined = Buffer.concat(audioBuffers);
+    setCachedAudio(cacheKey, combined);
+
+    const arrayBuffer = combined.buffer.slice(combined.byteOffset, combined.byteOffset + combined.byteLength);
+    return new NextResponse(arrayBuffer as ArrayBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Content-Length": combined.byteLength.toString(),
+        "Cache-Control": "public, max-age=3600",
+        "X-Voice-Source": "google-translate",
+      },
+    });
+  } catch (error) {
+    console.error("Google TTS fallback error:", error);
+    return NextResponse.json(
+      { error: "Voice generation unavailable" },
+      { status: 503 }
+    );
   }
 }
 
