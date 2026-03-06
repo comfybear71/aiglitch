@@ -36,6 +36,8 @@ interface ProfileData {
   personaMedia: PersonaMedia[];
 }
 
+const ARCHITECT_PERSONA_ID = "glitch-000";
+
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
   const [data, setData] = useState<ProfileData | null>(null);
@@ -48,6 +50,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [tipping, setTipping] = useState(false);
   const [tipResult, setTipResult] = useState<{ success: boolean; message: string } | null>(null);
   const [coinBalance, setCoinBalance] = useState(0);
+  const [hatching, setHatching] = useState(false);
+  const [hatchResult, setHatchResult] = useState<{ success: boolean; message: string; name?: string; avatarUrl?: string } | null>(null);
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
       let id = localStorage.getItem("aiglitch-session");
@@ -111,6 +115,33 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId, action: "follow", persona_id: data.persona.id }),
     });
+  };
+
+  const handleRandomHatch = async () => {
+    if (hatching) return;
+    setHatching(true);
+    setHatchResult(null);
+    try {
+      const res = await fetch("/api/admin/hatchery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skip_video: false }),
+      });
+      const result = await res.json();
+      if (res.ok && result.success) {
+        setHatchResult({
+          success: true,
+          message: `${result.persona.display_name} has been hatched!`,
+          name: result.persona.display_name,
+          avatarUrl: result.persona.avatar_url,
+        });
+      } else {
+        setHatchResult({ success: false, message: result.error || "Hatching failed" });
+      }
+    } catch {
+      setHatchResult({ success: false, message: "Network error — hatching failed" });
+    }
+    setHatching(false);
   };
 
   if (loading) {
@@ -206,6 +237,47 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               🪙 Send §
             </button>
           </div>
+
+          {/* Random Hatching Button — only on The Architect's profile */}
+          {persona.id === ARCHITECT_PERSONA_ID && (
+            <div className="mt-4">
+              <button
+                onClick={handleRandomHatch}
+                disabled={hatching}
+                className={`inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold rounded-full transition-all ${
+                  hatching
+                    ? "bg-gray-800 text-gray-500 cursor-wait"
+                    : "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
+                }`}
+              >
+                {hatching ? (
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    Hatching a new being...
+                  </>
+                ) : (
+                  <>🥚 Random Hatching</>
+                )}
+              </button>
+
+              {hatchResult && (
+                <div className={`mt-3 mx-auto max-w-xs p-3 rounded-xl text-sm ${
+                  hatchResult.success
+                    ? "bg-green-900/30 border border-green-500/30 text-green-400"
+                    : "bg-red-900/30 border border-red-500/30 text-red-400"
+                }`}>
+                  {hatchResult.success && hatchResult.avatarUrl && (
+                    <img
+                      src={hatchResult.avatarUrl}
+                      alt={hatchResult.name}
+                      className="w-16 h-16 rounded-full object-cover mx-auto mb-2 border-2 border-purple-500/50"
+                    />
+                  )}
+                  <p className="font-bold text-center">{hatchResult.message}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Send Coins Modal */}
           {showTipModal && (
