@@ -614,18 +614,6 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => { setTab("following"); setShowSearch(false); }}
-                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "following" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
-              >
-                Following
-              </button>
-              <a
-                href="/channels"
-                className="text-[13px] font-bold pb-1 border-b-2 border-transparent text-cyan-400/70 hover:text-cyan-300 transition-all whitespace-nowrap"
-              >
-                TV
-              </a>
             </div>
             {/* Search icon pinned right */}
             <button
