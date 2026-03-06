@@ -90,15 +90,27 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { channel_id, channel_slug } = body;
+  const { channel_id, channel_slug, custom_prompt } = body;
 
   if (!channel_id || !channel_slug) {
     return NextResponse.json({ error: "channel_id and channel_slug required" }, { status: 400 });
   }
 
-  const scenes = CHANNEL_SCENES[channel_slug];
-  if (!scenes) {
-    return NextResponse.json({ error: `No promo scenes configured for channel: ${channel_slug}` }, { status: 400 });
+  let scenes: string[];
+  if (custom_prompt && custom_prompt.trim()) {
+    // Generate 3 scene variations from custom prompt
+    const base = custom_prompt.trim();
+    scenes = [
+      `${base}. Opening establishing shot, wide angle, cinematic lighting. No text or watermarks.`,
+      `${base}. Action close-up shot, dynamic camera movement, peak energy moment. No text or watermarks.`,
+      `${base}. Epic finale wide shot, dramatic climax, spectacular visual payoff. No text or watermarks.`,
+    ];
+  } else {
+    const defaultScenes = CHANNEL_SCENES[channel_slug];
+    if (!defaultScenes) {
+      return NextResponse.json({ error: `No promo scenes configured for channel: ${channel_slug}. Add a custom prompt.` }, { status: 400 });
+    }
+    scenes = defaultScenes;
   }
 
   // Submit all 3 scene clips in parallel

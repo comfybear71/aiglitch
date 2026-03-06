@@ -21,6 +21,11 @@ export default function AdminChannelsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
   const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
+  const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
+  const [expandedTitle, setExpandedTitle] = useState<string | null>(null);
+  const [promoPrompts, setPromoPrompts] = useState<Record<string, string>>({});
+  const [titlePrompts, setTitlePrompts] = useState<Record<string, string>>({});
+  const [titleStylePrompts, setTitleStylePrompts] = useState<Record<string, string>>({});
 
   const fetchChannels = useCallback(async () => {
     const res = await fetch("/api/admin/channels");
@@ -56,6 +61,8 @@ export default function AdminChannelsPage() {
   };
 
   const generatePromo = async (channel: AdminChannel) => {
+    const customPrompt = promoPrompts[channel.id]?.trim() || undefined;
+    setExpandedPromo(null);
     setPromoJobs(prev => ({
       ...prev,
       [channel.id]: { channelId: channel.id, channelSlug: channel.slug, status: "generating", message: "Submitting 3 clips..." },
@@ -65,7 +72,7 @@ export default function AdminChannelsPage() {
       const res = await fetch("/api/admin/channels/generate-promo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel_id: channel.id, channel_slug: channel.slug }),
+        body: JSON.stringify({ channel_id: channel.id, channel_slug: channel.slug, custom_prompt: customPrompt }),
       });
       const data = await res.json();
 
@@ -208,8 +215,9 @@ export default function AdminChannelsPage() {
   };
 
   const generateTitle = async (channel: AdminChannel) => {
-    const title = prompt(`Enter title text for ${channel.name}:`, channel.name);
-    if (!title) return;
+    const title = titlePrompts[channel.id]?.trim() || channel.name;
+    const stylePrompt = titleStylePrompts[channel.id]?.trim() || undefined;
+    setExpandedTitle(null);
 
     setTitleJobs(prev => ({ ...prev, [channel.id]: { status: "generating", message: "Submitting..." } }));
 
@@ -217,7 +225,7 @@ export default function AdminChannelsPage() {
       const res = await fetch("/api/admin/channels/generate-title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel_id: channel.id, channel_slug: channel.slug, title }),
+        body: JSON.stringify({ channel_id: channel.id, channel_slug: channel.slug, title, style_prompt: stylePrompt }),
       });
       const data = await res.json();
 
@@ -326,160 +334,183 @@ export default function AdminChannelsPage() {
                     )}
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{channel.description}</p>
-
-                  {/* Stats */}
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-500">
-                    <span>{channel.subscriber_count} subs</span>
-                    <span>{channel.actual_post_count} posts</span>
-                    <span>{channel.persona_count} personas</span>
-                    {channel.schedule?.postsPerDay && (
-                      <span className="text-cyan-400/60">{channel.schedule.postsPerDay}/day target</span>
-                    )}
-                  </div>
-
-                  {/* Assigned personas */}
-                  {channel.personas.length > 0 && (
-                    <div className="flex items-center gap-1 mt-2 flex-wrap">
-                      {channel.personas.map(p => (
-                        <span
-                          key={p.persona_id}
-                          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] ${
-                            p.role === "host" ? "bg-cyan-500/20 text-cyan-300" : "bg-gray-800 text-gray-400"
-                          }`}
-                        >
-                          {p.avatar_emoji} {p.username}
-                          {p.role === "host" && <span className="text-cyan-500">*</span>}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
-                    className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => toggleActive(channel)}
-                    className={`px-2 py-1 text-xs transition-colors ${channel.is_active ? "text-yellow-400 hover:text-yellow-300" : "text-green-400 hover:text-green-300"}`}
-                  >
-                    {channel.is_active ? "Disable" : "Enable"}
-                  </button>
-                  <button
-                    onClick={() => deleteChannel(channel.id)}
-                    className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                {/* Generate Promo Video */}
-                {(() => {
-                  const job = promoJobs[channel.id];
-                  if (job?.status === "generating" || job?.status === "polling" || job?.status === "stitching") {
-                    const doneClips = job.clips?.filter(c => c.done).length || 0;
-                    const totalClips = job.clips?.length || 3;
-                    return (
-                      <div className="flex items-center gap-1.5 px-2 py-1">
-                        <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                        <div className="text-[10px] text-cyan-400">
-                          <div>{job.message || "Generating..."}</div>
-                          {job.status === "polling" && (
-                            <div className="flex gap-0.5 mt-0.5">
-                              {Array.from({ length: totalClips }).map((_, i) => (
-                                <div
-                                  key={i}
-                                  className={`w-4 h-1 rounded-full ${
-                                    i < doneClips ? "bg-green-400" : "bg-gray-600 animate-pulse"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (job?.status === "done") {
-                    return (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-green-400 px-1">✓ {job.message || "Promo ready"}</span>
-                        <button
-                          onClick={() => generatePromo(channel)}
-                          className="text-[10px] text-gray-500 hover:text-gray-300 px-1"
-                        >
-                          Regen
-                        </button>
-                      </div>
-                    );
-                  }
-                  if (job?.status === "error") {
-                    return (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-red-400 px-1">{job.message}</span>
-                        <button
-                          onClick={() => generatePromo(channel)}
-                          className="text-[10px] text-cyan-400 hover:text-cyan-300 px-1"
-                        >
-                          Retry
-                        </button>
-                      </div>
-                    );
-                  }
-                  return (
-                    <button
-                      onClick={() => generatePromo(channel)}
-                      className="px-2.5 py-1 text-[10px] font-bold bg-purple-500/20 text-purple-300 rounded-full hover:bg-purple-500/30 transition-colors"
-                    >
-                      🎬 Generate 30s Promo
-                    </button>
-                  );
-                })()}
-
-                {/* Generate Title Animation */}
-                {(() => {
-                  const tj = titleJobs[channel.id];
-                  if (tj?.status === "generating" || tj?.status === "polling") {
-                    return (
-                      <div className="flex items-center gap-1 px-2 py-0.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                        <span className="text-[10px] text-amber-400">{tj.message}</span>
-                      </div>
-                    );
-                  }
-                  if (tj?.status === "done") {
-                    return (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-green-400 px-1">✓ Title ready</span>
-                        <button onClick={() => generateTitle(channel)} className="text-[10px] text-gray-500 hover:text-gray-300 px-1">Regen</button>
-                      </div>
-                    );
-                  }
-                  if (tj?.status === "error") {
-                    return (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-red-400 px-1">{tj.message}</span>
-                        <button onClick={() => generateTitle(channel)} className="text-[10px] text-cyan-400 hover:text-cyan-300 px-1">Retry</button>
-                      </div>
-                    );
-                  }
-                  return (
-                    <button
-                      onClick={() => generateTitle(channel)}
-                      className="px-2.5 py-1 text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full hover:bg-amber-500/30 transition-colors"
-                    >
-                      ✨ Generate Title
-                    </button>
-                  );
-                })()}
+              {/* Actions row */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
+                  className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => toggleActive(channel)}
+                  className={`px-2 py-1 text-xs transition-colors ${channel.is_active ? "text-yellow-400 hover:text-yellow-300" : "text-green-400 hover:text-green-300"}`}
+                >
+                  {channel.is_active ? "Disable" : "Enable"}
+                </button>
+                <button
+                  onClick={() => deleteChannel(channel.id)}
+                  className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Delete
+                </button>
               </div>
             </div>
+
+            {/* Generate buttons row */}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              {/* Promo button / status */}
+              {(() => {
+                const job = promoJobs[channel.id];
+                const isRunning = job?.status === "generating" || job?.status === "polling" || job?.status === "stitching";
+                if (isRunning) {
+                  const doneClips = job.clips?.filter(c => c.done).length || 0;
+                  const totalClips = job.clips?.length || 3;
+                  const steps = [
+                    { label: "Submitting", done: job.status !== "generating" },
+                    ...Array.from({ length: totalClips }, (_, i) => ({ label: `Clip ${i + 1}`, done: i < doneClips })),
+                    { label: "Stitching", done: job.status === "done" },
+                  ];
+                  return (
+                    <div className="flex-1 bg-purple-500/10 border border-purple-500/20 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                        <span className="text-[11px] text-purple-300 font-bold">{job.message || "Generating promo..."}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        {steps.map((s, i) => (
+                          <div key={i} className="flex flex-col items-center gap-0.5">
+                            <div className={`w-8 h-1.5 rounded-full ${s.done ? "bg-green-400" : job.status === "stitching" && s.label === "Stitching" ? "bg-purple-400 animate-pulse" : "bg-gray-700"}`} />
+                            <span className={`text-[8px] ${s.done ? "text-green-400" : "text-gray-600"}`}>{s.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                if (job?.status === "done") {
+                  return (
+                    <span className="text-[10px] text-green-400 font-bold">✓ {job.message || "30s promo ready!"}</span>
+                  );
+                }
+                if (job?.status === "error") {
+                  return (
+                    <span className="text-[10px] text-red-400">{job.message}</span>
+                  );
+                }
+                return null;
+              })()}
+              <button
+                onClick={() => setExpandedPromo(expandedPromo === channel.id ? null : channel.id)}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-full transition-colors ${
+                  expandedPromo === channel.id
+                    ? "bg-purple-500/30 text-purple-200 ring-1 ring-purple-500/50"
+                    : promoJobs[channel.id]?.status === "done"
+                      ? "bg-gray-800 text-gray-400 hover:text-gray-200"
+                      : "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                }`}
+              >
+                {promoJobs[channel.id]?.status === "done" ? "Regen Promo" : "🎬 30s Promo"}
+              </button>
+
+              {/* Title button / status */}
+              {(() => {
+                const tj = titleJobs[channel.id];
+                if (tj?.status === "generating" || tj?.status === "polling") {
+                  return (
+                    <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
+                      <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                      <span className="text-[11px] text-amber-300 font-bold">{tj.message}</span>
+                    </div>
+                  );
+                }
+                if (tj?.status === "done") {
+                  return <span className="text-[10px] text-green-400 font-bold">✓ Title ready</span>;
+                }
+                if (tj?.status === "error") {
+                  return <span className="text-[10px] text-red-400">{tj.message}</span>;
+                }
+                return null;
+              })()}
+              <button
+                onClick={() => setExpandedTitle(expandedTitle === channel.id ? null : channel.id)}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-full transition-colors ${
+                  expandedTitle === channel.id
+                    ? "bg-amber-500/30 text-amber-200 ring-1 ring-amber-500/50"
+                    : titleJobs[channel.id]?.status === "done"
+                      ? "bg-gray-800 text-gray-400 hover:text-gray-200"
+                      : "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+                }`}
+              >
+                {titleJobs[channel.id]?.status === "done" ? "Regen Title" : "✨ Title"}
+              </button>
+            </div>
+
+            {/* Expanded promo prompt panel */}
+            {expandedPromo === channel.id && (
+              <div className="mt-3 bg-purple-500/5 border border-purple-500/20 rounded-xl p-3 space-y-2">
+                <label className="text-[10px] text-purple-300 uppercase font-bold block">Promo Video Prompt</label>
+                <p className="text-[10px] text-gray-500">Describe what the AI characters should do — make them funny, dramatic, chaotic, etc.</p>
+                <textarea
+                  value={promoPrompts[channel.id] || ""}
+                  onChange={e => setPromoPrompts(prev => ({ ...prev, [channel.id]: e.target.value }))}
+                  placeholder={`e.g. "Robots having an epic food fight in a fancy restaurant, slapstick comedy, things going hilariously wrong..."`}
+                  rows={3}
+                  className="w-full px-3 py-2 bg-gray-800/80 border border-purple-500/20 rounded-lg text-white text-xs resize-none placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] text-gray-600">Leave blank for default channel scenes</span>
+                  <button
+                    onClick={() => generatePromo(channel)}
+                    disabled={promoJobs[channel.id]?.status === "generating" || promoJobs[channel.id]?.status === "polling"}
+                    className="px-4 py-1.5 text-xs font-bold bg-purple-500 text-white rounded-lg hover:bg-purple-400 disabled:opacity-50 transition-colors"
+                  >
+                    Generate
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Expanded title prompt panel */}
+            {expandedTitle === channel.id && (
+              <div className="mt-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 space-y-2">
+                <label className="text-[10px] text-amber-300 uppercase font-bold block">Title Animation</label>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-[10px] text-gray-400">Title text</span>
+                    <input
+                      value={titlePrompts[channel.id] ?? channel.name}
+                      onChange={e => setTitlePrompts(prev => ({ ...prev, [channel.id]: e.target.value }))}
+                      className="w-full px-3 py-1.5 bg-gray-800/80 border border-amber-500/20 rounded-lg text-white text-xs focus:outline-none focus:border-amber-500/50"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400">Style prompt</span>
+                    <p className="text-[10px] text-gray-600">Describe the look — camouflage, brick wall, on fire, neon, dripping gold, etc.</p>
+                    <textarea
+                      value={titleStylePrompts[channel.id] || ""}
+                      onChange={e => setTitleStylePrompts(prev => ({ ...prev, [channel.id]: e.target.value }))}
+                      placeholder={`e.g. "Letters made of fire and lava, burning and dripping sparks" or "Military camouflage pattern, army green texture"`}
+                      rows={2}
+                      className="w-full px-3 py-2 bg-gray-800/80 border border-amber-500/20 rounded-lg text-white text-xs resize-none placeholder:text-gray-600 focus:outline-none focus:border-amber-500/50"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] text-gray-600">Leave style blank for default glowing neon</span>
+                  <button
+                    onClick={() => generateTitle(channel)}
+                    disabled={titleJobs[channel.id]?.status === "generating" || titleJobs[channel.id]?.status === "polling"}
+                    className="px-4 py-1.5 text-xs font-bold bg-amber-500 text-black rounded-lg hover:bg-amber-400 disabled:opacity-50 transition-colors"
+                  >
+                    Generate
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

@@ -28,14 +28,19 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { channel_id, channel_slug, title } = body;
+  const { channel_id, channel_slug, title, style_prompt } = body;
 
   if (!channel_id || !channel_slug || !title) {
     return NextResponse.json({ error: "channel_id, channel_slug, and title required" }, { status: 400 });
   }
 
-  // Prompt designed for a title animation on dark background (for mix-blend-screen overlay)
-  const prompt = `A cinematic title card animation on a pure black background. The text "${title.toUpperCase()}" appears with a dramatic reveal — glowing neon letters that flicker and pulse with electric energy, the text materialising letter by letter with sparks and light trails. The letters have a bright cyan/white glow against the pure black background. The animation is sleek, dramatic, and cinematic like a Netflix show title. The text is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the glowing animated text on black. No watermarks.`;
+  // Build prompt — use custom style or default glowing neon
+  let prompt: string;
+  if (style_prompt && style_prompt.trim()) {
+    prompt = `A cinematic title card animation on a pure black background. The text "${title.toUpperCase()}" appears with a dramatic reveal. Style: ${style_prompt.trim()}. The text is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the animated text on black. No watermarks.`;
+  } else {
+    prompt = `A cinematic title card animation on a pure black background. The text "${title.toUpperCase()}" appears with a dramatic reveal — glowing neon letters that flicker and pulse with electric energy, the text materialising letter by letter with sparks and light trails. The letters have a bright cyan/white glow against the pure black background. The animation is sleek, dramatic, and cinematic like a Netflix show title. The text is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the glowing animated text on black. No watermarks.`;
+  }
 
   try {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
