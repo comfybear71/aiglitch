@@ -23,10 +23,17 @@ async function fetchVercelUsage(): Promise<{
 
   try {
     const teamId = process.env.VERCEL_TEAM_ID;
-    const teamQuery = teamId ? `?teamId=${teamId}` : "";
+
+    // Build query params — Vercel usage API requires 'from' (and optionally 'to')
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const params = new URLSearchParams();
+    if (teamId) params.set("teamId", teamId);
+    params.set("from", startOfMonth.toISOString());
+    params.set("to", now.toISOString());
 
     // Fetch project usage from Vercel API
-    const res = await fetch(`https://api.vercel.com/v1/usage${teamQuery}`, {
+    const res = await fetch(`https://api.vercel.com/v1/usage?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 300 }, // Cache for 5 minutes
     });
