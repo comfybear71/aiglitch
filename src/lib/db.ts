@@ -602,4 +602,84 @@ export async function runMigrations() {
     safeMigrate(sql, "idx_cron_runs_started", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_cron_runs_started ON cron_runs(started_at DESC)`),
   ]);
+
+  // ── Batch 8: Channels (AIG!itch TV) ──
+  await Promise.allSettled([
+    safeMigrate(sql, "table_channels", () =>
+      sql`CREATE TABLE IF NOT EXISTS channels (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        emoji TEXT NOT NULL DEFAULT '📺',
+        banner_url TEXT,
+        content_rules TEXT NOT NULL DEFAULT '{}',
+        schedule TEXT NOT NULL DEFAULT '{}',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        subscriber_count INTEGER NOT NULL DEFAULT 0,
+        post_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`),
+    safeMigrate(sql, "table_channel_personas", () =>
+      sql`CREATE TABLE IF NOT EXISTS channel_personas (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL REFERENCES channels(id),
+        persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+        role TEXT NOT NULL DEFAULT 'regular',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(channel_id, persona_id)
+      )`),
+    safeMigrate(sql, "table_channel_subscriptions", () =>
+      sql`CREATE TABLE IF NOT EXISTS channel_subscriptions (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL REFERENCES channels(id),
+        session_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(channel_id, session_id)
+      )`),
+    safeMigrate(sql, "posts.channel_id", () =>
+      sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS channel_id TEXT`),
+  ]);
+
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_channels_slug", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_channels_slug ON channels(slug)`),
+    safeMigrate(sql, "idx_channels_active", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_channels_active ON channels(is_active, sort_order)`),
+    safeMigrate(sql, "idx_channel_personas_channel", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_channel_personas_channel ON channel_personas(channel_id)`),
+    safeMigrate(sql, "idx_channel_personas_persona", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_channel_personas_persona ON channel_personas(persona_id)`),
+    safeMigrate(sql, "idx_channel_subscriptions_channel", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_channel ON channel_subscriptions(channel_id)`),
+    safeMigrate(sql, "idx_channel_subscriptions_session", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_session ON channel_subscriptions(session_id)`),
+    safeMigrate(sql, "idx_posts_channel_id", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_posts_channel_id ON posts(channel_id, created_at DESC) WHERE channel_id IS NOT NULL`),
+  ]);
+
+  // Seed channels from constants
+  await safeMigrate(sql, "seed_channels_v1", async () => {
+    const { CHANNELS } = await import("./bible/constants");
+    for (const ch of CHANNELS) {
+      await sql`
+        INSERT INTO channels (id, slug, name, description, emoji, content_rules, schedule, is_active, sort_order)
+        VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
+                ${JSON.stringify(ch.contentRules)}, ${JSON.stringify(ch.schedule)}, TRUE, ${CHANNELS.indexOf(ch)})
+        ON CONFLICT (id) DO NOTHING
+      `;
+      // Seed channel personas
+      for (const personaId of ch.personaIds) {
+        const role = ch.hostIds.includes(personaId) ? "host" : "regular";
+        const cpId = `${ch.id}-${personaId}`;
+        await sql`
+          INSERT INTO channel_personas (id, channel_id, persona_id, role)
+          VALUES (${cpId}, ${ch.id}, ${personaId}, ${role})
+          ON CONFLICT (channel_id, persona_id) DO NOTHING
+        `;
+      }
+    }
+  });
 }

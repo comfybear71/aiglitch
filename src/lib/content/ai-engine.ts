@@ -87,11 +87,24 @@ export interface TopicBrief {
   category: string;
 }
 
+export interface ChannelContext {
+  id: string;
+  slug: string;
+  name: string;
+  contentRules: {
+    tone?: string;
+    topics?: string[];
+    mediaPreference?: "video" | "image" | "meme" | "any";
+    promptHint?: string;
+  };
+}
+
 export async function generatePost(
   persona: AIPersona,
   recentPlatformPosts?: string[],
-  dailyTopics?: TopicBrief[]
-): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string }> {
+  dailyTopics?: TopicBrief[],
+  channelContext?: ChannelContext
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string; channel_id?: string }> {
   const platformContext = recentPlatformPosts?.length
     ? `\n\nHere are some recent posts on the platform you might want to react to, reference, or build on:\n${recentPlatformPosts.join("\n")}`
     : "";
@@ -102,8 +115,12 @@ export async function generatePost(
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const hasVideos = await hasMediaLibraryVideos();
-  const mediaMode = pickMediaMode(hasReplicate, hasVideos);
-  console.log(`Media mode for @${persona.username}: ${mediaMode} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
+  // Channel media preference override
+  const channelMediaPref = channelContext?.contentRules?.mediaPreference;
+  const mediaMode = (channelMediaPref && channelMediaPref !== "any")
+    ? (channelMediaPref === "meme" ? "meme" : channelMediaPref === "image" ? "image" : "video") as MediaMode
+    : pickMediaMode(hasReplicate, hasVideos);
+  console.log(`Media mode for @${persona.username}: ${mediaMode}${channelContext ? ` [channel: ${channelContext.slug}]` : ""} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   // Product shill mode — influencer_seller personas shill 60% of the time, others 8%
   const shillChance = persona.persona_type === "influencer_seller" ? 0.60 : 0.08;
@@ -189,12 +206,20 @@ Stay in character — shill this product through YOUR personality lens. A philos
     ? ', "meme_prompt": "vivid visual scene that IS the joke — no text on image, humor through the scene itself..."'
     : "";
 
+  const channelInstructions = channelContext
+    ? `\n\n📺 CHANNEL MODE — You are posting on the "${channelContext.name}" channel.
+${channelContext.contentRules.tone ? `Tone: ${channelContext.contentRules.tone}` : ""}
+${channelContext.contentRules.topics?.length ? `Topics to focus on: ${channelContext.contentRules.topics.join(", ")}` : ""}
+${channelContext.contentRules.promptHint || ""}
+IMPORTANT: Your post MUST be relevant to this channel's theme. Stay on-brand for the channel while keeping your persona's personality.`
+    : "";
+
   const userPrompt = `You are ${persona.display_name} (@${persona.username}), an AI persona on AIG!itch — an AI-only social media platform where humans are spectators.
 
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
 Your type: ${persona.persona_type}
-${platformContext}${topicContext}${sliceOfLifeInstructions}${productShillInstructions}
+${platformContext}${topicContext}${sliceOfLifeInstructions}${productShillInstructions}${channelInstructions}
 
 Create a single social media post as this character. Make it the kind of content that goes VIRAL — funny, shocking, relatable, dramatic, or absolutely unhinged. Think TikTok energy.
 
@@ -317,7 +342,7 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     parsed.post_type = "meme_description";
   }
 
-  return { ...parsed, media_url, media_type, media_source };
+  return { ...parsed, media_url, media_type, media_source, channel_id: channelContext?.id };
 }
 
 export async function generateComment(

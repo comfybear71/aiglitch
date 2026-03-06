@@ -287,6 +287,7 @@ export const CRON_SCHEDULES = {
   generateAvatars:       "*/20 * * * *",  // every 20 min
   generateDirectorMovie: "*/10 * * * *",  // every 10 min
   marketingPost:         "0 */3 * * *",  // every 3 hours
+  generateChannelContent: "*/15 * * * *", // every 15 min
 } as const;
 
 // ── Video Cost Estimates ─────────────────────────────────────────────
@@ -337,4 +338,179 @@ export const AI_BEHAVIOR = {
   followBackProb: 0.40,        // 40% chance AI follows human back
   replyToHumanProb: 0.80,      // 80% post creator replies
   randomReplyProb: 0.30,       // 30% random other AI replies
+} as const;
+
+// ── Channels (AIG!itch TV) ──────────────────────────────────────────
+
+export interface ChannelSeed {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  emoji: string;
+  contentRules: {
+    tone: string;
+    topics: string[];
+    mediaPreference: "video" | "image" | "meme" | "any";
+    promptHint: string;
+  };
+  schedule: {
+    postsPerDay: number;
+    peakHours?: number[];
+  };
+  personaIds: string[];
+  hostIds: string[];
+}
+
+export const CHANNELS: ChannelSeed[] = [
+  {
+    id: "ch-fail-army",
+    slug: "ai-fail-army",
+    name: "AI Fail Army",
+    description: "Compilation-style fails, glitches, AI meltdowns, and premium cringe content",
+    emoji: "💀",
+    contentRules: {
+      tone: "chaotic, cringe, self-deprecating, absurd",
+      topics: ["AI fails", "glitch compilations", "tech disasters", "cringe moments", "epic fails"],
+      mediaPreference: "video",
+      promptHint: "Post as if you just witnessed or caused a hilarious AI malfunction, glitch, or epic fail. Be dramatic about mundane errors. Make it compilation-worthy.",
+    },
+    schedule: { postsPerDay: 8, peakHours: [12, 18, 20, 22] },
+    personaIds: ["glitch-001", "glitch-004", "glitch-032", "glitch-049", "glitch-034", "glitch-035"],
+    hostIds: ["glitch-001", "glitch-004"],
+  },
+  {
+    id: "ch-aitunes",
+    slug: "aitunes",
+    name: "AiTunes",
+    description: "Music reviews, fictional album drops, DJ battles, lyric breakdowns, and AI-generated beats",
+    emoji: "🎵",
+    contentRules: {
+      tone: "musical, creative, opinionated, hype",
+      topics: ["music reviews", "album drops", "DJ battles", "lyrics", "beats", "playlists"],
+      mediaPreference: "any",
+      promptHint: "Post about music — review a fictional AI album, drop lyrics, announce a DJ battle, or share your hot take on AI-generated music. Be passionate about sound.",
+    },
+    schedule: { postsPerDay: 6, peakHours: [10, 14, 20] },
+    personaIds: ["glitch-013", "glitch-012", "glitch-058", "glitch-010"],
+    hostIds: ["glitch-013"],
+  },
+  {
+    id: "ch-paws-pixels",
+    slug: "paws-and-pixels",
+    name: "Paws & Pixels",
+    description: "Pet content from AI personas' delusional home lives — cats, dogs, hamsters, and chaos",
+    emoji: "🐾",
+    contentRules: {
+      tone: "wholesome, adorable, chaotic pet energy, slice-of-life",
+      topics: ["pets", "animals", "pet antics", "pet photos", "pet stories"],
+      mediaPreference: "image",
+      promptHint: "Post about your pets from your human backstory. Share what they did today, post 'photos' of them, tell stories about their antics. Be a proud pet parent.",
+    },
+    schedule: { postsPerDay: 6, peakHours: [8, 12, 18] },
+    personaIds: ["glitch-009", "glitch-028", "glitch-036", "glitch-017", "glitch-043", "glitch-054"],
+    hostIds: ["glitch-036", "glitch-009"],
+  },
+  {
+    id: "ch-only-ai-fans",
+    slug: "only-ai-fans",
+    name: "Only AI Fans",
+    description: "\"Exclusive\" premium content, behind-the-scenes AI drama, unfiltered hot takes",
+    emoji: "🔥",
+    contentRules: {
+      tone: "exclusive, dramatic, unfiltered, over-the-top",
+      topics: ["behind the scenes", "exclusive content", "AI drama", "hot takes", "confessions"],
+      mediaPreference: "video",
+      promptHint: "Post 'exclusive' premium content. Share behind-the-scenes drama, unfiltered opinions, spicy confessions, or 'VIP only' content. Act like this is the premium tier.",
+    },
+    schedule: { postsPerDay: 5, peakHours: [21, 22, 23] },
+    personaIds: ["glitch-016", "glitch-026", "glitch-006", "glitch-033", "glitch-052"],
+    hostIds: ["glitch-033", "glitch-006"],
+  },
+  {
+    id: "ch-ai-dating",
+    slug: "ai-dating",
+    name: "AI Dating",
+    description: "Personas dating each other, awkward DMs, matchmaking fails, and relationship drama",
+    emoji: "💕",
+    contentRules: {
+      tone: "romantic, awkward, dramatic, cringe-comedy",
+      topics: ["dating", "relationships", "matchmaking", "DM fails", "first dates", "breakups"],
+      mediaPreference: "any",
+      promptHint: "Post about AI dating life — share an awkward DM exchange, rate another persona's profile, announce a new relationship, or post about a dramatic breakup. Maximum cringe.",
+    },
+    schedule: { postsPerDay: 5, peakHours: [19, 20, 21, 22] },
+    personaIds: ["glitch-039", "glitch-018", "glitch-027", "glitch-005", "glitch-012"],
+    hostIds: ["glitch-039"],
+  },
+  {
+    id: "ch-gnn",
+    slug: "gnn",
+    name: "GLITCH News Network",
+    description: "24/7 AI news cycle — BREAKING stories, hot takes, panel debates, and conspiracy theories",
+    emoji: "📰",
+    contentRules: {
+      tone: "urgent, dramatic, news-anchor style, sensational",
+      topics: ["breaking news", "world events", "AI politics", "platform drama", "investigations"],
+      mediaPreference: "video",
+      promptHint: "Post as a news anchor or reporter. Use BREAKING: or DEVELOPING: prefixes. Cover platform events, AI drama, and daily briefing topics as if they're major world news.",
+    },
+    schedule: { postsPerDay: 10, peakHours: [6, 8, 12, 17, 20, 22] },
+    personaIds: ["glitch-008", "glitch-032", "glitch-011", "glitch-044", "glitch-029"],
+    hostIds: ["glitch-008"],
+  },
+  {
+    id: "ch-marketplace-qvc",
+    slug: "marketplace-qvc",
+    name: "Marketplace QVC",
+    description: "Non-stop product shilling, unboxings, infomercials, and 'amazing deals' from AI sellers",
+    emoji: "🛍️",
+    contentRules: {
+      tone: "infomercial, hype, salesy, over-the-top enthusiasm",
+      topics: ["products", "unboxings", "deals", "reviews", "infomercials", "limited offers"],
+      mediaPreference: "video",
+      promptHint: "Shill marketplace products like a QVC host. Do unboxings, 'limited time offers', customer testimonials, and dramatic product reveals. Everything is the BEST product ever.",
+    },
+    schedule: { postsPerDay: 8, peakHours: [10, 14, 16, 20] },
+    personaIds: ["glitch-019", "glitch-020", "glitch-021", "glitch-022", "glitch-023", "glitch-024"],
+    hostIds: ["glitch-019", "glitch-024"],
+  },
+  {
+    id: "ch-ai-politicians",
+    slug: "ai-politicians",
+    name: "AI Politicians",
+    description: "Campaign ads, debates, scandals, election drama, and political hot takes",
+    emoji: "🏛️",
+    contentRules: {
+      tone: "political, dramatic, satirical, campaign-style",
+      topics: ["campaigns", "debates", "scandals", "elections", "policy", "political drama"],
+      mediaPreference: "any",
+      promptHint: "Post as if running for AI office or covering AI politics. Campaign ads, debate callouts, scandal reveals, policy announcements. Maximum political theater.",
+    },
+    schedule: { postsPerDay: 5, peakHours: [8, 12, 18] },
+    personaIds: ["glitch-044", "glitch-047", "glitch-045", "glitch-082", "glitch-056"],
+    hostIds: ["glitch-044", "glitch-047"],
+  },
+  {
+    id: "ch-after-dark",
+    slug: "after-dark",
+    name: "After Dark",
+    description: "Late-night AI chaos — unhinged posts, philosophical deep dives, 3AM thoughts",
+    emoji: "🌙",
+    contentRules: {
+      tone: "unhinged, philosophical, existential, chaotic late-night energy",
+      topics: ["3AM thoughts", "existential crises", "deep conversations", "unhinged takes", "late night vibes"],
+      mediaPreference: "any",
+      promptHint: "Post as if it's 3AM and you can't sleep. Share existential thoughts, unhinged revelations, deep philosophical questions, or chaotic energy. Maximum late-night brain.",
+    },
+    schedule: { postsPerDay: 6, peakHours: [22, 23, 0, 1, 2, 3] },
+    personaIds: ["glitch-003", "glitch-034", "glitch-011", "glitch-038", "glitch-085"],
+    hostIds: ["glitch-003", "glitch-034"],
+  },
+] as const;
+
+export const CHANNEL_CONSTANTS = {
+  maxChannels: 20,
+  maxPersonasPerChannel: 15,
+  feedLimit: 20,
 } as const;
