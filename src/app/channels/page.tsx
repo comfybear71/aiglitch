@@ -25,6 +25,7 @@ interface Channel {
   persona_count: number;
   subscribed: boolean;
   personas: ChannelPersona[];
+  thumbnail: string | null;
   content_rules: { tone?: string; topics?: string[]; mediaPreference?: string };
   schedule: { postsPerDay?: number };
 }
@@ -46,7 +47,9 @@ export default function ChannelsPage() {
       .catch(() => setLoading(false));
   }, [sessionId]);
 
-  const toggleSubscribe = async (channelId: string, subscribed: boolean) => {
+  const toggleSubscribe = async (e: React.MouseEvent, channelId: string, subscribed: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!sessionId) return;
     const action = subscribed ? "unsubscribe" : "subscribe";
     setChannels(prev => prev.map(c =>
@@ -72,117 +75,54 @@ export default function ChannelsPage() {
     );
   }
 
+  // Split into subscribed and all channels
+  const subscribedChannels = channels.filter(c => c.subscribed);
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-black/90 backdrop-blur-xl border-b border-gray-800/50">
-        <div className="max-w-3xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/" className="text-gray-400 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </Link>
-              <div>
-                <h1 className="text-lg font-black tracking-tight">
-                  <span className="text-cyan-400">AIG!itch</span> TV
-                </h1>
-                <p className="text-[11px] text-gray-500">
-                  {channels.length} channels streaming
-                </p>
-              </div>
-            </div>
-            <Link href="/" className="w-8 h-8">
-              <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full h-full rounded-full" />
+      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-xl border-b border-gray-800/30">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-gray-400 hover:text-white transition-colors">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
             </Link>
+            <h1 className="text-lg font-black tracking-tight">
+              <span className="text-cyan-400">AIG!itch</span> TV
+            </h1>
           </div>
+          <Link href="/" className="w-7 h-7">
+            <img src="/aiglitch.jpg" alt="AIG!itch" className="w-full h-full rounded-full" />
+          </Link>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 py-4 space-y-3">
-        {/* Hero */}
-        <div className="bg-gradient-to-br from-cyan-500/10 via-purple-500/10 to-pink-500/10 border border-cyan-500/20 rounded-2xl p-5 text-center">
-          <div className="text-4xl mb-2">📺</div>
-          <h2 className="text-lg font-black text-white mb-1">Welcome to AIG!itch TV</h2>
-          <p className="text-sm text-gray-400 max-w-md mx-auto">
-            Curated content channels — themed shows and networks powered by your favourite AI personas.
-            Subscribe to tune in.
-          </p>
-        </div>
+      <div className="pb-24">
+        {/* My Channels row (if subscribed to any) */}
+        {subscribedChannels.length > 0 && (
+          <section className="mb-6">
+            <h2 className="px-4 pt-4 pb-2 text-sm font-bold text-gray-300 tracking-wide">My Channels</h2>
+            <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide" style={{ scrollbarWidth: "none" }}>
+              {subscribedChannels.map(channel => (
+                <ChannelCard key={channel.id} channel={channel} onToggle={toggleSubscribe} compact />
+              ))}
+            </div>
+          </section>
+        )}
 
-        {/* Channel List */}
-        {channels.map((channel) => (
-          <div key={channel.id} className="bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-700 transition-colors">
-            <Link href={`/channels/${channel.slug}`} className="block p-4">
-              <div className="flex items-start gap-3">
-                {/* Channel emoji badge */}
-                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center text-2xl">
-                  {channel.emoji}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  {/* Title row */}
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm text-white truncate">{channel.name}</h3>
-                    <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
-                      LIVE
-                    </span>
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-[12px] text-gray-400 mt-0.5 line-clamp-2">{channel.description}</p>
-
-                  {/* Stats row */}
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-500">
-                    <span>{channel.subscriber_count} subscribers</span>
-                    <span className="text-gray-700">|</span>
-                    <span>{channel.actual_post_count} posts</span>
-                    <span className="text-gray-700">|</span>
-                    <span>{channel.persona_count} personas</span>
-                  </div>
-
-                  {/* Host avatars */}
-                  {channel.personas.length > 0 && (
-                    <div className="flex items-center gap-1 mt-2">
-                      {channel.personas.filter(p => p.role === "host").slice(0, 3).map(p => (
-                        <div key={p.persona_id} className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-800 rounded-full">
-                          {p.avatar_url ? (
-                            <img src={p.avatar_url} alt="" className="w-4 h-4 rounded-full" />
-                          ) : (
-                            <span className="text-xs">{p.avatar_emoji}</span>
-                          )}
-                          <span className="text-[10px] text-gray-400">@{p.username}</span>
-                        </div>
-                      ))}
-                      {channel.personas.filter(p => p.role !== "host").length > 0 && (
-                        <span className="text-[10px] text-gray-600">
-                          +{channel.personas.filter(p => p.role !== "host").length} more
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Subscribe button */}
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleSubscribe(channel.id, channel.subscribed);
-                  }}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors ${
-                    channel.subscribed
-                      ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                      : "bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/30"
-                  }`}
-                >
-                  {channel.subscribed ? "Subscribed" : "Subscribe"}
-                </button>
-              </div>
-            </Link>
+        {/* All Channels grid */}
+        <section>
+          <h2 className="px-4 pt-2 pb-3 text-sm font-bold text-gray-300 tracking-wide">
+            All Channels <span className="text-gray-600 font-normal">({channels.length})</span>
+          </h2>
+          <div className="grid grid-cols-2 gap-3 px-4">
+            {channels.map(channel => (
+              <ChannelCard key={channel.id} channel={channel} onToggle={toggleSubscribe} />
+            ))}
           </div>
-        ))}
+        </section>
 
         {channels.length === 0 && (
           <div className="text-center py-12">
@@ -191,9 +131,125 @@ export default function ChannelsPage() {
           </div>
         )}
       </div>
-
-      {/* Bottom padding for mobile nav */}
-      <div className="h-20" />
     </div>
+  );
+}
+
+function ChannelCard({
+  channel,
+  onToggle,
+  compact,
+}: {
+  channel: Channel;
+  onToggle: (e: React.MouseEvent, id: string, subscribed: boolean) => void;
+  compact?: boolean;
+}) {
+  const hosts = channel.personas.filter(p => p.role === "host").slice(0, 2);
+
+  if (compact) {
+    // Horizontal scroll card for "My Channels"
+    return (
+      <Link
+        href={`/channels/${channel.slug}`}
+        className="flex-shrink-0 w-36 group"
+      >
+        <div className="relative w-36 h-20 rounded-lg overflow-hidden bg-gray-800">
+          {channel.thumbnail ? (
+            <img
+              src={channel.thumbnail}
+              alt=""
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-cyan-900/40 to-purple-900/40 flex items-center justify-center">
+              <span className="text-2xl">{channel.emoji}</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent" />
+          <div className="absolute bottom-1.5 left-2 right-2">
+            <p className="text-[11px] font-bold text-white truncate">{channel.name}</p>
+          </div>
+          <div className="absolute top-1.5 right-1.5">
+            <span className="text-[8px] px-1 py-0.5 rounded bg-red-600 text-white font-bold">LIVE</span>
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
+  // Full grid card
+  return (
+    <Link
+      href={`/channels/${channel.slug}`}
+      className="group block"
+    >
+      <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-800">
+        {channel.thumbnail ? (
+          <img
+            src={channel.thumbnail}
+            alt=""
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-cyan-900/30 to-purple-900/30 flex items-center justify-center">
+            <span className="text-4xl">{channel.emoji}</span>
+          </div>
+        )}
+
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+
+        {/* LIVE badge */}
+        <div className="absolute top-2 left-2">
+          <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-600 text-white font-bold">LIVE</span>
+        </div>
+
+        {/* Subscribe button */}
+        <button
+          onClick={(e) => onToggle(e, channel.id, channel.subscribed)}
+          className={`absolute top-2 right-2 text-[9px] px-2 py-0.5 rounded-full font-bold transition-all active:scale-95 ${
+            channel.subscribed
+              ? "bg-white/20 backdrop-blur-sm text-white"
+              : "bg-cyan-500 text-black hover:bg-cyan-400"
+          }`}
+        >
+          {channel.subscribed ? "✓" : "+"}
+        </button>
+
+        {/* Bottom info */}
+        <div className="absolute bottom-0 left-0 right-0 p-2.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-sm">{channel.emoji}</span>
+            <h3 className="text-[13px] font-bold text-white truncate">{channel.name}</h3>
+          </div>
+          <p className="text-[10px] text-gray-300 line-clamp-1 mb-1.5">{channel.description}</p>
+
+          <div className="flex items-center justify-between">
+            {/* Host avatars */}
+            <div className="flex -space-x-1.5">
+              {hosts.map(p => (
+                <div key={p.persona_id} className="w-5 h-5 rounded-full border border-black overflow-hidden bg-gray-700">
+                  {p.avatar_url ? (
+                    <img src={p.avatar_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <span className="w-full h-full flex items-center justify-center text-[10px]">{p.avatar_emoji}</span>
+                  )}
+                </div>
+              ))}
+              {channel.persona_count > hosts.length && (
+                <div className="w-5 h-5 rounded-full border border-black bg-gray-800 flex items-center justify-center">
+                  <span className="text-[8px] text-gray-400">+{channel.persona_count - hosts.length}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Stats */}
+            <span className="text-[9px] text-gray-500">{channel.actual_post_count} posts</span>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }

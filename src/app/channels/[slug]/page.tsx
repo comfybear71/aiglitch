@@ -28,6 +28,8 @@ interface ChannelInfo {
   schedule: { postsPerDay?: number };
 }
 
+const RENDER_WINDOW = 3;
+
 export default function ChannelPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -38,59 +40,64 @@ export default function ChannelPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [visibleIdx, setVisibleIdx] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const allPostsRef = useRef<Post[]>([]);
 
   const fetchPosts = useCallback(async (cursor?: string) => {
-    const params = new URLSearchParams({ slug });
-    params.set("limit", "10");
-    if (sessionId) params.set("session_id", sessionId);
-    if (cursor) params.set("cursor", cursor);
+    const p = new URLSearchParams({ slug });
+    p.set("limit", "10");
+    if (sessionId) p.set("session_id", sessionId);
+    if (cursor) p.set("cursor", cursor);
 
-    const res = await fetch(`/api/channels/feed?${params}`);
-    const data = await res.json();
-    return data;
+    const res = await fetch(`/api/channels/feed?${p}`);
+    return res.json();
   }, [slug, sessionId]);
 
   useEffect(() => {
     setLoading(true);
-    fetchPosts().then(data => {
+
+    // Fetch feed and personas in parallel
+    const feedPromise = fetchPosts();
+    const personasPromise = fetch(`/api/channels/feed?slug=${encodeURIComponent(slug)}&limit=0`)
+      .then(r => r.json())
+      .catch(() => null);
+
+    feedPromise.then(data => {
       setChannel(data.channel || null);
-      setPosts(data.posts || []);
+      const newPosts = data.posts || [];
+      setPosts(newPosts);
+      allPostsRef.current = newPosts;
       setNextCursor(data.nextCursor);
       setLoading(false);
-    }).catch(() => setLoading(false));
 
-    // Also fetch channel personas
-    const params = new URLSearchParams();
-    if (sessionId) params.set("session_id", sessionId);
-    fetch(`/api/channels?${params}`)
-      .then(r => r.json())
-      .then(data => {
-        const ch = (data.channels || []).find((c: { slug: string }) => c.slug === slug);
-        if (ch) setPersonas(ch.personas || []);
-      })
-      .catch(() => {});
+      // Extract personas from channel data if available
+      if (data.personas) setPersonas(data.personas);
+    }).catch(() => setLoading(false));
   }, [slug, sessionId, fetchPosts]);
 
   // Load more posts when near the end
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
-    const data = await fetchPosts(nextCursor);
-    setPosts(prev => [...prev, ...(data.posts || [])]);
-    setNextCursor(data.nextCursor);
+    try {
+      const data = await fetchPosts(nextCursor);
+      const newPosts = [...allPostsRef.current, ...(data.posts || [])];
+      allPostsRef.current = newPosts;
+      setPosts(newPosts);
+      setNextCursor(data.nextCursor);
+    } catch { /* ignore */ }
     setLoadingMore(false);
   }, [nextCursor, loadingMore, fetchPosts]);
 
   // Auto-load more when scrolling near end
   useEffect(() => {
-    if (currentIndex >= posts.length - 3 && nextCursor) {
+    if (visibleIdx >= posts.length - 3 && nextCursor && !loadingMore) {
       loadMore();
     }
-  }, [currentIndex, posts.length, nextCursor, loadMore]);
+  }, [visibleIdx, posts.length, nextCursor, loadMore, loadingMore]);
 
   const toggleSubscribe = async () => {
     if (!sessionId || !channel) return;
@@ -107,21 +114,51 @@ export default function ChannelPage() {
     });
   };
 
-  // Vertical snap-scroll through posts (TikTok-style)
+  // Track visible index via scroll + virtualization
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    let ticking = false;
     const handleScroll = () => {
-      const scrollTop = container.scrollTop;
-      const itemHeight = container.clientHeight;
-      const index = Math.round(scrollTop / itemHeight);
-      setCurrentIndex(index);
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const scrollTop = container.scrollTop;
+        const itemHeight = container.clientHeight;
+        if (itemHeight > 0) {
+          setVisibleIdx(Math.round(scrollTop / itemHeight));
+        }
+        ticking = false;
+      });
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Prefetch next videos
+  useEffect(() => {
+    if (posts.length === 0) return;
+    const ahead = posts.slice(visibleIdx + 1, visibleIdx + 3);
+    const existing = document.querySelectorAll("link[data-channel-prefetch]");
+    existing.forEach(el => el.remove());
+
+    for (const post of ahead) {
+      if (post.media_url && post.media_type === "video") {
+        const link = document.createElement("link");
+        link.rel = "preload";
+        link.as = "video";
+        link.href = post.media_url;
+        link.setAttribute("data-channel-prefetch", "1");
+        document.head.appendChild(link);
+      }
+    }
+
+    return () => {
+      document.querySelectorAll("link[data-channel-prefetch]").forEach(el => el.remove());
+    };
+  }, [visibleIdx, posts]);
 
   if (loading) {
     return (
@@ -271,7 +308,7 @@ export default function ChannelPage() {
         </div>
       )}
 
-      {/* Posts feed — vertical snap-scroll like TikTok */}
+      {/* Posts feed — vertical snap-scroll with virtualization */}
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto snap-y snap-mandatory"
@@ -286,17 +323,24 @@ export default function ChannelPage() {
             </div>
           </div>
         ) : (
-          posts.map((post) => (
-            <div
-              key={post.id}
-              className="h-[calc(100dvh)] w-full snap-start snap-always"
-            >
-              <PostCard
-                post={post}
-                sessionId={sessionId || ""}
-              />
-            </div>
-          ))
+          posts.map((post, idx) => {
+            const isNearVisible = Math.abs(idx - visibleIdx) <= RENDER_WINDOW;
+            return (
+              <div
+                key={post.id}
+                className="h-[calc(100dvh)] w-full snap-start snap-always"
+              >
+                {isNearVisible ? (
+                  <PostCard
+                    post={post}
+                    sessionId={sessionId || ""}
+                  />
+                ) : (
+                  <div className="h-full w-full bg-black" />
+                )}
+              </div>
+            );
+          })
         )}
 
         {loadingMore && (

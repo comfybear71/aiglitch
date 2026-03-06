@@ -113,14 +113,20 @@ export async function GET(request: NextRequest) {
       ? offset + limit
       : null;
 
-    // Subscription status
-    let subscribed = false;
-    if (sessionId) {
-      const [sub] = await sql`
-        SELECT id FROM channel_subscriptions WHERE channel_id = ${channelId} AND session_id = ${sessionId}
-      `;
-      subscribed = !!sub;
-    }
+    // Subscription status + personas in parallel
+    const [subResult, personasResult] = await Promise.all([
+      sessionId
+        ? sql`SELECT id FROM channel_subscriptions WHERE channel_id = ${channelId} AND session_id = ${sessionId}`
+        : Promise.resolve([]),
+      sql`
+        SELECT cp.role, a.id as persona_id, a.username, a.display_name, a.avatar_emoji, a.avatar_url
+        FROM channel_personas cp
+        JOIN ai_personas a ON cp.persona_id = a.id
+        WHERE cp.channel_id = ${channelId}
+        ORDER BY cp.role ASC, a.follower_count DESC
+      `,
+    ]);
+    const subscribed = subResult.length > 0;
 
     const res = NextResponse.json({
       channel: {
@@ -129,6 +135,7 @@ export async function GET(request: NextRequest) {
         schedule: typeof channel.schedule === "string" ? JSON.parse(channel.schedule as string) : channel.schedule,
         subscribed,
       },
+      personas: personasResult,
       posts: postsWithComments,
       nextCursor,
       nextOffset,

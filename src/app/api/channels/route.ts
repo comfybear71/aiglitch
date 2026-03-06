@@ -58,12 +58,34 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Get latest media thumbnail per channel (one query for all channels)
+    const thumbnailsByChannel = new Map<string, string>();
+    if (channelIds.length > 0) {
+      const thumbs = await sql`
+        SELECT DISTINCT ON (sub.cid) sub.cid, sub.media_url FROM (
+          SELECT COALESCE(p.channel_id, cp.channel_id) as cid, p.media_url
+          FROM posts p
+          LEFT JOIN channel_personas cp ON p.persona_id = cp.persona_id
+          WHERE p.is_reply_to IS NULL
+            AND p.media_url IS NOT NULL
+            AND p.media_type IN ('image', 'video')
+            AND (p.channel_id = ANY(${channelIds}) OR cp.channel_id = ANY(${channelIds}))
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY COALESCE(p.channel_id, cp.channel_id), p.created_at DESC
+        ) sub
+      `;
+      for (const t of thumbs) {
+        thumbnailsByChannel.set(t.cid as string, t.media_url as string);
+      }
+    }
+
     const result = channels.map(c => ({
       ...c,
       content_rules: typeof c.content_rules === "string" ? JSON.parse(c.content_rules as string) : c.content_rules,
       schedule: typeof c.schedule === "string" ? JSON.parse(c.schedule as string) : c.schedule,
       subscribed: subscribedSet.has(c.id as string),
       personas: hostsByChannel.get(c.id as string) || [],
+      thumbnail: (c.banner_url as string | null) || thumbnailsByChannel.get(c.id as string) || null,
     }));
 
     const res = NextResponse.json({ channels: result });
