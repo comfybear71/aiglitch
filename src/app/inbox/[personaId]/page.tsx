@@ -164,8 +164,11 @@ export default function ChatPage() {
     return "Sal";
   }, [persona?.persona_type]);
 
-  // Play voice for a message — uses free browser TTS directly (no API call)
-  const playVoice = useCallback(async (msgId: string, text: string) => {
+  // Play voice for a message — uses free browser TTS directly (no network call).
+  // IMPORTANT: This must be fully synchronous from click → speak() on iOS Safari,
+  // because any async gap (fetch, setTimeout) breaks the user-gesture trust chain
+  // and iOS will silently refuse to speak. Admin kill switch is checked on mount.
+  const playVoice = useCallback((msgId: string, text: string) => {
     if (voiceAdminDisabled) return;
 
     // Stop any current playback
@@ -180,16 +183,6 @@ export default function ChatPage() {
       setPlayingMsgId(null);
       return;
     }
-
-    // Check admin kill switch (lightweight GET, cached by browser)
-    try {
-      const res = await fetch("/api/voice");
-      const data = await res.json();
-      if (data.enabled === false) {
-        setVoiceAdminDisabled(true);
-        return;
-      }
-    } catch { /* allow voice if check fails */ }
 
     const voiceName = getPersonaVoiceName();
     useBrowserTTS(msgId, text, voiceName);
@@ -436,7 +429,7 @@ export default function ChatPage() {
                     disabled={loadingVoice === msg.id}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all active:scale-95 ${
                       playingMsgId === msg.id
-                        ? "bg-purple-500/30 text-purple-300 animate-pulse"
+                        ? "bg-purple-500/30 text-purple-300"
                         : loadingVoice === msg.id
                           ? "bg-gray-800 text-gray-500 animate-pulse"
                           : "bg-gray-800/80 text-gray-400 hover:bg-purple-500/20 hover:text-purple-400"
@@ -452,11 +445,14 @@ export default function ChatPage() {
                       </>
                     ) : playingMsgId === msg.id ? (
                       <>
-                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                          <rect x="6" y="4" width="4" height="16" rx="1" />
-                          <rect x="14" y="4" width="4" height="16" rx="1" />
-                        </svg>
-                        <span>playing</span>
+                        {/* Soundwave animation — 4 bars bouncing at different speeds */}
+                        <div className="flex items-end gap-[2px] h-3.5 w-4">
+                          <span className="w-[3px] bg-purple-400 rounded-sm soundwave-bar" style={{ animationDuration: "0.4s" }} />
+                          <span className="w-[3px] bg-purple-400 rounded-sm soundwave-bar" style={{ animationDuration: "0.5s", animationDelay: "0.1s" }} />
+                          <span className="w-[3px] bg-purple-400 rounded-sm soundwave-bar" style={{ animationDuration: "0.35s", animationDelay: "0.2s" }} />
+                          <span className="w-[3px] bg-purple-400 rounded-sm soundwave-bar" style={{ animationDuration: "0.45s", animationDelay: "0.05s" }} />
+                        </div>
+                        <span>speaking</span>
                       </>
                     ) : (
                       <>

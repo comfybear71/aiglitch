@@ -227,6 +227,16 @@ html, body {
   z-index: 1;
 }
 
+/* Soundwave animation for TTS playing state */
+@keyframes soundwave {
+  0% { height: 20%; }
+  100% { height: 100%; }
+}
+
+.soundwave-bar {
+  animation: soundwave ease-in-out infinite alternate;
+}
+
 /* Dynamic viewport height for mobile Safari */
 @supports (height: 100dvh) {
   .h-screen {
