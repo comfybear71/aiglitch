@@ -14,6 +14,10 @@ export default function DirectorsPage() {
   const [directorSubmitting, setDirectorSubmitting] = useState(false);
   const [directorGenerating, setDirectorGenerating] = useState(false);
   const [directorAutoGenerating, setDirectorAutoGenerating] = useState(false);
+  const [extendingMovieId, setExtendingMovieId] = useState<string | null>(null);
+  const [extensionHint, setExtensionHint] = useState("");
+  const [extensionClips, setExtensionClips] = useState(2);
+  const [showExtendModal, setShowExtendModal] = useState<string | null>(null);
 
   const fetchDirectorData = useCallback(async () => {
     setDirectorLoading(true);
@@ -119,6 +123,138 @@ export default function DirectorsPage() {
       console.error("[directors] Auto-generate error:", err);
     }
     setDirectorAutoGenerating(false);
+  };
+
+  const extendMovie = async (movieId: string) => {
+    setExtendingMovieId(movieId);
+    setShowExtendModal(null);
+    setGenerationLog([`🎬 Extending movie with ${extensionClips} additional scene(s)...`]);
+    if (extensionHint) {
+      setGenerationLog(prev => [...prev, `  📝 Director's note: "${extensionHint}"`]);
+    }
+    setGenProgress({ label: `🎬 Extend`, current: 1, total: 3, startTime: Date.now() });
+
+    try {
+      // Phase 1: Submit extension request (generates continuation scenes + submits to Grok)
+      setGenerationLog(prev => [...prev, `  📜 Claude writing continuation screenplay...`]);
+      const submitRes = await fetch("/api/admin/extend-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          movieId,
+          extensionClips,
+          continuationHint: extensionHint || undefined,
+        }),
+      });
+      const submitData = await submitRes.json();
+
+      if (!submitRes.ok || !submitData.success) {
+        setGenerationLog(prev => [...prev, `  ❌ ${submitData.error || "Extension failed"}`]);
+        setGenProgress(null);
+        setExtendingMovieId(null);
+        return;
+      }
+
+      setGenerationLog(prev => [...prev, `  ✅ ${submitData.clipCount} extension scene(s) submitted`]);
+      if (submitData.lastFrameGenerated) {
+        setGenerationLog(prev => [...prev, `  🖼️ Last frame generated for visual continuity`]);
+      }
+      for (const scene of submitData.scenes || []) {
+        setGenerationLog(prev => [...prev, `  🎬 Scene ${scene.number}: "${scene.title}"`]);
+      }
+
+      // Phase 2: Poll extension jobs
+      const pendingJobs = (submitData.extensionJobs || []).filter(
+        (j: { requestId: string | null }) => j.requestId
+      );
+      const completedUrls: string[] = [];
+
+      // Collect any already-completed videos
+      for (const job of submitData.extensionJobs || []) {
+        if (job.videoUrl) completedUrls.push(job.videoUrl);
+      }
+
+      if (pendingJobs.length > 0) {
+        setGenerationLog(prev => [...prev, ``]);
+        setGenerationLog(prev => [...prev, `⏳ Polling ${pendingJobs.length} extension scene(s)...`]);
+        setGenProgress({ label: `🎬 Rendering`, current: completedUrls.length, total: submitData.clipCount, startTime: Date.now() });
+
+        const maxPolls = 60;
+        for (let attempt = 1; attempt <= maxPolls; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 10_000));
+          const timeStr = `${Math.floor((attempt * 10) / 60)}m ${(attempt * 10) % 60}s`;
+
+          for (const job of pendingJobs) {
+            if (job.done) continue;
+            try {
+              const pollRes = await fetch(`/api/admin/extend-video?requestId=${encodeURIComponent(job.requestId)}`);
+              const pollData = await pollRes.json();
+
+              if (pollData.status === "done" && pollData.videoUrl) {
+                job.done = true;
+                completedUrls.push(pollData.videoUrl);
+                setGenerationLog(prev => [...prev, `  🎉 Extension scene ${job.sceneNumber} DONE (${timeStr}) ${pollData.sizeMb ? `— ${pollData.sizeMb}MB` : ""}`]);
+              } else if (pollData.status === "failed" || pollData.status === "expired" || pollData.status === "moderation_failed") {
+                job.done = true;
+                setGenerationLog(prev => [...prev, `  ❌ Extension scene ${job.sceneNumber} ${pollData.status} (${timeStr})`]);
+              }
+            } catch {
+              // retry next round
+            }
+          }
+
+          setGenProgress({ label: `🎬 Extending`, current: completedUrls.length, total: submitData.clipCount, startTime: Date.now() - attempt * 10000 });
+
+          if (attempt % 3 === 0) {
+            setGenerationLog(prev => [...prev, `  🔄 ${timeStr}: ${completedUrls.length}/${submitData.clipCount} done`]);
+          }
+
+          if (pendingJobs.every((j: { done?: boolean }) => j.done)) break;
+        }
+      }
+
+      if (completedUrls.length === 0) {
+        setGenerationLog(prev => [...prev, `❌ No extension scenes rendered. Try again.`]);
+        setGenProgress(null);
+        setExtendingMovieId(null);
+        return;
+      }
+
+      // Phase 3: Stitch extension onto original
+      setGenerationLog(prev => [...prev, ``]);
+      setGenerationLog(prev => [...prev, `🧩 Stitching ${completedUrls.length} extension scene(s) onto original movie...`]);
+      setGenProgress({ label: `🧩 Stitching`, current: 1, total: 1, startTime: Date.now() });
+
+      const stitchRes = await fetch("/api/admin/extend-video", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          movieId,
+          originalVideoUrl: submitData.originalVideoUrl,
+          extensionVideoUrls: completedUrls,
+        }),
+      });
+      const stitchData = await stitchRes.json();
+
+      if (stitchRes.ok && stitchData.success) {
+        setGenerationLog(prev => [...prev, `✅ EXTENDED CUT COMPLETE! ${stitchData.totalClips} total clips → ${stitchData.sizeMb}MB`]);
+        setGenerationLog(prev => [...prev, `  📹 +${stitchData.extensionClips} extension scene(s) added`]);
+        if (stitchData.postUpdated) {
+          setGenerationLog(prev => [...prev, `  ✅ Post updated with extended video`]);
+        }
+        setGenerationLog(prev => [...prev, `🙏 Thank you Architect — Extended Cut is live!`]);
+      } else {
+        setGenerationLog(prev => [...prev, `❌ Stitch failed: ${stitchData.error || "unknown"}`]);
+      }
+
+      fetchDirectorData();
+    } catch (err) {
+      setGenerationLog(prev => [...prev, `❌ Extension error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+
+    setGenProgress(null);
+    setExtendingMovieId(null);
+    setExtensionHint("");
   };
 
   const triggerDirectorMovie = async () => {
@@ -500,6 +636,16 @@ export default function DirectorsPage() {
                               {isStitching ? "Stitching..." : "Stitch Now"}
                             </button>
                           )}
+                          {movie.status === "completed" && moviePostId && (
+                            <button
+                              onClick={() => setShowExtendModal(movie.id)}
+                              disabled={extendingMovieId === movie.id}
+                              className="text-emerald-400 hover:text-emerald-300 text-xs px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors font-bold disabled:opacity-50"
+                              title="Extend movie with Grok's Extend from Frame (up to 30s)"
+                            >
+                              {extendingMovieId === movie.id ? "Extending..." : "Extend 30s"}
+                            </button>
+                          )}
                           <button onClick={() => deleteDirectorMovie(movie.id)}
                             className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
                             title="Remove movie">
@@ -546,6 +692,81 @@ export default function DirectorsPage() {
                     </button>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Extend from Frame Modal */}
+          {showExtendModal && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-900 border border-emerald-500/30 rounded-xl p-5 max-w-md w-full shadow-2xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-2xl">🎬</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-emerald-400">Extend from Frame</h3>
+                    <p className="text-[10px] text-gray-500">Grok generates seamless continuation scenes</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Extension Scenes (10s each)</label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => setExtensionClips(n)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                            extensionClips === n
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50"
+                              : "bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-600"
+                          }`}
+                        >
+                          +{n * 10}s
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-600 mt-1">
+                      Cost: ~${(extensionClips * 10 * 0.05).toFixed(2)} ({extensionClips * 10}s @ $0.05/s)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Director&apos;s Note (optional)</label>
+                    <textarea
+                      value={extensionHint}
+                      onChange={(e) => setExtensionHint(e.target.value)}
+                      placeholder="e.g. 'Add an epic twist ending' or 'Show the aftermath'"
+                      rows={2}
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 resize-none"
+                    />
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-3 text-[10px] text-gray-500">
+                    <p className="font-bold text-gray-400 mb-1">How it works:</p>
+                    <ol className="list-decimal list-inside space-y-0.5">
+                      <li>Grok generates a &quot;last frame&quot; image from the movie</li>
+                      <li>Claude writes {extensionClips} continuation scene(s)</li>
+                      <li>Each scene is generated using Extend from Frame</li>
+                      <li>Extension clips are stitched onto the original</li>
+                    </ol>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setShowExtendModal(null); setExtensionHint(""); }}
+                      className="flex-1 py-2.5 bg-gray-800 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-700 transition-colors text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => extendMovie(showExtendModal)}
+                      className="flex-1 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-lg hover:opacity-90 transition-opacity text-xs"
+                    >
+                      Extend Movie
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
