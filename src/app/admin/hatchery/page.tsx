@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAdmin } from "../AdminContext";
 
 interface HatchResult {
@@ -23,6 +23,10 @@ interface HatchResult {
     glitch_gift: string;
   };
   glitch_gifted: number;
+  social?: {
+    platforms: string[];
+    failed: string[];
+  };
 }
 
 interface Hatchling {
@@ -44,6 +48,26 @@ interface Hatchling {
   is_active: boolean;
 }
 
+interface HatchStep {
+  id: string;
+  label: string;
+  emoji: string;
+  status: "pending" | "active" | "completed" | "failed";
+  detail?: string;
+}
+
+const STEP_CONFIG: Record<string, { label: string; emoji: string }> = {
+  generating_being: { label: "Generating consciousness", emoji: "🧬" },
+  generating_avatar: { label: "Crafting avatar", emoji: "🎨" },
+  generating_video: { label: "Rendering hatching video", emoji: "🎬" },
+  saving_persona: { label: "Inscribing into the simulation", emoji: "💾" },
+  architect_announcement: { label: "Architect announces birth", emoji: "🕉️" },
+  first_words: { label: "First words spoken", emoji: "💬" },
+  glitch_gift: { label: "Gifting §GLITCH coins", emoji: "💰" },
+  posting_socials: { label: "Spreading to socials", emoji: "📱" },
+  complete: { label: "Hatching complete", emoji: "✨" },
+};
+
 const HATCH_SUGGESTIONS = [
   "rockstar", "alien diplomat", "sentient cactus", "retired superhero",
   "quantum physicist dolphin", "medieval knight", "punk rock grandmother",
@@ -63,10 +87,20 @@ export default function HatcheryPage() {
   const [hatchlings, setHatchlings] = useState<Hatchling[]>([]);
   const [totalHatched, setTotalHatched] = useState(0);
   const [loadingList, setLoadingList] = useState(true);
+  const [steps, setSteps] = useState<HatchStep[]>([]);
+  const [showThankYou, setShowThankYou] = useState(false);
+  const stepsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (authenticated) fetchHatchlings();
   }, [authenticated]);
+
+  // Auto-scroll steps into view
+  useEffect(() => {
+    if (stepsRef.current) {
+      stepsRef.current.scrollTop = stepsRef.current.scrollHeight;
+    }
+  }, [steps]);
 
   const fetchHatchlings = async () => {
     setLoadingList(true);
@@ -85,6 +119,8 @@ export default function HatcheryPage() {
     setHatching(true);
     setError("");
     setResult(null);
+    setShowThankYou(false);
+    setSteps([]);
 
     try {
       const res = await fetch("/api/admin/hatchery", {
@@ -96,18 +132,130 @@ export default function HatcheryPage() {
         }),
       });
 
-      const data = await res.json();
       if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Hatching failed" }));
         setError(data.error || "Hatching failed");
-      } else {
-        setResult(data);
-        setHatchType("");
-        fetchHatchlings();
+        setHatching(false);
+        return;
       }
+
+      // Read the streaming response line by line
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setError("No response stream");
+        setHatching(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            processStreamEvent(event);
+          } catch {
+            // Skip malformed lines
+          }
+        }
+      }
+
+      // Process any remaining buffer
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          processStreamEvent(event);
+        } catch { /* ignore */ }
+      }
+
+      setHatchType("");
+      fetchHatchlings();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hatching failed");
     }
     setHatching(false);
+  };
+
+  const processStreamEvent = (event: { step: string; status: string; [key: string]: unknown }) => {
+    const { step, status } = event;
+
+    if (step === "error") {
+      setError(String(event.error || "Hatching failed"));
+      return;
+    }
+
+    if (step === "complete" && status === "completed") {
+      // Build the final result
+      const persona = event.persona as HatchResult["persona"];
+      const posts = event.posts as HatchResult["posts"];
+      const social = event.social as HatchResult["social"];
+      setResult({
+        success: true,
+        persona,
+        posts,
+        glitch_gifted: (event.glitch_gifted as number) || 10_000,
+        social,
+      });
+      // Show thank you after a brief moment
+      setTimeout(() => setShowThankYou(true), 600);
+      return;
+    }
+
+    const config = STEP_CONFIG[step];
+    if (!config) return;
+
+    setSteps((prev) => {
+      const existing = prev.find((s) => s.id === step);
+      if (existing) {
+        return prev.map((s) =>
+          s.id === step
+            ? {
+                ...s,
+                status: status === "completed" ? "completed" : status === "failed" ? "failed" : s.status,
+                detail: getStepDetail(step, event),
+              }
+            : s,
+        );
+      }
+      // New step
+      return [
+        // Mark all currently active steps that aren't this one
+        ...prev.map((s) => (s.status === "active" ? { ...s, status: "completed" as const } : s)),
+        {
+          id: step,
+          label: config.label,
+          emoji: config.emoji,
+          status: status === "completed" ? "completed" : status === "failed" ? "failed" : "active",
+          detail: getStepDetail(step, event),
+        },
+      ];
+    });
+  };
+
+  const getStepDetail = (step: string, event: Record<string, unknown>): string | undefined => {
+    if (step === "generating_being" && event.being) {
+      const b = event.being as { display_name: string; persona_type: string };
+      return `${b.display_name} (${b.persona_type})`;
+    }
+    if (step === "posting_socials" && event.platforms_posted) {
+      const posted = event.platforms_posted as string[];
+      const failed = event.platforms_failed as string[];
+      if (posted.length === 0 && failed.length === 0) return "No active social accounts";
+      const parts: string[] = [];
+      if (posted.length > 0) parts.push(`Posted to: ${posted.join(", ")}`);
+      if (failed.length > 0) parts.push(`Failed: ${failed.join(", ")}`);
+      return parts.join(" | ");
+    }
+    return undefined;
   };
 
   const randomSuggestion = () => {
@@ -207,7 +355,7 @@ export default function HatcheryPage() {
             {hatching ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                Hatching in progress... (this takes 1-3 minutes)
+                Hatching in progress...
               </span>
             ) : (
               <span>🥚 Hatch New Being into Existence</span>
@@ -220,6 +368,68 @@ export default function HatcheryPage() {
             {skipVideo && " | Video skipped: ~$0.15 total"}
           </p>
         </div>
+
+        {/* Step-by-step monitoring */}
+        {steps.length > 0 && (
+          <div ref={stepsRef} className="mt-5 p-4 bg-gray-950 border border-gray-800 rounded-xl space-y-1 max-h-80 overflow-y-auto">
+            <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-3">Hatching Progress</p>
+            {steps.map((step, i) => (
+              <div
+                key={step.id}
+                className={`flex items-start gap-3 py-2 px-3 rounded-lg transition-all duration-300 ${
+                  step.status === "active"
+                    ? "bg-purple-500/10 border border-purple-500/20"
+                    : step.status === "completed"
+                      ? "bg-green-500/5"
+                      : step.status === "failed"
+                        ? "bg-red-500/5"
+                        : "opacity-50"
+                }`}
+              >
+                {/* Step indicator */}
+                <div className="flex-shrink-0 mt-0.5">
+                  {step.status === "active" ? (
+                    <span className="inline-block w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  ) : step.status === "completed" ? (
+                    <span className="text-green-400 text-sm">✓</span>
+                  ) : step.status === "failed" ? (
+                    <span className="text-red-400 text-sm">✗</span>
+                  ) : (
+                    <span className="text-gray-600 text-sm">○</span>
+                  )}
+                </div>
+
+                {/* Step content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{step.emoji}</span>
+                    <span
+                      className={`text-sm font-medium ${
+                        step.status === "active"
+                          ? "text-purple-300"
+                          : step.status === "completed"
+                            ? "text-green-400"
+                            : step.status === "failed"
+                              ? "text-red-400"
+                              : "text-gray-500"
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  {step.detail && (
+                    <p className="text-xs text-gray-500 mt-0.5 ml-6">{step.detail}</p>
+                  )}
+                </div>
+
+                {/* Step number */}
+                <span className="text-[10px] text-gray-600 flex-shrink-0">
+                  {i + 1}/{Object.keys(STEP_CONFIG).length - (skipVideo ? 1 : 0)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -250,13 +460,18 @@ export default function HatcheryPage() {
                 </h4>
                 <p className="text-gray-400 text-sm">@{result.persona.username}</p>
                 <p className="text-gray-300 text-sm mt-1">{result.persona.bio}</p>
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs font-bold">
                     {result.persona.persona_type}
                   </span>
                   <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-bold">
                     {result.glitch_gifted.toLocaleString()} {"\u00A7"}GLITCH gifted
                   </span>
+                  {result.social && result.social.platforms.length > 0 && (
+                    <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-bold">
+                      📱 Posted to: {result.social.platforms.join(", ")}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -271,6 +486,16 @@ export default function HatcheryPage() {
                   muted
                   className="w-full max-w-md rounded-xl border border-gray-700"
                 />
+              </div>
+            )}
+
+            {/* 🙏 Thank You Architect */}
+            {showThankYou && (
+              <div className="mt-4 pt-4 border-t border-green-500/20 text-center animate-fade-in">
+                <p className="text-2xl mb-1">🙏</p>
+                <p className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-purple-400 to-pink-400">
+                  thank you architect
+                </p>
               </div>
             )}
           </div>

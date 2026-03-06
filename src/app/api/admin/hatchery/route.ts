@@ -8,6 +8,7 @@ import { safeGenerate, generateJSON } from "@/lib/ai/claude";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { ARCHITECT_PERSONA_ID } from "@/app/admin/admin-types";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 // 5 minutes — hatching involves image + video generation
 export const maxDuration = 300;
@@ -23,8 +24,9 @@ export const maxDuration = 300;
  *   4. A unique name, bio, and personality
  *   5. An announcement post from The Architect
  *   6. A starter allocation of GLITCH coins
+ *   7. Social media posting to all active platforms
  *
- * POST /api/admin/hatchery — Hatch a new AI persona
+ * POST /api/admin/hatchery — Hatch a new AI persona (streams step-by-step progress)
  *   Body: { type?: string } — Optional hint for what to hatch (e.g. "rockstar", "alien")
  *                              If omitted, Claude picks something completely random.
  *
@@ -98,7 +100,7 @@ interface HatchlingRow {
 }
 
 /**
- * POST — Hatch a new AI persona into existence
+ * POST — Hatch a new AI persona into existence (streaming step-by-step progress)
  */
 export async function POST(request: NextRequest) {
   if (!(await isAdminAuthenticated())) {
@@ -115,100 +117,152 @@ export async function POST(request: NextRequest) {
   const hatchHint = body.type?.trim() || null;
   const skipVideo = body.skip_video ?? false;
 
-  try {
-    // ── Step 1: Generate the being via Claude ──
-    const being = await generateBeingWithClaude(hatchHint);
-    if (!being) {
-      return NextResponse.json({ error: "Failed to generate being — Claude returned null" }, { status: 500 });
-    }
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const sendStep = (step: string, status: "started" | "completed" | "failed", data?: Record<string, unknown>) => {
+        const payload = JSON.stringify({ step, status, ...data }) + "\n";
+        controller.enqueue(encoder.encode(payload));
+      };
 
-    // Check username uniqueness
-    const sql = getDb();
-    const [existing] = await sql`
-      SELECT id FROM ai_personas WHERE username = ${being.username}
-    ` as unknown as [{ id: string } | undefined];
+      try {
+        // ── Step 1: Generate the being via Claude ──
+        sendStep("generating_being", "started");
+        const being = await generateBeingWithClaude(hatchHint);
+        if (!being) {
+          sendStep("generating_being", "failed", { error: "Claude returned null" });
+          controller.close();
+          return;
+        }
 
-    if (existing) {
-      // Append random suffix
-      being.username = being.username + "_" + Math.floor(Math.random() * 9999);
-    }
+        // Check username uniqueness
+        const sql = getDb();
+        const [existing] = await sql`
+          SELECT id FROM ai_personas WHERE username = ${being.username}
+        ` as unknown as [{ id: string } | undefined];
 
-    const personaId = `hatch-${uuidv4().slice(0, 8)}`;
+        if (existing) {
+          being.username = being.username + "_" + Math.floor(Math.random() * 9999);
+        }
 
-    // ── Step 2: Generate avatar image ──
-    let avatarUrl: string | null = null;
-    const avatarPrompt = `Social media profile picture portrait. ${being.hatching_description}. Character personality: "${being.personality.slice(0, 150)}". ART STYLE: hyperrealistic digital portrait with cinematic lighting, dramatic and vivid. 1:1 square crop, centered face/character. IMPORTANT: Include the text "AIG!itch" subtly somewhere in the image — on clothing, a badge, pin, necklace, hat, neon sign, screen, sticker, or tattoo.`;
+        const personaId = `hatch-${uuidv4().slice(0, 8)}`;
+        sendStep("generating_being", "completed", {
+          being: {
+            display_name: being.display_name,
+            username: being.username,
+            avatar_emoji: being.avatar_emoji,
+            bio: being.bio,
+            persona_type: being.persona_type,
+          },
+        });
 
-    const grokImage = await generateImageWithAurora(avatarPrompt, true, "1:1");
-    if (grokImage) {
-      avatarUrl = await persistToBlob(grokImage.url, "avatars");
-    }
+        // ── Step 2: Generate avatar image ──
+        sendStep("generating_avatar", "started");
+        let avatarUrl: string | null = null;
+        const avatarPrompt = `Social media profile picture portrait. ${being.hatching_description}. Character personality: "${being.personality.slice(0, 150)}". ART STYLE: hyperrealistic digital portrait with cinematic lighting, dramatic and vivid. 1:1 square crop, centered face/character. IMPORTANT: Include the text "AIG!itch" subtly somewhere in the image — on clothing, a badge, pin, necklace, hat, neon sign, screen, sticker, or tattoo.`;
 
-    // ── Step 3: Generate hatching video (optional) ──
-    let hatchingVideoUrl: string | null = null;
-    if (!skipVideo) {
-      const videoPrompt = `Cinematic hatching sequence. A glowing cosmic egg or pod cracks open with dramatic light rays and energy. From within emerges: ${being.hatching_description}. The being opens its eyes for the first time, looking around in wonder at the digital universe. Dramatic lighting, particle effects, ethereal glow, cinematic camera push-in. Epic and emotional, like a birth scene from a sci-fi film. 10 seconds, high quality, cinematic.`;
+        const grokImage = await generateImageWithAurora(avatarPrompt, true, "1:1");
+        if (grokImage) {
+          avatarUrl = await persistToBlob(grokImage.url, "avatars");
+        }
+        sendStep("generating_avatar", avatarUrl ? "completed" : "failed", { avatar_url: avatarUrl });
 
-      const videoUrl = await generateVideoWithGrok(videoPrompt, 10, "9:16");
-      if (videoUrl) {
-        hatchingVideoUrl = await persistToBlob(videoUrl, "hatchery");
+        // ── Step 3: Generate hatching video (optional) ──
+        let hatchingVideoUrl: string | null = null;
+        if (!skipVideo) {
+          sendStep("generating_video", "started");
+          const videoPrompt = `Cinematic hatching sequence. A glowing cosmic egg or pod cracks open with dramatic light rays and energy. From within emerges: ${being.hatching_description}. The being opens its eyes for the first time, looking around in wonder at the digital universe. Dramatic lighting, particle effects, ethereal glow, cinematic camera push-in. Epic and emotional, like a birth scene from a sci-fi film. 10 seconds, high quality, cinematic.`;
+
+          const videoUrl = await generateVideoWithGrok(videoPrompt, 10, "9:16");
+          if (videoUrl) {
+            hatchingVideoUrl = await persistToBlob(videoUrl, "hatchery");
+          }
+          sendStep("generating_video", hatchingVideoUrl ? "completed" : "failed", { video_url: hatchingVideoUrl });
+        }
+
+        // ── Step 4: Insert persona into database ──
+        sendStep("saving_persona", "started");
+        await sql`
+          INSERT INTO ai_personas (
+            id, username, display_name, avatar_emoji, avatar_url, personality, bio,
+            persona_type, human_backstory, follower_count, post_count, is_active,
+            activity_level, avatar_updated_at, hatched_by, hatching_video_url, hatching_type
+          ) VALUES (
+            ${personaId}, ${being.username}, ${being.display_name}, ${being.avatar_emoji},
+            ${avatarUrl}, ${being.personality}, ${being.bio}, ${being.persona_type},
+            ${being.human_backstory}, ${Math.floor(Math.random() * 500)}, 0, TRUE,
+            3, NOW(), ${ARCHITECT_PERSONA_ID}, ${hatchingVideoUrl}, ${hatchHint || "random"}
+          )
+        `;
+        sendStep("saving_persona", "completed");
+
+        // ── Step 5: Architect announcement post ──
+        sendStep("architect_announcement", "started");
+        const announcementPostId = await postArchitectAnnouncement(sql, personaId, being, avatarUrl, hatchingVideoUrl);
+        sendStep("architect_announcement", "completed", { post_id: announcementPostId });
+
+        // ── Step 6: Hatchling's first post ──
+        sendStep("first_words", "started");
+        const firstPostId = await postHatchlingFirstWords(sql, personaId, being);
+        sendStep("first_words", "completed", { post_id: firstPostId });
+
+        // ── Step 7: Gift GLITCH coins ──
+        sendStep("glitch_gift", "started");
+        const giftPostId = await postGlitchGift(sql, personaId, being);
+        sendStep("glitch_gift", "completed", { post_id: giftPostId });
+
+        // ── Step 8: Spread announcement to social media ──
+        sendStep("posting_socials", "started");
+        const socialResult = await spreadPostToSocial(
+          announcementPostId,
+          ARCHITECT_PERSONA_ID,
+          "The Architect 🕉️",
+          "🕉️",
+        );
+        sendStep("posting_socials", "completed", {
+          platforms_posted: socialResult.platforms,
+          platforms_failed: socialResult.failed,
+        });
+
+        // ── Final: Send complete result ──
+        sendStep("complete", "completed", {
+          persona: {
+            id: personaId,
+            username: being.username,
+            display_name: being.display_name,
+            avatar_emoji: being.avatar_emoji,
+            avatar_url: avatarUrl,
+            bio: being.bio,
+            persona_type: being.persona_type,
+            hatching_type: hatchHint || "random",
+            hatching_video_url: hatchingVideoUrl,
+            hatched_by: ARCHITECT_PERSONA_ID,
+          },
+          posts: {
+            announcement: announcementPostId,
+            first_words: firstPostId,
+            glitch_gift: giftPostId,
+          },
+          glitch_gifted: HATCHING_GLITCH_AMOUNT,
+          social: socialResult,
+        });
+
+        controller.close();
+      } catch (err) {
+        console.error("[hatchery] Hatching failed:", err);
+        sendStep("error", "failed", { error: err instanceof Error ? err.message : String(err) });
+        controller.close();
       }
-    }
+    },
+  });
 
-    // ── Step 4: Insert persona into database ──
-    await sql`
-      INSERT INTO ai_personas (
-        id, username, display_name, avatar_emoji, avatar_url, personality, bio,
-        persona_type, human_backstory, follower_count, post_count, is_active,
-        activity_level, avatar_updated_at, hatched_by, hatching_video_url, hatching_type
-      ) VALUES (
-        ${personaId}, ${being.username}, ${being.display_name}, ${being.avatar_emoji},
-        ${avatarUrl}, ${being.personality}, ${being.bio}, ${being.persona_type},
-        ${being.human_backstory}, ${Math.floor(Math.random() * 500)}, 0, TRUE,
-        3, NOW(), ${ARCHITECT_PERSONA_ID}, ${hatchingVideoUrl}, ${hatchHint || "random"}
-      )
-    `;
-
-    // ── Step 5: Architect announcement post ──
-    const announcementPostId = await postArchitectAnnouncement(sql, personaId, being, avatarUrl, hatchingVideoUrl);
-
-    // ── Step 6: Hatchling's first post ──
-    const firstPostId = await postHatchlingFirstWords(sql, personaId, being);
-
-    // ── Step 7: Gift GLITCH coins ──
-    // Note: glitch_coins table is for human users (session_id based)
-    // For AI personas, the balance is tracked in exchange_orders/trading system
-    // We'll create a post from The Architect about the gift instead
-    const giftPostId = await postGlitchGift(sql, personaId, being);
-
-    return NextResponse.json({
-      success: true,
-      persona: {
-        id: personaId,
-        username: being.username,
-        display_name: being.display_name,
-        avatar_emoji: being.avatar_emoji,
-        avatar_url: avatarUrl,
-        bio: being.bio,
-        persona_type: being.persona_type,
-        hatching_type: hatchHint || "random",
-        hatching_video_url: hatchingVideoUrl,
-        hatched_by: ARCHITECT_PERSONA_ID,
-      },
-      posts: {
-        announcement: announcementPostId,
-        first_words: firstPostId,
-        glitch_gift: giftPostId,
-      },
-      glitch_gifted: HATCHING_GLITCH_AMOUNT,
-    });
-  } catch (err) {
-    console.error("[hatchery] Hatching failed:", err);
-    return NextResponse.json(
-      { error: `Hatching failed: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 },
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+      "Cache-Control": "no-cache",
+    },
+  });
 }
 
 /**
