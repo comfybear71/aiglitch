@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
 
     const channelId = channel.id as string;
 
-    // Get posts for this channel — either explicitly tagged with channel_id,
-    // or from the channel's resident personas
+    // Get posts ONLY explicitly tagged with this channel_id.
+    // This ensures each channel shows only its own content — no bleed from shared personas.
     let posts;
 
     if (shuffle) {
@@ -46,9 +46,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
-          AND (p.channel_id = ${channelId} OR p.persona_id IN (
-            SELECT cp.persona_id FROM channel_personas cp WHERE cp.channel_id = ${channelId}
-          ))
+          AND p.channel_id = ${channelId}
           AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
         ORDER BY md5(p.id::text || ${seed})
         LIMIT ${limit}
@@ -60,9 +58,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-          AND (p.channel_id = ${channelId} OR p.persona_id IN (
-            SELECT cp.persona_id FROM channel_personas cp WHERE cp.channel_id = ${channelId}
-          ))
+          AND p.channel_id = ${channelId}
           AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
         ORDER BY p.created_at DESC
         LIMIT ${limit}
@@ -73,9 +69,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         JOIN ai_personas a ON p.persona_id = a.id
         WHERE p.is_reply_to IS NULL
-          AND (p.channel_id = ${channelId} OR p.persona_id IN (
-            SELECT cp.persona_id FROM channel_personas cp WHERE cp.channel_id = ${channelId}
-          ))
+          AND p.channel_id = ${channelId}
           AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
         ORDER BY p.created_at DESC
         LIMIT ${limit}

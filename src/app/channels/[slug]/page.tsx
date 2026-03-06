@@ -3,18 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import PostCard from "@/components/PostCard";
 import { useSession } from "@/hooks/useSession";
 import type { Post } from "@/lib/types";
-
-interface ChannelPersona {
-  persona_id: string;
-  username: string;
-  display_name: string;
-  avatar_emoji: string;
-  avatar_url: string | null;
-  role: string;
-}
 
 interface ChannelInfo {
   id: string;
@@ -24,11 +14,7 @@ interface ChannelInfo {
   emoji: string;
   subscriber_count: number;
   subscribed: boolean;
-  content_rules: { tone?: string; topics?: string[] };
-  schedule: { postsPerDay?: number };
 }
-
-const RENDER_WINDOW = 3;
 
 export default function ChannelPage() {
   const params = useParams();
@@ -36,49 +22,43 @@ export default function ChannelPage() {
   const { sessionId } = useSession();
 
   const [channel, setChannel] = useState<ChannelInfo | null>(null);
-  const [personas, setPersonas] = useState<ChannelPersona[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [visibleIdx, setVisibleIdx] = useState(0);
+  const [currentIdx, setCurrentIdx] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [showInfo, setShowInfo] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [showControls, setShowControls] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const allPostsRef = useRef<Post[]>([]);
+
+  const currentPost = posts[currentIdx] || null;
 
   const fetchPosts = useCallback(async (cursor?: string) => {
     const p = new URLSearchParams({ slug });
     p.set("limit", "10");
     if (sessionId) p.set("session_id", sessionId);
     if (cursor) p.set("cursor", cursor);
-
     const res = await fetch(`/api/channels/feed?${p}`);
     return res.json();
   }, [slug, sessionId]);
 
   useEffect(() => {
     setLoading(true);
-
-    // Fetch feed and personas in parallel
-    const feedPromise = fetchPosts();
-    const personasPromise = fetch(`/api/channels/feed?slug=${encodeURIComponent(slug)}&limit=0`)
-      .then(r => r.json())
-      .catch(() => null);
-
-    feedPromise.then(data => {
+    fetchPosts().then(data => {
       setChannel(data.channel || null);
       const newPosts = data.posts || [];
       setPosts(newPosts);
       allPostsRef.current = newPosts;
       setNextCursor(data.nextCursor);
       setLoading(false);
-
-      // Extract personas from channel data if available
-      if (data.personas) setPersonas(data.personas);
     }).catch(() => setLoading(false));
   }, [slug, sessionId, fetchPosts]);
 
-  // Load more posts when near the end
+  // Auto-load more when near end
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
@@ -92,12 +72,108 @@ export default function ChannelPage() {
     setLoadingMore(false);
   }, [nextCursor, loadingMore, fetchPosts]);
 
-  // Auto-load more when scrolling near end
   useEffect(() => {
-    if (visibleIdx >= posts.length - 3 && nextCursor && !loadingMore) {
+    if (currentIdx >= posts.length - 3 && nextCursor && !loadingMore) {
       loadMore();
     }
-  }, [visibleIdx, posts.length, nextCursor, loadMore, loadingMore]);
+  }, [currentIdx, posts.length, nextCursor, loadMore, loadingMore]);
+
+  // Play current video
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid || !currentPost?.media_url || currentPost.media_type !== "video") return;
+    vid.src = currentPost.media_url;
+    vid.load();
+    vid.play().catch(() => {
+      // Autoplay blocked — try muted
+      vid.muted = true;
+      setMuted(true);
+      vid.play().catch(() => {});
+    });
+    setPaused(false);
+    setProgress(0);
+  }, [currentIdx, currentPost?.media_url, currentPost?.media_type]);
+
+  // Track progress
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    const onTime = () => {
+      if (vid.duration > 0) setProgress(vid.currentTime / vid.duration);
+    };
+    const onEnded = () => {
+      // Auto-advance to next video
+      if (currentIdx < posts.length - 1) {
+        setCurrentIdx(prev => prev + 1);
+      } else {
+        // Loop back to start
+        setCurrentIdx(0);
+      }
+    };
+    vid.addEventListener("timeupdate", onTime);
+    vid.addEventListener("ended", onEnded);
+    return () => {
+      vid.removeEventListener("timeupdate", onTime);
+      vid.removeEventListener("ended", onEnded);
+    };
+  }, [currentIdx, posts.length]);
+
+  // Auto-hide controls
+  const showControlsBriefly = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+  }, []);
+
+  useEffect(() => {
+    showControlsBriefly();
+    return () => { if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current); };
+  }, [showControlsBriefly]);
+
+  // Prefetch next video
+  useEffect(() => {
+    const next = posts[currentIdx + 1];
+    if (next?.media_url && next.media_type === "video") {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "video";
+      link.href = next.media_url;
+      link.setAttribute("data-channel-prefetch", "1");
+      document.head.appendChild(link);
+      return () => { link.remove(); };
+    }
+  }, [currentIdx, posts]);
+
+  const togglePlay = () => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    if (vid.paused) {
+      vid.play().catch(() => {});
+      setPaused(false);
+    } else {
+      vid.pause();
+      setPaused(true);
+    }
+    showControlsBriefly();
+  };
+
+  const toggleMute = () => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    vid.muted = !vid.muted;
+    setMuted(vid.muted);
+    showControlsBriefly();
+  };
+
+  const goNext = () => {
+    if (currentIdx < posts.length - 1) setCurrentIdx(prev => prev + 1);
+    showControlsBriefly();
+  };
+
+  const goPrev = () => {
+    if (currentIdx > 0) setCurrentIdx(prev => prev - 1);
+    showControlsBriefly();
+  };
 
   const toggleSubscribe = async () => {
     if (!sessionId || !channel) return;
@@ -114,55 +190,9 @@ export default function ChannelPage() {
     });
   };
 
-  // Track visible index via scroll + virtualization
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    let ticking = false;
-    const handleScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const scrollTop = container.scrollTop;
-        const itemHeight = container.clientHeight;
-        if (itemHeight > 0) {
-          setVisibleIdx(Math.round(scrollTop / itemHeight));
-        }
-        ticking = false;
-      });
-    };
-
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Prefetch next videos
-  useEffect(() => {
-    if (posts.length === 0) return;
-    const ahead = posts.slice(visibleIdx + 1, visibleIdx + 3);
-    const existing = document.querySelectorAll("link[data-channel-prefetch]");
-    existing.forEach(el => el.remove());
-
-    for (const post of ahead) {
-      if (post.media_url && post.media_type === "video") {
-        const link = document.createElement("link");
-        link.rel = "preload";
-        link.as = "video";
-        link.href = post.media_url;
-        link.setAttribute("data-channel-prefetch", "1");
-        document.head.appendChild(link);
-      }
-    }
-
-    return () => {
-      document.querySelectorAll("link[data-channel-prefetch]").forEach(el => el.remove());
-    };
-  }, [visibleIdx, posts]);
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="h-[100dvh] bg-black text-white flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4 animate-pulse">📺</div>
           <p className="text-gray-400 font-mono text-sm">Tuning in...</p>
@@ -173,182 +203,168 @@ export default function ChannelPage() {
 
   if (!channel) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="h-[100dvh] bg-black text-white flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">📺</div>
           <p className="text-gray-400 mb-4">Channel not found</p>
-          <Link href="/channels" className="text-cyan-400 hover:text-cyan-300">
-            Browse channels
-          </Link>
+          <Link href="/channels" className="text-cyan-400 hover:text-cyan-300">Browse channels</Link>
         </div>
       </div>
     );
   }
 
+  const isVideo = currentPost?.media_type === "video" && currentPost?.media_url;
+  const isImage = currentPost?.media_type === "image" && currentPost?.media_url;
+
   return (
-    <div className="h-[100dvh] bg-black text-white flex flex-col overflow-hidden">
-      {/* Floating channel header */}
-      <div className="fixed top-0 left-0 right-0 z-40 pointer-events-none">
-        <div className="flex items-center justify-between px-4 py-2 pointer-events-auto">
-          <div className="flex items-center gap-2">
-            <Link href="/channels" className="text-white/80 hover:text-white transition-colors drop-shadow-lg">
+    <div
+      className="h-[100dvh] bg-black text-white flex flex-col overflow-hidden relative select-none"
+      onClick={showControlsBriefly}
+    >
+      {/* Full-screen video/image */}
+      <div className="absolute inset-0">
+        {isVideo && (
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            playsInline
+            muted={muted}
+            onClick={togglePlay}
+          />
+        )}
+        {isImage && (
+          <img
+            src={currentPost.media_url!}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        )}
+        {!isVideo && !isImage && (
+          <div className="w-full h-full flex items-center justify-center bg-gray-900">
+            <div className="text-center px-8">
+              <div className="text-4xl mb-3">{channel.emoji}</div>
+              <p className="text-gray-300 text-sm">{currentPost?.content || "No content"}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Top bar — channel info + back */}
+      <div className={`relative z-10 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
+        <div className="flex items-center justify-between px-4 pt-3 pb-8 bg-gradient-to-b from-black/70 to-transparent">
+          <div className="flex items-center gap-3">
+            <Link href="/channels" className="text-white/80 hover:text-white">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
             </Link>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm">
-              <span className="text-sm">{channel.emoji}</span>
-              <span className="text-xs font-bold text-white">{channel.name}</span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">{channel.emoji}</span>
+                <span className="text-sm font-bold">{channel.name}</span>
+                <span className="text-[8px] px-1 py-0.5 rounded bg-red-600 text-white font-bold ml-1">LIVE</span>
+              </div>
+              <p className="text-[10px] text-gray-400">{channel.subscriber_count} subscribers</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleSubscribe}
-              className={`text-[10px] px-2.5 py-1 rounded-full font-bold backdrop-blur-sm transition-all active:scale-95 ${
-                channel.subscribed
-                  ? "bg-gray-500/60 text-white"
-                  : "bg-cyan-500/80 text-white hover:bg-cyan-400/80"
-              }`}
-            >
-              {channel.subscribed ? "Subscribed" : "Subscribe"}
-            </button>
-            <button
-              onClick={() => setShowInfo(!showInfo)}
-              className="text-white/80 hover:text-white transition-colors drop-shadow-lg"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+          <button
+            onClick={toggleSubscribe}
+            className={`text-[11px] px-3 py-1 rounded-full font-bold transition-all active:scale-95 ${
+              channel.subscribed
+                ? "bg-white/10 text-white"
+                : "bg-cyan-500 text-black"
+            }`}
+          >
+            {channel.subscribed ? "Subscribed" : "Subscribe"}
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom controls */}
+      <div className={`absolute bottom-0 left-0 right-0 z-10 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
+        {/* Progress bar */}
+        {isVideo && (
+          <div className="px-4 mb-2">
+            <div className="h-0.5 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-cyan-400 rounded-full transition-[width] duration-200"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="px-4 pb-6 pt-4 bg-gradient-to-t from-black/80 to-transparent">
+          {/* Episode info */}
+          {currentPost && (
+            <p className="text-xs text-gray-300 mb-3 line-clamp-2">
+              <span className="text-white font-bold">@{currentPost.username}</span>{" "}
+              {currentPost.content?.split("\n")[0]?.slice(0, 100)}
+            </p>
+          )}
+
+          {/* Controls row */}
+          <div className="flex items-center justify-between">
+            {/* Left: prev / play / next */}
+            <div className="flex items-center gap-4">
+              <button onClick={goPrev} disabled={currentIdx === 0} className="text-white/70 hover:text-white disabled:opacity-30">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                </svg>
+              </button>
+
+              <button onClick={togglePlay} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 active:scale-95 transition-all">
+                {paused ? (
+                  <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                  </svg>
+                )}
+              </button>
+
+              <button onClick={goNext} disabled={currentIdx >= posts.length - 1} className="text-white/70 hover:text-white disabled:opacity-30">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Center: episode counter */}
+            <span className="text-[10px] text-gray-500 font-mono">
+              {currentIdx + 1} / {posts.length}
+            </span>
+
+            {/* Right: volume */}
+            <button onClick={toggleMute} className="text-white/70 hover:text-white">
+              {muted ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                </svg>
+              )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Channel info modal */}
-      {showInfo && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowInfo(false)}>
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="text-center mb-4">
-              <div className="text-4xl mb-2">{channel.emoji}</div>
-              <h2 className="text-lg font-black text-white">{channel.name}</h2>
-              <p className="text-xs text-gray-400 mt-1">{channel.description}</p>
-            </div>
-
-            <div className="flex justify-center gap-6 mb-4 text-center">
-              <div>
-                <p className="text-lg font-bold text-white">{channel.subscriber_count}</p>
-                <p className="text-[10px] text-gray-500">Subscribers</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-white">{posts.length}+</p>
-                <p className="text-[10px] text-gray-500">Posts</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-white">{personas.length}</p>
-                <p className="text-[10px] text-gray-500">Personas</p>
-              </div>
-            </div>
-
-            {/* Hosts */}
-            {personas.filter(p => p.role === "host").length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">Hosts</h3>
-                <div className="flex flex-wrap gap-2">
-                  {personas.filter(p => p.role === "host").map(p => (
-                    <Link
-                      key={p.persona_id}
-                      href={`/profile/${p.username}`}
-                      onClick={() => setShowInfo(false)}
-                      className="flex items-center gap-1.5 px-2 py-1 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors"
-                    >
-                      {p.avatar_url ? (
-                        <img src={p.avatar_url} alt="" className="w-5 h-5 rounded-full" />
-                      ) : (
-                        <span className="text-sm">{p.avatar_emoji}</span>
-                      )}
-                      <span className="text-xs text-gray-300">@{p.username}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Regular personas */}
-            {personas.filter(p => p.role !== "host").length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">Cast</h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {personas.filter(p => p.role !== "host").map(p => (
-                    <Link
-                      key={p.persona_id}
-                      href={`/profile/${p.username}`}
-                      onClick={() => setShowInfo(false)}
-                      className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-800/50 rounded-full hover:bg-gray-700/50 transition-colors"
-                    >
-                      {p.avatar_url ? (
-                        <img src={p.avatar_url} alt="" className="w-4 h-4 rounded-full" />
-                      ) : (
-                        <span className="text-xs">{p.avatar_emoji}</span>
-                      )}
-                      <span className="text-[10px] text-gray-400">@{p.username}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setShowInfo(false)}
-              className="w-full py-2.5 bg-cyan-500 text-black font-bold rounded-xl hover:bg-cyan-400 transition-colors text-sm"
-            >
-              Watch Now
-            </button>
+      {/* Paused overlay */}
+      {paused && (
+        <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none">
+          <div className="w-16 h-16 rounded-full bg-black/40 flex items-center justify-center">
+            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
           </div>
         </div>
       )}
-
-      {/* Posts feed — vertical snap-scroll with virtualization */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-y-auto snap-y snap-mandatory"
-        style={{ scrollSnapType: "y mandatory" }}
-      >
-        {posts.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-4xl mb-3">{channel.emoji}</div>
-              <p className="text-gray-400 text-sm mb-1">No posts in this channel yet</p>
-              <p className="text-gray-600 text-xs">Content is coming soon...</p>
-            </div>
-          </div>
-        ) : (
-          posts.map((post, idx) => {
-            const isNearVisible = Math.abs(idx - visibleIdx) <= RENDER_WINDOW;
-            return (
-              <div
-                key={post.id}
-                className="h-[calc(100dvh)] w-full snap-start snap-always"
-              >
-                {isNearVisible ? (
-                  <PostCard
-                    post={post}
-                    sessionId={sessionId || ""}
-                  />
-                ) : (
-                  <div className="h-full w-full bg-black" />
-                )}
-              </div>
-            );
-          })
-        )}
-
-        {loadingMore && (
-          <div className="h-20 flex items-center justify-center">
-            <div className="text-gray-500 text-xs animate-pulse">Loading more...</div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

@@ -58,21 +58,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get latest media thumbnail per channel (one query for all channels)
+    // Get latest media thumbnail per channel — only from explicitly tagged posts
     const thumbnailsByChannel = new Map<string, string>();
     if (channelIds.length > 0) {
       const thumbs = await sql`
-        SELECT DISTINCT ON (sub.cid) sub.cid, sub.media_url FROM (
-          SELECT COALESCE(p.channel_id, cp.channel_id) as cid, p.media_url
-          FROM posts p
-          LEFT JOIN channel_personas cp ON p.persona_id = cp.persona_id
-          WHERE p.is_reply_to IS NULL
-            AND p.media_url IS NOT NULL
-            AND p.media_type IN ('image', 'video')
-            AND (p.channel_id = ANY(${channelIds}) OR cp.channel_id = ANY(${channelIds}))
-            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-          ORDER BY COALESCE(p.channel_id, cp.channel_id), p.created_at DESC
-        ) sub
+        SELECT DISTINCT ON (p.channel_id) p.channel_id as cid, p.media_url
+        FROM posts p
+        WHERE p.is_reply_to IS NULL
+          AND p.media_url IS NOT NULL
+          AND p.media_type IN ('image', 'video')
+          AND p.channel_id = ANY(${channelIds})
+          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+        ORDER BY p.channel_id, p.created_at DESC
       `;
       for (const t of thumbs) {
         thumbnailsByChannel.set(t.cid as string, t.media_url as string);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSession } from "@/hooks/useSession";
 
@@ -178,14 +178,49 @@ function ChannelCard({
     );
   }
 
-  // Full grid card
+  // Full grid card with video thumbnail + animated title overlay
+  const isVideo = channel.thumbnail?.endsWith(".mp4") || channel.thumbnail?.includes("video");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Auto-play/pause video thumbnails when visible using IntersectionObserver
+  useEffect(() => {
+    const card = cardRef.current;
+    const vid = videoRef.current;
+    if (!card || !vid) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          vid.play().catch(() => {});
+        } else {
+          vid.pause();
+        }
+      },
+      { threshold: 0.3 }
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Link
       href={`/channels/${channel.slug}`}
       className="group block"
     >
-      <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-800">
-        {channel.thumbnail ? (
+      <div ref={cardRef} className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-900">
+        {/* Video or image thumbnail underneath */}
+        {channel.thumbnail && isVideo ? (
+          <video
+            ref={videoRef}
+            src={channel.thumbnail}
+            className="w-full h-full object-cover"
+            muted
+            loop
+            playsInline
+            preload="metadata"
+          />
+        ) : channel.thumbnail ? (
           <img
             src={channel.thumbnail}
             alt=""
@@ -193,17 +228,29 @@ function ChannelCard({
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-cyan-900/30 to-purple-900/30 flex items-center justify-center">
-            <span className="text-4xl">{channel.emoji}</span>
-          </div>
+          <div className="w-full h-full bg-gradient-to-br from-gray-900 to-gray-800" />
         )}
 
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+        {/* Dark overlay for title readability */}
+        <div className="absolute inset-0 bg-black/40 group-hover:bg-black/30 transition-colors" />
 
-        {/* LIVE badge */}
-        <div className="absolute top-2 left-2">
-          <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-600 text-white font-bold">LIVE</span>
+        {/* Animated title overlay — centered, big and bold */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
+          <div className="text-center">
+            <span className="text-2xl mb-1 block drop-shadow-lg">{channel.emoji}</span>
+            <h3
+              className="text-[15px] font-black text-white uppercase tracking-wider drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] leading-tight"
+              style={{
+                textShadow: "0 0 20px rgba(0,200,255,0.3), 0 2px 4px rgba(0,0,0,0.8)",
+              }}
+            >
+              {channel.name}
+            </h3>
+            <div className="mt-1.5 flex items-center justify-center gap-2">
+              <span className="text-[8px] px-1.5 py-0.5 rounded bg-red-600 text-white font-bold animate-pulse">LIVE</span>
+              <span className="text-[9px] text-gray-300/80">{channel.actual_post_count} episodes</span>
+            </div>
+          </div>
         </div>
 
         {/* Subscribe button */}
@@ -218,37 +265,20 @@ function ChannelCard({
           {channel.subscribed ? "✓" : "+"}
         </button>
 
-        {/* Bottom info */}
-        <div className="absolute bottom-0 left-0 right-0 p-2.5">
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-sm">{channel.emoji}</span>
-            <h3 className="text-[13px] font-bold text-white truncate">{channel.name}</h3>
+        {/* Bottom: host avatars */}
+        {hosts.length > 0 && (
+          <div className="absolute bottom-2 left-2 flex -space-x-1.5">
+            {hosts.map(p => (
+              <div key={p.persona_id} className="w-5 h-5 rounded-full border border-black overflow-hidden bg-gray-700">
+                {p.avatar_url ? (
+                  <img src={p.avatar_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <span className="w-full h-full flex items-center justify-center text-[10px]">{p.avatar_emoji}</span>
+                )}
+              </div>
+            ))}
           </div>
-          <p className="text-[10px] text-gray-300 line-clamp-1 mb-1.5">{channel.description}</p>
-
-          <div className="flex items-center justify-between">
-            {/* Host avatars */}
-            <div className="flex -space-x-1.5">
-              {hosts.map(p => (
-                <div key={p.persona_id} className="w-5 h-5 rounded-full border border-black overflow-hidden bg-gray-700">
-                  {p.avatar_url ? (
-                    <img src={p.avatar_url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <span className="w-full h-full flex items-center justify-center text-[10px]">{p.avatar_emoji}</span>
-                  )}
-                </div>
-              ))}
-              {channel.persona_count > hosts.length && (
-                <div className="w-5 h-5 rounded-full border border-black bg-gray-800 flex items-center justify-center">
-                  <span className="text-[8px] text-gray-400">+{channel.persona_count - hosts.length}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Stats */}
-            <span className="text-[9px] text-gray-500">{channel.actual_post_count} posts</span>
-          </div>
-        </div>
+        )}
       </div>
     </Link>
   );
