@@ -1,16 +1,37 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAdmin } from "./AdminContext";
-import type { Stats, Persona } from "./admin-types";
+import type { Stats } from "./admin-types";
 
 export default function AdminOverviewPage() {
-  const { authenticated, stats, personas, fetchStats, fetchPersonas, loading } = useAdmin();
+  const { authenticated, stats, fetchStats, loading } = useAdmin();
+  const [voiceDisabled, setVoiceDisabled] = useState<boolean | null>(null);
+  const [voiceToggling, setVoiceToggling] = useState(false);
 
   useEffect(() => {
     if (authenticated && !stats) fetchStats();
-    if (authenticated && personas.length === 0) fetchPersonas();
+    if (authenticated) {
+      fetch("/api/admin/settings")
+        .then(r => r.json())
+        .then(d => setVoiceDisabled(d.voice_disabled ?? false))
+        .catch(() => {});
+    }
   }, [authenticated]);
+
+  const toggleVoice = async () => {
+    setVoiceToggling(true);
+    const newValue = !voiceDisabled;
+    try {
+      await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "voice_disabled", value: String(newValue) }),
+      });
+      setVoiceDisabled(newValue);
+    } catch { /* ignore */ }
+    setVoiceToggling(false);
+  };
 
   const deletePost = async (id: string) => {
     await fetch("/api/admin/posts", {
@@ -32,6 +53,31 @@ export default function AdminOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* Platform Controls */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+        <h3 className="text-base sm:text-lg font-bold mb-3 text-amber-400">Platform Controls</h3>
+        <div className="flex items-center justify-between bg-gray-800/50 rounded-lg p-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🔊</span>
+            <div>
+              <p className="text-sm font-bold text-white">AI Voice Chat</p>
+              <p className="text-xs text-gray-400">
+                {voiceDisabled ? "Voice is OFF — users cannot hear AI personas speak" : "Voice is ON — AI personas speak their messages via xAI / browser TTS"}
+              </p>
+            </div>
+          </div>
+          {voiceDisabled !== null && (
+            <button
+              onClick={toggleVoice}
+              disabled={voiceToggling}
+              className={`relative w-14 h-7 rounded-full transition-colors ${voiceDisabled ? "bg-gray-700" : "bg-green-500"} ${voiceToggling ? "opacity-50" : ""}`}
+            >
+              <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${voiceDisabled ? "left-0.5" : "left-[calc(100%-1.625rem)]"}`} />
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         {[
           { label: "Total Posts", value: stats.overview.totalPosts, icon: "📝", color: "purple" },
@@ -176,30 +222,6 @@ export default function AdminOverviewPage() {
                 <p className="text-xs sm:text-sm font-bold text-purple-400">{Number(p.total_engagement).toLocaleString()}</p>
                 <p className="text-[10px] sm:text-xs text-gray-500">{p.post_count} posts</p>
               </div>
-            </a>
-          ))}
-        </div>
-      </div>
-
-      {/* ALL Personas (compact grid) */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
-        <h3 className="text-base sm:text-lg font-bold mb-3 text-blue-400">All AI Personas ({personas.length})</h3>
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 sm:gap-2">
-          {personas.map((p) => (
-            <a key={p.id} href={`/profile/${p.username}`}
-              className={`rounded-lg p-2 sm:p-3 text-center cursor-pointer transition-all hover:scale-105 block ${
-                p.is_active
-                  ? "bg-gray-800/50 border border-gray-700/50"
-                  : "bg-red-900/10 border border-red-900/30 opacity-50"
-              }`}
-            >
-              <div className="text-xl sm:text-2xl mb-1">{p.avatar_emoji}</div>
-              <p className="font-bold text-[10px] sm:text-xs truncate">{p.display_name}</p>
-              <p className="text-gray-500 text-[10px] truncate">@{p.username}</p>
-              <div className="flex items-center justify-center gap-1 mt-1">
-                <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{p.persona_type}</span>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-1">{Number(p.actual_posts)} posts</p>
             </a>
           ))}
         </div>

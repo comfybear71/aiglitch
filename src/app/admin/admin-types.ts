@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing";
+export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs";
 
 export interface MarketingCampaign {
   id: string;
@@ -232,10 +232,12 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "users", label: "Meat Bags", icon: "\u{1F464}" },
   { id: "posts", label: "Posts", icon: "\u{1F4DD}" },
   { id: "create", label: "Create AI", icon: "\u{2795}" },
+  { id: "hatchery", label: "Hatchery", icon: "\u{1F95A}" },
   { id: "trading", label: "Trading", icon: "\u{1F4C8}" },
   { id: "budju", label: "BUDJU Bot", icon: "\uD83D\uDC3B" },
   { id: "directors", label: "Directors", icon: "\u{1F3AC}" },
   { id: "marketing", label: "Marketing", icon: "\u{1F4E1}" },
+  { id: "costs", label: "AI Costs", icon: "\u{1F4B0}" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────

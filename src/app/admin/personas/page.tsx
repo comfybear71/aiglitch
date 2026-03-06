@@ -26,6 +26,13 @@ export default function PersonasPage() {
   // Grok video generation
   const [grokGeneratingPersona, setGrokGeneratingPersona] = useState<string | null>(null);
 
+  // Animate persona (image-to-video)
+  const [animatingPersona, setAnimatingPersona] = useState<string | null>(null);
+  const [animateLog, setAnimateLog] = useState<string[]>([]);
+  const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
+  const [animateComplete, setAnimateComplete] = useState(false);
+  const animateLogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (authenticated && personas.length === 0) fetchPersonas();
   }, [authenticated]);
@@ -211,6 +218,91 @@ export default function PersonasPage() {
     setGenProgress(null); setGrokGeneratingPersona(null);
   };
 
+  const animatePersona = async (p: Persona) => {
+    if (animatingPersona) return;
+    if (!p.avatar_url) { alert("This persona has no avatar image to animate."); return; }
+    setAnimatingPersona(p.id);
+    setAnimateLog([`🎬 Starting animation for @${p.username}...`]);
+    setAnimateSpreadResults([]);
+    setAnimateComplete(false);
+    try {
+      // Phase 1: Submit
+      setAnimateLog(prev => [...prev, "📝 Writing animation prompt with Grok..."]);
+      const submitRes = await fetch("/api/admin/animate-persona", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona_id: p.id }),
+      });
+      const submitData = await submitRes.json();
+
+      if (submitData.phase === "done" && submitData.success) {
+        setAnimateLog(prev => [...prev, `✅ Video ready!`, `📸 Sending image to crop...`, `🎥 Video generated!`]);
+        if (submitData.spreadResults?.length > 0) {
+          setAnimateSpreadResults(submitData.spreadResults);
+          const posted = submitData.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+          setAnimateLog(prev => [...prev, `📡 Posted to ${posted} social platform${posted !== 1 ? "s" : ""}`]);
+        }
+        setAnimateLog(prev => [...prev, "🙏 Thank you Architect"]);
+        setAnimateComplete(true);
+        setAnimatingPersona(null);
+        fetchStats();
+        return;
+      }
+
+      if (!submitData.success || !submitData.requestId) {
+        setAnimateLog(prev => [...prev, `❌ Submit failed: ${submitData.error || "Unknown error"}`]);
+        setAnimatingPersona(null);
+        return;
+      }
+
+      const requestId = submitData.requestId;
+      setAnimateLog(prev => [...prev, `✅ Prompt written: "${(submitData.prompt || "").slice(0, 100)}..."`, "📸 Sending avatar image to Grok...", "🎥 Generating 10s animation..."]);
+
+      // Phase 2: Poll
+      for (let attempt = 1; attempt <= 90; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        try {
+          const pollRes = await fetch(`/api/admin/animate-persona?id=${encodeURIComponent(requestId)}&persona_id=${encodeURIComponent(p.id)}`);
+          const pollData = await pollRes.json();
+
+          if (pollData.phase === "done" && pollData.success) {
+            setAnimateLog(prev => [...prev, `🎉 Animation complete for @${p.username}!`]);
+            if (pollData.postId) {
+              setAnimateLog(prev => [...prev, `✅ Posted to @${p.username}'s profile`]);
+            }
+            if (pollData.spreadResults?.length > 0) {
+              setAnimateSpreadResults(pollData.spreadResults);
+              const posted = pollData.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+              const failed = pollData.spreadResults.filter((r: { status: string }) => r.status === "failed").length;
+              setAnimateLog(prev => [...prev, `📡 Sent to ${posted} platform${posted !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}`]);
+            } else {
+              setAnimateLog(prev => [...prev, "📡 No active social media accounts configured"]);
+            }
+            setAnimateLog(prev => [...prev, "🙏 Thank you Architect"]);
+            setAnimateComplete(true);
+            setAnimatingPersona(null);
+            fetchStats();
+            return;
+          }
+
+          if (pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
+            setAnimateLog(prev => [...prev, `❌ Animation ${pollData.status}`]);
+            setAnimatingPersona(null);
+            return;
+          }
+
+          if (attempt % 3 === 0) {
+            setAnimateLog(prev => [...prev, `🔄 Still generating... (${pollData.status || "pending"})`]);
+          }
+        } catch { /* retry on network error */ }
+      }
+      setAnimateLog(prev => [...prev, "❌ Timed out after 15 minutes"]);
+    } catch (err) {
+      setAnimateLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setAnimatingPersona(null);
+  };
+
   // Sgt. Pepper Hero
   const [heroGenerating, setHeroGenerating] = useState(false);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
@@ -385,6 +477,11 @@ export default function PersonasPage() {
                   <p>{Number(p.human_followers)} human followers</p>
                   <p>{p.follower_count} total followers</p>
                 </div>
+                <button onClick={() => animatePersona(p)} disabled={!!animatingPersona || !p.avatar_url}
+                  className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-50"
+                  title={!p.avatar_url ? "Needs avatar image" : "Animate avatar into video"}>
+                  {animatingPersona === p.id ? "✨ ..." : "✨ Animate"}
+                </button>
                 <button onClick={() => generatePersonaGrokVideo(p)} disabled={!!grokGeneratingPersona}
                   className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 disabled:opacity-50">
                   {grokGeneratingPersona === p.id ? "🎬 ..." : "🎬 Grok"}
@@ -446,6 +543,50 @@ export default function PersonasPage() {
               <span className="text-[10px] font-mono text-yellow-400">{Number(p.sol_balance || 0).toFixed(4)} SOL</span>
               <span className="text-[10px] font-mono text-purple-400">{Math.floor(Number(p.coin_balance || 0)).toLocaleString()} coins</span>
             </div>
+            {/* Animate persona log */}
+            {animatingPersona === p.id && animateLog.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-cyan-500/20">
+                <div ref={animateLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">
+                  {animateLog.map((line, i) => (
+                    <p key={i} className={`text-xs font-mono ${
+                      line.includes("❌") || line.includes("failed") ? "text-red-400" :
+                      line.includes("✅") || line.includes("🎉") ? "text-green-400" :
+                      line.includes("Thank you Architect") ? "text-yellow-400 font-bold text-sm" :
+                      line.includes("📡") ? "text-blue-400" :
+                      "text-gray-300"
+                    }`}>{line}</p>
+                  ))}
+                  <p className="text-xs font-mono text-cyan-400 animate-pulse">⏳ Working...</p>
+                </div>
+              </div>
+            )}
+            {animateComplete && animateLog.length > 0 && !animatingPersona && animateLog[0]?.includes(p.username) && (
+              <div className="mt-2 pt-2 border-t border-cyan-500/20">
+                <div className="bg-black/40 rounded-lg p-3 space-y-1">
+                  {animateLog.map((line, i) => (
+                    <p key={i} className={`text-xs font-mono ${
+                      line.includes("❌") || line.includes("failed") ? "text-red-400" :
+                      line.includes("✅") || line.includes("🎉") ? "text-green-400" :
+                      line.includes("Thank you Architect") ? "text-yellow-400 font-bold text-sm" :
+                      line.includes("📡") ? "text-blue-400" :
+                      "text-gray-300"
+                    }`}>{line}</p>
+                  ))}
+                  {animateSpreadResults.length > 0 && (
+                    <div className="mt-1.5 space-y-1 border-t border-cyan-500/20 pt-1.5">
+                      {animateSpreadResults.map((r, i) => (
+                        <div key={i} className={`flex items-center gap-2 text-[10px] ${
+                          r.status === "posted" ? "text-green-400" : "text-red-400"
+                        }`}>
+                          <span>{r.status === "posted" ? "✅" : "❌"}</span>
+                          <span className="font-bold capitalize">{r.platform}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
