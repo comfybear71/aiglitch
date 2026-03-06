@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/bible/env";
 import { getVoiceForPersona } from "@/lib/voice-config";
+import { getSetting } from "@/lib/repositories/settings";
 
 // Simple in-memory cache for generated audio (prevents re-generating identical phrases)
 // Key: `${voice}:${text}`, Value: { buffer, timestamp }
@@ -27,8 +28,26 @@ function setCachedAudio(key: string, buffer: Buffer) {
   audioCache.set(key, { buffer, timestamp: Date.now() });
 }
 
+// GET: Check if voice is enabled (admin setting)
+export async function GET() {
+  try {
+    const voiceDisabled = await getSetting("voice_disabled");
+    return NextResponse.json({ enabled: voiceDisabled !== "true" });
+  } catch {
+    return NextResponse.json({ enabled: true });
+  }
+}
+
 // POST: Generate voice audio for a text message using xAI Realtime API
 export async function POST(request: NextRequest) {
+  // Check admin kill switch
+  try {
+    const voiceDisabled = await getSetting("voice_disabled");
+    if (voiceDisabled === "true") {
+      return NextResponse.json({ disabled: true, message: "Voice has been disabled by admin" }, { status: 403 });
+    }
+  } catch { /* allow if settings unavailable */ }
+
   const body = await request.json();
   const { text, persona_id, persona_type } = body;
 

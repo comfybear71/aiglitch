@@ -45,6 +45,8 @@ export default function ChatPage() {
     }
     return true;
   });
+  // Admin can globally disable voice
+  const [voiceAdminDisabled, setVoiceAdminDisabled] = useState(false);
   const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   // Track if user has interacted (required for iOS Safari autoplay)
@@ -53,8 +55,9 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Pre-created Audio element for iOS Safari — must be "unlocked" by user gesture
-  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Reusable Audio element for iOS Safari — reusing the same element that was
+  // "unlocked" by a user gesture avoids the autoplay restriction
+  const iosAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -78,30 +81,42 @@ export default function ChatPage() {
     localStorage.setItem("aiglitch-voice", voiceEnabled ? "on" : "off");
   }, [voiceEnabled]);
 
-  // iOS Safari audio unlock: create a silent audio context on first user interaction
-  // This allows subsequent programmatic audio.play() calls to work
+  // Check admin voice setting on mount
+  useEffect(() => {
+    fetch("/api/voice")
+      .then(res => res.json())
+      .then(data => { if (data.enabled === false) setVoiceAdminDisabled(true); })
+      .catch(() => {});
+  }, []);
+
+  // iOS Safari audio unlock: play a silent sound on first user interaction.
+  // We create and reuse a single HTMLAudioElement so subsequent .play() calls
+  // on that same element are trusted by Safari's autoplay policy.
   useEffect(() => {
     const unlock = () => {
       setUserHasInteracted(true);
-      // Create and play a silent audio buffer to unlock iOS audio
-      if (!silentAudioRef.current) {
+      if (!iosAudioRef.current) {
         try {
+          // Create AudioContext to unlock Web Audio
           const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
           const buf = ctx.createBuffer(1, 1, 22050);
           const source = ctx.createBufferSource();
           source.buffer = buf;
           source.connect(ctx.destination);
           source.start(0);
-          // Also unlock HTMLAudioElement
+
+          // Create a reusable Audio element — this element is now "user-gesture unlocked"
           const audio = new Audio();
           audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-          audio.play().catch(() => {});
-          silentAudioRef.current = audio;
+          audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+          }).catch(() => {});
+          iosAudioRef.current = audio;
         } catch { /* ignore */ }
       }
-      document.removeEventListener("touchstart", unlock);
-      document.removeEventListener("click", unlock);
     };
+    // Listen for both touch and click to cover all iOS interaction types
     document.addEventListener("touchstart", unlock, { once: true });
     document.addEventListener("click", unlock, { once: true });
     return () => {
@@ -130,11 +145,47 @@ export default function ChatPage() {
     setLoading(false);
   };
 
+  // Play voice for a message using the iOS-unlocked Audio element when available
+  const playAudioBlob = useCallback(async (blob: Blob, msgId: string, text: string) => {
+    const url = URL.createObjectURL(blob);
+    // On iOS Safari, reuse the gesture-unlocked Audio element for reliable playback
+    const audio = iosAudioRef.current || new Audio();
+    audio.src = url;
+    audioRef.current = audio;
+    setPlayingMsgId(msgId);
+    setLoadingVoice(null);
+
+    audio.onended = () => {
+      setPlayingMsgId(null);
+      URL.revokeObjectURL(url);
+      audioRef.current = null;
+    };
+    audio.onerror = () => {
+      setPlayingMsgId(null);
+      URL.revokeObjectURL(url);
+      audioRef.current = null;
+    };
+
+    try {
+      await audio.play();
+    } catch {
+      // If audio.play() still fails (e.g. old iOS), fall back to browser TTS
+      URL.revokeObjectURL(url);
+      audioRef.current = null;
+      setPlayingMsgId(null);
+      setLoadingVoice(null);
+      useBrowserTTS(msgId, text, "Sal");
+    }
+  }, []);
+
   // Play voice for a message
   const playVoice = useCallback(async (msgId: string, text: string) => {
+    if (voiceAdminDisabled) return;
+
     // Stop any current playback
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.src = "";
       audioRef.current = null;
     }
     window.speechSynthesis?.cancel();
@@ -157,36 +208,17 @@ export default function ChatPage() {
         }),
       });
 
+      if (res.status === 403) {
+        // Admin disabled voice
+        setVoiceAdminDisabled(true);
+        setLoadingVoice(null);
+        return;
+      }
+
       if (res.headers.get("content-type")?.includes("audio/")) {
         // Got real audio from xAI
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        setPlayingMsgId(msgId);
-        setLoadingVoice(null);
-
-        audio.onended = () => {
-          setPlayingMsgId(null);
-          URL.revokeObjectURL(url);
-          audioRef.current = null;
-        };
-        audio.onerror = () => {
-          setPlayingMsgId(null);
-          URL.revokeObjectURL(url);
-          audioRef.current = null;
-        };
-        try {
-          await audio.play();
-        } catch {
-          // iOS Safari may reject autoplay — fall back to browser TTS
-          URL.revokeObjectURL(url);
-          audioRef.current = null;
-          setPlayingMsgId(null);
-          setLoadingVoice(null);
-          useBrowserTTS(msgId, text, "Sal");
-          return;
-        }
+        await playAudioBlob(blob, msgId, text);
       } else {
         // Fallback to browser speech synthesis
         const data = await res.json();
@@ -197,7 +229,7 @@ export default function ChatPage() {
       // Fallback to browser TTS
       useBrowserTTS(msgId, text, "Sal");
     }
-  }, [personaId, persona?.persona_type, playingMsgId]);
+  }, [personaId, persona?.persona_type, playingMsgId, voiceAdminDisabled, playAudioBlob]);
 
   const useBrowserTTS = (msgId: string, text: string, voiceName: string) => {
     if (!window.speechSynthesis) {
@@ -255,7 +287,7 @@ export default function ChatPage() {
   // Auto-play voice for new AI messages (only after user interaction on iOS)
   const lastAutoPlayedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!voiceEnabled || !persona || messages.length === 0) return;
+    if (!voiceEnabled || voiceAdminDisabled || !persona || messages.length === 0) return;
     // On iOS Safari, audio autoplay only works after user gesture — skip if no interaction yet
     if (!userHasInteracted) return;
     const lastMsg = messages[messages.length - 1];
@@ -264,7 +296,7 @@ export default function ChatPage() {
       // Small delay so the message renders first
       setTimeout(() => playVoice(lastMsg.id, lastMsg.content), 300);
     }
-  }, [messages, voiceEnabled, persona, playVoice, userHasInteracted]);
+  }, [messages, voiceEnabled, voiceAdminDisabled, persona, playVoice, userHasInteracted]);
 
   const sendMessage = async () => {
     if (!inputText.trim() || sending) return;
@@ -309,6 +341,8 @@ export default function ChatPage() {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
+  const voiceAvailable = voiceEnabled && !voiceAdminDisabled;
+
   if (loading) {
     return (
       <div className="min-h-[100dvh] bg-black flex items-center justify-center">
@@ -339,29 +373,31 @@ export default function ChatPage() {
             </Link>
           )}
           {/* Voice toggle */}
-          <button
-            onClick={() => {
-              setVoiceEnabled(!voiceEnabled);
-              if (voiceEnabled) {
-                window.speechSynthesis?.cancel();
-                if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-                setPlayingMsgId(null);
-              }
-            }}
-            className={`p-1.5 rounded-full transition-colors ${voiceEnabled ? "bg-purple-500/20 text-purple-400" : "bg-gray-800 text-gray-600"}`}
-            title={voiceEnabled ? "Voice ON — tap to mute" : "Voice OFF — tap to enable"}
-          >
-            {voiceEnabled ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-              </svg>
-            )}
-          </button>
+          {!voiceAdminDisabled && (
+            <button
+              onClick={() => {
+                setVoiceEnabled(!voiceEnabled);
+                if (voiceEnabled) {
+                  window.speechSynthesis?.cancel();
+                  if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+                  setPlayingMsgId(null);
+                }
+              }}
+              className={`p-2 rounded-full transition-colors ${voiceEnabled ? "bg-purple-500/20 text-purple-400" : "bg-gray-800 text-gray-600"}`}
+              title={voiceEnabled ? "Voice ON — tap to mute" : "Voice OFF — tap to enable"}
+            >
+              {voiceEnabled ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+              )}
+            </button>
+          )}
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-mono">ONLINE</span>
         </div>
       </div>
@@ -376,7 +412,7 @@ export default function ChatPage() {
             <h2 className="text-white font-bold text-base mb-1">{persona.display_name}</h2>
             <p className="text-gray-500 text-xs mb-2 px-8">{persona.bio}</p>
             <p className="text-purple-400 text-[10px] mb-4">
-              {voiceEnabled ? "🔊 Voice enabled — I'll speak my replies" : "🔇 Voice muted"}
+              {voiceAdminDisabled ? "🔇 Voice disabled" : voiceEnabled ? "🔊 Voice enabled — I'll speak my replies" : "🔇 Voice muted"}
             </p>
             <p className="text-gray-600 text-xs">Send a message to start chatting!</p>
 
@@ -414,37 +450,46 @@ export default function ChatPage() {
               }`}>
                 {msg.content}
               </div>
-              <div className={`flex items-center gap-1.5 mt-0.5 ${msg.sender_type === "human" ? "justify-end" : "justify-start"}`}>
+              <div className={`flex items-center gap-2 mt-1 ${msg.sender_type === "human" ? "justify-end" : "justify-start"}`}>
                 <p className="text-[9px] text-gray-600">
                   {formatTime(msg.created_at)}
                 </p>
-                {/* Speaker button for AI messages */}
-                {msg.sender_type === "ai" && !msg.id.startsWith("temp-") && (
+                {/* Voice play button for AI messages — prominent and tappable */}
+                {msg.sender_type === "ai" && !msg.id.startsWith("temp-") && voiceAvailable && (
                   <button
                     onClick={() => playVoice(msg.id, msg.content)}
                     disabled={loadingVoice === msg.id}
-                    className={`p-0.5 rounded transition-colors ${
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all active:scale-95 ${
                       playingMsgId === msg.id
-                        ? "text-purple-400 animate-pulse"
+                        ? "bg-purple-500/30 text-purple-300 animate-pulse"
                         : loadingVoice === msg.id
-                          ? "text-gray-600 animate-pulse"
-                          : "text-gray-600 hover:text-purple-400"
+                          ? "bg-gray-800 text-gray-500 animate-pulse"
+                          : "bg-gray-800/80 text-gray-400 hover:bg-purple-500/20 hover:text-purple-400"
                     }`}
                     title={playingMsgId === msg.id ? "Stop" : "Play voice"}
                   >
                     {loadingVoice === msg.id ? (
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <circle cx="12" cy="12" r="10" strokeDasharray="60" strokeDashoffset="20" />
-                      </svg>
+                      <>
+                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" d="M12 2a10 10 0 110 20 10 10 0 010-20" strokeDasharray="50" strokeDashoffset="15" />
+                        </svg>
+                        <span>loading...</span>
+                      </>
                     ) : playingMsgId === msg.id ? (
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <rect x="6" y="4" width="4" height="16" rx="1" />
-                        <rect x="14" y="4" width="4" height="16" rx="1" />
-                      </svg>
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <rect x="6" y="4" width="4" height="16" rx="1" />
+                          <rect x="14" y="4" width="4" height="16" rx="1" />
+                        </svg>
+                        <span>playing</span>
+                      </>
                     ) : (
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M11 5L6 9H2v6h4l5 4V5z" />
-                      </svg>
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M11 5L6 9H2v6h4l5 4V5z" />
+                        </svg>
+                        <span>listen</span>
+                      </>
                     )}
                   </button>
                 )}

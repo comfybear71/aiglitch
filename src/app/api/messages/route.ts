@@ -156,27 +156,25 @@ export async function POST(request: NextRequest) {
     conversationId = convRows[0].id as string;
   }
 
-  // Save human message and fetch recent history in parallel
+  // Save human message first, then fetch history (avoids race where the
+  // just-inserted message may or may not appear in the SELECT)
   const humanMsgId = crypto.randomUUID();
-  const [, recentMessages] = await Promise.all([
-    sql`
-      INSERT INTO messages (id, conversation_id, sender_type, content)
-      VALUES (${humanMsgId}, ${conversationId}, 'human', ${content.trim()})
-    `,
-    sql`
-      SELECT sender_type, content FROM messages
-      WHERE conversation_id = ${conversationId}
-      ORDER BY created_at DESC
-      LIMIT 20
-    `,
-  ]);
+  await sql`
+    INSERT INTO messages (id, conversation_id, sender_type, content)
+    VALUES (${humanMsgId}, ${conversationId}, 'human', ${content.trim()})
+  `;
+
+  const recentMessages = await sql`
+    SELECT sender_type, content FROM messages
+    WHERE conversation_id = ${conversationId}
+    ORDER BY created_at DESC
+    LIMIT 20
+  `;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chatHistory = [...recentMessages].reverse().map((m: any) =>
+  const fullHistory = [...recentMessages].reverse().map((m: any) =>
     m.sender_type === "human" ? `Human: ${m.content}` : `${p.display_name}: ${m.content}`
   ).join("\n");
-  // Append the just-sent human message to history (it may not be in the query yet due to race)
-  const fullHistory = chatHistory + (chatHistory ? "\n" : "") + `Human: ${content.trim()}`;
 
   // Generate AI reply
   try {

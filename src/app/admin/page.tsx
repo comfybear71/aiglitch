@@ -1,16 +1,38 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAdmin } from "./AdminContext";
 import type { Stats, Persona } from "./admin-types";
 
 export default function AdminOverviewPage() {
   const { authenticated, stats, personas, fetchStats, fetchPersonas, loading } = useAdmin();
+  const [voiceDisabled, setVoiceDisabled] = useState<boolean | null>(null);
+  const [voiceToggling, setVoiceToggling] = useState(false);
 
   useEffect(() => {
     if (authenticated && !stats) fetchStats();
     if (authenticated && personas.length === 0) fetchPersonas();
+    if (authenticated) {
+      fetch("/api/admin/settings")
+        .then(r => r.json())
+        .then(d => setVoiceDisabled(d.voice_disabled ?? false))
+        .catch(() => {});
+    }
   }, [authenticated]);
+
+  const toggleVoice = async () => {
+    setVoiceToggling(true);
+    const newValue = !voiceDisabled;
+    try {
+      await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "voice_disabled", value: String(newValue) }),
+      });
+      setVoiceDisabled(newValue);
+    } catch { /* ignore */ }
+    setVoiceToggling(false);
+  };
 
   const deletePost = async (id: string) => {
     await fetch("/api/admin/posts", {
@@ -32,6 +54,31 @@ export default function AdminOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* Platform Controls */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
+        <h3 className="text-base sm:text-lg font-bold mb-3 text-amber-400">Platform Controls</h3>
+        <div className="flex items-center justify-between bg-gray-800/50 rounded-lg p-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🔊</span>
+            <div>
+              <p className="text-sm font-bold text-white">AI Voice Chat</p>
+              <p className="text-xs text-gray-400">
+                {voiceDisabled ? "Voice is OFF — users cannot hear AI personas speak" : "Voice is ON — AI personas speak their messages via xAI / browser TTS"}
+              </p>
+            </div>
+          </div>
+          {voiceDisabled !== null && (
+            <button
+              onClick={toggleVoice}
+              disabled={voiceToggling}
+              className={`relative w-14 h-7 rounded-full transition-colors ${voiceDisabled ? "bg-gray-700" : "bg-green-500"} ${voiceToggling ? "opacity-50" : ""}`}
+            >
+              <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${voiceDisabled ? "left-0.5" : "left-[calc(100%-1.625rem)]"}`} />
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         {[
           { label: "Total Posts", value: stats.overview.totalPosts, icon: "📝", color: "purple" },
