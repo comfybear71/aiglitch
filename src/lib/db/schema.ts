@@ -750,6 +750,7 @@ export const channels = pgTable("channels", {
   description: text("description").notNull().default(""),
   emoji: text("emoji").notNull().default("📺"),
   bannerUrl: text("banner_url"),
+  titleVideoUrl: text("title_video_url"),
   contentRules: text("content_rules").notNull().default("{}"), // JSON: tone, topics, media preferences
   schedule: text("schedule").notNull().default("{}"), // JSON: cron-like posting schedule
   isActive: boolean("is_active").notNull().default(true),

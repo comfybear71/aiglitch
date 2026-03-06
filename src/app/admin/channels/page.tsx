@@ -20,6 +20,7 @@ export default function AdminChannelsPage() {
   const [editingChannel, setEditingChannel] = useState<AdminChannel | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
+  const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
 
   const fetchChannels = useCallback(async () => {
     const res = await fetch("/api/admin/channels");
@@ -206,6 +207,69 @@ export default function AdminChannelsPage() {
     pollAllClips(channelId, channelSlug, updated, attempt + 1);
   };
 
+  const generateTitle = async (channel: AdminChannel) => {
+    const title = prompt(`Enter title text for ${channel.name}:`, channel.name);
+    if (!title) return;
+
+    setTitleJobs(prev => ({ ...prev, [channel.id]: { status: "generating", message: "Submitting..." } }));
+
+    try {
+      const res = await fetch("/api/admin/channels/generate-title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: channel.id, channel_slug: channel.slug, title }),
+      });
+      const data = await res.json();
+
+      if (data.phase === "done" && data.success) {
+        setTitleJobs(prev => ({ ...prev, [channel.id]: { status: "done", message: "Title ready!" } }));
+        fetchChannels();
+        return;
+      }
+
+      if (!data.success || !data.requestId) {
+        setTitleJobs(prev => ({ ...prev, [channel.id]: { status: "error", message: data.error || "Submit failed" } }));
+        return;
+      }
+
+      setTitleJobs(prev => ({ ...prev, [channel.id]: { status: "polling", message: "Generating title..." } }));
+      pollTitle(channel.id, data.requestId, channel.slug);
+    } catch {
+      setTitleJobs(prev => ({ ...prev, [channel.id]: { status: "error", message: "Network error" } }));
+    }
+  };
+
+  const pollTitle = async (channelId: string, requestId: string, channelSlug: string, attempt = 0) => {
+    if (attempt > 60) {
+      setTitleJobs(prev => ({ ...prev, [channelId]: { status: "error", message: "Timed out" } }));
+      return;
+    }
+
+    await new Promise(r => setTimeout(r, 10000));
+
+    try {
+      const res = await fetch(
+        `/api/admin/channels/generate-title?id=${requestId}&channel_id=${channelId}&channel_slug=${channelSlug}`
+      );
+      const data = await res.json();
+
+      if (data.phase === "done") {
+        if (data.success) {
+          setTitleJobs(prev => ({ ...prev, [channelId]: { status: "done", message: "Title ready!" } }));
+          fetchChannels();
+        } else {
+          setTitleJobs(prev => ({ ...prev, [channelId]: { status: "error", message: data.status || "Failed" } }));
+        }
+        return;
+      }
+
+      setTitleJobs(prev => ({ ...prev, [channelId]: { status: "polling", message: `Generating... (${attempt * 10}s)` } }));
+      pollTitle(channelId, requestId, channelSlug, attempt + 1);
+    } catch {
+      pollTitle(channelId, requestId, channelSlug, attempt + 1);
+    }
+  };
+
   const deleteChannel = async (id: string) => {
     if (!confirm("Delete this channel? Posts will be unlinked.")) return;
     await fetch("/api/admin/channels", {
@@ -374,6 +438,43 @@ export default function AdminChannelsPage() {
                       className="px-2.5 py-1 text-[10px] font-bold bg-purple-500/20 text-purple-300 rounded-full hover:bg-purple-500/30 transition-colors"
                     >
                       🎬 Generate 30s Promo
+                    </button>
+                  );
+                })()}
+
+                {/* Generate Title Animation */}
+                {(() => {
+                  const tj = titleJobs[channel.id];
+                  if (tj?.status === "generating" || tj?.status === "polling") {
+                    return (
+                      <div className="flex items-center gap-1 px-2 py-0.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        <span className="text-[10px] text-amber-400">{tj.message}</span>
+                      </div>
+                    );
+                  }
+                  if (tj?.status === "done") {
+                    return (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-green-400 px-1">✓ Title ready</span>
+                        <button onClick={() => generateTitle(channel)} className="text-[10px] text-gray-500 hover:text-gray-300 px-1">Regen</button>
+                      </div>
+                    );
+                  }
+                  if (tj?.status === "error") {
+                    return (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-red-400 px-1">{tj.message}</span>
+                        <button onClick={() => generateTitle(channel)} className="text-[10px] text-cyan-400 hover:text-cyan-300 px-1">Retry</button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      onClick={() => generateTitle(channel)}
+                      className="px-2.5 py-1 text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full hover:bg-amber-500/30 transition-colors"
+                    >
+                      ✨ Generate Title
                     </button>
                   );
                 })()}

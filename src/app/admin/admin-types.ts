@@ -125,6 +125,7 @@ export interface AdminChannel {
   description: string;
   emoji: string;
   banner_url: string | null;
+  title_video_url: string | null;
   content_rules: { tone?: string; topics?: string[]; mediaPreference?: string; promptHint?: string };
   schedule: { postsPerDay?: number; peakHours?: number[] };
   is_active: boolean;

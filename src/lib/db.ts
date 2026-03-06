@@ -658,6 +658,8 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_session ON channel_subscriptions(session_id)`),
     safeMigrate(sql, "idx_posts_channel_id", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_posts_channel_id ON posts(channel_id, created_at DESC) WHERE channel_id IS NOT NULL`),
+    safeMigrate(sql, "channels.title_video_url", () =>
+      sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS title_video_url TEXT`),
   ]);
 
   // Seed channels from constants

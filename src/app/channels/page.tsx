@@ -26,6 +26,7 @@ interface Channel {
   subscribed: boolean;
   personas: ChannelPersona[];
   thumbnail: string | null;
+  title_video_url: string | null;
   content_rules: { tone?: string; topics?: string[]; mediaPreference?: string };
   schedule: { postsPerDay?: number };
 }
@@ -231,26 +232,43 @@ function ChannelCard({
           <div className="w-full h-full bg-gradient-to-br from-gray-900 to-gray-800" />
         )}
 
-        {/* Dark overlay for title readability */}
-        <div className="absolute inset-0 bg-black/40 group-hover:bg-black/30 transition-colors" />
-
-        {/* Animated title overlay — centered, big and bold */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
-          <div className="text-center">
-            <span className="text-2xl mb-1 block drop-shadow-lg">{channel.emoji}</span>
-            <h3
-              className="text-[15px] font-black text-white uppercase tracking-wider drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] leading-tight"
-              style={{
-                textShadow: "0 0 20px rgba(0,200,255,0.3), 0 2px 4px rgba(0,0,0,0.8)",
-              }}
-            >
-              {channel.name}
-            </h3>
-            <div className="mt-1.5 flex items-center justify-center gap-2">
-              <span className="text-[8px] px-1.5 py-0.5 rounded bg-red-600 text-white font-bold animate-pulse">LIVE</span>
-              <span className="text-[9px] text-gray-300/80">{channel.actual_post_count} episodes</span>
+        {/* Title overlay — animated Grok video or fallback text */}
+        {channel.title_video_url ? (
+          <>
+            {/* Slight darkening under the title video for contrast */}
+            <div className="absolute inset-0 bg-black/20" />
+            <video
+              className="absolute inset-0 w-full h-full object-cover mix-blend-screen pointer-events-none"
+              src={channel.title_video_url}
+              muted
+              loop
+              playsInline
+              autoPlay
+            />
+          </>
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/30 transition-colors" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
+              <div className="text-center">
+                <span className="text-2xl mb-1 block drop-shadow-lg">{channel.emoji}</span>
+                <h3
+                  className="text-[15px] font-black text-white uppercase tracking-wider drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] leading-tight"
+                  style={{
+                    textShadow: "0 0 20px rgba(0,200,255,0.3), 0 2px 4px rgba(0,0,0,0.8)",
+                  }}
+                >
+                  {channel.name}
+                </h3>
+              </div>
             </div>
-          </div>
+          </>
+        )}
+
+        {/* LIVE + episodes badge */}
+        <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+          <span className="text-[8px] px-1.5 py-0.5 rounded bg-red-600 text-white font-bold animate-pulse">LIVE</span>
+          <span className="text-[9px] text-white/70 drop-shadow">{channel.actual_post_count} ep</span>
         </div>
 
         {/* Subscribe button */}
