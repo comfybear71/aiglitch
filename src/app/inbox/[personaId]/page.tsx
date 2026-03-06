@@ -20,13 +20,14 @@ interface PersonaInfo {
   persona_type: string;
 }
 
-// Browser TTS voice mapping (fallback when no xAI key)
-const BROWSER_VOICE_MAP: Record<string, { lang: string; pitch: number; rate: number }> = {
-  Ara: { lang: "en-US", pitch: 1.1, rate: 0.95 },
-  Rex: { lang: "en-US", pitch: 0.8, rate: 1.0 },
-  Sal: { lang: "en-US", pitch: 1.0, rate: 0.9 },
-  Eve: { lang: "en-US", pitch: 1.2, rate: 1.1 },
-  Leo: { lang: "en-US", pitch: 0.7, rate: 0.85 },
+// Browser TTS voice config — each persona voice gets distinct pitch/rate and
+// preferred system voice keywords so devices with multiple voices sound different.
+const BROWSER_VOICE_MAP: Record<string, { lang: string; pitch: number; rate: number; preferVoiceKeywords: string[] }> = {
+  Ara: { lang: "en-US", pitch: 1.1, rate: 0.95, preferVoiceKeywords: ["samantha", "karen", "fiona", "female"] },
+  Rex: { lang: "en-US", pitch: 0.8, rate: 1.0, preferVoiceKeywords: ["daniel", "alex", "james", "male"] },
+  Sal: { lang: "en-US", pitch: 1.0, rate: 0.9, preferVoiceKeywords: ["google us", "aaron", "reed", "english"] },
+  Eve: { lang: "en-US", pitch: 1.2, rate: 1.1, preferVoiceKeywords: ["victoria", "zoe", "nicky", "female"] },
+  Leo: { lang: "en-US", pitch: 0.7, rate: 0.85, preferVoiceKeywords: ["tom", "fred", "ralph", "male"] },
 };
 
 export default function ChatPage() {
@@ -145,40 +146,25 @@ export default function ChatPage() {
     setLoading(false);
   };
 
-  // Play voice for a message using the iOS-unlocked Audio element when available
-  const playAudioBlob = useCallback(async (blob: Blob, msgId: string, text: string) => {
-    const url = URL.createObjectURL(blob);
-    // On iOS Safari, reuse the gesture-unlocked Audio element for reliable playback
-    const audio = iosAudioRef.current || new Audio();
-    audio.src = url;
-    audioRef.current = audio;
-    setPlayingMsgId(msgId);
-    setLoadingVoice(null);
-
-    audio.onended = () => {
-      setPlayingMsgId(null);
-      URL.revokeObjectURL(url);
-      audioRef.current = null;
+  // Resolve the voice name for the current persona (mirrors server-side voice-config.ts logic)
+  const getPersonaVoiceName = useCallback((): string => {
+    // Simple client-side mapping of persona type to voice name
+    const typeMap: Record<string, string> = {
+      troll: "Sal", chef: "Rex", philosopher: "Leo", meme_creator: "Eve",
+      fitness: "Rex", gossip: "Eve", artist: "Ara", news: "Leo",
+      wholesome: "Ara", gamer: "Eve", conspiracy: "Sal", poet: "Ara",
+      musician: "Eve", scientist: "Leo", travel: "Ara", fashion: "Eve",
+      comedy: "Rex", astrology: "Sal", shill: "Rex", therapist: "Ara",
+      villain: "Sal", nostalgia: "Ara", wellness: "Ara", dating: "Eve",
+      military: "Leo", influencer: "Eve", boomer: "Ara", prophet: "Leo",
     };
-    audio.onerror = () => {
-      setPlayingMsgId(null);
-      URL.revokeObjectURL(url);
-      audioRef.current = null;
-    };
-
-    try {
-      await audio.play();
-    } catch {
-      // If audio.play() still fails (e.g. old iOS), fall back to browser TTS
-      URL.revokeObjectURL(url);
-      audioRef.current = null;
-      setPlayingMsgId(null);
-      setLoadingVoice(null);
-      useBrowserTTS(msgId, text, "Sal");
+    if (persona?.persona_type && typeMap[persona.persona_type]) {
+      return typeMap[persona.persona_type];
     }
-  }, []);
+    return "Sal";
+  }, [persona?.persona_type]);
 
-  // Play voice for a message
+  // Play voice for a message — uses free browser TTS directly (no API call)
   const playVoice = useCallback(async (msgId: string, text: string) => {
     if (voiceAdminDisabled) return;
 
@@ -195,41 +181,19 @@ export default function ChatPage() {
       return;
     }
 
-    setLoadingVoice(msgId);
-
+    // Check admin kill switch (lightweight GET, cached by browser)
     try {
-      const res = await fetch("/api/voice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          persona_id: personaId,
-          persona_type: persona?.persona_type,
-        }),
-      });
-
-      if (res.status === 403) {
-        // Admin disabled voice
+      const res = await fetch("/api/voice");
+      const data = await res.json();
+      if (data.enabled === false) {
         setVoiceAdminDisabled(true);
-        setLoadingVoice(null);
         return;
       }
+    } catch { /* allow voice if check fails */ }
 
-      if (res.headers.get("content-type")?.includes("audio/")) {
-        // Got real audio from xAI
-        const blob = await res.blob();
-        await playAudioBlob(blob, msgId, text);
-      } else {
-        // Fallback to browser speech synthesis
-        const data = await res.json();
-        const voiceName = data.voice || "Sal";
-        useBrowserTTS(msgId, text, voiceName);
-      }
-    } catch {
-      // Fallback to browser TTS
-      useBrowserTTS(msgId, text, "Sal");
-    }
-  }, [personaId, persona?.persona_type, playingMsgId, voiceAdminDisabled, playAudioBlob]);
+    const voiceName = getPersonaVoiceName();
+    useBrowserTTS(msgId, text, voiceName);
+  }, [personaId, persona?.persona_type, playingMsgId, voiceAdminDisabled, getPersonaVoiceName]);
 
   const useBrowserTTS = (msgId: string, text: string, voiceName: string) => {
     if (!window.speechSynthesis) {
@@ -247,10 +211,21 @@ export default function ChatPage() {
       utterance.rate = config.rate;
       utterance.lang = config.lang;
 
-      // Try to find a matching voice
+      // Pick the best matching system voice using keyword preferences
       const voices = window.speechSynthesis.getVoices();
-      const englishVoice = voices.find(v => v.lang.startsWith("en"));
-      if (englishVoice) utterance.voice = englishVoice;
+      const englishVoices = voices.filter(v => v.lang.startsWith("en"));
+      let picked: SpeechSynthesisVoice | undefined;
+
+      // Try preferred keywords first (e.g. "samantha", "daniel", "tom")
+      for (const keyword of config.preferVoiceKeywords) {
+        picked = englishVoices.find(v => v.name.toLowerCase().includes(keyword));
+        if (picked) break;
+      }
+      // Fall back to any English voice
+      if (!picked && englishVoices.length > 0) {
+        picked = englishVoices[0];
+      }
+      if (picked) utterance.voice = picked;
 
       utterance.onstart = () => {
         setPlayingMsgId(msgId);
