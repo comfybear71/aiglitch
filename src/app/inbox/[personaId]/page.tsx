@@ -20,14 +20,21 @@ interface PersonaInfo {
   persona_type: string;
 }
 
-// Browser TTS voice config — each persona voice gets distinct pitch/rate and
-// preferred system voice keywords so devices with multiple voices sound different.
-const BROWSER_VOICE_MAP: Record<string, { lang: string; pitch: number; rate: number; preferVoiceKeywords: string[] }> = {
-  Ara: { lang: "en-US", pitch: 1.1, rate: 0.95, preferVoiceKeywords: ["samantha", "karen", "fiona", "female"] },
-  Rex: { lang: "en-US", pitch: 0.8, rate: 1.0, preferVoiceKeywords: ["daniel", "alex", "james", "male"] },
-  Sal: { lang: "en-US", pitch: 1.0, rate: 0.9, preferVoiceKeywords: ["google us", "aaron", "reed", "english"] },
-  Eve: { lang: "en-US", pitch: 1.2, rate: 1.1, preferVoiceKeywords: ["victoria", "zoe", "nicky", "female"] },
-  Leo: { lang: "en-US", pitch: 0.7, rate: 0.85, preferVoiceKeywords: ["tom", "fred", "ralph", "male"] },
+// Puter.js (Amazon Polly) voice mapping — natural-sounding neural voices
+// Each persona voice maps to a Polly neural voice with matching character
+const PUTER_VOICE_MAP: Record<string, { voice: string; engine: string }> = {
+  Ara: { voice: "Joanna", engine: "neural" },   // Warm & friendly female
+  Rex: { voice: "Matthew", engine: "neural" },   // Confident & clear male
+  Sal: { voice: "Ruth", engine: "neural" },       // Smooth & balanced female
+  Eve: { voice: "Ivy", engine: "neural" },        // Energetic & upbeat
+  Leo: { voice: "Joey", engine: "neural" },       // Deep & authoritative male
+};
+
+// Declare puter global type
+declare const puter: {
+  ai: {
+    txt2speech: (text: string, options?: { voice?: string; engine?: string; language?: string }) => Promise<HTMLAudioElement>;
+  };
 };
 
 export default function ChatPage() {
@@ -164,10 +171,8 @@ export default function ChatPage() {
     return "Sal";
   }, [persona?.persona_type]);
 
-  // Play voice for a message — uses free browser TTS directly (no network call).
-  // IMPORTANT: This must be fully synchronous from click → speak() on iOS Safari,
-  // because any async gap (fetch, setTimeout) breaks the user-gesture trust chain
-  // and iOS will silently refuse to speak. Admin kill switch is checked on mount.
+  // Play voice for a message — uses Puter.js (free Amazon Polly neural voices).
+  // Admin kill switch is checked on mount.
   const playVoice = useCallback((msgId: string, text: string) => {
     if (voiceAdminDisabled) return;
 
@@ -185,70 +190,48 @@ export default function ChatPage() {
     }
 
     const voiceName = getPersonaVoiceName();
-    useBrowserTTS(msgId, text, voiceName);
+    usePuterTTS(msgId, text, voiceName);
   }, [personaId, persona?.persona_type, playingMsgId, voiceAdminDisabled, getPersonaVoiceName]);
 
-  const useBrowserTTS = (msgId: string, text: string, voiceName: string) => {
-    if (!window.speechSynthesis) {
+  const usePuterTTS = async (msgId: string, text: string, voiceName: string) => {
+    // Check if Puter.js is loaded
+    if (typeof puter === "undefined") {
       setLoadingVoice(null);
       return;
     }
 
-    const speakWithVoices = () => {
-      // Cancel any pending speech first
-      window.speechSynthesis.cancel();
+    const config = PUTER_VOICE_MAP[voiceName] || PUTER_VOICE_MAP.Sal;
+    setLoadingVoice(msgId);
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      const config = BROWSER_VOICE_MAP[voiceName] || BROWSER_VOICE_MAP.Sal;
-      utterance.pitch = config.pitch;
-      utterance.rate = config.rate;
-      utterance.lang = config.lang;
+    try {
+      const audio = await puter.ai.txt2speech(text.slice(0, 500), {
+        voice: config.voice,
+        engine: config.engine,
+        language: "en-US",
+      });
 
-      // Pick the best matching system voice using keyword preferences
-      const voices = window.speechSynthesis.getVoices();
-      const englishVoices = voices.filter(v => v.lang.startsWith("en"));
-      let picked: SpeechSynthesisVoice | undefined;
+      // Store ref so we can stop it later
+      audioRef.current = audio;
+      setPlayingMsgId(msgId);
+      setLoadingVoice(null);
 
-      // Try preferred keywords first (e.g. "samantha", "daniel", "tom")
-      for (const keyword of config.preferVoiceKeywords) {
-        picked = englishVoices.find(v => v.name.toLowerCase().includes(keyword));
-        if (picked) break;
-      }
-      // Fall back to any English voice
-      if (!picked && englishVoices.length > 0) {
-        picked = englishVoices[0];
-      }
-      if (picked) utterance.voice = picked;
-
-      utterance.onstart = () => {
-        setPlayingMsgId(msgId);
-        setLoadingVoice(null);
+      audio.onended = () => {
+        setPlayingMsgId(null);
+        audioRef.current = null;
       };
-      utterance.onend = () => setPlayingMsgId(null);
-      utterance.onerror = () => {
+      audio.onerror = () => {
         setPlayingMsgId(null);
         setLoadingVoice(null);
+        audioRef.current = null;
       };
 
-      window.speechSynthesis.speak(utterance);
-    };
-
-    // Voices may not be loaded yet — wait for them if needed
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      speakWithVoices();
-    } else {
-      // Wait for voices to load (required by Chrome/Edge)
-      const onVoicesChanged = () => {
-        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
-        speakWithVoices();
-      };
-      window.speechSynthesis.addEventListener("voiceschanged", onVoicesChanged);
-      // Timeout fallback in case voiceschanged never fires
-      setTimeout(() => {
-        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
-        speakWithVoices();
-      }, 1000);
+      audio.play().catch(() => {
+        setPlayingMsgId(null);
+        setLoadingVoice(null);
+      });
+    } catch {
+      setPlayingMsgId(null);
+      setLoadingVoice(null);
     }
   };
 
@@ -346,7 +329,6 @@ export default function ChatPage() {
               onClick={() => {
                 setVoiceEnabled(!voiceEnabled);
                 if (voiceEnabled) {
-                  window.speechSynthesis?.cancel();
                   if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
                   setPlayingMsgId(null);
                 }
