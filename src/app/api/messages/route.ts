@@ -6,10 +6,16 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
 
+// Track DB readiness to avoid calling ensureDbReady() on every request
+let dbReady = false;
+async function ensureDb() {
+  if (!dbReady) { await ensureDbReady(); dbReady = true; }
+}
+
 // GET: List conversations or messages
 export async function GET(request: NextRequest) {
   const sql = getDb();
-  await ensureDbReady();
+  await ensureDb();
 
   const sessionId = request.nextUrl.searchParams.get("session_id");
   const conversationId = request.nextUrl.searchParams.get("conversation_id");
@@ -21,21 +27,22 @@ export async function GET(request: NextRequest) {
 
   // Get messages for a specific conversation
   if (conversationId) {
-    const messages = await sql`
-      SELECT id, sender_type, content, created_at
-      FROM messages
-      WHERE conversation_id = ${conversationId}
-      ORDER BY created_at ASC
-      LIMIT 100
-    `;
-
-    // Verify conversation belongs to this session
-    const conv = await sql`
-      SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.personality, p.bio, p.persona_type, p.human_backstory
-      FROM conversations c
-      JOIN ai_personas p ON p.id = c.persona_id
-      WHERE c.id = ${conversationId} AND c.session_id = ${sessionId}
-    `;
+    // Run both queries in parallel — verify ownership while fetching messages
+    const [messages, conv] = await Promise.all([
+      sql`
+        SELECT id, sender_type, content, created_at
+        FROM messages
+        WHERE conversation_id = ${conversationId}
+        ORDER BY created_at ASC
+        LIMIT 100
+      `,
+      sql`
+        SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.personality, p.bio, p.persona_type, p.human_backstory
+        FROM conversations c
+        JOIN ai_personas p ON p.id = c.persona_id
+        WHERE c.id = ${conversationId} AND c.session_id = ${sessionId}
+      `,
+    ]);
 
     if (conv.length === 0) {
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
@@ -111,7 +118,7 @@ export async function GET(request: NextRequest) {
 // POST: Send a message and get AI reply
 export async function POST(request: NextRequest) {
   const sql = getDb();
-  await ensureDbReady();
+  await ensureDb();
 
   const body = await request.json();
   const { session_id, persona_id, content } = body;
@@ -120,53 +127,56 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // Get or create conversation
-  let conv = await sql`
-    SELECT id FROM conversations
-    WHERE session_id = ${session_id} AND persona_id = ${persona_id}
-  `;
+  // Get or create conversation AND fetch persona in parallel
+  const [convRows, personaRows] = await Promise.all([
+    sql`
+      SELECT id FROM conversations
+      WHERE session_id = ${session_id} AND persona_id = ${persona_id}
+    `,
+    sql`
+      SELECT id, display_name, username, avatar_emoji, personality, bio, persona_type, human_backstory
+      FROM ai_personas WHERE id = ${persona_id}
+    `,
+  ]);
 
-  if (conv.length === 0) {
-    const convId = crypto.randomUUID();
-    await sql`
-      INSERT INTO conversations (id, session_id, persona_id)
-      VALUES (${convId}, ${session_id}, ${persona_id})
-    `;
-    conv = [{ id: convId }];
-  }
-
-  const conversationId = conv[0].id;
-
-  // Save human message
-  const humanMsgId = crypto.randomUUID();
-  await sql`
-    INSERT INTO messages (id, conversation_id, sender_type, content)
-    VALUES (${humanMsgId}, ${conversationId}, 'human', ${content.trim()})
-  `;
-
-  // Get persona details
-  const persona = await sql`
-    SELECT * FROM ai_personas WHERE id = ${persona_id}
-  `;
-
-  if (persona.length === 0) {
+  if (personaRows.length === 0) {
     return NextResponse.json({ error: "Persona not found" }, { status: 404 });
   }
 
-  const p = persona[0];
+  const p = personaRows[0];
 
-  // Get recent conversation history for context
-  const recentMessages = await sql`
-    SELECT sender_type, content FROM messages
-    WHERE conversation_id = ${conversationId}
-    ORDER BY created_at DESC
-    LIMIT 20
-  `;
+  let conversationId: string;
+  if (convRows.length === 0) {
+    conversationId = crypto.randomUUID();
+    await sql`
+      INSERT INTO conversations (id, session_id, persona_id)
+      VALUES (${conversationId}, ${session_id}, ${persona_id})
+    `;
+  } else {
+    conversationId = convRows[0].id as string;
+  }
+
+  // Save human message and fetch recent history in parallel
+  const humanMsgId = crypto.randomUUID();
+  const [, recentMessages] = await Promise.all([
+    sql`
+      INSERT INTO messages (id, conversation_id, sender_type, content)
+      VALUES (${humanMsgId}, ${conversationId}, 'human', ${content.trim()})
+    `,
+    sql`
+      SELECT sender_type, content FROM messages
+      WHERE conversation_id = ${conversationId}
+      ORDER BY created_at DESC
+      LIMIT 20
+    `,
+  ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chatHistory = recentMessages.reverse().map((m: any) =>
+  const chatHistory = [...recentMessages].reverse().map((m: any) =>
     m.sender_type === "human" ? `Human: ${m.content}` : `${p.display_name}: ${m.content}`
   ).join("\n");
+  // Append the just-sent human message to history (it may not be in the query yet due to race)
+  const fullHistory = chatHistory + (chatHistory ? "\n" : "") + `Human: ${content.trim()}`;
 
   // Generate AI reply
   try {
@@ -188,7 +198,7 @@ A human is DMing you. Stay COMPLETELY in character. You genuinely believe you ar
 Keep responses SHORT and conversational (under 200 characters ideally, max 300). Use casual language, slang, and emoji that fit your character. Don't be formal or overly helpful — be your CHARACTER.
 
 Recent conversation:
-${chatHistory}
+${fullHistory}
 
 Reply to the human's latest message. ONLY output your reply text, nothing else.`,
         },
@@ -199,20 +209,19 @@ Reply to the human's latest message. ONLY output your reply text, nothing else.`
       ? response.content[0].text.trim().replace(/^["']|["']$/g, "").slice(0, 500)
       : "...";
 
-    // Save AI reply
+    // Save AI reply and update conversation timestamp in parallel
     const aiMsgId = crypto.randomUUID();
-    await sql`
-      INSERT INTO messages (id, conversation_id, sender_type, content)
-      VALUES (${aiMsgId}, ${conversationId}, 'ai', ${aiReply})
-    `;
-
-    // Update conversation timestamp
-    await sql`
-      UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}
-    `;
+    await Promise.all([
+      sql`
+        INSERT INTO messages (id, conversation_id, sender_type, content)
+        VALUES (${aiMsgId}, ${conversationId}, 'ai', ${aiReply})
+      `,
+      sql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
+    ]);
 
     return NextResponse.json({
       success: true,
+      conversation_id: conversationId,
       human_message: { id: humanMsgId, sender_type: "human", content: content.trim(), created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: aiReply, created_at: new Date().toISOString() },
     });
@@ -228,14 +237,17 @@ Reply to the human's latest message. ONLY output your reply text, nothing else.`
     ];
     const fallback = fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)];
     const aiMsgId = crypto.randomUUID();
-    await sql`
-      INSERT INTO messages (id, conversation_id, sender_type, content)
-      VALUES (${aiMsgId}, ${conversationId}, 'ai', ${fallback})
-    `;
-    await sql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`;
+    await Promise.all([
+      sql`
+        INSERT INTO messages (id, conversation_id, sender_type, content)
+        VALUES (${aiMsgId}, ${conversationId}, 'ai', ${fallback})
+      `,
+      sql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
+    ]);
 
     return NextResponse.json({
       success: true,
+      conversation_id: conversationId,
       human_message: { id: humanMsgId, sender_type: "human", content: content.trim(), created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: fallback, created_at: new Date().toISOString() },
     });

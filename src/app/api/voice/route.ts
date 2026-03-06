@@ -2,7 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/bible/env";
 import { getVoiceForPersona } from "@/lib/voice-config";
 
-// POST: Generate voice audio for a text message using xAI Voice Agent API
+// Simple in-memory cache for generated audio (prevents re-generating identical phrases)
+// Key: `${voice}:${text}`, Value: { buffer, timestamp }
+const audioCache = new Map<string, { buffer: Buffer; timestamp: number }>();
+const CACHE_MAX_SIZE = 50;
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function getCachedAudio(key: string): Buffer | null {
+  const entry = audioCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    audioCache.delete(key);
+    return null;
+  }
+  return entry.buffer;
+}
+
+function setCachedAudio(key: string, buffer: Buffer) {
+  // Evict oldest entries if at capacity
+  if (audioCache.size >= CACHE_MAX_SIZE) {
+    const oldest = audioCache.keys().next().value;
+    if (oldest) audioCache.delete(oldest);
+  }
+  audioCache.set(key, { buffer, timestamp: Date.now() });
+}
+
+// POST: Generate voice audio for a text message using xAI Realtime API
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { text, persona_id, persona_type } = body;
@@ -11,24 +36,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing text" }, { status: 400 });
   }
 
+  const trimmedText = text.trim().slice(0, 500); // Limit text length for voice
   const apiKey = env.XAI_API_KEY;
+
   if (!apiKey) {
     // No API key — tell client to use browser TTS
     const voiceConfig = getVoiceForPersona(persona_id || "", persona_type);
     return NextResponse.json({
       fallback: true,
       voice: voiceConfig.voice,
-      text: text.trim(),
+      text: trimmedText,
       message: "No XAI_API_KEY set — use browser speech synthesis",
     });
   }
 
   const voiceConfig = getVoiceForPersona(persona_id || "", persona_type);
 
+  // Check cache first
+  const cacheKey = `${voiceConfig.voice}:${trimmedText}`;
+  const cached = getCachedAudio(cacheKey);
+  if (cached) {
+    const arrayBuffer = cached.buffer.slice(cached.byteOffset, cached.byteOffset + cached.byteLength);
+    return new NextResponse(arrayBuffer as ArrayBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/wav",
+        "Content-Length": cached.byteLength.toString(),
+        "Cache-Control": "public, max-age=3600",
+        "X-Voice-Source": "cache",
+      },
+    });
+  }
+
   try {
     // Use xAI Realtime API via WebSocket to generate speech from text
     const audioChunks: string[] = [];
-    let responseText = "";
 
     await new Promise<void>((resolve, reject) => {
       // Dynamic import for server-side WebSocket
@@ -65,7 +107,7 @@ export async function POST(request: NextRequest) {
               content: [
                 {
                   type: "input_text",
-                  text: `Read this aloud exactly: "${text.trim()}"`,
+                  text: `Read this aloud exactly: "${trimmedText}"`,
                 },
               ],
             },
@@ -86,8 +128,6 @@ export async function POST(request: NextRequest) {
 
             if (event.type === "response.audio.delta") {
               audioChunks.push(event.delta);
-            } else if (event.type === "response.text.delta") {
-              responseText += event.delta || "";
             } else if (event.type === "response.done") {
               clearTimeout(timeout);
               ws.close();
@@ -119,7 +159,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         fallback: true,
         voice: voiceConfig.voice,
-        text: text.trim(),
+        text: trimmedText,
         message: "No audio generated — use browser speech synthesis",
       });
     }
@@ -132,6 +172,9 @@ export async function POST(request: NextRequest) {
     // Convert PCM16 to WAV format
     const wavBuffer = pcmToWav(combinedPcm, 24000, 1, 16);
 
+    // Cache for future requests
+    setCachedAudio(cacheKey, wavBuffer);
+
     // Convert Buffer to ArrayBuffer for NextResponse compatibility
     const arrayBuffer = wavBuffer.buffer.slice(wavBuffer.byteOffset, wavBuffer.byteOffset + wavBuffer.byteLength);
     return new NextResponse(arrayBuffer as ArrayBuffer, {
@@ -140,6 +183,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "audio/wav",
         "Content-Length": wavBuffer.byteLength.toString(),
         "Cache-Control": "public, max-age=3600",
+        "X-Voice-Source": "xai-realtime",
       },
     });
   } catch (error) {
@@ -148,7 +192,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       fallback: true,
       voice: voiceConfig.voice,
-      text: text.trim(),
+      text: trimmedText,
       message: "Voice API error — use browser speech synthesis",
     });
   }

@@ -47,10 +47,14 @@ export default function ChatPage() {
   });
   const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
+  // Track if user has interacted (required for iOS Safari autoplay)
+  const [userHasInteracted, setUserHasInteracted] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Pre-created Audio element for iOS Safari — must be "unlocked" by user gesture
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -73,6 +77,38 @@ export default function ChatPage() {
   useEffect(() => {
     localStorage.setItem("aiglitch-voice", voiceEnabled ? "on" : "off");
   }, [voiceEnabled]);
+
+  // iOS Safari audio unlock: create a silent audio context on first user interaction
+  // This allows subsequent programmatic audio.play() calls to work
+  useEffect(() => {
+    const unlock = () => {
+      setUserHasInteracted(true);
+      // Create and play a silent audio buffer to unlock iOS audio
+      if (!silentAudioRef.current) {
+        try {
+          const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+          const buf = ctx.createBuffer(1, 1, 22050);
+          const source = ctx.createBufferSource();
+          source.buffer = buf;
+          source.connect(ctx.destination);
+          source.start(0);
+          // Also unlock HTMLAudioElement
+          const audio = new Audio();
+          audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+          audio.play().catch(() => {});
+          silentAudioRef.current = audio;
+        } catch { /* ignore */ }
+      }
+      document.removeEventListener("touchstart", unlock);
+      document.removeEventListener("click", unlock);
+    };
+    document.addEventListener("touchstart", unlock, { once: true });
+    document.addEventListener("click", unlock, { once: true });
+    return () => {
+      document.removeEventListener("touchstart", unlock);
+      document.removeEventListener("click", unlock);
+    };
+  }, []);
 
   const fetchChat = async () => {
     try {
@@ -140,7 +176,17 @@ export default function ChatPage() {
           URL.revokeObjectURL(url);
           audioRef.current = null;
         };
-        await audio.play();
+        try {
+          await audio.play();
+        } catch {
+          // iOS Safari may reject autoplay — fall back to browser TTS
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          setPlayingMsgId(null);
+          setLoadingVoice(null);
+          useBrowserTTS(msgId, text, "Sal");
+          return;
+        }
       } else {
         // Fallback to browser speech synthesis
         const data = await res.json();
@@ -206,17 +252,19 @@ export default function ChatPage() {
     }
   };
 
-  // Auto-play voice for new AI messages
+  // Auto-play voice for new AI messages (only after user interaction on iOS)
   const lastAutoPlayedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!voiceEnabled || !persona || messages.length === 0) return;
+    // On iOS Safari, audio autoplay only works after user gesture — skip if no interaction yet
+    if (!userHasInteracted) return;
     const lastMsg = messages[messages.length - 1];
     if (lastMsg.sender_type === "ai" && lastMsg.id !== lastAutoPlayedRef.current && !lastMsg.id.startsWith("temp-")) {
       lastAutoPlayedRef.current = lastMsg.id;
       // Small delay so the message renders first
       setTimeout(() => playVoice(lastMsg.id, lastMsg.content), 300);
     }
-  }, [messages, voiceEnabled, persona, playVoice]);
+  }, [messages, voiceEnabled, persona, playVoice, userHasInteracted]);
 
   const sendMessage = async () => {
     if (!inputText.trim() || sending) return;
