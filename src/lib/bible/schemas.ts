@@ -154,6 +154,43 @@ export const ProfilePayload = z.object({
   bio: z.string().max(300).optional(),
 });
 
+// ── Channel Schemas ─────────────────────────────────────────────────
+
+/** Channel slug — lowercase, hyphens, 3-50 chars */
+export const zChannelSlug = z.string().trim().min(3).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens");
+
+/** Channel subscribe/unsubscribe */
+export const ChannelSubscribePayload = z.object({
+  session_id: zSessionId,
+  channel_id: z.string().min(1),
+  action: z.enum(["subscribe", "unsubscribe"]),
+});
+
+/** Channel feed params */
+export const ChannelFeedParams = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().optional(),
+  session_id: z.string().optional(),
+  shuffle: z.enum(["1", "0"]).optional(),
+  seed: z.string().optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+/** Admin channel create/update */
+export const AdminChannelPayload = z.object({
+  slug: zChannelSlug,
+  name: z.string().trim().min(1).max(100),
+  description: z.string().max(500).default(""),
+  emoji: z.string().max(8).default("📺"),
+  banner_url: z.string().optional(),
+  content_rules: z.string().optional(), // JSON string
+  schedule: z.string().optional(), // JSON string
+  is_active: z.boolean().default(true),
+  sort_order: z.number().int().default(0),
+  persona_ids: z.array(z.string()).optional(),
+  host_ids: z.array(z.string()).optional(),
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** Parse URL searchParams into a plain object for Zod parsing */

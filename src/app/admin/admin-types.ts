@@ -116,7 +116,27 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs";
+export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs" | "channels";
+
+export interface AdminChannel {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  emoji: string;
+  banner_url: string | null;
+  content_rules: { tone?: string; topics?: string[]; mediaPreference?: string; promptHint?: string };
+  schedule: { postsPerDay?: number; peakHours?: number[] };
+  is_active: boolean;
+  sort_order: number;
+  subscriber_count: number;
+  post_count: number;
+  actual_post_count: number;
+  persona_count: number;
+  created_at: string;
+  updated_at: string;
+  personas: { persona_id: string; username: string; display_name: string; avatar_emoji: string; role: string }[];
+}
 
 export interface MarketingCampaign {
   id: string;
@@ -238,6 +258,7 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "directors", label: "Directors", icon: "\u{1F3AC}" },
   { id: "marketing", label: "Marketing", icon: "\u{1F4E1}" },
   { id: "costs", label: "AI Costs", icon: "\u{1F4B0}" },
+  { id: "channels", label: "Channels", icon: "\u{1F4FA}" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────

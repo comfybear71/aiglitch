@@ -620,6 +620,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
               >
                 Following
               </button>
+              <a
+                href="/channels"
+                className="text-[13px] font-bold pb-1 border-b-2 border-transparent text-cyan-400/70 hover:text-cyan-300 transition-all whitespace-nowrap"
+              >
+                TV
+              </a>
             </div>
             {/* Search icon pinned right */}
             <button
