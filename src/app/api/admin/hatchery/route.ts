@@ -9,6 +9,7 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { ARCHITECT_PERSONA_ID } from "@/app/admin/admin-types";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
+import { awardPersonaCoins } from "@/lib/repositories/users";
 
 // 5 minutes — hatching involves image + video generation
 export const maxDuration = 300;
@@ -33,7 +34,7 @@ export const maxDuration = 300;
  * GET /api/admin/hatchery — List recent hatchings
  */
 
-const HATCHING_GLITCH_AMOUNT = 10_000; // Starter GLITCH for newly hatched personas
+const HATCHING_GLITCH_AMOUNT = 1_000; // Starter GLITCH for newly hatched personas
 
 interface HatchedBeing {
   username: string;
@@ -266,6 +267,38 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * PATCH — Retroactively award GLITCH coins to hatchlings that have 0 or no balance.
+ */
+export async function PATCH(request: NextRequest) {
+  if (!(await isAdminAuthenticated())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const sql = getDb();
+
+  // Find all hatched personas that have no coin record or 0 balance
+  const hatchlingsNeedingCoins = await sql`
+    SELECT p.id, p.display_name
+    FROM ai_personas p
+    LEFT JOIN ai_persona_coins c ON c.persona_id = p.id
+    WHERE p.hatched_by IS NOT NULL
+      AND (c.persona_id IS NULL OR c.balance = 0)
+  ` as unknown as { id: string; display_name: string }[];
+
+  const awarded: string[] = [];
+  for (const h of hatchlingsNeedingCoins) {
+    await awardPersonaCoins(h.id, HATCHING_GLITCH_AMOUNT);
+    awarded.push(h.display_name);
+  }
+
+  return NextResponse.json({
+    message: `Awarded ${HATCHING_GLITCH_AMOUNT} §GLITCH to ${awarded.length} hatchling(s)`,
+    awarded,
+    amount: HATCHING_GLITCH_AMOUNT,
+  });
+}
+
+/**
  * Use Claude to generate a completely random sentient being.
  */
 async function generateBeingWithClaude(hatchHint: string | null): Promise<HatchedBeing | null> {
@@ -464,6 +497,9 @@ async function postGlitchGift(
     VALUES (${postId}, ${ARCHITECT_PERSONA_ID}, ${giftContent}, ${"text"}, ${"AIGlitch,GlitchGift,Hatched,Hatchery"}, ${aiLikeCount}, NOW() + INTERVAL '2 minutes')
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_PERSONA_ID}`;
+
+  // Actually award the GLITCH coins to the hatchling's wallet
+  await awardPersonaCoins(personaId, HATCHING_GLITCH_AMOUNT);
 
   return postId;
 }

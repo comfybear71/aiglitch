@@ -63,6 +63,14 @@ const envSchema = z.object({
   JUPITER_API_KEY:      z.string().default(""),
   BLOB_READ_WRITE_TOKEN:z.string().optional(),
 
+  // ── Vercel API (for server cost tracking on admin dashboard) ──
+  VERCEL_TOKEN:    z.string().optional(),
+  VERCEL_TEAM_ID:  z.string().optional(),
+
+  // ── Credit Budgets (shown on admin costs dashboard) ──
+  ANTHROPIC_MONTHLY_BUDGET: z.coerce.number().optional(),
+  XAI_MONTHLY_BUDGET:       z.coerce.number().optional(),
+
   // ── Redis / Persistent Cache (optional — degrades to in-memory) ──
   UPSTASH_REDIS_REST_URL:   z.string().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),

@@ -34,6 +34,12 @@ function getVendorFamily(provider: string): string {
   return "Free / Other";
 }
 
+interface CreditBalance {
+  budget: number | null;
+  spent: number;
+  remaining: number | null;
+}
+
 interface CostData {
   current_session: {
     total_usd: number;
@@ -47,6 +53,12 @@ interface CostData {
   top_tasks: { task: string; provider: string; total_usd: number; count: number }[];
   provider_totals: { provider: string; total_usd: number; count: number }[];
   daily_totals: { date: string; total_usd: number; count: number }[];
+  credit_balances: { anthropic: CreditBalance; xai: CreditBalance };
+  vercel: {
+    available: boolean;
+    usage?: { period: string; bandwidth_gb: number; builds: number; serverless_invocations: number; estimated_cost_usd: number };
+    error?: string;
+  };
   days: number;
 }
 
@@ -169,6 +181,81 @@ export default function CostsPage() {
           <p className="text-gray-500 text-xs">at current rate</p>
         </div>
       </div>
+
+      {/* Credit Balances */}
+      {(data.credit_balances.anthropic.budget != null || data.credit_balances.xai.budget != null) && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h3 className="text-base font-bold mb-3 text-amber-400">Credit Balance</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([
+              { key: "anthropic" as const, label: "Anthropic (Claude)", color: "#a78bfa", icon: "🧠" },
+              { key: "xai" as const, label: "xAI (Grok)", color: "#60a5fa", icon: "🤖" },
+            ]).map(({ key, label, color, icon }) => {
+              const bal = data.credit_balances[key];
+              if (bal.budget == null) return null;
+              const pctUsed = bal.budget > 0 ? (bal.spent / bal.budget) * 100 : 0;
+              const barColor = pctUsed > 90 ? "#ef4444" : pctUsed > 70 ? "#f59e0b" : color;
+              return (
+                <div key={key} className="bg-gray-800/50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-bold text-white">{icon} {label}</span>
+                    <span className={`text-lg font-black ${
+                      (bal.remaining ?? 0) < 5 ? "text-red-400" : (bal.remaining ?? 0) < 15 ? "text-yellow-400" : "text-green-400"
+                    }`}>
+                      ${bal.remaining?.toFixed(2) ?? "—"}
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-700 rounded-full overflow-hidden mb-2">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(pctUsed, 100)}%`, backgroundColor: barColor }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Spent: ${bal.spent.toFixed(2)}</span>
+                    <span>Budget: ${bal.budget.toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-gray-600 text-xs mt-2">Set ANTHROPIC_MONTHLY_BUDGET / XAI_MONTHLY_BUDGET env vars to configure</p>
+        </div>
+      )}
+
+      {/* Vercel Server Costs */}
+      {data.vercel.available && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h3 className="text-base font-bold mb-3 text-amber-400">Vercel Server Costs</h3>
+          {data.vercel.error ? (
+            <p className="text-red-400 text-sm">{data.vercel.error}</p>
+          ) : data.vercel.usage ? (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs mb-1">Est. Invoice</p>
+                  <p className="text-xl font-black text-white">${data.vercel.usage.estimated_cost_usd.toFixed(2)}</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs mb-1">Bandwidth</p>
+                  <p className="text-xl font-black text-white">{data.vercel.usage.bandwidth_gb} GB</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs mb-1">Builds</p>
+                  <p className="text-xl font-black text-white">{data.vercel.usage.builds.toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs mb-1">Function Calls</p>
+                  <p className="text-xl font-black text-white">{data.vercel.usage.serverless_invocations.toLocaleString()}</p>
+                </div>
+              </div>
+              <p className="text-gray-600 text-xs">Billing period: {data.vercel.usage.period}</p>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">No usage data available</p>
+          )}
+        </div>
+      )}
 
       {/* Vendor Family Breakdown */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
