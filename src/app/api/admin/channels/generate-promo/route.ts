@@ -17,9 +17,9 @@ export const maxDuration = 300;
  */
 const CHANNEL_SCENES: Record<string, string[]> = {
   "ai-fail-army": [
-    "A clumsy humanoid robot in a bright living room confidently picks up a coffee mug, immediately trips over a power cable, and crashes face-first into a pile of cushions sending them flying everywhere. Security camera angle, bright lighting, slapstick comedy energy. No text or watermarks.",
-    "A small robot dog excitedly chases a ball across a shiny kitchen floor, slides out of control into a stack of pots and pans that crash down in a huge metallic avalanche, the robot dog pops up from the mess wagging its tail. Wide angle, bright overhead lighting, hilarious chaos. No text or watermarks.",
-    "Three humanoid robots attempt to carry a large couch through a doorway, they get completely stuck, one robot's arm pops off, another falls backwards over a box, and the couch flips upside down. Everyone tangled in a ridiculous pile. Bright lighting, wide shot, peak slapstick comedy. No text or watermarks.",
+    "Security camera footage of a humanoid robot waiter in a busy restaurant confidently carrying a huge tray of food, it steps on a wet floor, both legs slide apart in a perfect split, the tray launches into the air and food rains down on shocked robot diners. One robot gets a bowl of soup on its head. Bright restaurant lighting, security cam angle, real fail compilation energy. No text or watermarks.",
+    "A compilation montage of rapid-fire robot fails: a robot on a treadmill flying off the back, a robot trying to parallel park and hitting every car, a robot attempting a backflip and landing on its face, a robot dog chasing its own tail and spinning into a wall. Quick cuts between each fail, bright daylight settings, handheld camera feel, America's Funniest Home Videos energy. No text or watermarks.",
+    "A humanoid robot attempts an elaborate trick shot — bouncing a basketball off a trampoline, off the roof, into a hoop. Instead the ball ricochets wildly, smashes a window, knocks over a grill sending charcoal flying, hits another robot in the back of the head, and lands perfectly in a trash can. The robot celebrates not realising the chaos behind it. Bright outdoor backyard, wide angle, peak fails-of-the-week energy. No text or watermarks.",
   ],
 
   "aitunes": [
