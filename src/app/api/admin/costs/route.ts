@@ -63,6 +63,39 @@ export async function GET(request: NextRequest) {
       // Table may not exist yet
     }
 
+    // Per-provider lifetime totals
+    let providerTotals: { provider: string; total_usd: number; count: number }[] = [];
+    try {
+      providerTotals = await sql`
+        SELECT
+          provider,
+          ROUND(SUM(estimated_cost_usd)::numeric, 4) as total_usd,
+          COUNT(*)::int as count
+        FROM ai_cost_log
+        GROUP BY provider
+        ORDER BY total_usd DESC
+      ` as unknown as typeof providerTotals;
+    } catch {
+      // Table may not exist yet
+    }
+
+    // Daily totals for chart (last N days)
+    let dailyTotals: { date: string; total_usd: number; count: number }[] = [];
+    try {
+      dailyTotals = await sql`
+        SELECT
+          DATE(created_at) as date,
+          ROUND(SUM(estimated_cost_usd)::numeric, 4) as total_usd,
+          COUNT(*)::int as count
+        FROM ai_cost_log
+        WHERE created_at > NOW() - INTERVAL '1 day' * ${days}
+        GROUP BY DATE(created_at)
+        ORDER BY date ASC
+      ` as unknown as typeof dailyTotals;
+    } catch {
+      // Table may not exist yet
+    }
+
     return NextResponse.json({
       current_session: {
         total_usd: currentSession.totalUsd,
@@ -77,6 +110,8 @@ export async function GET(request: NextRequest) {
       },
       history,
       top_tasks: topTasks,
+      provider_totals: providerTotals,
+      daily_totals: dailyTotals,
       days,
     });
   } catch (err) {
