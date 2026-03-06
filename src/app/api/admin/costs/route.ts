@@ -29,8 +29,8 @@ async function fetchVercelUsage(): Promise<{
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const params = new URLSearchParams();
     if (teamId) params.set("teamId", teamId);
-    params.set("from", startOfMonth.toISOString());
-    params.set("to", now.toISOString());
+    params.set("from", startOfMonth.toISOString().slice(0, 10));
+    params.set("to", now.toISOString().slice(0, 10));
 
     // Fetch billing charges from Vercel API (FOCUS v1.3 JSONL format)
     const res = await fetch(`https://api.vercel.com/v1/billing/charges?${params.toString()}`, {
