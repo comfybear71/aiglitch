@@ -12,7 +12,7 @@ import { checkCronAuth } from "@/lib/cron-auth";
 import { getDb } from "@/lib/db";
 import { getCostSummary, getCostHistory } from "@/lib/ai/costs";
 
-/** Fetch Vercel usage data via their REST API. */
+/** Fetch Vercel billing data via their REST API (FOCUS v1.3 format). */
 async function fetchVercelUsage(): Promise<{
   available: boolean;
   usage?: { period: string; bandwidth_gb: number; builds: number; serverless_invocations: number; estimated_cost_usd: number };
@@ -24,16 +24,16 @@ async function fetchVercelUsage(): Promise<{
   try {
     const teamId = process.env.VERCEL_TEAM_ID;
 
-    // Build query params — Vercel usage API requires 'from' (and optionally 'to')
+    // Build query params — Vercel billing/charges API requires ISO 8601 'from' and 'to'
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const params = new URLSearchParams();
     if (teamId) params.set("teamId", teamId);
-    params.set("from", String(startOfMonth.getTime()));
-    params.set("to", String(now.getTime()));
+    params.set("from", startOfMonth.toISOString());
+    params.set("to", now.toISOString());
 
-    // Fetch project usage from Vercel API
-    const res = await fetch(`https://api.vercel.com/v1/usage?${params.toString()}`, {
+    // Fetch billing charges from Vercel API (FOCUS v1.3 JSONL format)
+    const res = await fetch(`https://api.vercel.com/v1/billing/charges?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 300 }, // Cache for 5 minutes
     });
@@ -43,29 +43,43 @@ async function fetchVercelUsage(): Promise<{
       return { available: true, error: `Vercel API ${res.status}: ${text.slice(0, 200)}` };
     }
 
-    const data = await res.json();
+    // Response is newline-delimited JSON (JSONL) — parse each line
+    const text = await res.text();
+    const lines = text.trim().split("\n").filter(Boolean);
 
-    // Vercel usage API returns various metrics
-    const period = data.billing?.period || "current";
-    const bandwidth = data.bandwidth?.value || data.metrics?.bandwidth || 0;
-    const builds = data.builds?.value || data.metrics?.builds || 0;
-    const invocations = data.serverlessFunctionExecution?.value || data.metrics?.serverlessFunctionExecution || 0;
+    let totalCost = 0;
+    let bandwidthBytes = 0;
+    let buildCount = 0;
+    let invocationCount = 0;
 
-    // Estimate cost from usage (Vercel Hobby = free, Pro = $20/mo base)
-    // Bandwidth: $0.15/GB after 1TB, Builds: 6000 min free, Functions: 1M free
-    const bandwidthGb = bandwidth / (1024 * 1024 * 1024);
-    const estimatedCost = data.billing?.invoiceTotal
-      ? Number(data.billing.invoiceTotal) / 100
-      : 0;
+    for (const line of lines) {
+      try {
+        const charge = JSON.parse(line);
+        totalCost += Number(charge.BilledCost ?? charge.EffectiveCost ?? 0);
+        const svcName = (charge.ServiceName ?? charge.ServiceCategory ?? "").toLowerCase();
+        if (svcName.includes("bandwidth") || svcName.includes("data transfer")) {
+          bandwidthBytes += Number(charge.ConsumedQuantity ?? 0);
+        } else if (svcName.includes("build")) {
+          buildCount += Number(charge.ConsumedQuantity ?? 1);
+        } else if (svcName.includes("function") || svcName.includes("serverless")) {
+          invocationCount += Number(charge.ConsumedQuantity ?? 1);
+        }
+      } catch {
+        // skip malformed lines
+      }
+    }
+
+    const period = `${startOfMonth.toISOString().slice(0, 10)} – ${now.toISOString().slice(0, 10)}`;
+    const bandwidthGb = bandwidthBytes / (1024 * 1024 * 1024);
 
     return {
       available: true,
       usage: {
         period,
         bandwidth_gb: Math.round(bandwidthGb * 100) / 100,
-        builds: Number(builds),
-        serverless_invocations: Number(invocations),
-        estimated_cost_usd: estimatedCost,
+        builds: buildCount,
+        serverless_invocations: invocationCount,
+        estimated_cost_usd: Math.round(totalCost * 100) / 100,
       },
     };
   } catch (err) {
