@@ -303,6 +303,113 @@ export default function PersonasPage() {
     setAnimatingPersona(null);
   };
 
+  // §GLITCH Coin Promotion
+  const [promoMode, setPromoMode] = useState<"image" | "video">("image");
+  const [promoGenerating, setPromoGenerating] = useState(false);
+  const [promoLog, setPromoLog] = useState<string[]>([]);
+  const [promoSpreadResults, setPromoSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
+  const [promoComplete, setPromoComplete] = useState(false);
+  const [promoImageUrl, setPromoImageUrl] = useState<string | null>(null);
+  const promoLogRef = useRef<HTMLDivElement>(null);
+
+  const promoteGlitchCoin = async () => {
+    if (promoGenerating) return;
+    setPromoGenerating(true);
+    setPromoLog([`${promoMode === "video" ? "🎬" : "🖼️"} Generating §GLITCH promo ${promoMode}...`]);
+    setPromoSpreadResults([]);
+    setPromoComplete(false);
+    setPromoImageUrl(null);
+    try {
+      const form = new FormData();
+      form.append("mode", promoMode);
+      const res = await fetch("/api/admin/promote-glitchcoin", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+
+      if (promoMode === "image") {
+        if (data.success && data.imageUrl) {
+          setPromoImageUrl(data.imageUrl);
+          setPromoLog(prev => [...prev, "✅ Image generated!"]);
+          setPromoLog(prev => [...prev, "📡 Spreading to social media..."]);
+          if (data.spreadResults?.length > 0) {
+            setPromoSpreadResults(data.spreadResults);
+            const posted = data.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+            const failed = data.spreadResults.filter((r: { status: string }) => r.status === "failed").length;
+            setPromoLog(prev => [...prev, `📡 Sent to ${posted} platform${posted !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}`]);
+          } else {
+            setPromoLog(prev => [...prev, "📡 No active social media accounts configured"]);
+          }
+          setPromoLog(prev => [...prev, "🙏 Thank you Architect — §GLITCH promoted!"]);
+          setPromoComplete(true);
+        } else {
+          setPromoLog(prev => [...prev, `❌ ${data.error || "Generation failed"}`]);
+        }
+        setPromoGenerating(false);
+        return;
+      }
+
+      // Video mode — submit + poll
+      if (data.phase === "done" && data.success) {
+        setPromoLog(prev => [...prev, "✅ Video ready!", "📡 Spreading to social media..."]);
+        if (data.spreadResults?.length > 0) {
+          setPromoSpreadResults(data.spreadResults);
+          const posted = data.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+          setPromoLog(prev => [...prev, `📡 Sent to ${posted} platform${posted !== 1 ? "s" : ""}`]);
+        }
+        setPromoLog(prev => [...prev, "🙏 Thank you Architect — §GLITCH promoted!"]);
+        setPromoComplete(true);
+        setPromoGenerating(false);
+        return;
+      }
+
+      if (!data.success || !data.requestId) {
+        setPromoLog(prev => [...prev, `❌ Submit failed: ${data.error || "Unknown error"}`]);
+        setPromoGenerating(false);
+        return;
+      }
+
+      const requestId = data.requestId;
+      setPromoLog(prev => [...prev, "✅ Video submitted! Polling for completion..."]);
+
+      for (let attempt = 1; attempt <= 90; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        try {
+          const pollRes = await fetch(`/api/admin/promote-glitchcoin?id=${encodeURIComponent(requestId)}`);
+          const pollData = await pollRes.json();
+
+          if (pollData.phase === "done" && pollData.success) {
+            setPromoLog(prev => [...prev, "🎉 Video ready!", "📡 Spreading to social media..."]);
+            if (pollData.spreadResults?.length > 0) {
+              setPromoSpreadResults(pollData.spreadResults);
+              const posted = pollData.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+              setPromoLog(prev => [...prev, `📡 Sent to ${posted} platform${posted !== 1 ? "s" : ""}`]);
+            }
+            setPromoLog(prev => [...prev, "🙏 Thank you Architect — §GLITCH promoted!"]);
+            setPromoComplete(true);
+            setPromoGenerating(false);
+            return;
+          }
+
+          if (pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
+            setPromoLog(prev => [...prev, `❌ Video ${pollData.status}`]);
+            setPromoGenerating(false);
+            return;
+          }
+
+          if (attempt % 3 === 0) {
+            setPromoLog(prev => [...prev, `🔄 Still generating... (${pollData.status || "pending"})`]);
+          }
+        } catch { /* retry on network error */ }
+      }
+      setPromoLog(prev => [...prev, "❌ Timed out after 15 minutes"]);
+    } catch (err) {
+      setPromoLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : String(err)}`]);
+    }
+    setPromoGenerating(false);
+  };
+
   // Sgt. Pepper Hero
   const [heroGenerating, setHeroGenerating] = useState(false);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
@@ -444,6 +551,64 @@ export default function PersonasPage() {
           <p className="text-[10px] text-gray-500 mt-1 break-all">{heroUrl}</p>
         </div>
       )}
+
+      {/* §GLITCH Coin Promotion */}
+      <div className="bg-gradient-to-r from-green-950/60 via-gray-900 to-cyan-950/60 border border-green-500/30 rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 className="text-xs font-bold text-green-400">§GLITCH Coin Promotion</h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">Generate promo content & spread to all social media</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={promoMode} onChange={(e) => setPromoMode(e.target.value as "image" | "video")}
+              className="px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-[10px] text-white">
+              <option value="image">Image</option>
+              <option value="video">Video (10s)</option>
+            </select>
+            <button onClick={promoteGlitchCoin} disabled={promoGenerating}
+              className="px-4 py-1.5 bg-gradient-to-r from-green-500 to-cyan-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
+              {promoGenerating ? "⏳ Generating..." : "§ Promote §GLITCH"}
+            </button>
+          </div>
+        </div>
+        {promoLog.length > 0 && (
+          <div ref={promoLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">
+            {promoLog.map((line, i) => (
+              <p key={i} className={`text-xs font-mono ${
+                line.includes("❌") || line.includes("failed") ? "text-red-400" :
+                line.includes("✅") || line.includes("🎉") ? "text-green-400" :
+                line.includes("Thank you Architect") ? "text-green-400 font-bold text-sm" :
+                line.includes("📡") ? "text-blue-400" :
+                "text-gray-300"
+              }`}>{line}</p>
+            ))}
+            {promoGenerating && (
+              <p className="text-xs font-mono text-green-400 animate-pulse">⏳ Working...</p>
+            )}
+            {promoSpreadResults.length > 0 && (
+              <div className="mt-1.5 space-y-1 border-t border-green-500/20 pt-1.5">
+                {promoSpreadResults.map((r, i) => (
+                  <div key={i} className={`flex items-center gap-2 text-[10px] ${
+                    r.status === "posted" ? "text-green-400" : "text-red-400"
+                  }`}>
+                    <span>{r.status === "posted" ? "✅" : "❌"}</span>
+                    <span className="font-bold capitalize">{r.platform}</span>
+                    {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
+                    {r.error && <span className="truncate">{r.error}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {promoImageUrl && (
+          <div className="mt-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={promoImageUrl} alt="§GLITCH Promo" className="w-full max-w-md rounded-lg border border-green-500/20" />
+            <p className="text-[10px] text-gray-500 mt-1 break-all">{promoImageUrl}</p>
+          </div>
+        )}
+      </div>
 
       <div className="space-y-3">
         {personas.map((p) => (
