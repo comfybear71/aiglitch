@@ -71,14 +71,14 @@ export default function MePage() {
   // Use wallet adapter hooks
   const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets } = useWallet();
 
-  // Detect iOS Safari (not Phantom in-app browser) — affected by WebKit postMessage bug
-  const isIOSSafariBroken = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    const ua = navigator.userAgent;
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
-    const isPhantomInApp = /Phantom/i.test(ua);
-    return isIOS && isSafari && !isPhantomInApp;
+  // Visible debug log for diagnosing wallet connection issues on mobile
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
+  // Show a tappable deep link when connect fails on iOS
+  const [showPhantomDeepLink, setShowPhantomDeepLink] = useState<"login" | "link" | null>(null);
+  const addDebug = useCallback((msg: string) => {
+    console.log("[Phantom]", msg);
+    setDebugLog(prev => [...prev.slice(-19), `${new Date().toLocaleTimeString()}: ${msg}`]);
   }, []);
 
   // Helper: poll for Phantom provider availability (in-app browser may inject late)
@@ -89,183 +89,135 @@ export default function MePage() {
     while (elapsed < maxWaitMs) {
       const provider = w.phantom?.solana || w.solana;
       if (provider?.isPhantom) {
-        console.log("[Phantom] Provider found after", elapsed, "ms");
+        addDebug(`Provider found after ${elapsed}ms`);
         return provider;
       }
       await new Promise(r => setTimeout(r, intervalMs));
       elapsed += intervalMs;
     }
-    console.warn("[Phantom] Provider not found after", maxWaitMs, "ms");
+    addDebug(`Provider NOT found after ${maxWaitMs}ms`);
     return null;
   };
 
-  // Helper: try to get wallet address using multiple strategies.
-  // Returns the address string or throws with a special "IOS_SAFARI_BUG" flag
-  // so callers can redirect to Phantom deep link.
-  const connectAndGetAddress = async (): Promise<string> => {
-    // Strategy 1: Already connected via adapter
-    if (walletConnected && walletPublicKey) {
-      console.log("[Phantom] Adapter already connected:", walletPublicKey.toString());
-      return walletPublicKey.toString();
-    }
+  // Helper: try to connect and get wallet address with full error logging.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connectAndGetAddress = async (provider: any): Promise<string> => {
+    const ua = navigator.userAgent;
+    addDebug(`UA: ${ua.substring(0, 80)}`);
+    addDebug(`provider.isPhantom=${provider?.isPhantom}, isConnected=${provider?.isConnected}`);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const rawProvider = w.phantom?.solana || w.solana;
-
-    // Strategy 2: Raw provider already connected
-    if (rawProvider?.isConnected && rawProvider?.publicKey) {
+    // Check if already connected
+    if (provider?.isConnected && provider?.publicKey) {
       try {
-        const addr = rawProvider.publicKey.toString();
-        console.log("[Phantom] Raw provider already connected:", addr);
+        const addr = provider.publicKey.toString();
+        addDebug(`Already connected: ${addr}`);
         return addr;
       } catch (e) {
-        console.warn("[Phantom] toString() failed on existing publicKey:", e);
+        addDebug(`toString() failed on existing publicKey: ${e}`);
       }
     }
 
-    // Strategy 3: Event listener + connect() race
-    // Listen for 'connect' event BEFORE calling connect(). The event might
-    // fire even when the connect() promise rejects on iOS Safari.
-    let connectError: unknown = null;
-    const addressFromEvent = await new Promise<string | null>((resolve) => {
-      const timeout = setTimeout(() => {
-        console.warn("[Phantom] Event listener timed out after 8s");
-        resolve(null);
-      }, 8000);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        if (rawProvider) rawProvider.removeListener?.("connect", onConnect);
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const onConnect = (pk: any) => {
-        console.log("[Phantom] 'connect' event fired, pk:", pk);
-        cleanup();
-        try {
-          if (pk) {
-            resolve(pk.toString());
-            return;
-          }
-        } catch (e) {
-          console.warn("[Phantom] toString() failed in event:", e);
-        }
-        // Event fired but no usable publicKey — check raw provider
-        try {
-          if (rawProvider?.publicKey) {
-            resolve(rawProvider.publicKey.toString());
-            return;
-          }
-        } catch (e) {
-          console.warn("[Phantom] raw provider toString() failed:", e);
-        }
-        resolve(null);
-      };
-
-      if (rawProvider) {
-        rawProvider.on?.("connect", onConnect);
-      }
-
-      // Try adapter connect
-      const phantomWallet = wallets.find(wal => wal.adapter.name === "Phantom");
-      if (phantomWallet) {
-        try { walletSelect(phantomWallet.adapter.name); } catch {}
-      }
-
-      // Small delay for selection to take effect, then connect
-      setTimeout(async () => {
-        try {
-          await walletConnect();
-          console.log("[Phantom] walletConnect() resolved");
-          // If we get here, check adapter publicKey
-          if (walletPublicKey) {
-            cleanup();
-            resolve(walletPublicKey.toString());
-            return;
-          }
-          // Check raw provider
-          if (rawProvider?.publicKey) {
-            cleanup();
-            try {
-              resolve(rawProvider.publicKey.toString());
-            } catch {
-              resolve(null);
-            }
-            return;
-          }
-          // Wait a bit more for state to propagate
-          await new Promise(r => setTimeout(r, 500));
-          if (rawProvider?.publicKey) {
-            cleanup();
-            try {
-              resolve(rawProvider.publicKey.toString());
-            } catch {
-              resolve(null);
-            }
-            return;
-          }
-        } catch (err) {
-          console.warn("[Phantom] walletConnect() threw:", err);
-          connectError = err;
-
-          // Check if raw provider got the publicKey despite the error
-          await new Promise(r => setTimeout(r, 300));
-          if (rawProvider?.publicKey) {
-            cleanup();
-            try {
-              resolve(rawProvider.publicKey.toString());
-            } catch {
-              resolve(null);
-            }
-            return;
-          }
-
-          // Try raw connect() as well (different code path)
-          if (rawProvider && !rawProvider.isConnected) {
-            try {
-              const resp = await rawProvider.connect();
-              if (resp?.publicKey) {
-                cleanup();
-                resolve(resp.publicKey.toString());
-                return;
-              }
-            } catch (e2) {
-              console.warn("[Phantom] raw connect() also threw:", e2);
-              connectError = connectError || e2;
-            }
-          }
-
-          // Final check with delay
-          await new Promise(r => setTimeout(r, 1000));
-          if (rawProvider?.publicKey) {
-            cleanup();
-            try {
-              resolve(rawProvider.publicKey.toString());
-            } catch {
-              resolve(null);
-            }
-            return;
-          }
-          // Let timeout handle it
-        }
-      }, 200);
-    });
-
-    if (addressFromEvent) {
-      console.log("[Phantom] Got address:", addressFromEvent);
-      return addressFromEvent;
+    // Check wallet adapter state
+    if (walletConnected && walletPublicKey) {
+      const addr = walletPublicKey.toString();
+      addDebug(`Adapter already connected: ${addr}`);
+      return addr;
     }
 
-    // All strategies failed — check if this was the iOS Safari serialization bug
-    const errMsg = connectError instanceof Error ? connectError.message : String(connectError || "");
-    if (errMsg.includes("string did not match") || errMsg.includes("expected pattern")) {
-      const err = new Error("IOS_SAFARI_BUG");
-      (err as any).originalError = connectError;
+    // Set up event listener BEFORE connect() — event fires independently of promise
+    let eventAddress: string | null = null;
+    const onConnect = (pk: unknown) => {
+      addDebug(`'connect' event fired, pk type=${typeof pk}, value=${String(pk).substring(0, 50)}`);
+      try {
+        if (pk) {
+          eventAddress = String(pk);
+          addDebug(`Event gave address: ${eventAddress}`);
+        }
+      } catch (e) {
+        addDebug(`Event pk.toString() failed: ${e}`);
+      }
+    };
+    provider?.on?.("connect", onConnect);
+
+    // Try raw provider.connect() with timeout
+    addDebug("Calling provider.connect()...");
+    try {
+      const resp = await Promise.race([
+        provider.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("WALLET_TIMEOUT")), 30000)),
+      ]);
+      addDebug(`connect() resolved, resp keys: ${resp ? Object.keys(resp).join(",") : "null"}`);
+      if (resp?.publicKey) {
+        try {
+          const addr = resp.publicKey.toString();
+          addDebug(`connect() returned address: ${addr}`);
+          provider?.removeListener?.("connect", onConnect);
+          return addr;
+        } catch (e) {
+          addDebug(`resp.publicKey.toString() FAILED: ${e}`);
+          // Try to extract raw bytes
+          try {
+            const pk = resp.publicKey;
+            addDebug(`publicKey type=${typeof pk}, constructor=${pk?.constructor?.name}, keys=${pk ? Object.keys(pk).join(",") : "none"}`);
+            if (pk?.toBase58) {
+              const addr = pk.toBase58();
+              addDebug(`toBase58() worked: ${addr}`);
+              provider?.removeListener?.("connect", onConnect);
+              return addr;
+            }
+          } catch (e2) {
+            addDebug(`toBase58() also failed: ${e2}`);
+          }
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addDebug(`connect() THREW: ${msg}`);
+
+      // After error, check if event listener caught the address
+      await new Promise(r => setTimeout(r, 500));
+      if (eventAddress) {
+        addDebug(`Event listener caught address despite error: ${eventAddress}`);
+        provider?.removeListener?.("connect", onConnect);
+        return eventAddress;
+      }
+
+      // Check if provider.publicKey got set despite error
+      if (provider?.publicKey) {
+        try {
+          const addr = provider.publicKey.toString();
+          addDebug(`provider.publicKey available after error: ${addr}`);
+          provider?.removeListener?.("connect", onConnect);
+          return addr;
+        } catch (e) {
+          addDebug(`provider.publicKey.toString() failed after error: ${e}`);
+        }
+      }
+
+      provider?.removeListener?.("connect", onConnect);
       throw err;
     }
 
-    throw new Error(errMsg || "Could not get wallet address");
+    provider?.removeListener?.("connect", onConnect);
+
+    // If event listener caught something
+    if (eventAddress) {
+      addDebug(`Using event address: ${eventAddress}`);
+      return eventAddress;
+    }
+
+    // Check provider.publicKey one more time
+    if (provider?.publicKey) {
+      try {
+        const addr = provider.publicKey.toString();
+        addDebug(`Late provider.publicKey: ${addr}`);
+        return addr;
+      } catch (e) {
+        addDebug(`Late provider.publicKey.toString() failed: ${e}`);
+      }
+    }
+
+    throw new Error("connect() succeeded but no publicKey returned");
   };
 
   const [sessionId, setSessionId] = useState(() => {
@@ -471,7 +423,7 @@ export default function MePage() {
       if (!provider) return;
 
       try {
-        const walletAddress = await connectAndGetAddress();
+        const walletAddress = await connectAndGetAddress(provider);
 
         const res = await fetch("/api/auth/human", {
           method: "POST",
@@ -488,8 +440,8 @@ export default function MePage() {
           setSuccess(data.message || "Wallet linked!");
           setTimeout(() => setSuccess(""), 3000);
         }
-      } catch {
-        // User rejected or error — they can try manually
+      } catch (e) {
+        addDebug(`Auto-link failed: ${e instanceof Error ? e.message : e}`);
       }
     };
     const timer = setTimeout(run, 500);
@@ -507,7 +459,7 @@ export default function MePage() {
       if (!provider) return;
 
       try {
-        const walletAddress = await connectAndGetAddress();
+        const walletAddress = await connectAndGetAddress(provider);
         if (!walletAddress) return;
 
         const res = await fetch("/api/auth/human", {
@@ -530,8 +482,8 @@ export default function MePage() {
             : "Wallet account created!");
           fetchProfile();
         }
-      } catch {
-        // User rejected or error — they can try manually via button
+      } catch (e) {
+        addDebug(`Auto-login failed: ${e instanceof Error ? e.message : e}`);
       }
     };
     const timer = setTimeout(run, 500);
@@ -539,40 +491,27 @@ export default function MePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, fetchProfile]);
 
-  // Redirect to Phantom's in-app browser via deep link.
-  // Used as fallback when iOS Safari's WebKit postMessage bug breaks connect().
-  const redirectToPhantomBrowser = (mode: "login" | "link") => {
-    const targetUrl = new URL(window.location.href);
-    // Clear any previous params
-    targetUrl.searchParams.delete("phantom_link");
-    targetUrl.searchParams.delete("phantom_login");
-    targetUrl.searchParams.set(mode === "login" ? "phantom_login" : "phantom_link", "1");
-    if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-    console.log("[Phantom] Redirecting to Phantom browser:", targetUrl.toString());
-    window.location.href = buildPhantomBrowseLink(targetUrl.toString());
-  };
-
   // Wallet-based login (for Phantom browser users)
   const handleWalletLogin = async () => {
     if (typeof window === "undefined") return;
     setWalletLoggingIn(true);
     setError("");
-    try {
-      // On iOS Safari (not Phantom in-app browser), skip connect() entirely —
-      // it's broken due to WebKit postMessage bug. Go straight to deep link.
-      if (isIOSSafariBroken) {
-        console.log("[Phantom] iOS Safari detected — using deep link flow");
-        redirectToPhantomBrowser("login");
-        return;
-      }
+    setShowPhantomDeepLink(null);
+    addDebug("handleWalletLogin started");
 
+    try {
       // Poll for Phantom provider — may take a moment to inject
       const provider = await waitForPhantomProvider(3000);
 
       if (!provider) {
+        addDebug("No provider found");
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
-          redirectToPhantomBrowser("login");
+          // Show tappable deep link (programmatic redirect doesn't trigger universal links on iOS)
+          addDebug("Mobile without provider — showing deep link");
+          setError("Phantom not detected. Tap the link below to open in Phantom app.");
+          setShowPhantomDeepLink("login");
+          setShowDebug(true);
           setWalletLoggingIn(false);
           return;
         }
@@ -583,9 +522,10 @@ export default function MePage() {
         return;
       }
 
-      // Try connect (multiple strategies including event listeners)
-      const walletAddress = await connectAndGetAddress();
+      // Actually try connect() with full error logging
+      const walletAddress = await connectAndGetAddress(provider);
 
+      addDebug(`Login with address: ${walletAddress}`);
       const res = await fetch("/api/auth/human", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -596,6 +536,7 @@ export default function MePage() {
         }),
       });
       const data = await res.json();
+      addDebug(`API response: ${JSON.stringify(data).substring(0, 100)}`);
       if (data.success) {
         const newSid = data.user.session_id || sessionId;
         localStorage.setItem("aiglitch-session", newSid);
@@ -610,23 +551,23 @@ export default function MePage() {
         setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      console.error("[Phantom] handleWalletLogin error:", err);
       const message = err instanceof Error ? err.message : String(err);
+      addDebug(`CATCH error: ${message}`);
+      setShowDebug(true); // Auto-show debug on error
 
-      // iOS Safari serialization bug — redirect to Phantom's in-app browser
-      if (message === "IOS_SAFARI_BUG" || message.includes("string did not match") || message.includes("expected pattern")) {
-        console.log("[Phantom] iOS Safari bug detected — redirecting to Phantom browser");
-        setError("Opening Phantom app...");
-        redirectToPhantomBrowser("login");
-        return;
-      }
-
-      if (message.includes("User rejected")) {
+      // On any connect failure on mobile, show tappable deep link as fallback
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile && !message.includes("User rejected")) {
+        setError(`Connection failed: ${message}. Try opening in Phantom app instead.`);
+        setShowPhantomDeepLink("login");
+      } else if (message === "WALLET_TIMEOUT") {
+        setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
+      } else if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
         setError(`Wallet error: ${message || "Unknown error"}. Please try again.`);
       }
-      setTimeout(() => setError(""), 8000);
+      setTimeout(() => setError(""), 15000);
     }
     setWalletLoggingIn(false);
   };
@@ -636,20 +577,19 @@ export default function MePage() {
     if (typeof window === "undefined") return;
     setWalletLinking(true);
     setError("");
-    try {
-      // On iOS Safari, skip broken connect() and go straight to deep link
-      if (isIOSSafariBroken) {
-        console.log("[Phantom] iOS Safari detected — using deep link for wallet linking");
-        redirectToPhantomBrowser("link");
-        return;
-      }
+    setShowPhantomDeepLink(null);
+    addDebug("handleLinkWallet started");
 
+    try {
       const provider = await waitForPhantomProvider(3000);
 
       if (!provider) {
+        addDebug("No provider for linking");
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isMobile) {
-          redirectToPhantomBrowser("link");
+          setError("Phantom not detected. Tap the link below to open in Phantom app.");
+          setShowPhantomDeepLink("link");
+          setShowDebug(true);
           setWalletLinking(false);
           return;
         }
@@ -659,7 +599,8 @@ export default function MePage() {
         return;
       }
 
-      const walletAddress = await connectAndGetAddress();
+      const walletAddress = await connectAndGetAddress(provider);
+      addDebug(`Linking address: ${walletAddress}`);
 
       const res = await fetch("/api/auth/human", {
         method: "POST",
@@ -680,23 +621,20 @@ export default function MePage() {
         setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      console.error("[Phantom] handleLinkWallet error:", err);
       const message = err instanceof Error ? err.message : String(err);
+      addDebug(`Link CATCH: ${message}`);
+      setShowDebug(true);
 
-      // iOS Safari serialization bug — redirect to Phantom's in-app browser
-      if (message === "IOS_SAFARI_BUG" || message.includes("string did not match") || message.includes("expected pattern")) {
-        console.log("[Phantom] iOS Safari bug detected — redirecting to Phantom browser");
-        setError("Opening Phantom app...");
-        redirectToPhantomBrowser("link");
-        return;
-      }
-
-      if (message.includes("User rejected")) {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile && !message.includes("User rejected")) {
+        setError(`Connection failed: ${message}. Try opening in Phantom app instead.`);
+        setShowPhantomDeepLink("link");
+      } else if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
         setError(`Wallet error: ${message || "Unknown error"}. Please try again.`);
       }
-      setTimeout(() => setError(""), 8000);
+      setTimeout(() => setError(""), 15000);
     }
     setWalletLinking(false);
   };
@@ -1203,6 +1141,38 @@ export default function MePage() {
         {error && (
           <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-3 mb-4 text-red-400 text-sm text-center">
             {error}
+          </div>
+        )}
+        {/* Tappable deep link fallback — iOS requires real <a> tap for universal links */}
+        {showPhantomDeepLink && (
+          <div className="bg-purple-500/20 border border-purple-500/30 rounded-xl p-4 mb-4 text-center space-y-2">
+            <a
+              href={(() => {
+                const targetUrl = new URL(window.location.origin + "/me");
+                targetUrl.searchParams.set(showPhantomDeepLink === "login" ? "phantom_login" : "phantom_link", "1");
+                if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+                return buildPhantomBrowseLink(targetUrl.toString());
+              })()}
+              className="inline-block px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+            >
+              Open in Phantom App
+            </a>
+            <p className="text-[10px] text-gray-400">Tap above to open this page in Phantom&apos;s browser</p>
+          </div>
+        )}
+        {/* Debug log panel — shows on error or toggle */}
+        {debugLog.length > 0 && (
+          <div className="mb-4">
+            <button onClick={() => setShowDebug(!showDebug)} className="text-[10px] text-gray-600 hover:text-gray-400 mb-1">
+              {showDebug ? "Hide" : "Show"} debug log ({debugLog.length})
+            </button>
+            {showDebug && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 max-h-40 overflow-y-auto">
+                {debugLog.map((line, i) => (
+                  <div key={i} className="text-[9px] text-gray-500 font-mono leading-tight">{line}</div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
