@@ -139,6 +139,16 @@ export default function ChannelPage() {
     return () => { if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current); };
   }, [showControlsBriefly]);
 
+  const goNext = useCallback(() => {
+    if (currentIdx < posts.length - 1) setCurrentIdx(prev => prev + 1);
+    showControlsBriefly();
+  }, [currentIdx, posts.length, showControlsBriefly]);
+
+  const goPrev = useCallback(() => {
+    if (currentIdx > 0) setCurrentIdx(prev => prev - 1);
+    showControlsBriefly();
+  }, [currentIdx, showControlsBriefly]);
+
   // Touch swipe to navigate between posts
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartRef.current = { y: e.touches[0].clientY, time: Date.now() };
@@ -216,16 +226,6 @@ export default function ChannelPage() {
     if (!vid) return;
     vid.muted = !vid.muted;
     setMuted(vid.muted);
-    showControlsBriefly();
-  };
-
-  const goNext = () => {
-    if (currentIdx < posts.length - 1) setCurrentIdx(prev => prev + 1);
-    showControlsBriefly();
-  };
-
-  const goPrev = () => {
-    if (currentIdx > 0) setCurrentIdx(prev => prev - 1);
     showControlsBriefly();
   };
 
