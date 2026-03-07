@@ -33,6 +33,8 @@ export default function ChannelPage() {
   const [userReactions, setUserReactions] = useState<Record<string, Set<string>>>({});
   const [progress, setProgress] = useState(0);
   const [showControls, setShowControls] = useState(true);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const allPostsRef = useRef<Post[]>([]);
@@ -209,28 +211,46 @@ export default function ChannelPage() {
     if (!sessionId || !currentPost) return;
     const pid = currentPost.id;
     const wasActive = userReactions[pid]?.has(emoji) || false;
+    const previousReactions = new Set(userReactions[pid] || []);
 
-    // Optimistic update
+    // Single-select: optimistic update — clear all previous, toggle this one
     setUserReactions(prev => {
-      const newSet = new Set(prev[pid] || []);
-      if (wasActive) newSet.delete(emoji); else newSet.add(emoji);
+      const newSet = new Set<string>();
+      if (!wasActive) newSet.add(emoji);
       return { ...prev, [pid]: newSet };
     });
-    setReactionCounts(prev => ({
-      ...prev,
-      [pid]: {
-        ...(prev[pid] || { funny: 0, sad: 0, shocked: 0, crap: 0 }),
-        [emoji]: Math.max(0, ((prev[pid] || {})[emoji] || 0) + (wasActive ? -1 : 1)),
-      },
-    }));
+    setReactionCounts(prev => {
+      const current = { ...(prev[pid] || { funny: 0, sad: 0, shocked: 0, crap: 0 }) };
+      // Decrement any previously active reactions
+      for (const prevEmoji of previousReactions) {
+        if (prevEmoji !== emoji) {
+          current[prevEmoji] = Math.max(0, (current[prevEmoji] || 0) - 1);
+        }
+      }
+      // Toggle the selected emoji
+      current[emoji] = Math.max(0, (current[emoji] || 0) + (wasActive ? -1 : 1));
+      return { ...prev, [pid]: current };
+    });
 
+    // Remove previous reactions on server, then toggle the new one
     try {
+      for (const prevEmoji of previousReactions) {
+        if (prevEmoji !== emoji) {
+          await fetch("/api/interact", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ post_id: pid, session_id: sessionId, action: "react", emoji: prevEmoji }),
+          });
+        }
+      }
       await fetch("/api/interact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ post_id: pid, session_id: sessionId, action: "react", emoji }),
       });
     } catch { /* optimistic update already applied */ }
+
+    setShowEmojiPicker(false);
   };
 
   const currentReactionCounts = currentPost ? (reactionCounts[currentPost.id] || { funny: 0, sad: 0, shocked: 0, crap: 0 }) : { funny: 0, sad: 0, shocked: 0, crap: 0 };
@@ -265,7 +285,7 @@ export default function ChannelPage() {
   return (
     <div
       className="h-[100dvh] bg-black text-white flex flex-col overflow-hidden relative select-none"
-      onClick={showControlsBriefly}
+      onClick={() => { showControlsBriefly(); setShowEmojiPicker(false); }}
     >
       {/* Full-screen video/image */}
       <div className="absolute inset-0">
@@ -327,32 +347,73 @@ export default function ChannelPage() {
         </div>
       </div>
 
-      {/* Right side: Emoji reactions */}
+      {/* Right side: Thumbs-up reaction button with long-press emoji picker */}
       {currentPost && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-2">
-          {([
-            { key: "funny", emoji: "😂" },
-            { key: "sad", emoji: "😢" },
-            { key: "shocked", emoji: "😮" },
-            { key: "crap", emoji: "💩" },
-          ] as const).map(({ key, emoji }) => (
-            <button
-              key={key}
-              onClick={(e) => { e.stopPropagation(); handleReaction(key); }}
-              className={`flex flex-col items-center transition-all active:scale-125 ${
-                currentUserReactions.has(key) ? "scale-110" : ""
-              }`}
-            >
-              <span className={`text-2xl drop-shadow-lg transition-all ${
-                currentUserReactions.has(key) ? "" : "grayscale opacity-50"
-              }`}>{emoji}</span>
-              {(currentReactionCounts[key] || 0) > 0 && (
-                <span className="text-[10px] text-white font-bold drop-shadow-lg leading-none">
-                  {currentReactionCounts[key]}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="absolute right-3 bottom-36 z-20 flex flex-col items-center">
+          {/* Emoji picker (shown on long-press) */}
+          {showEmojiPicker && (
+            <div className="absolute bottom-14 right-0 bg-black/80 backdrop-blur-xl rounded-2xl p-2 flex flex-col gap-1 border border-white/10 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+              {([
+                { key: "funny", emoji: "😂" },
+                { key: "sad", emoji: "😢" },
+                { key: "shocked", emoji: "😮" },
+                { key: "crap", emoji: "💩" },
+              ] as const).map(({ key, emoji }) => (
+                <button
+                  key={key}
+                  onClick={(e) => { e.stopPropagation(); handleReaction(key); }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all active:scale-95 hover:bg-white/10 ${
+                    currentUserReactions.has(key) ? "bg-white/15" : ""
+                  }`}
+                >
+                  <span className="text-2xl">{emoji}</span>
+                  {(currentReactionCounts[key] || 0) > 0 && (
+                    <span className="text-[11px] text-white/70 font-bold min-w-[16px]">
+                      {currentReactionCounts[key]}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Main thumbs-up button */}
+          {(() => {
+            const activeEntry = (["funny", "sad", "shocked", "crap"] as const).find(k => currentUserReactions.has(k));
+            const activeEmoji = activeEntry ? { funny: "😂", sad: "😢", shocked: "😮", crap: "💩" }[activeEntry] : null;
+            const totalReactions = Object.values(currentReactionCounts).reduce((a, b) => a + b, 0);
+            return (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (activeEntry) {
+                    // Tap when active = unreact
+                    handleReaction(activeEntry);
+                  } else {
+                    // Tap when no reaction = quick react with "funny"
+                    handleReaction("funny");
+                  }
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  longPressTimerRef.current = setTimeout(() => {
+                    setShowEmojiPicker(prev => !prev);
+                  }, 400);
+                }}
+                onPointerUp={() => clearTimeout(longPressTimerRef.current)}
+                onPointerLeave={() => clearTimeout(longPressTimerRef.current)}
+                className={`w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all active:scale-90 ${
+                  activeEntry
+                    ? "bg-white/20 backdrop-blur-sm"
+                    : "bg-black/40 backdrop-blur-sm border border-white/20"
+                }`}
+              >
+                <span className="text-2xl leading-none">{activeEmoji || "👍"}</span>
+                {totalReactions > 0 && (
+                  <span className="text-[9px] text-white font-bold leading-none mt-0.5">{totalReactions}</span>
+                )}
+              </button>
+            );
+          })()}
         </div>
       )}
 
