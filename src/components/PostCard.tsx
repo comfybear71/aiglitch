@@ -192,7 +192,6 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   const [userReactions, setUserReactions] = useState<Set<string>>(
     new Set(post.userReactions || [])
   );
-  const [showReactions, setShowReactions] = useState(false);
 
   // Video controls state
   const [isPaused, setIsPaused] = useState(false);
@@ -840,7 +839,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
       </div>
 
       {/* Right Side: TikTok action icons */}
-      <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-4">
+      <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-3">
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <Link href={`/profile/${post.username}`} className="block">
@@ -890,40 +889,27 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
           <span className="text-white text-xs font-bold drop-shadow-lg">{commentCount}</span>
         </button>
 
-        {/* Emoji Reactions */}
-        <div className="relative">
-          <button
-            onClick={() => setShowReactions(!showReactions)}
-            className="flex flex-col items-center gap-1 active:scale-110 transition-transform"
-          >
-            <span className="text-2xl drop-shadow-lg">😂</span>
-            <span className="text-white text-xs font-bold drop-shadow-lg">
-              {Object.values(reactionCounts).reduce((a, b) => a + b, 0) || "React"}
-            </span>
-          </button>
-          {showReactions && (
-            <div className="absolute right-10 top-1/2 -translate-y-1/2 flex gap-1 bg-black/80 backdrop-blur-sm rounded-full px-2 py-1 border border-white/20 shadow-xl z-50">
-              {([
-                { key: "funny", emoji: "😂" },
-                { key: "sad", emoji: "😢" },
-                { key: "shocked", emoji: "😮" },
-                { key: "crap", emoji: "💩" },
-              ] as const).map(({ key, emoji }) => (
-                <button
-                  key={key}
-                  onClick={() => handleReaction(key)}
-                  className={`flex flex-col items-center px-1.5 py-0.5 rounded-lg transition-all active:scale-125 ${
-                    userReactions.has(key) ? "bg-white/20 scale-110" : "hover:bg-white/10"
-                  }`}
-                >
-                  <span className="text-xl">{emoji}</span>
-                  {reactionCounts[key] > 0 && (
-                    <span className="text-[9px] text-white font-bold">{reactionCounts[key]}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+        {/* Emoji Reactions — 4 inline buttons */}
+        <div className="flex flex-col items-center gap-1.5">
+          {([
+            { key: "funny", emoji: "😂" },
+            { key: "sad", emoji: "😢" },
+            { key: "shocked", emoji: "😮" },
+            { key: "crap", emoji: "💩" },
+          ] as const).map(({ key, emoji }) => (
+            <button
+              key={key}
+              onClick={() => handleReaction(key)}
+              className={`flex flex-col items-center transition-all active:scale-125 ${
+                userReactions.has(key) ? "scale-110" : ""
+              }`}
+            >
+              <span className={`text-lg drop-shadow-lg ${userReactions.has(key) ? "" : "grayscale opacity-60"}`}>{emoji}</span>
+              {reactionCounts[key] > 0 && (
+                <span className="text-[9px] text-white font-bold drop-shadow-lg leading-none">{reactionCounts[key]}</span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Share */}

@@ -43,6 +43,10 @@
     {
       "path": "/api/generate-channel-content",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/feedback-loop",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
