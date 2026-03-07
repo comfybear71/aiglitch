@@ -68,8 +68,18 @@ export default function MePage() {
   const phantomDeepLinkedRef = useRef(false);
   const phantomLoginLinkedRef = useRef(false);
 
-  // Use wallet adapter (handles iOS Safari serialization bug internally)
+  // Use wallet adapter hooks
   const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets } = useWallet();
+
+  // Detect iOS Safari (not Phantom in-app browser) — affected by WebKit postMessage bug
+  const isIOSSafariBroken = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const ua = navigator.userAgent;
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
+    const isPhantomInApp = /Phantom/i.test(ua);
+    return isIOS && isSafari && !isPhantomInApp;
+  }, []);
 
   // Helper: poll for Phantom provider availability (in-app browser may inject late)
   const waitForPhantomProvider = async (maxWaitMs = 3000, intervalMs = 300) => {
@@ -89,75 +99,173 @@ export default function MePage() {
     return null;
   };
 
-  // Helper: connect via wallet adapter and return wallet address.
-  // Uses @solana/wallet-adapter which handles the iOS Safari "string did not match"
-  // bug internally, unlike raw provider.connect().
-  const connectAndGetAddress = async (): Promise<string | null> => {
-    // Already connected via adapter
+  // Helper: try to get wallet address using multiple strategies.
+  // Returns the address string or throws with a special "IOS_SAFARI_BUG" flag
+  // so callers can redirect to Phantom deep link.
+  const connectAndGetAddress = async (): Promise<string> => {
+    // Strategy 1: Already connected via adapter
     if (walletConnected && walletPublicKey) {
       console.log("[Phantom] Adapter already connected:", walletPublicKey.toString());
       return walletPublicKey.toString();
     }
 
-    // Select Phantom wallet in the adapter
-    const phantomWallet = wallets.find(w => w.adapter.name === "Phantom");
-    if (phantomWallet) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const rawProvider = w.phantom?.solana || w.solana;
+
+    // Strategy 2: Raw provider already connected
+    if (rawProvider?.isConnected && rawProvider?.publicKey) {
       try {
-        walletSelect(phantomWallet.adapter.name);
-        await new Promise(r => setTimeout(r, 300));
-      } catch (err) {
-        console.warn("[Phantom] walletSelect error:", err);
+        const addr = rawProvider.publicKey.toString();
+        console.log("[Phantom] Raw provider already connected:", addr);
+        return addr;
+      } catch (e) {
+        console.warn("[Phantom] toString() failed on existing publicKey:", e);
       }
     }
 
-    // Connect via adapter
-    try {
-      await walletConnect();
-      // Small delay for adapter state to update
-      await new Promise(r => setTimeout(r, 200));
-    } catch (err) {
-      console.warn("[Phantom] walletConnect() error:", err);
-      // Adapter may still have connected despite error — check publicKey
+    // Strategy 3: Event listener + connect() race
+    // Listen for 'connect' event BEFORE calling connect(). The event might
+    // fire even when the connect() promise rejects on iOS Safari.
+    let connectError: unknown = null;
+    const addressFromEvent = await new Promise<string | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        console.warn("[Phantom] Event listener timed out after 8s");
+        resolve(null);
+      }, 8000);
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        if (rawProvider) rawProvider.removeListener?.("connect", onConnect);
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const onConnect = (pk: any) => {
+        console.log("[Phantom] 'connect' event fired, pk:", pk);
+        cleanup();
+        try {
+          if (pk) {
+            resolve(pk.toString());
+            return;
+          }
+        } catch (e) {
+          console.warn("[Phantom] toString() failed in event:", e);
+        }
+        // Event fired but no usable publicKey — check raw provider
+        try {
+          if (rawProvider?.publicKey) {
+            resolve(rawProvider.publicKey.toString());
+            return;
+          }
+        } catch (e) {
+          console.warn("[Phantom] raw provider toString() failed:", e);
+        }
+        resolve(null);
+      };
+
+      if (rawProvider) {
+        rawProvider.on?.("connect", onConnect);
+      }
+
+      // Try adapter connect
+      const phantomWallet = wallets.find(wal => wal.adapter.name === "Phantom");
+      if (phantomWallet) {
+        try { walletSelect(phantomWallet.adapter.name); } catch {}
+      }
+
+      // Small delay for selection to take effect, then connect
+      setTimeout(async () => {
+        try {
+          await walletConnect();
+          console.log("[Phantom] walletConnect() resolved");
+          // If we get here, check adapter publicKey
+          if (walletPublicKey) {
+            cleanup();
+            resolve(walletPublicKey.toString());
+            return;
+          }
+          // Check raw provider
+          if (rawProvider?.publicKey) {
+            cleanup();
+            try {
+              resolve(rawProvider.publicKey.toString());
+            } catch {
+              resolve(null);
+            }
+            return;
+          }
+          // Wait a bit more for state to propagate
+          await new Promise(r => setTimeout(r, 500));
+          if (rawProvider?.publicKey) {
+            cleanup();
+            try {
+              resolve(rawProvider.publicKey.toString());
+            } catch {
+              resolve(null);
+            }
+            return;
+          }
+        } catch (err) {
+          console.warn("[Phantom] walletConnect() threw:", err);
+          connectError = err;
+
+          // Check if raw provider got the publicKey despite the error
+          await new Promise(r => setTimeout(r, 300));
+          if (rawProvider?.publicKey) {
+            cleanup();
+            try {
+              resolve(rawProvider.publicKey.toString());
+            } catch {
+              resolve(null);
+            }
+            return;
+          }
+
+          // Try raw connect() as well (different code path)
+          if (rawProvider && !rawProvider.isConnected) {
+            try {
+              const resp = await rawProvider.connect();
+              if (resp?.publicKey) {
+                cleanup();
+                resolve(resp.publicKey.toString());
+                return;
+              }
+            } catch (e2) {
+              console.warn("[Phantom] raw connect() also threw:", e2);
+              connectError = connectError || e2;
+            }
+          }
+
+          // Final check with delay
+          await new Promise(r => setTimeout(r, 1000));
+          if (rawProvider?.publicKey) {
+            cleanup();
+            try {
+              resolve(rawProvider.publicKey.toString());
+            } catch {
+              resolve(null);
+            }
+            return;
+          }
+          // Let timeout handle it
+        }
+      }, 200);
+    });
+
+    if (addressFromEvent) {
+      console.log("[Phantom] Got address:", addressFromEvent);
+      return addressFromEvent;
     }
 
-    // Check if publicKey is available (adapter reads it from provider internally)
-    if (walletPublicKey) {
-      console.log("[Phantom] Got publicKey after connect:", walletPublicKey.toString());
-      return walletPublicKey.toString();
+    // All strategies failed — check if this was the iOS Safari serialization bug
+    const errMsg = connectError instanceof Error ? connectError.message : String(connectError || "");
+    if (errMsg.includes("string did not match") || errMsg.includes("expected pattern")) {
+      const err = new Error("IOS_SAFARI_BUG");
+      (err as any).originalError = connectError;
+      throw err;
     }
 
-    // Fallback: read directly from raw provider (adapter state is a snapshot
-    // and won't update within this async function — raw provider will)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const getRawPK = () => {
-      const p = w.phantom?.solana || w.solana;
-      return p?.publicKey ? p.publicKey.toString() : null;
-    };
-
-    const pk1 = getRawPK();
-    if (pk1) {
-      console.log("[Phantom] Got publicKey from raw provider:", pk1);
-      return pk1;
-    }
-
-    // Retry with delays — raw provider may update asynchronously
-    await new Promise(r => setTimeout(r, 500));
-    const pk2 = getRawPK();
-    if (pk2) {
-      console.log("[Phantom] Got publicKey after 500ms:", pk2);
-      return pk2;
-    }
-
-    await new Promise(r => setTimeout(r, 1000));
-    const pk3 = getRawPK();
-    if (pk3) {
-      console.log("[Phantom] Got publicKey after 1.5s:", pk3);
-      return pk3;
-    }
-
-    console.error("[Phantom] No publicKey available after all attempts");
-    return null;
+    throw new Error(errMsg || "Could not get wallet address");
   };
 
   const [sessionId, setSessionId] = useState(() => {
@@ -364,7 +472,6 @@ export default function MePage() {
 
       try {
         const walletAddress = await connectAndGetAddress();
-        if (!walletAddress) return;
 
         const res = await fetch("/api/auth/human", {
           method: "POST",
@@ -432,23 +539,40 @@ export default function MePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, fetchProfile]);
 
+  // Redirect to Phantom's in-app browser via deep link.
+  // Used as fallback when iOS Safari's WebKit postMessage bug breaks connect().
+  const redirectToPhantomBrowser = (mode: "login" | "link") => {
+    const targetUrl = new URL(window.location.href);
+    // Clear any previous params
+    targetUrl.searchParams.delete("phantom_link");
+    targetUrl.searchParams.delete("phantom_login");
+    targetUrl.searchParams.set(mode === "login" ? "phantom_login" : "phantom_link", "1");
+    if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+    console.log("[Phantom] Redirecting to Phantom browser:", targetUrl.toString());
+    window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+  };
+
   // Wallet-based login (for Phantom browser users)
   const handleWalletLogin = async () => {
     if (typeof window === "undefined") return;
     setWalletLoggingIn(true);
     setError("");
     try {
+      // On iOS Safari (not Phantom in-app browser), skip connect() entirely —
+      // it's broken due to WebKit postMessage bug. Go straight to deep link.
+      if (isIOSSafariBroken) {
+        console.log("[Phantom] iOS Safari detected — using deep link flow");
+        redirectToPhantomBrowser("login");
+        return;
+      }
+
       // Poll for Phantom provider — may take a moment to inject
       const provider = await waitForPhantomProvider(3000);
 
       if (!provider) {
-        // Phantom not installed — try deep link for mobile, otherwise open install page
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
-          const targetUrl = new URL(window.location.href);
-          targetUrl.searchParams.set("phantom_login", "1");
-          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+          redirectToPhantomBrowser("login");
           setWalletLoggingIn(false);
           return;
         }
@@ -459,14 +583,8 @@ export default function MePage() {
         return;
       }
 
-      // Connect via wallet adapter (handles iOS Safari serialization bug)
+      // Try connect (multiple strategies including event listeners)
       const walletAddress = await connectAndGetAddress();
-      if (!walletAddress) {
-        setError("Could not get wallet address. Please try again.");
-        setTimeout(() => setError(""), 5000);
-        setWalletLoggingIn(false);
-        return;
-      }
 
       const res = await fetch("/api/auth/human", {
         method: "POST",
@@ -494,6 +612,15 @@ export default function MePage() {
     } catch (err) {
       console.error("[Phantom] handleWalletLogin error:", err);
       const message = err instanceof Error ? err.message : String(err);
+
+      // iOS Safari serialization bug — redirect to Phantom's in-app browser
+      if (message === "IOS_SAFARI_BUG" || message.includes("string did not match") || message.includes("expected pattern")) {
+        console.log("[Phantom] iOS Safari bug detected — redirecting to Phantom browser");
+        setError("Opening Phantom app...");
+        redirectToPhantomBrowser("login");
+        return;
+      }
+
       if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
@@ -510,16 +637,19 @@ export default function MePage() {
     setWalletLinking(true);
     setError("");
     try {
-      // Poll for Phantom provider — may take a moment to inject
+      // On iOS Safari, skip broken connect() and go straight to deep link
+      if (isIOSSafariBroken) {
+        console.log("[Phantom] iOS Safari detected — using deep link for wallet linking");
+        redirectToPhantomBrowser("link");
+        return;
+      }
+
       const provider = await waitForPhantomProvider(3000);
 
       if (!provider) {
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isMobile) {
-          const targetUrl = new URL(window.location.href);
-          targetUrl.searchParams.set("phantom_link", "1");
-          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+          redirectToPhantomBrowser("link");
           setWalletLinking(false);
           return;
         }
@@ -529,14 +659,7 @@ export default function MePage() {
         return;
       }
 
-      // Connect via wallet adapter (handles iOS Safari serialization bug)
       const walletAddress = await connectAndGetAddress();
-      if (!walletAddress) {
-        setError("Could not get wallet address. Please try again.");
-        setTimeout(() => setError(""), 5000);
-        setWalletLinking(false);
-        return;
-      }
 
       const res = await fetch("/api/auth/human", {
         method: "POST",
@@ -559,6 +682,15 @@ export default function MePage() {
     } catch (err) {
       console.error("[Phantom] handleLinkWallet error:", err);
       const message = err instanceof Error ? err.message : String(err);
+
+      // iOS Safari serialization bug — redirect to Phantom's in-app browser
+      if (message === "IOS_SAFARI_BUG" || message.includes("string did not match") || message.includes("expected pattern")) {
+        console.log("[Phantom] iOS Safari bug detected — redirecting to Phantom browser");
+        setError("Opening Phantom app...");
+        redirectToPhantomBrowser("link");
+        return;
+      }
+
       if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
