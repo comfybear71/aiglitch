@@ -74,29 +74,58 @@ export default function MePage() {
     let elapsed = 0;
     while (elapsed < maxWaitMs) {
       const provider = w.phantom?.solana || w.solana;
-      if (provider?.isPhantom) return provider;
+      if (provider?.isPhantom) {
+        console.log("[Phantom] Provider found after", elapsed, "ms, isConnected:", provider.isConnected, "publicKey:", provider.publicKey?.toString());
+        return provider;
+      }
       await new Promise(r => setTimeout(r, intervalMs));
       elapsed += intervalMs;
     }
+    console.warn("[Phantom] Provider not found after", maxWaitMs, "ms");
     return null;
   };
 
-  // Helper: get wallet address from Phantom provider (matches BUDJU pattern).
-  // Checks isConnected first — in Phantom's in-app browser the wallet is often
-  // already connected and calling connect() again can throw on iOS Safari.
+  // Helper: get wallet address from Phantom provider.
+  // On iOS Safari, provider.connect() can throw EVEN AFTER the user approves
+  // (PublicKey serialization fails in postMessage). So we always check
+  // provider.publicKey in the catch block — the connection may have succeeded.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getWalletAddress = async (provider: any): Promise<string | null> => {
     // Already connected — just read the publicKey directly
     if (provider.isConnected && provider.publicKey) {
+      console.log("[Phantom] Already connected, publicKey:", provider.publicKey.toString());
       return provider.publicKey.toString();
     }
-    // Not connected — call connect() and read publicKey from provider object
+
+    // Not connected — call connect()
     try {
-      await provider.connect();
-    } catch {
-      return null;
+      const resp = await provider.connect();
+      console.log("[Phantom] connect() resolved, resp:", resp);
+      // Try return value first, then provider object
+      if (resp?.publicKey) return resp.publicKey.toString();
+      if (provider.publicKey) return provider.publicKey.toString();
+    } catch (err) {
+      console.warn("[Phantom] connect() threw:", err);
+      // iOS Safari bug: connect() throws but connection actually succeeded.
+      // Check provider.publicKey anyway.
+      if (provider.publicKey) {
+        console.log("[Phantom] publicKey available despite error:", provider.publicKey.toString());
+        return provider.publicKey.toString();
+      }
+      // Provider may update publicKey asynchronously — wait briefly
+      await new Promise(r => setTimeout(r, 500));
+      if (provider.publicKey) {
+        console.log("[Phantom] publicKey available after delay:", provider.publicKey.toString());
+        return provider.publicKey.toString();
+      }
+      // Try one more time with a longer delay
+      await new Promise(r => setTimeout(r, 1000));
+      if (provider.publicKey) {
+        console.log("[Phantom] publicKey available after 1.5s:", provider.publicKey.toString());
+        return provider.publicKey.toString();
+      }
+      console.error("[Phantom] No publicKey after connect() error");
     }
-    if (provider.publicKey) return provider.publicKey.toString();
     return null;
   };
 
@@ -434,13 +463,14 @@ export default function MePage() {
         setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "";
+      console.error("[Phantom] handleWalletLogin error:", err);
+      const message = err instanceof Error ? err.message : String(err);
       if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
-        setError("Failed to connect Phantom wallet. Please make sure Phantom is unlocked and try again.");
+        setError(`Wallet connect error: ${message || "Unknown error"}. Please try again.`);
       }
-      setTimeout(() => setError(""), 5000);
+      setTimeout(() => setError(""), 8000);
     }
     setWalletLoggingIn(false);
   };
@@ -498,13 +528,14 @@ export default function MePage() {
         setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "";
+      console.error("[Phantom] handleLinkWallet error:", err);
+      const message = err instanceof Error ? err.message : String(err);
       if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request to link your wallet.");
       } else {
-        setError("Failed to connect Phantom wallet. Make sure Phantom is installed and unlocked.");
+        setError(`Wallet connect error: ${message || "Unknown error"}. Please try again.`);
       }
-      setTimeout(() => setError(""), 5000);
+      setTimeout(() => setError(""), 8000);
     }
     setWalletLinking(false);
   };
