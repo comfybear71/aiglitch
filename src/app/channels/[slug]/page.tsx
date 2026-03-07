@@ -133,11 +133,11 @@ export default function ChannelPage() {
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setVolume(val);
+    setMuted(val === 0);
     const vid = videoRef.current;
     if (vid) {
       vid.volume = val;
       vid.muted = val === 0;
-      setMuted(val === 0);
     }
   };
 
@@ -293,6 +293,36 @@ export default function ChannelPage() {
             </div>
           )}
 
+          {/* Channel name overlay - top left */}
+          <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1">
+            <Link href="/channels" className="text-white/80 hover:text-white">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </Link>
+            <span className="text-sm">{channel.emoji}</span>
+            <span className="text-xs font-bold text-white">{channel.name}</span>
+            <span className="text-[8px] px-1 py-0.5 rounded bg-red-600 text-white font-bold">LIVE</span>
+          </div>
+
+          {/* Fullscreen button - bottom right */}
+          <button
+            onClick={() => {
+              const container = videoRef.current?.parentElement;
+              if (!container) return;
+              if (document.fullscreenElement) {
+                document.exitFullscreen();
+              } else {
+                container.requestFullscreen().catch(() => {});
+              }
+            }}
+            className="absolute bottom-2 right-2 p-1.5 bg-black/60 backdrop-blur-sm rounded-lg hover:bg-black/80 transition-colors"
+          >
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+            </svg>
+          </button>
+
           {/* Paused overlay */}
           {paused && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -373,60 +403,53 @@ export default function ChannelPage() {
 
         {/* Video info section */}
         <div className="px-4 py-3 border-b border-white/5">
-          {currentPost && (
-            <p className="text-sm text-gray-200 mb-2 line-clamp-2">
-              <span className="text-white font-bold">@{currentPost.username}</span>{" "}
-              {currentPost.content?.split("\n")[0]?.slice(0, 120)}
-            </p>
-          )}
+          <div className="flex items-start justify-between gap-3">
+            {/* Left: post info + subscribe */}
+            <div className="flex-1 min-w-0">
+              {currentPost && (
+                <p className="text-sm text-gray-200 mb-2 line-clamp-2">
+                  <span className="text-white font-bold">@{currentPost.username}</span>{" "}
+                  {currentPost.content?.split("\n")[0]?.slice(0, 120)}
+                </p>
+              )}
 
-          {/* Channel row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Link href="/channels" className="text-white/60 hover:text-white">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </Link>
-              <span className="text-sm">{channel.emoji}</span>
-              <span className="text-sm font-bold">{channel.name}</span>
-              <span className="text-[8px] px-1 py-0.5 rounded bg-red-600 text-white font-bold">LIVE</span>
-              <span className="text-[10px] text-gray-500">{channel.subscriber_count} subs</span>
-            </div>
-
-            <button
-              onClick={toggleSubscribe}
-              className={`text-[11px] px-3 py-1 rounded-full font-bold transition-all active:scale-95 ${
-                channel.subscribed
-                  ? "bg-white/10 text-white"
-                  : "bg-cyan-500 text-black"
-              }`}
-            >
-              {channel.subscribed ? "Subscribed" : "Subscribe"}
-            </button>
-          </div>
-
-          {/* Reactions row */}
-          {currentPost && (
-            <div className="flex items-center gap-1 mt-2">
-              {reactions.map(({ key, emoji }) => (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500">{channel.subscriber_count} subs</span>
                 <button
-                  key={key}
-                  onClick={() => handleReaction(key)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-all active:scale-95 ${
-                    currentUserReactions.has(key)
-                      ? "bg-cyan-500/20 border border-cyan-500/40"
-                      : "bg-white/5 border border-white/10 hover:bg-white/10"
+                  onClick={toggleSubscribe}
+                  className={`text-[11px] px-3 py-1 rounded-full font-bold transition-all active:scale-95 ${
+                    channel.subscribed
+                      ? "bg-white/10 text-white"
+                      : "bg-cyan-500 text-black"
                   }`}
                 >
-                  <span>{emoji}</span>
-                  {(currentReactionCounts[key] || 0) > 0 && (
-                    <span className="text-[10px] text-gray-400 font-bold">{currentReactionCounts[key]}</span>
-                  )}
+                  {channel.subscribed ? "Subscribed" : "Subscribe"}
                 </button>
-              ))}
+              </div>
             </div>
-          )}
+
+            {/* Right: Reactions */}
+            {currentPost && (
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {reactions.map(({ key, emoji }) => (
+                  <button
+                    key={key}
+                    onClick={() => handleReaction(key)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-all active:scale-95 ${
+                      currentUserReactions.has(key)
+                        ? "bg-cyan-500/20 border border-cyan-500/40"
+                        : "bg-white/5 border border-white/10 hover:bg-white/10"
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    {(currentReactionCounts[key] || 0) > 0 && (
+                      <span className="text-[10px] text-gray-400 font-bold">{currentReactionCounts[key]}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* On mobile: scrollable thumbnail list below */}
@@ -478,16 +501,6 @@ export default function ChannelPage() {
 
 function ThumbnailItem({ post, isActive, onClick }: { post: Post; isActive: boolean; onClick: () => void }) {
   const hasMedia = post.media_url && (post.media_type === "video" || post.media_type === "image");
-  const thumbRef = useRef<HTMLVideoElement>(null);
-
-  // For videos, seek to 0.5s to get a visible frame
-  useEffect(() => {
-    const vid = thumbRef.current;
-    if (!vid) return;
-    const seekToFrame = () => { vid.currentTime = 0.5; };
-    vid.addEventListener("loadeddata", seekToFrame);
-    return () => vid.removeEventListener("loadeddata", seekToFrame);
-  }, []);
 
   return (
     <button
@@ -504,12 +517,11 @@ function ThumbnailItem({ post, isActive, onClick }: { post: Post; isActive: bool
         {hasMedia && post.media_type === "video" && (
           <>
             <video
-              ref={thumbRef}
-              src={post.media_url!}
+              src={`${post.media_url!}#t=0.5`}
               className="w-full h-full object-cover"
               muted
               playsInline
-              preload="metadata"
+              preload="auto"
             />
             {/* Play icon overlay */}
             <div className="absolute inset-0 flex items-center justify-center">
