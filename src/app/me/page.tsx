@@ -280,26 +280,12 @@ export default function MePage() {
 
     // Poll for Phantom provider — in-app browser may inject it late
     const run = async () => {
-      const provider = await waitForPhantomProvider(6000);
-      if (!provider) {
-        setError("Phantom wallet provider not detected. Please try again.");
-        setTimeout(() => setError(""), 5000);
-        return;
-      }
+      const provider = await waitForPhantomProvider(4000);
+      if (!provider) return;
 
       try {
-        // Try eager connect first (succeeds if already approved)
-        let resp;
-        try {
-          resp = await provider.connect({ onlyIfTrusted: true });
-        } catch {
-          resp = await provider.connect();
-        }
-        if (!resp?.publicKey) {
-          setError("Phantom did not return a wallet address. Please try again.");
-          setTimeout(() => setError(""), 5000);
-          return;
-        }
+        const resp = await provider.connect();
+        if (!resp?.publicKey) return;
         const walletAddress = resp.publicKey.toString();
 
         const res = await fetch("/api/auth/human", {
@@ -322,12 +308,14 @@ export default function MePage() {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[Phantom auto-link]", err);
-        setError(`Wallet linking failed: ${msg || "Unknown error"}`);
-        setTimeout(() => setError(""), 6000);
+        if (!msg.includes("User rejected")) {
+          console.error("[Phantom auto-link]", err);
+          setError(`Wallet linking failed: ${msg || "Unknown error"}`);
+          setTimeout(() => setError(""), 6000);
+        }
       }
     };
-    const timer = setTimeout(run, 800);
+    const timer = setTimeout(run, 500);
     return () => clearTimeout(timer);
   }, [sessionId]);
 
@@ -346,19 +334,8 @@ export default function MePage() {
       }
 
       try {
-        // Try eager connect first (succeeds if already approved)
-        let resp;
-        try {
-          resp = await provider.connect({ onlyIfTrusted: true });
-        } catch {
-          // Not pre-approved — do full connect with user approval
-          resp = await provider.connect();
-        }
-        if (!resp?.publicKey) {
-          setError("Phantom did not return a wallet address. Please try again.");
-          setTimeout(() => setError(""), 5000);
-          return;
-        }
+        const resp = await provider.connect();
+        if (!resp?.publicKey) return;
         const walletAddress = resp.publicKey.toString();
 
         const res = await fetch("/api/auth/human", {
@@ -386,17 +363,14 @@ export default function MePage() {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("User rejected")) {
-          setError("Connection was rejected. Please approve the Phantom connection request.");
-        } else {
+        if (!msg.includes("User rejected")) {
           console.error("[Phantom auto-login]", err);
           setError(`Wallet connection failed: ${msg || "Unknown error"}. Tap the button to try again.`);
+          setTimeout(() => setError(""), 6000);
         }
-        setTimeout(() => setError(""), 6000);
       }
     };
-    // Longer initial delay for Phantom in-app browser to stabilize
-    const timer = setTimeout(run, 800);
+    const timer = setTimeout(run, 500);
     return () => clearTimeout(timer);
   }, [sessionId, fetchProfile]);
 
@@ -428,23 +402,17 @@ export default function MePage() {
         return;
       }
 
-      // Try eager connect first (auto-approves if previously connected)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let resp: any;
-      try {
-        resp = await Promise.race([
-          provider.connect({ onlyIfTrusted: true }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("EAGER_TIMEOUT")), 3000)),
-        ]);
-      } catch {
-        // Not pre-approved — do full connect with user approval
-        resp = await Promise.race([
+      // Connect with timeout so it doesn't hang forever
+      const connectWithTimeout = (timeoutMs: number) => {
+        return Promise.race([
           provider.connect(),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), 30000)
+            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
           ),
         ]);
-      }
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resp = await connectWithTimeout(30000) as any;
       if (!resp?.publicKey) {
         setError("Phantom did not return a wallet address. Please try again.");
         setTimeout(() => setError(""), 5000);
@@ -478,16 +446,16 @@ export default function MePage() {
         setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : "";
       console.error("[Phantom handleWalletLogin]", err);
       if (message === "WALLET_TIMEOUT") {
         setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
       } else if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
-        setError(`Failed to connect Phantom wallet: ${message || "Unknown error"}. Please make sure Phantom is unlocked and try again.`);
+        setError("Failed to connect Phantom wallet. Please make sure Phantom is unlocked and try again.");
       }
-      setTimeout(() => setError(""), 8000);
+      setTimeout(() => setError(""), 5000);
     }
     setWalletLoggingIn(false);
   };
@@ -517,23 +485,17 @@ export default function MePage() {
         setWalletLinking(false);
         return;
       }
-      // Try eager connect first (auto-approves if previously connected)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let resp: any;
-      try {
-        resp = await Promise.race([
-          provider.connect({ onlyIfTrusted: true }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("EAGER_TIMEOUT")), 3000)),
-        ]);
-      } catch {
-        // Not pre-approved — do full connect with user approval
-        resp = await Promise.race([
+      // Wrap provider.connect() with a timeout so it doesn't hang forever on desktop
+      const connectWithTimeout = (timeoutMs: number) => {
+        return Promise.race([
           provider.connect(),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), 30000)
+            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
           ),
         ]);
-      }
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resp = await connectWithTimeout(30000) as any;
       if (!resp?.publicKey) {
         setError("Phantom did not return a wallet address. Please try again.");
         setTimeout(() => setError(""), 5000);
@@ -561,16 +523,15 @@ export default function MePage() {
         setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("[Phantom handleLinkWallet]", err);
+      const message = err instanceof Error ? err.message : "";
       if (message === "WALLET_TIMEOUT") {
         setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
       } else if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request to link your wallet.");
       } else {
-        setError(`Failed to connect Phantom wallet: ${message || "Unknown error"}`);
+        setError("Failed to connect Phantom wallet. Make sure Phantom is installed and unlocked.");
       }
-      setTimeout(() => setError(""), 8000);
+      setTimeout(() => setError(""), 5000);
     }
     setWalletLinking(false);
   };
