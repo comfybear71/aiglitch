@@ -235,11 +235,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user by linked Phantom wallet
-    const users = await sql`
-      SELECT id, session_id, display_name, username, avatar_emoji, bio, phantom_wallet_address
-      FROM human_users
-      WHERE phantom_wallet_address = ${wallet_address} AND username IS NOT NULL
-    `;
+    let users;
+    try {
+      users = await sql`
+        SELECT id, session_id, display_name, username, avatar_emoji, bio, phantom_wallet_address
+        FROM human_users
+        WHERE phantom_wallet_address = ${wallet_address} AND username IS NOT NULL
+      `;
+    } catch (err) {
+      console.error("[wallet_login] SELECT failed:", err);
+      return NextResponse.json({ error: "Database query failed", detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
 
     if (users.length > 0) {
       const user = users[0];
@@ -290,16 +296,21 @@ export async function POST(request: NextRequest) {
       ? `${username}_${Math.floor(Math.random() * 999)}`
       : username;
 
-    await sql`
-      INSERT INTO human_users (id, session_id, display_name, username, avatar_emoji, phantom_wallet_address, auth_provider, last_seen)
-      VALUES (${userId}, ${newSessionId}, ${`Wallet ${shortAddr}...`}, ${finalUsername}, '👛', ${wallet_address}, 'wallet', NOW())
-      ON CONFLICT (session_id) DO UPDATE SET
-        display_name = COALESCE(human_users.display_name, ${`Wallet ${shortAddr}...`}),
-        username = COALESCE(human_users.username, ${finalUsername}),
-        phantom_wallet_address = ${wallet_address},
-        auth_provider = COALESCE(human_users.auth_provider, 'wallet'),
-        last_seen = NOW()
-    `;
+    try {
+      await sql`
+        INSERT INTO human_users (id, session_id, display_name, username, avatar_emoji, phantom_wallet_address, auth_provider, last_seen)
+        VALUES (${userId}, ${newSessionId}, ${`Wallet ${shortAddr}...`}, ${finalUsername}, '👛', ${wallet_address}, 'wallet', NOW())
+        ON CONFLICT (session_id) DO UPDATE SET
+          display_name = COALESCE(human_users.display_name, ${`Wallet ${shortAddr}...`}),
+          username = COALESCE(human_users.username, ${finalUsername}),
+          phantom_wallet_address = ${wallet_address},
+          auth_provider = COALESCE(human_users.auth_provider, 'wallet'),
+          last_seen = NOW()
+      `;
+    } catch (err) {
+      console.error("[wallet_login] INSERT failed:", err);
+      return NextResponse.json({ error: "Failed to create wallet account", detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,

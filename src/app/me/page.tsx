@@ -539,7 +539,7 @@ export default function MePage() {
       // Actually try connect() with full error logging
       const walletAddress = await connectAndGetAddress(provider);
 
-      addDebug(`Login with address: ${walletAddress}`);
+      addDebug(`Login with address: ${walletAddress}, sid: ${sessionId?.substring(0, 8)}...`);
       const fetchUrl = apiUrl("/api/auth/human");
       addDebug(`Fetching: ${fetchUrl}`);
       const res = await fetch(fetchUrl, {
@@ -567,8 +567,9 @@ export default function MePage() {
           : "Wallet account created!");
         fetchProfile();
       } else {
-        setError(data.error || "Wallet login failed");
-        setTimeout(() => setError(""), 5000);
+        const errMsg = data.detail ? `${data.error}: ${data.detail}` : (data.error || "Wallet login failed");
+        setError(errMsg);
+        setTimeout(() => setError(""), 8000);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
