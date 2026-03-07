@@ -338,13 +338,17 @@ export default function MePage() {
     setIsMobileNoPhantom(isMobile && !hasPhantom && !isInPhantom);
   }, []);
 
-  // Precompute Phantom deep link URLs for <a> tags (avoids async JS navigation)
+  // Precompute Phantom deep link URLs for <a> tags.
+  // Use phantom:// custom scheme (always opens app) instead of universal links
+  // (which iOS often fails to intercept).
   const phantomLoginHref = useMemo(() => {
     if (typeof window === "undefined") return "";
     const targetUrl = new URL(window.location.origin + "/me");
     targetUrl.searchParams.set("phantom_login", "1");
     if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-    return buildPhantomBrowseLink(targetUrl.toString());
+    const encoded = encodeURIComponent(targetUrl.toString());
+    const ref = encodeURIComponent(window.location.origin);
+    return `phantom://browse/${encoded}?ref=${ref}`;
   }, [sessionId]);
 
   const phantomLinkWalletHref = useMemo(() => {
@@ -352,7 +356,9 @@ export default function MePage() {
     const targetUrl = new URL(window.location.origin + "/me");
     targetUrl.searchParams.set("phantom_link", "1");
     if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-    return buildPhantomBrowseLink(targetUrl.toString());
+    const encoded = encodeURIComponent(targetUrl.toString());
+    const ref = encodeURIComponent(window.location.origin);
+    return `phantom://browse/${encoded}?ref=${ref}`;
   }, [sessionId]);
 
   const fetchProfile = useCallback(async () => {
@@ -1143,9 +1149,24 @@ export default function MePage() {
             {error}
           </div>
         )}
-        {/* Tappable deep link fallback — iOS requires real <a> tap for universal links */}
+        {/* Tappable deep link fallback — iOS requires real <a> tap for universal links.
+            We show BOTH phantom:// (custom scheme, always opens app) and https://phantom.app/ul/
+            (universal link, may or may not work depending on iOS state). */}
         {showPhantomDeepLink && (
-          <div className="bg-purple-500/20 border border-purple-500/30 rounded-xl p-4 mb-4 text-center space-y-2">
+          <div className="bg-purple-500/20 border border-purple-500/30 rounded-xl p-4 mb-4 text-center space-y-3">
+            <a
+              href={(() => {
+                const targetUrl = new URL(window.location.origin + "/me");
+                targetUrl.searchParams.set(showPhantomDeepLink === "login" ? "phantom_login" : "phantom_link", "1");
+                if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+                const encoded = encodeURIComponent(targetUrl.toString());
+                const ref = encodeURIComponent(window.location.origin);
+                return `phantom://browse/${encoded}?ref=${ref}`;
+              })()}
+              className="inline-block w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+            >
+              Open in Phantom App
+            </a>
             <a
               href={(() => {
                 const targetUrl = new URL(window.location.origin + "/me");
@@ -1153,11 +1174,11 @@ export default function MePage() {
                 if (sessionId) targetUrl.searchParams.set("sid", sessionId);
                 return buildPhantomBrowseLink(targetUrl.toString());
               })()}
-              className="inline-block px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+              className="inline-block text-[11px] text-purple-400 underline"
             >
-              Open in Phantom App
+              Alternative link (if above doesn&apos;t work)
             </a>
-            <p className="text-[10px] text-gray-400">Tap above to open this page in Phantom&apos;s browser</p>
+            <p className="text-[10px] text-gray-500">Tap to open this page inside Phantom&apos;s browser</p>
           </div>
         )}
         {/* Debug log panel — shows on error or toggle */}

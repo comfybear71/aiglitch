@@ -752,7 +752,7 @@ export default function WalletPage() {
                 href={(() => {
                   const targetUrl = encodeURIComponent((typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app") + "/wallet");
                   const ref = encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app");
-                  return `https://phantom.app/ul/browse/${targetUrl}?ref=${ref}`;
+                  return `phantom://browse/${targetUrl}?ref=${ref}`;
                 })()}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
               >
