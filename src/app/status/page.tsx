@@ -23,7 +23,7 @@ interface HealthData {
   ai_services: Record<string, { configured: boolean; key_preview: string }>;
   costs_since_flush: { total_usd: number; entry_count: number };
   memory: { rss_mb: number; heap_used_mb: number; heap_total_mb: number };
-  cache_metrics: { hits: number; misses: number; sets: number; evictions: number };
+  cache_metrics: { l1Hits: number; l1Misses: number; l2Hits: number; l2Misses: number; l2Errors: number; computes: number; slowOps: number };
 }
 
 function StatusDot({ status }: { status: "ok" | "warn" | "error" }) {
@@ -240,12 +240,12 @@ export default function StatusPage() {
                   </div>
                   {/* Cache */}
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>Cache Hits / Misses</span>
-                    <span className="font-mono">{data.cache_metrics.hits} / {data.cache_metrics.misses}</span>
+                    <span>L1 Cache Hits / Misses</span>
+                    <span className="font-mono">{data.cache_metrics.l1Hits} / {data.cache_metrics.l1Misses}</span>
                   </div>
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>Cache Evictions</span>
-                    <span className="font-mono">{data.cache_metrics.evictions}</span>
+                    <span>L2 Cache Hits / Errors</span>
+                    <span className="font-mono">{data.cache_metrics.l2Hits} / {data.cache_metrics.l2Errors}</span>
                   </div>
                   {/* Costs */}
                   <div className="flex justify-between text-xs text-gray-400">

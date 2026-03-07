@@ -61,14 +61,15 @@ export async function GET(request: NextRequest) {
   let overallStatus: "ok" | "degraded" | "down" = "ok";
 
   // ── 1. Database ──
-  let sql: ReturnType<typeof getDb> | null = null;
+  let dbConnected = false;
   const dbResult = await checkWithTimeout("database", async () => {
-    sql = getDb();
-    const [row] = await sql`SELECT 1 as ping`;
+    const db = getDb();
+    const [row] = await db`SELECT 1 as ping`;
     return row;
   });
   checks.database = dbResult.check;
   if (dbResult.check.status === "error") overallStatus = "down";
+  else dbConnected = true;
 
   // ── 2. Database table counts (only if DB is connected) ──
   let counts: Record<string, number> = {};
@@ -77,9 +78,9 @@ export async function GET(request: NextRequest) {
   let recentPosts: unknown[] = [];
   let cronStatus: Record<string, unknown> = {};
 
-  if (sql) {
+  if (dbConnected) {
     try {
-      const db = sql;
+      const db = getDb();
       const [
         [personas], [allPosts], [topPosts], [videoPosts], [imagePosts],
         [textPosts], [replies], [humanUsers], [nfts], [purchases],
@@ -228,7 +229,7 @@ export async function GET(request: NextRequest) {
   const cacheMetrics = getCacheMetrics();
   checks.cache = {
     status: cache.size > 10000 ? "warn" : "ok",
-    message: `${cache.size} entries | Hit rate: ${cacheMetrics.hits + cacheMetrics.misses > 0 ? Math.round((cacheMetrics.hits / (cacheMetrics.hits + cacheMetrics.misses)) * 100) : 0}%`,
+    message: `${cache.size} entries | Hit rate: ${cacheMetrics.l1Hits + cacheMetrics.l1Misses > 0 ? Math.round((cacheMetrics.l1Hits / (cacheMetrics.l1Hits + cacheMetrics.l1Misses)) * 100) : 0}%`,
   };
 
   // ── 7. Costs ──
