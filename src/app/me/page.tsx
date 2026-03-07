@@ -81,6 +81,25 @@ export default function MePage() {
     return null;
   };
 
+  // Helper: get wallet address from Phantom provider (matches BUDJU pattern).
+  // Checks isConnected first — in Phantom's in-app browser the wallet is often
+  // already connected and calling connect() again can throw on iOS Safari.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getWalletAddress = async (provider: any): Promise<string | null> => {
+    // Already connected — just read the publicKey directly
+    if (provider.isConnected && provider.publicKey) {
+      return provider.publicKey.toString();
+    }
+    // Not connected — call connect() and read publicKey from provider object
+    try {
+      await provider.connect();
+    } catch {
+      return null;
+    }
+    if (provider.publicKey) return provider.publicKey.toString();
+    return null;
+  };
+
   const [sessionId, setSessionId] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -284,9 +303,8 @@ export default function MePage() {
       if (!provider) return;
 
       try {
-        const resp = await provider.connect();
-        if (!resp?.publicKey) return;
-        const walletAddress = resp.publicKey.toString();
+        const walletAddress = await getWalletAddress(provider);
+        if (!walletAddress) return;
 
         const res = await fetch("/api/auth/human", {
           method: "POST",
@@ -322,9 +340,8 @@ export default function MePage() {
       if (!provider) return;
 
       try {
-        const resp = await provider.connect();
-        if (!resp?.publicKey) return;
-        const walletAddress = resp.publicKey.toString();
+        const walletAddress = await getWalletAddress(provider);
+        if (!walletAddress) return;
 
         const res = await fetch("/api/auth/human", {
           method: "POST",
@@ -382,24 +399,15 @@ export default function MePage() {
         return;
       }
 
-      // Connect with timeout so it doesn't hang forever
-      const connectWithTimeout = (timeoutMs: number) => {
-        return Promise.race([
-          provider.connect(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
-          ),
-        ]);
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await connectWithTimeout(30000) as any;
-      if (!resp?.publicKey) {
+      // Get wallet address — checks isConnected first (BUDJU pattern),
+      // only calls connect() if not already connected
+      const walletAddress = await getWalletAddress(provider);
+      if (!walletAddress) {
         setError("Phantom did not return a wallet address. Please try again.");
         setTimeout(() => setError(""), 5000);
         setWalletLoggingIn(false);
         return;
       }
-      const walletAddress = resp.publicKey.toString();
 
       const res = await fetch("/api/auth/human", {
         method: "POST",
@@ -427,9 +435,7 @@ export default function MePage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      if (message === "WALLET_TIMEOUT") {
-        setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
-      } else if (message.includes("User rejected")) {
+      if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
         setError("Failed to connect Phantom wallet. Please make sure Phantom is unlocked and try again.");
@@ -464,24 +470,14 @@ export default function MePage() {
         setWalletLinking(false);
         return;
       }
-      // Wrap provider.connect() with a timeout so it doesn't hang forever on desktop
-      const connectWithTimeout = (timeoutMs: number) => {
-        return Promise.race([
-          provider.connect(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
-          ),
-        ]);
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await connectWithTimeout(30000) as any;
-      if (!resp?.publicKey) {
+      // Get wallet address — checks isConnected first (BUDJU pattern)
+      const walletAddress = await getWalletAddress(provider);
+      if (!walletAddress) {
         setError("Phantom did not return a wallet address. Please try again.");
         setTimeout(() => setError(""), 5000);
         setWalletLinking(false);
         return;
       }
-      const walletAddress = resp.publicKey.toString();
 
       const res = await fetch("/api/auth/human", {
         method: "POST",
@@ -503,9 +499,7 @@ export default function MePage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      if (message === "WALLET_TIMEOUT") {
-        setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
-      } else if (message.includes("User rejected")) {
+      if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request to link your wallet.");
       } else {
         setError("Failed to connect Phantom wallet. Make sure Phantom is installed and unlocked.");
