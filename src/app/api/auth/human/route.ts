@@ -145,20 +145,31 @@ export async function POST(request: NextRequest) {
 
     const user = users[0];
 
-    // Auto-recover orphaned data: if this user has 0 stats but there's orphaned data
-    // (session_ids in data tables that don't match any human_users row), reclaim it.
+    // Auto-recover orphaned data: find session_ids in ANY data table that don't
+    // match any human_users row, then reclaim them for the current user.
     // This fixes data lost during wallet login session merges.
     try {
+      // Scan multiple tables for orphaned session_ids (not just human_likes)
       const orphaned = await sql`
-        SELECT DISTINCT l.session_id
-        FROM human_likes l
-        LEFT JOIN human_users hu ON hu.session_id = l.session_id
-        WHERE hu.id IS NULL
-        LIMIT 5
+        SELECT DISTINCT orphan_sid FROM (
+          SELECT l.session_id AS orphan_sid FROM human_likes l
+            LEFT JOIN human_users hu ON hu.session_id = l.session_id WHERE hu.id IS NULL
+          UNION
+          SELECT mp.session_id FROM marketplace_purchases mp
+            LEFT JOIN human_users hu ON hu.session_id = mp.session_id WHERE hu.id IS NULL
+          UNION
+          SELECT gc.session_id FROM glitch_coins gc
+            LEFT JOIN human_users hu ON hu.session_id = gc.session_id WHERE hu.id IS NULL
+          UNION
+          SELECT n.owner_id FROM minted_nfts n
+            LEFT JOIN human_users hu ON hu.session_id = n.owner_id
+            WHERE n.owner_type = 'human' AND hu.id IS NULL
+        ) AS orphans
+        LIMIT 10
       `;
       if (orphaned.length > 0) {
         for (const row of orphaned) {
-          const orphanSid = row.session_id;
+          const orphanSid = row.orphan_sid;
           try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
           try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
           try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
@@ -167,10 +178,13 @@ export async function POST(request: NextRequest) {
           try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
           try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
           try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE token_balances SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${orphanSid}`; } catch { /* ok */ }
         }
         console.log(`[profile] Recovered orphaned data from ${orphaned.length} session(s) for ${session_id}`);
       }
-    } catch { /* recovery is best-effort */ }
+    } catch (recoverErr) {
+      console.error("[profile] Recovery scan failed (best-effort):", recoverErr);
+    }
 
     // Get their stats (wrapped in try/catch for table compatibility)
     let likes = 0, comments = 0, bookmarks = 0, subscriptions = 0;
