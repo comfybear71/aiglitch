@@ -35,11 +35,16 @@ export async function POST(request: NextRequest) {
   }
 
   // Build prompt — use custom style or default glowing neon
+  // IMPORTANT: Spelling emphasis — AI video generators often misspell text,
+  // so we spell it out letter-by-letter and repeat the exact text multiple times.
+  const exactText = title.toUpperCase();
+  const spelledOut = exactText.split("").join("-");
+
   let prompt: string;
   if (style_prompt && style_prompt.trim()) {
-    prompt = `A cinematic title card animation on a pure black background. The text "${title.toUpperCase()}" appears with a dramatic reveal. Style: ${style_prompt.trim()}. The text is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the animated text on black. No watermarks.`;
+    prompt = `A cinematic title card animation on a pure black background. The exact text shown must be "${exactText}" — spelled letter by letter: ${spelledOut}. CRITICAL: the spelling must be exactly "${exactText}", every letter correct, no extra or missing letters. The text appears with a dramatic reveal. Style: ${style_prompt.trim()}. The text is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the animated text "${exactText}" on black. No watermarks.`;
   } else {
-    prompt = `A cinematic title card animation on a pure black background. The text "${title.toUpperCase()}" appears with a dramatic reveal — glowing neon letters that flicker and pulse with electric energy, the text materialising letter by letter with sparks and light trails. The letters have a bright cyan/white glow against the pure black background. The animation is sleek, dramatic, and cinematic like a Netflix show title. The text is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the glowing animated text on black. No watermarks.`;
+    prompt = `A cinematic title card animation on a pure black background. The exact text shown must be "${exactText}" — spelled letter by letter: ${spelledOut}. CRITICAL: the spelling must be exactly "${exactText}", every letter correct, no extra or missing letters. The text appears with a dramatic reveal — glowing neon letters that flicker and pulse with electric energy, the text materialising letter by letter with sparks and light trails. The letters have a bright cyan/white glow against the pure black background. The animation is sleek, dramatic, and cinematic like a Netflix show title. The text "${exactText}" is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the glowing animated text on black. No watermarks.`;
   }
 
   try {

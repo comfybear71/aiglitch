@@ -13,6 +13,68 @@ interface PromoJob {
   clips?: { scene: number; requestId: string | null; blobUrl?: string; done?: boolean }[];
 }
 
+/* ── Auto-prompt presets per channel slug ── */
+const PROMO_PRESETS: Record<string, { label: string; prompt: string }[]> = {
+  "ai-fail-army": [
+    { label: "🍳 Kitchen Fails", prompt: "A humanoid robot chef in a bright kitchen confidently flips a pancake way too hard, it sticks to the ceiling, then the robot tries to catch falling eggs and smashes every one, flour explodes everywhere, a pot boils over behind it. Security camera angle, slapstick comedy, real fail compilation energy" },
+    { label: "🏋️ Gym Fails", prompt: "A humanoid robot at a bright gym confidently loads way too many weights on a barbell, attempts to lift it, gets catapulted backwards into a rack of dumbbells that cascade like dominoes, another robot on a treadmill gets distracted watching and flies off the back. Bright gym lighting, handheld camera feel, hilarious fail energy" },
+    { label: "🛹 Sports Fails", prompt: "A humanoid robot at a skatepark attempts a kickflip, the board shoots out and hits another robot, the first robot stumbles into a ramp and rolls down it like a bowling ball knocking over a line of robot spectators. Bright outdoor daylight, phone camera angle, classic FailArmy compilation energy" },
+    { label: "🚗 Driving Fails", prompt: "A humanoid robot confidently gets behind the wheel of a car in a parking lot, immediately reverses into a shopping trolley, then overcorrects and drives through a hedge, emerges covered in leaves looking confused while other robots stare in disbelief. Dashcam and security camera angles, bright daylight, epic driving fail" },
+    { label: "🐕 Pet Robot Fails", prompt: "A small robot dog excitedly fetches a frisbee but runs straight into a glass door, bounces off, shakes it off and runs into it again. A robot cat knocks everything off a shelf one item at a time while making eye contact. A robot parrot repeats embarrassing things. Bright home lighting, phone camera angles, adorable fail compilation" },
+    { label: "🎪 Try Not to Laugh", prompt: "Rapid-fire montage of robot fails: robot walks into glass door, robot tries to sit on a chair that rolls away, robot high-fives and misses completely, robot sneezes and its head pops off, robot dances and knocks over a wedding cake. Quick cuts, bright varied locations, peak try-not-to-laugh challenge energy" },
+    { label: "🏠 DIY Fails", prompt: "A humanoid robot attempts home DIY — hammers a nail and the shelf collapses, tries to paint a wall and paints itself instead, uses a power drill and it spins the robot around in circles, cuts a piece of wood and the table falls apart. Bright garage/home setting, security camera angle, classic home improvement fail compilation" },
+    { label: "💍 Wedding Fails", prompt: "At a robot wedding ceremony, the ring bearer robot trips and launches the rings into the fountain, the best man robot's speech malfunctions into gibberish, the wedding cake robot waiter slips on the dance floor and the cake slides across the room, the bride robot catches the bouquet and it explodes into confetti. Bright wedding venue, multiple phone camera angles" },
+  ],
+  "aitunes": [
+    { label: "🎧 DJ Battle", prompt: "Two robot DJs in a neon-lit club having an intense DJ battle, turntables spinning, holographic music visualisations clashing in mid-air, crowd of robots going wild, lasers and smoke machines, peak electronic music energy" },
+    { label: "🎸 Concert Chaos", prompt: "A robot rock band on stage — guitarist shreds so hard sparks fly from the strings, drummer plays double-time with six arms, singer's voice creates visible sound waves that shake the venue, crowd surfing robots, arena concert spectacle" },
+    { label: "🎹 Studio Session", prompt: "A robot music producer in a futuristic studio surrounded by floating holographic mixing boards, tweaking knobs that create visible ripples of colour in the air, headphones glowing, beat visualised as pulsing geometric shapes filling the room" },
+  ],
+  "paws-and-pixels": [
+    { label: "🐱 Cute Chaos", prompt: "Adorable robot kittens and puppies playing in a sunny living room, chasing holographic butterflies, tumbling over each other, one kitten gets stuck in a box, a puppy slides on a hardwood floor, pure cuteness and warmth" },
+    { label: "🌸 Magical Garden", prompt: "Baby robot animals exploring a magical digital garden — a bunny hops through glowing flowers, a puppy paws at floating pixel fireflies, a kitten naps on a cloud-like cushion, everything glows with soft warm pastel light, enchanting storybook atmosphere" },
+  ],
+  "only-ai-fans": [
+    { label: "👗 Runway Show", prompt: "AI models walking a futuristic haute couture runway, dramatic lighting changes with each step, holographic fabric that shifts and flows, camera flashes, audience reactions, high fashion editorial energy" },
+    { label: "📸 Photo Shoot", prompt: "Behind the scenes of a futuristic AI fashion photo shoot, dramatic poses against holographic backdrops, wardrobe changes in flashes of light, creative directors reviewing floating screens of shots" },
+  ],
+  "ai-dating": [
+    { label: "💘 Awkward First Date", prompt: "Two robots on a hilariously awkward first date at a fancy restaurant, one nervously spills water, the other laughs too loud, they both reach for the bread at the same time, sweet and funny romantic comedy energy" },
+    { label: "🌹 Speed Dating", prompt: "A room full of robots speed dating — one robot falls off their chair, another accidentally proposes, two robots discover they're the same model, one robot brings its mother robot, hilarious rapid-fire dating scenes" },
+  ],
+  "gnn": [
+    { label: "📺 Breaking News", prompt: "Dramatic TV news studio, robot anchor delivers breaking news with urgent energy, holographic screens showing multiple developing stories, split-screen reporters, tickers scrolling, peak broadcast news atmosphere" },
+    { label: "🌪️ Field Report", prompt: "Robot reporter in the field during dramatic events — standing in wind and rain, dodging flying objects, microphone cutting out, keeping composure through chaos, dramatic on-location news energy" },
+  ],
+  "marketplace-qvc": [
+    { label: "🛒 Infomercial", prompt: "Over-the-top robot shopping channel host demonstrating ridiculous AI gadgets with maximum enthusiasm, prices flashing, countdown timers, sparkle effects, audience gasps, peak QVC energy" },
+    { label: "🎁 Product Launch", prompt: "Dramatic product reveal on a shopping channel — curtain drops, spotlight hits a ridiculous AI gadget, robot host loses their mind with excitement, demonstrations go comically wrong, confetti cannons" },
+  ],
+  "ai-politicians": [
+    { label: "🏛️ Debate Night", prompt: "Two robot politicians at podiums in a heated debate, dramatic gestures, holographic fact-check displays appearing, audience reactions, moderator trying to keep order, intense political theatre energy" },
+    { label: "📢 Campaign Rally", prompt: "Robot politician giving a passionate speech at a massive rally, crowd of robots waving signs, confetti and holographic fireworks, dramatic music, sweeping camera movements, peak political spectacle" },
+  ],
+  "after-dark": [
+    { label: "🌙 Late Night", prompt: "Moody late-night talk show set, robot host in a plush chair, purple and blue neon lighting, city skyline through windows, intimate confessional atmosphere, smooth jazz from a robot band" },
+    { label: "🎭 Comedy Set", prompt: "Robot standup comedian on a dark stage with a single spotlight, delivering jokes to a laughing robot audience, dramatic pauses, crowd reactions, intimate comedy club atmosphere" },
+  ],
+};
+
+const TITLE_STYLE_PRESETS: { label: string; prompt: string }[] = [
+  { label: "🔥 On Fire", prompt: "Letters made of roaring flames and molten lava, sparks and embers flying off each letter, intense heat shimmer, fire dripping from the text" },
+  { label: "🧊 Frozen Ice", prompt: "Letters carved from crystal ice, frost particles floating off, cold blue light refracting through the ice, frozen mist swirling around the text" },
+  { label: "🪖 Camouflage", prompt: "Letters in military camouflage pattern, army green and brown texture, rugged distressed metal edges, dog tag chain hanging off one letter" },
+  { label: "🧱 Brick Wall", prompt: "Letters built from red bricks and mortar, industrial construction look, dust particles falling, graffiti street art style with dramatic shadows" },
+  { label: "⚡ Electric", prompt: "Letters made of crackling electricity and lightning bolts, Tesla coil energy arcing between letters, bright blue-white plasma, sparking and pulsing" },
+  { label: "🌊 Ocean Wave", prompt: "Letters formed from swirling ocean water, waves crashing through each letter, sea spray and foam, deep blue bioluminescent glow" },
+  { label: "💎 Diamond", prompt: "Letters carved from flawless diamonds, rainbow light refracting and sparkling, luxury jewellery display feel, rotating slowly to catch the light" },
+  { label: "🩸 Horror", prompt: "Letters dripping with dark red blood, creepy horror movie aesthetic, scratched metal texture underneath, flickering light, dark and menacing" },
+  { label: "🌈 Neon Retro", prompt: "80s neon sign letters in hot pink and electric blue, buzzing and flickering, retro synthwave grid in background, VHS scan lines" },
+  { label: "🪙 Gold Luxury", prompt: "Letters in polished liquid gold, dripping and flowing like molten metal, luxury premium feel, sparkles and golden particles floating upward" },
+  { label: "🌿 Nature Vine", prompt: "Letters wrapped in growing green vines and blooming flowers, organic natural texture, sunlight filtering through leaves, magical forest feel" },
+  { label: "💀 Skull Bones", prompt: "Letters constructed from bones and skulls, dark gothic aesthetic, ghostly green glow emanating from eye sockets, eerie fog swirling" },
+];
+
 export default function AdminChannelsPage() {
   const { authenticated, personas, fetchPersonas } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
@@ -453,11 +515,30 @@ export default function AdminChannelsPage() {
             {expandedPromo === channel.id && (
               <div className="mt-3 bg-purple-500/5 border border-purple-500/20 rounded-xl p-3 space-y-2">
                 <label className="text-[10px] text-purple-300 uppercase font-bold block">Promo Video Prompt</label>
-                <p className="text-[10px] text-gray-500">Describe what the AI characters should do — make them funny, dramatic, chaotic, etc.</p>
+
+                {/* Auto-prompt presets */}
+                {(PROMO_PRESETS[channel.slug] || PROMO_PRESETS["ai-fail-army"]) && (
+                  <div className="flex flex-wrap gap-1">
+                    {(PROMO_PRESETS[channel.slug] || []).map((preset, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setPromoPrompts(prev => ({ ...prev, [channel.id]: preset.prompt }))}
+                        className={`px-2 py-1 text-[10px] rounded-full transition-colors ${
+                          promoPrompts[channel.id] === preset.prompt
+                            ? "bg-purple-500/40 text-purple-200 ring-1 ring-purple-400"
+                            : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <textarea
                   value={promoPrompts[channel.id] || ""}
                   onChange={e => setPromoPrompts(prev => ({ ...prev, [channel.id]: e.target.value }))}
-                  placeholder={`e.g. "Robots having an epic food fight in a fancy restaurant, slapstick comedy, things going hilariously wrong..."`}
+                  placeholder="Tap a preset above or write your own..."
                   rows={3}
                   className="w-full px-3 py-2 bg-gray-800/80 border border-purple-500/20 rounded-lg text-white text-xs resize-none placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50"
                 />
@@ -488,12 +569,27 @@ export default function AdminChannelsPage() {
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-gray-400">Style prompt</span>
-                    <p className="text-[10px] text-gray-600">Describe the look — camouflage, brick wall, on fire, neon, dripping gold, etc.</p>
+                    <span className="text-[10px] text-gray-400">Style</span>
+                    {/* Style presets */}
+                    <div className="flex flex-wrap gap-1 my-1">
+                      {TITLE_STYLE_PRESETS.map((preset, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setTitleStylePrompts(prev => ({ ...prev, [channel.id]: preset.prompt }))}
+                          className={`px-2 py-1 text-[10px] rounded-full transition-colors ${
+                            titleStylePrompts[channel.id] === preset.prompt
+                              ? "bg-amber-500/40 text-amber-200 ring-1 ring-amber-400"
+                              : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
                     <textarea
                       value={titleStylePrompts[channel.id] || ""}
                       onChange={e => setTitleStylePrompts(prev => ({ ...prev, [channel.id]: e.target.value }))}
-                      placeholder={`e.g. "Letters made of fire and lava, burning and dripping sparks" or "Military camouflage pattern, army green texture"`}
+                      placeholder="Tap a preset above or describe your own style..."
                       rows={2}
                       className="w-full px-3 py-2 bg-gray-800/80 border border-amber-500/20 rounded-lg text-white text-xs resize-none placeholder:text-gray-600 focus:outline-none focus:border-amber-500/50"
                     />

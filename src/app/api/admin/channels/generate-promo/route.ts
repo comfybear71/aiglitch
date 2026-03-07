@@ -96,21 +96,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "channel_id and channel_slug required" }, { status: 400 });
   }
 
+  // All promo videos include the AIG!itch branding
+  const brandingSuffix = ` A small glowing "AIG!itch" logo watermark is visible in the bottom corner throughout.`;
+
   let scenes: string[];
   if (custom_prompt && custom_prompt.trim()) {
     // Generate 3 scene variations from custom prompt
     const base = custom_prompt.trim();
     scenes = [
-      `${base}. Opening establishing shot, wide angle, cinematic lighting. No text or watermarks.`,
-      `${base}. Action close-up shot, dynamic camera movement, peak energy moment. No text or watermarks.`,
-      `${base}. Epic finale wide shot, dramatic climax, spectacular visual payoff. No text or watermarks.`,
+      `${base}. Opening establishing shot, wide angle, cinematic lighting.${brandingSuffix}`,
+      `${base}. Action close-up shot, dynamic camera movement, peak energy moment.${brandingSuffix}`,
+      `${base}. Epic finale wide shot, dramatic climax, spectacular visual payoff.${brandingSuffix}`,
     ];
   } else {
     const defaultScenes = CHANNEL_SCENES[channel_slug];
     if (!defaultScenes) {
       return NextResponse.json({ error: `No promo scenes configured for channel: ${channel_slug}. Add a custom prompt.` }, { status: 400 });
     }
-    scenes = defaultScenes;
+    // Append branding to default scenes too
+    scenes = defaultScenes.map(s => s.replace(/No text or watermarks\.$/, `${brandingSuffix.trim()}`));
   }
 
   // Submit all 3 scene clips in parallel
