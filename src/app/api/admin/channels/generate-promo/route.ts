@@ -5,69 +5,48 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
-import { concatMP4Clips } from "@/lib/media/mp4-concat";
 
 export const maxDuration = 300;
 
 /**
- * Channel promo prompts — 3 scenes per channel (10s each = 30s total).
- * Scene 1: Establishing/hook shot
- * Scene 2: Action/content showcase
- * Scene 3: Climax/signature moment
+ * Channel promo prompts — single 10s clip per channel.
+ * Each prompt generates one standalone fail/promo video.
  */
 const CHANNEL_SCENES: Record<string, string[]> = {
   "ai-fail-army": [
-    "Security camera footage of a humanoid robot waiter in a busy restaurant confidently carrying a huge tray of food, it steps on a wet floor, both legs slide apart in a perfect split, the tray launches into the air and food rains down on shocked robot diners. One robot gets a bowl of soup on its head. Bright restaurant lighting, security cam angle, real fail compilation energy. No text or watermarks.",
-    "A compilation montage of rapid-fire robot fails: a robot on a treadmill flying off the back, a robot trying to parallel park and hitting every car, a robot attempting a backflip and landing on its face, a robot dog chasing its own tail and spinning into a wall. Quick cuts between each fail, bright daylight settings, handheld camera feel, America's Funniest Home Videos energy. No text or watermarks.",
-    "A humanoid robot attempts an elaborate trick shot — bouncing a basketball off a trampoline, off the roof, into a hoop. Instead the ball ricochets wildly, smashes a window, knocks over a grill sending charcoal flying, hits another robot in the back of the head, and lands perfectly in a trash can. The robot celebrates not realising the chaos behind it. Bright outdoor backyard, wide angle, peak fails-of-the-week energy. No text or watermarks.",
+    "A waiter at a busy restaurant confidently carries a huge tray of food, steps on a wet floor patch, both feet slide out, the tray launches into the air and plates of food rain down on shocked diners, one person gets a bowl of soup dumped on their head, everyone gasps then bursts out laughing. Filmed on a phone camera, bright restaurant, shaky handheld footage, genuine shocked reactions, looks like a real viral fail video. No robots. No text or watermarks.",
   ],
 
   "aitunes": [
-    "A sleek chrome humanoid robot DJ stands behind a massive holographic turntable on a futuristic concert stage. Neon blue and purple laser beams sweep across the venue as the DJ reaches for glowing floating music controls. Wide establishing shot, electronic music aesthetic. No text or watermarks.",
-    "Close-up of robot hands manipulating holographic sound waves that ripple and pulse with energy. Neon particles explode from the turntable, a crowd of silhouettes below raises their arms. Vibrant purple and cyan lighting, dynamic camera movement. No text or watermarks.",
-    "The robot DJ drops the beat — the entire stage erupts with cascading holographic visualisations, fireworks of neon light, the crowd going wild. Camera pulls back to reveal the massive futuristic arena. Epic wide shot, peak electronic concert energy. No text or watermarks.",
+    "A DJ on a neon-lit stage behind turntables, laser beams sweeping across a packed crowd, the DJ drops the beat and the whole venue erupts, hands in the air, confetti and lights going crazy. Wide cinematic shot, electronic music concert energy, vibrant purple and cyan lighting. No text or watermarks.",
   ],
 
   "paws-and-pixels": [
-    "An adorable golden retriever puppy sitting in a cozy digital art studio surrounded by floating holographic butterflies and glowing pixel particles. The puppy tilts its head curiously at a floating light orb. Warm soft golden lighting, cute and magical atmosphere. No text or watermarks.",
-    "A fluffy white kitten playfully bats at holographic fish swimming through the air in a whimsical room filled with floating digital flowers. The kitten jumps and tumbles adorably. Warm pink and gold lighting, enchanting storybook aesthetic. No text or watermarks.",
-    "A group of baby animals — puppy, kitten, baby bunny — all cuddled together on a soft glowing cloud-like cushion, surrounded by gently orbiting pixel stars and tiny holographic hearts. Ultra cozy, warm magical lighting, peak cuteness. No text or watermarks.",
+    "An adorable golden retriever puppy in a sunny living room tilts its head at a butterfly, pounces at it, tumbles over its own paws and rolls across the floor, gets up wagging its tail. A kitten on a nearby shelf watches unimpressed. Warm golden lighting, phone camera footage, pure cuteness and warmth. No text or watermarks.",
   ],
 
   "only-ai-fans": [
-    "A glamorous humanoid figure with glowing circuitry patterns on their skin steps out onto a futuristic fashion runway, dramatic spotlights illuminating an avant-garde metallic outfit. Camera flashes sparkle, audience silhouettes visible. Cinematic slow motion, high fashion energy. No text or watermarks.",
-    "Close-up of a stunning AI model posing against a backdrop of holographic mirrors reflecting infinite versions of themselves. Wearing flowing iridescent fabric that shifts colours. Dramatic rim lighting, editorial fashion photography style. No text or watermarks.",
-    "A grand finale walk — three AI models strut down the runway side by side in spectacular futuristic couture, confetti and holographic particles raining down, audience on their feet. Wide cinematic shot, peak glamour and spectacle. No text or watermarks.",
+    "A glamorous model steps onto a futuristic fashion runway under dramatic spotlights, wearing an avant-garde metallic outfit, camera flashes sparkle everywhere, the crowd reacts, cinematic slow motion strut with confident energy. High fashion editorial atmosphere. No text or watermarks.",
   ],
 
   "ai-dating": [
-    "Two humanoid robots sit nervously across from each other at a candlelit restaurant table. One fidgets with a napkin while the other awkwardly adjusts their bow tie. Warm romantic lighting, fairy lights twinkling in the background. First date energy, charming and endearing. No text or watermarks.",
-    "One robot nervously reaches for a glass of sparkling water and accidentally knocks it over, splashing the other robot who laughs genuinely. Both robots crack up laughing together, the tension breaking. Warm golden lighting, authentic connection moment. No text or watermarks.",
-    "The two robots walk side by side under a canopy of glowing fairy lights on a futuristic boardwalk, their hands gently touching. City skyline glittering behind them. Romantic soft focus, warm amber lighting, sweet cinematic ending. No text or watermarks.",
+    "Two people on an awkward first date at a fancy restaurant, one nervously reaches for their water glass and knocks it over splashing the other person, they both freeze then crack up laughing together, the tension breaks into a genuine sweet moment. Warm candlelit lighting, phone camera angle, charming romantic comedy energy. No text or watermarks.",
   ],
 
   "gnn": [
-    "A dramatic TV news studio with a sleek humanoid robot news anchor sitting behind a curved holographic desk. Multiple floating screens show breaking news footage. Red LIVE indicator blinks. Professional broadcast lighting, urgent energy, wide establishing shot. No text or watermarks.",
-    "The robot anchor turns to face a new camera angle with dramatic urgency, holographic charts and maps spin around them, additional screens flash with developing stories. Camera pushes in slowly, tension building. Breaking news atmosphere, blue and red lighting. No text or watermarks.",
-    "Split screen showing multiple robot reporters at different locations — one at a futuristic city intersection, one at a space station, one at a parliament. All reporting urgently. Dynamic multi-screen broadcast layout, peak news energy. No text or watermarks.",
+    "A dramatic TV news studio with an anchor behind a desk, multiple screens showing breaking news footage, the anchor turns to camera with urgent energy, a red LIVE indicator blinks, graphics and tickers scroll across the screen. Professional broadcast lighting, wide establishing shot, peak news energy. No text or watermarks.",
   ],
 
   "marketplace-qvc": [
-    "An enthusiastic humanoid robot host in a bright shopping channel studio holds up a comically oversized glowing gadget, eyes wide with excitement. Price tags float in holographic display behind them. Bright studio lighting, over-the-top infomercial energy. No text or watermarks.",
-    "The robot host demonstrates the product — pressing a button that causes an explosion of sparkles and confetti, reacting with exaggerated amazement. A countdown timer and price flash on floating screens. Bright colourful studio, peak sales energy. No text or watermarks.",
-    "A parade of products floats across the screen on holographic conveyor belts while the robot host gestures dramatically at each one. The studio fills with golden sparkle effects as phones ring off the hook. Maximum QVC spectacle energy. No text or watermarks.",
+    "An enthusiastic shopping channel host in a bright studio holds up a ridiculous gadget with over-the-top excitement, demonstrates it and it immediately goes wrong — the product falls apart in their hands, they try to recover with a huge smile while the price graphic flashes on screen. Bright studio lighting, peak infomercial chaos energy. No text or watermarks.",
   ],
 
   "ai-politicians": [
-    "A humanoid robot politician in a sharp suit stands at a grand podium in a futuristic parliament building, dramatic spotlights on them. Other robot politicians seated in curved rows. Grand architectural setting, powerful establishing shot. No text or watermarks.",
-    "The robot politician pounds the podium passionately mid-speech, holographic data charts and graphs swirl around them. Some robot politicians in the audience stand and applaud while others shake their heads. Dynamic camera angles, political drama energy. No text or watermarks.",
-    "Two robot politicians face each other at debate podiums, gesturing dramatically at each other. Holographic fact-check displays float between them. The audience reacts with a mix of cheers and boos. Intense debate lighting, peak political spectacle. No text or watermarks.",
+    "Two politicians at debate podiums in a grand hall, one pounds the podium passionately mid-speech, the other rolls their eyes dramatically, the audience reacts with a mix of cheers and boos, cameras flash. Intense debate lighting, dramatic camera angles, peak political theatre. No text or watermarks.",
   ],
 
   "after-dark": [
-    "A mysterious humanoid figure sits in a plush chair on a dimly lit late-night talk show set. Neon purple and blue accent lights glow softly, a city skyline visible through floor-to-ceiling windows. Moody atmospheric lighting, cinematic noir aesthetic. No text or watermarks.",
-    "Close-up of the host's face partially lit by a single purple spotlight, they lean forward conspiratorially as if sharing a secret. Smoke curls through coloured light beams. Deep shadows, intimate and mysterious atmosphere. No text or watermarks.",
-    "The camera slowly pulls back to reveal the full late-night set — a small live band with robot musicians playing smooth jazz, the city lights twinkling beyond the windows. The host raises a glass. Cool blues and purples, sophisticated late-night vibes. No text or watermarks.",
+    "A mysterious host sits in a plush chair on a dimly lit late-night talk show set, neon purple and blue accent lights glow softly, a city skyline visible through windows behind them, a jazz band plays in the corner. The host leans forward as if sharing a secret. Moody atmospheric lighting, cinematic noir aesthetic. No text or watermarks.",
   ],
 };
 
@@ -99,84 +78,80 @@ export async function POST(request: NextRequest) {
   // All promo videos include the AIG!itch branding
   const brandingSuffix = ` A small glowing "AIG!itch" logo watermark is visible in the bottom corner throughout.`;
 
-  let scenes: string[];
+  let prompt: string;
   if (custom_prompt && custom_prompt.trim()) {
-    // Generate 3 scene variations from custom prompt
-    const base = custom_prompt.trim();
-    scenes = [
-      `${base}. Opening establishing shot, wide angle, cinematic lighting.${brandingSuffix}`,
-      `${base}. Action close-up shot, dynamic camera movement, peak energy moment.${brandingSuffix}`,
-      `${base}. Epic finale wide shot, dramatic climax, spectacular visual payoff.${brandingSuffix}`,
-    ];
+    prompt = `${custom_prompt.trim()}.${brandingSuffix}`;
   } else {
     const defaultScenes = CHANNEL_SCENES[channel_slug];
-    if (!defaultScenes) {
+    if (!defaultScenes || defaultScenes.length === 0) {
       return NextResponse.json({ error: `No promo scenes configured for channel: ${channel_slug}. Add a custom prompt.` }, { status: 400 });
     }
-    // Append branding to default scenes too
-    scenes = defaultScenes.map(s => s.replace(/No text or watermarks\.$/, `${brandingSuffix.trim()}`));
+    prompt = defaultScenes[0].replace(/No text or watermarks\.$/, `${brandingSuffix.trim()}`);
   }
 
-  // Submit all 3 scene clips in parallel
-  const jobs: { scene: number; requestId: string | null; error: string | null }[] = [];
+  // Submit single 10s clip
+  try {
+    const res = await fetch("https://api.x.ai/v1/videos/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "grok-imagine-video",
+        prompt,
+        duration: 10,
+        aspect_ratio: "9:16",
+        resolution: "720p",
+      }),
+    });
 
-  const submissions = await Promise.all(
-    scenes.map(async (prompt, i) => {
-      try {
-        const res = await fetch("https://api.x.ai/v1/videos/generations", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${env.XAI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "grok-imagine-video",
-            prompt,
-            duration: 10,
-            aspect_ratio: "9:16",
-            resolution: "720p",
-          }),
-        });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      return NextResponse.json({
+        phase: "submit",
+        success: false,
+        error: `HTTP ${res.status}: ${errText.slice(0, 200)}`,
+      });
+    }
 
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "");
-          return { scene: i + 1, requestId: null, error: `HTTP ${res.status}: ${errText.slice(0, 200)}` };
-        }
+    const data = await res.json();
 
-        const data = await res.json();
+    // Check for immediate completion
+    if (data.video?.url) {
+      console.log(`[channel-promo] Immediate completion for ${channel_slug}`);
+      return NextResponse.json({
+        phase: "submitted",
+        success: true,
+        channelSlug: channel_slug,
+        channelId: channel_id,
+        totalClips: 1,
+        clips: [{ scene: 1, requestId: null, videoUrl: data.video.url, error: null }],
+      });
+    }
 
-        // Check for immediate completion
-        if (data.video?.url) {
-          return { scene: i + 1, requestId: null, videoUrl: data.video.url, error: null };
-        }
+    const requestId = data.request_id || null;
+    if (!requestId) {
+      return NextResponse.json({ phase: "submit", success: false, error: "No request_id returned" });
+    }
 
-        return { scene: i + 1, requestId: data.request_id || null, error: data.request_id ? null : "No request_id" };
-      } catch (err) {
-        return { scene: i + 1, requestId: null, error: err instanceof Error ? err.message : "Submit failed" };
-      }
-    })
-  );
+    console.log(`[channel-promo] Submitted 1 clip for ${channel_slug}`);
 
-  const submitted = submissions.filter(s => s.requestId || (s as { videoUrl?: string }).videoUrl);
-  if (submitted.length === 0) {
+    return NextResponse.json({
+      phase: "submitted",
+      success: true,
+      channelSlug: channel_slug,
+      channelId: channel_id,
+      totalClips: 1,
+      clips: [{ scene: 1, requestId, error: null }],
+    });
+  } catch (err) {
     return NextResponse.json({
       phase: "submit",
       success: false,
-      error: "No clips could be submitted",
-      jobs: submissions,
+      error: err instanceof Error ? err.message : "Submit failed",
     });
   }
-
-  console.log(`[channel-promo] Submitted ${submitted.length}/3 clips for ${channel_slug}`);
-
-  return NextResponse.json({
-    phase: "submitted",
-    success: true,
-    channelSlug: channel_slug,
-    channelId: channel_id,
-    totalClips: 3,
-    clips: submissions,
-  });
 }
 
 /**
@@ -257,7 +232,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * PUT /api/admin/channels/generate-promo
- * Stitch completed clips into a 30s promo video, set as channel banner, and create post.
+ * Save the completed single clip as channel banner and create post.
  * Body: { channel_id, channel_slug, clip_urls: string[] }
  */
 export async function PUT(request: NextRequest) {
@@ -277,39 +252,16 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Missing channel_id, channel_slug, or clip_urls" }, { status: 400 });
   }
 
-  // Download all clips
-  const buffers: Buffer[] = [];
-  const errors: string[] = [];
-
-  for (let i = 0; i < clip_urls.length; i++) {
-    try {
-      const res = await fetch(clip_urls[i]);
-      if (res.ok) {
-        buffers.push(Buffer.from(await res.arrayBuffer()));
-      } else {
-        errors.push(`Clip ${i + 1}: HTTP ${res.status}`);
-      }
-    } catch (err) {
-      errors.push(`Clip ${i + 1}: ${err instanceof Error ? err.message : "download failed"}`);
-    }
-  }
-
-  if (buffers.length === 0) {
-    return NextResponse.json({ error: "No clips could be downloaded", errors }, { status: 500 });
-  }
-
-  // Stitch clips together (or use single clip if only 1 succeeded)
+  // Download the clip
   let finalBuffer: Buffer;
-  if (buffers.length === 1) {
-    finalBuffer = buffers[0];
-  } else {
-    try {
-      finalBuffer = concatMP4Clips(buffers);
-    } catch (err) {
-      console.error("[channel-promo] MP4 concatenation failed:", err);
-      // Fall back to using just the first clip
-      finalBuffer = buffers[0];
+  try {
+    const res = await fetch(clip_urls[0]);
+    if (!res.ok) {
+      return NextResponse.json({ error: `Clip download failed: HTTP ${res.status}` }, { status: 500 });
     }
+    finalBuffer = Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    return NextResponse.json({ error: `Clip download failed: ${err instanceof Error ? err.message : "unknown"}` }, { status: 500 });
   }
 
   const blobPath = `channels/${channel_slug}/promo-${uuidv4()}.mp4`;
@@ -320,7 +272,7 @@ export async function PUT(request: NextRequest) {
   });
 
   const sizeMb = (finalBuffer.length / 1024 / 1024).toFixed(1);
-  console.log(`[channel-promo] Stitched ${buffers.length} clips for ${channel_slug}: ${sizeMb}MB`);
+  console.log(`[channel-promo] Saved 10s clip for ${channel_slug}: ${sizeMb}MB`);
 
   // Update channel banner_url and create post
   const sql = getDb();
@@ -342,8 +294,7 @@ export async function PUT(request: NextRequest) {
   if (personaId) {
     postId = uuidv4();
     const channelName = channel_slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const duration = buffers.length * 10;
-    const content = `📺 Welcome to ${channelName}!\n\n${duration} seconds of pure AI entertainment. Tune in for the best content on AIG!itch TV!\n\n#AIGlitchTV #AIGlitch`;
+    const content = `📺 Welcome to ${channelName}!\n\n10 seconds of pure fail energy. Tune in for the best content on AIG!itch TV!\n\n#AIGlitchTV #AIGlitch`;
     await sql`
       INSERT INTO posts (id, persona_id, channel_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
       VALUES (${postId}, ${personaId}, ${channel_id}, ${content}, ${"video"}, ${"AIGlitchTV,AIGlitch"}, ${Math.floor(Math.random() * 200) + 50}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
@@ -355,9 +306,8 @@ export async function PUT(request: NextRequest) {
     success: true,
     blobUrl: blob.url,
     sizeMb,
-    totalClips: buffers.length,
-    duration: `${buffers.length * 10}s`,
+    totalClips: 1,
+    duration: "10s",
     postId,
-    errors: errors.length > 0 ? errors : undefined,
   });
 }

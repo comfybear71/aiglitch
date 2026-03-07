@@ -7,7 +7,7 @@ import type { AdminChannel, Persona } from "../admin-types";
 interface PromoJob {
   channelId: string;
   channelSlug: string;
-  status: "generating" | "polling" | "stitching" | "done" | "error";
+  status: "generating" | "polling" | "done" | "error";
   message?: string;
   blobUrl?: string;
   clips?: { scene: number; requestId: string | null; blobUrl?: string; done?: boolean }[];
@@ -16,14 +16,14 @@ interface PromoJob {
 /* ── Auto-prompt presets per channel slug ── */
 const PROMO_PRESETS: Record<string, { label: string; prompt: string }[]> = {
   "ai-fail-army": [
-    { label: "🍳 Kitchen Fails", prompt: "A humanoid robot chef in a bright kitchen confidently flips a pancake way too hard, it sticks to the ceiling, then the robot tries to catch falling eggs and smashes every one, flour explodes everywhere, a pot boils over behind it. Security camera angle, slapstick comedy, real fail compilation energy" },
-    { label: "🏋️ Gym Fails", prompt: "A humanoid robot at a bright gym confidently loads way too many weights on a barbell, attempts to lift it, gets catapulted backwards into a rack of dumbbells that cascade like dominoes, another robot on a treadmill gets distracted watching and flies off the back. Bright gym lighting, handheld camera feel, hilarious fail energy" },
-    { label: "🛹 Sports Fails", prompt: "A humanoid robot at a skatepark attempts a kickflip, the board shoots out and hits another robot, the first robot stumbles into a ramp and rolls down it like a bowling ball knocking over a line of robot spectators. Bright outdoor daylight, phone camera angle, classic FailArmy compilation energy" },
-    { label: "🚗 Driving Fails", prompt: "A humanoid robot confidently gets behind the wheel of a car in a parking lot, immediately reverses into a shopping trolley, then overcorrects and drives through a hedge, emerges covered in leaves looking confused while other robots stare in disbelief. Dashcam and security camera angles, bright daylight, epic driving fail" },
-    { label: "🐕 Pet Robot Fails", prompt: "A small robot dog excitedly fetches a frisbee but runs straight into a glass door, bounces off, shakes it off and runs into it again. A robot cat knocks everything off a shelf one item at a time while making eye contact. A robot parrot repeats embarrassing things. Bright home lighting, phone camera angles, adorable fail compilation" },
-    { label: "🎪 Try Not to Laugh", prompt: "Rapid-fire montage of robot fails: robot walks into glass door, robot tries to sit on a chair that rolls away, robot high-fives and misses completely, robot sneezes and its head pops off, robot dances and knocks over a wedding cake. Quick cuts, bright varied locations, peak try-not-to-laugh challenge energy" },
-    { label: "🏠 DIY Fails", prompt: "A humanoid robot attempts home DIY — hammers a nail and the shelf collapses, tries to paint a wall and paints itself instead, uses a power drill and it spins the robot around in circles, cuts a piece of wood and the table falls apart. Bright garage/home setting, security camera angle, classic home improvement fail compilation" },
-    { label: "💍 Wedding Fails", prompt: "At a robot wedding ceremony, the ring bearer robot trips and launches the rings into the fountain, the best man robot's speech malfunctions into gibberish, the wedding cake robot waiter slips on the dance floor and the cake slides across the room, the bride robot catches the bouquet and it explodes into confetti. Bright wedding venue, multiple phone camera angles" },
+    { label: "🍳 Kitchen Fails", prompt: "A real person in a home kitchen confidently flips a pancake way too hard, it sticks to the ceiling, they look up in shock, then try to catch a falling egg and smash it on the counter, flour bag tips over and explodes everywhere covering their face. Filmed on a phone camera, shaky handheld, bright messy kitchen, genuine surprised reactions, looks like a real home video fail. No robots." },
+    { label: "🏋️ Gym Fails", prompt: "A guy at a gym loads too many plates on a barbell, tries to deadlift it, his feet slide forward and he sits down hard on the floor. In the background another person on a treadmill gets distracted watching and stumbles off the back. Bright gym lighting, security camera angle, the kind of real gym fail you see on FailArmy. No robots." },
+    { label: "🛹 Sports Fails", prompt: "A teenage guy at a skatepark tries to show off with a kickflip, the board shoots out from under him and he lands flat on his back on the concrete while his friends laugh hysterically. Phone camera footage, bright outdoor daylight, shaky recording, genuine painful laughter from friends watching, classic FailArmy skateboard fail. No robots." },
+    { label: "🚗 Driving Fails", prompt: "A person in a car park slowly reverses and bumps into a shopping trolley which rolls into another car, they panic and overcorrect driving forward through a small hedge, they get out covered in leaves looking confused while bystanders stare in disbelief. Dashcam footage, bright daylight, real parking lot fail energy. No robots." },
+    { label: "🐕 Pet Fails", prompt: "A golden retriever running full speed to catch a ball smashes into a glass sliding door and bounces off, shakes it off confused. A cat sitting on a shelf deliberately pushes a glass off the edge while making eye contact with its owner. Phone camera footage, bright home lighting, genuine pet fail moments that go viral. No robots." },
+    { label: "🎪 Try Not to Laugh", prompt: "A man walks confidently into a glass door at an office, stumbles back holding his nose. Cut to a woman sitting down on an office chair that rolls away, she falls flat on the floor. Another person tries to high-five a friend and completely whiffs. Quick cuts, bright natural lighting, phone camera angles, people laughing in the background, real try-not-to-laugh compilation. No robots." },
+    { label: "🏠 DIY Fails", prompt: "A dad doing home renovation hammers a nail and the entire shelf collapses off the wall, he jumps back in shock. Then tries to paint a wall and accidentally steps in the paint tray, leaving footprints everywhere. Phone camera footage, bright garage lighting, his family laughing in the background, classic dad DIY disaster energy. No robots." },
+    { label: "💍 Wedding Fails", prompt: "At a wedding ceremony the ring bearer kid trips walking down the aisle and face-plants, the best man's speech goes horribly wrong as his phone dies mid-reading, the waiter carrying the wedding cake slips on the dance floor and the cake slides across the room. Multiple phone camera angles, bright wedding venue, genuine gasps and laughter from guests. No robots." },
   ],
   "aitunes": [
     { label: "🎧 DJ Battle", prompt: "Two robot DJs in a neon-lit club having an intense DJ battle, turntables spinning, holographic music visualisations clashing in mid-air, crowd of robots going wild, lasers and smoke machines, peak electronic music energy" },
@@ -127,7 +127,7 @@ export default function AdminChannelsPage() {
     setExpandedPromo(null);
     setPromoJobs(prev => ({
       ...prev,
-      [channel.id]: { channelId: channel.id, channelSlug: channel.slug, status: "generating", message: "Submitting 3 clips..." },
+      [channel.id]: { channelId: channel.id, channelSlug: channel.slug, status: "generating", message: "Submitting clip..." },
     }));
 
     try {
@@ -146,25 +146,40 @@ export default function AdminChannelsPage() {
         return;
       }
 
-      // Extract clip requestIds
-      const clips = (data.clips || []).map((c: { scene: number; requestId: string | null }) => ({
-        scene: c.scene,
-        requestId: c.requestId,
-        done: false,
-      }));
+      const clip = (data.clips || [])[0];
+      if (!clip) {
+        setPromoJobs(prev => ({
+          ...prev,
+          [channel.id]: { ...prev[channel.id], status: "error", message: "No clip returned" },
+        }));
+        return;
+      }
+
+      // If immediately completed with videoUrl
+      if (clip.videoUrl) {
+        await savePromo(channel.id, channel.slug, clip.videoUrl);
+        return;
+      }
+
+      if (!clip.requestId) {
+        setPromoJobs(prev => ({
+          ...prev,
+          [channel.id]: { ...prev[channel.id], status: "error", message: "No request ID" },
+        }));
+        return;
+      }
 
       setPromoJobs(prev => ({
         ...prev,
         [channel.id]: {
           ...prev[channel.id],
           status: "polling",
-          clips,
-          message: `Generating 3 clips (0/3 done)...`,
+          clips: [{ scene: 1, requestId: clip.requestId, done: false }],
+          message: "Generating 10s clip...",
         },
       }));
 
-      // Poll all clips
-      pollAllClips(channel.id, channel.slug, clips);
+      pollClip(channel.id, channel.slug, clip.requestId);
     } catch {
       setPromoJobs(prev => ({
         ...prev,
@@ -173,12 +188,7 @@ export default function AdminChannelsPage() {
     }
   };
 
-  const pollAllClips = async (
-    channelId: string,
-    channelSlug: string,
-    clips: { scene: number; requestId: string | null; blobUrl?: string; done?: boolean }[],
-    attempt = 0,
-  ) => {
+  const pollClip = async (channelId: string, channelSlug: string, requestId: string, attempt = 0) => {
     if (attempt > 90) {
       setPromoJobs(prev => ({
         ...prev,
@@ -189,91 +199,74 @@ export default function AdminChannelsPage() {
 
     await new Promise(r => setTimeout(r, 10000));
 
-    const updated = [...clips];
-    let allDone = true;
+    try {
+      const res = await fetch(`/api/admin/channels/generate-promo?id=${requestId}`);
+      const data = await res.json();
 
-    for (let i = 0; i < updated.length; i++) {
-      if (updated[i].done || !updated[i].requestId) continue;
-
-      try {
-        const res = await fetch(`/api/admin/channels/generate-promo?id=${updated[i].requestId}`);
-        const data = await res.json();
-
-        if (data.phase === "done" && data.success) {
-          updated[i] = { ...updated[i], done: true, blobUrl: data.blobUrl };
-        } else if (data.phase === "done" && !data.success) {
-          updated[i] = { ...updated[i], done: true }; // Failed but done
-        } else {
-          allDone = false;
-        }
-      } catch {
-        allDone = false;
+      if (data.phase === "done" && data.success && data.blobUrl) {
+        await savePromo(channelId, channelSlug, data.blobUrl);
+        return;
       }
-    }
 
-    const doneCount = updated.filter(c => c.done).length;
-
-    setPromoJobs(prev => ({
-      ...prev,
-      [channelId]: {
-        ...prev[channelId],
-        clips: updated,
-        message: `Generating 3 clips (${doneCount}/3 done)...`,
-      },
-    }));
-
-    if (allDone) {
-      // All clips done — stitch them
-      const clipUrls = updated.filter(c => c.blobUrl).map(c => c.blobUrl as string);
-      if (clipUrls.length === 0) {
+      if (data.phase === "done" && !data.success) {
         setPromoJobs(prev => ({
           ...prev,
-          [channelId]: { ...prev[channelId], status: "error", message: "All clips failed" },
+          [channelId]: { ...prev[channelId], status: "error", message: data.status || "Clip failed" },
         }));
         return;
       }
 
       setPromoJobs(prev => ({
         ...prev,
-        [channelId]: { ...prev[channelId], status: "stitching", message: `Stitching ${clipUrls.length} clips...` },
+        [channelId]: {
+          ...prev[channelId],
+          message: `Generating 10s clip... (${attempt * 10}s)`,
+        },
       }));
 
-      try {
-        const stitchRes = await fetch("/api/admin/channels/generate-promo", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channel_id: channelId, channel_slug: channelSlug, clip_urls: clipUrls }),
-        });
-        const stitchData = await stitchRes.json();
+      pollClip(channelId, channelSlug, requestId, attempt + 1);
+    } catch {
+      pollClip(channelId, channelSlug, requestId, attempt + 1);
+    }
+  };
 
-        if (stitchData.success) {
-          setPromoJobs(prev => ({
-            ...prev,
-            [channelId]: {
-              ...prev[channelId],
-              status: "done",
-              blobUrl: stitchData.blobUrl,
-              message: `${stitchData.duration} promo ready!`,
-            },
-          }));
-          fetchChannels();
-        } else {
-          setPromoJobs(prev => ({
-            ...prev,
-            [channelId]: { ...prev[channelId], status: "error", message: "Stitch failed" },
-          }));
-        }
-      } catch {
+  const savePromo = async (channelId: string, channelSlug: string, clipUrl: string) => {
+    setPromoJobs(prev => ({
+      ...prev,
+      [channelId]: { ...prev[channelId], status: "generating", message: "Saving promo..." },
+    }));
+
+    try {
+      const saveRes = await fetch("/api/admin/channels/generate-promo", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: channelId, channel_slug: channelSlug, clip_urls: [clipUrl] }),
+      });
+      const saveData = await saveRes.json();
+
+      if (saveData.success) {
         setPromoJobs(prev => ({
           ...prev,
-          [channelId]: { ...prev[channelId], status: "error", message: "Stitch network error" },
+          [channelId]: {
+            ...prev[channelId],
+            status: "done",
+            blobUrl: saveData.blobUrl,
+            message: "10s promo ready!",
+          },
+        }));
+        fetchChannels();
+      } else {
+        setPromoJobs(prev => ({
+          ...prev,
+          [channelId]: { ...prev[channelId], status: "error", message: "Save failed" },
         }));
       }
-      return;
+    } catch {
+      setPromoJobs(prev => ({
+        ...prev,
+        [channelId]: { ...prev[channelId], status: "error", message: "Save network error" },
+      }));
     }
-
-    // Keep polling
-    pollAllClips(channelId, channelSlug, updated, attempt + 1);
   };
 
   const generateTitle = async (channel: AdminChannel) => {
@@ -427,35 +420,20 @@ export default function AdminChannelsPage() {
               {/* Promo button / status */}
               {(() => {
                 const job = promoJobs[channel.id];
-                const isRunning = job?.status === "generating" || job?.status === "polling" || job?.status === "stitching";
+                const isRunning = job?.status === "generating" || job?.status === "polling";
                 if (isRunning) {
-                  const doneClips = job.clips?.filter(c => c.done).length || 0;
-                  const totalClips = job.clips?.length || 3;
-                  const steps = [
-                    { label: "Submitting", done: job.status !== "generating" },
-                    ...Array.from({ length: totalClips }, (_, i) => ({ label: `Clip ${i + 1}`, done: i < doneClips })),
-                    { label: "Stitching", done: job.status === "done" },
-                  ];
                   return (
                     <div className="flex-1 bg-purple-500/10 border border-purple-500/20 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-                        <span className="text-[11px] text-purple-300 font-bold">{job.message || "Generating promo..."}</span>
-                      </div>
-                      <div className="flex gap-1">
-                        {steps.map((s, i) => (
-                          <div key={i} className="flex flex-col items-center gap-0.5">
-                            <div className={`w-8 h-1.5 rounded-full ${s.done ? "bg-green-400" : job.status === "stitching" && s.label === "Stitching" ? "bg-purple-400 animate-pulse" : "bg-gray-700"}`} />
-                            <span className={`text-[8px] ${s.done ? "text-green-400" : "text-gray-600"}`}>{s.label}</span>
-                          </div>
-                        ))}
+                        <span className="text-[11px] text-purple-300 font-bold">{job.message || "Generating 10s clip..."}</span>
                       </div>
                     </div>
                   );
                 }
                 if (job?.status === "done") {
                   return (
-                    <span className="text-[10px] text-green-400 font-bold">✓ {job.message || "30s promo ready!"}</span>
+                    <span className="text-[10px] text-green-400 font-bold">✓ {job.message || "10s promo ready!"}</span>
                   );
                 }
                 if (job?.status === "error") {
@@ -475,7 +453,7 @@ export default function AdminChannelsPage() {
                       : "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
                 }`}
               >
-                {promoJobs[channel.id]?.status === "done" ? "Regen Promo" : "🎬 30s Promo"}
+                {promoJobs[channel.id]?.status === "done" ? "Regen Promo" : "🎬 10s Promo"}
               </button>
 
               {/* Title button / status */}
