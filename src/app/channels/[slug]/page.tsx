@@ -29,18 +29,13 @@ export default function ChannelPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   const [reactionCounts, setReactionCounts] = useState<Record<string, Record<string, number>>>({});
   const [userReactions, setUserReactions] = useState<Record<string, Set<string>>>({});
   const [progress, setProgress] = useState(0);
-  const [showControls, setShowControls] = useState(true);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const allPostsRef = useRef<Post[]>([]);
-  const touchStartRef = useRef<{ y: number; time: number } | null>(null);
-  const swipeAnimRef = useRef<"up" | "down" | null>(null);
-  const [swipeOffset, setSwipeOffset] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const currentPost = posts[currentIdx] || null;
 
@@ -66,7 +61,6 @@ export default function ChannelPage() {
     }).catch(() => setLoading(false));
   }, [slug, sessionId, fetchPosts]);
 
-  // Auto-load more when near end
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
@@ -94,7 +88,6 @@ export default function ChannelPage() {
     vid.src = currentPost.media_url;
     vid.load();
     vid.play().catch(() => {
-      // Autoplay blocked — try muted
       vid.muted = true;
       setMuted(true);
       vid.play().catch(() => {});
@@ -103,7 +96,7 @@ export default function ChannelPage() {
     setProgress(0);
   }, [currentIdx, currentPost?.media_url, currentPost?.media_type]);
 
-  // Track progress
+  // Track progress + auto-advance
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
@@ -111,11 +104,9 @@ export default function ChannelPage() {
       if (vid.duration > 0) setProgress(vid.currentTime / vid.duration);
     };
     const onEnded = () => {
-      // Auto-advance to next video
       if (currentIdx < posts.length - 1) {
         setCurrentIdx(prev => prev + 1);
       } else {
-        // Loop back to start
         setCurrentIdx(0);
       }
     };
@@ -127,87 +118,6 @@ export default function ChannelPage() {
     };
   }, [currentIdx, posts.length]);
 
-  // Auto-hide controls
-  const showControlsBriefly = useCallback(() => {
-    setShowControls(true);
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
-  }, []);
-
-  useEffect(() => {
-    showControlsBriefly();
-    return () => { if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current); };
-  }, [showControlsBriefly]);
-
-  const goNext = useCallback(() => {
-    if (currentIdx < posts.length - 1) setCurrentIdx(prev => prev + 1);
-    showControlsBriefly();
-  }, [currentIdx, posts.length, showControlsBriefly]);
-
-  const goPrev = useCallback(() => {
-    if (currentIdx > 0) setCurrentIdx(prev => prev - 1);
-    showControlsBriefly();
-  }, [currentIdx, showControlsBriefly]);
-
-  // Touch swipe to navigate between posts
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartRef.current = { y: e.touches[0].clientY, time: Date.now() };
-    setSwipeOffset(0);
-  }, []);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
-    // Dampen the offset for visual feedback
-    setSwipeOffset(deltaY * 0.3);
-  }, []);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
-    const deltaTime = Date.now() - touchStartRef.current.time;
-    touchStartRef.current = null;
-
-    // Threshold: 60px or fast flick (30px in under 300ms)
-    const isFastFlick = Math.abs(deltaY) > 30 && deltaTime < 300;
-    const isSwipe = Math.abs(deltaY) > 60 || isFastFlick;
-
-    if (isSwipe) {
-      if (deltaY < 0 && currentIdx < posts.length - 1) {
-        // Swipe up → next post
-        swipeAnimRef.current = "up";
-        setSwipeOffset(0);
-        goNext();
-      } else if (deltaY > 0 && currentIdx > 0) {
-        // Swipe down → previous post
-        swipeAnimRef.current = "down";
-        setSwipeOffset(0);
-        goPrev();
-      } else {
-        setSwipeOffset(0);
-      }
-    } else {
-      setSwipeOffset(0);
-    }
-
-    // Clear animation flag after transition
-    setTimeout(() => { swipeAnimRef.current = null; }, 300);
-  }, [currentIdx, posts.length, goNext, goPrev]);
-
-  // Prefetch next video
-  useEffect(() => {
-    const next = posts[currentIdx + 1];
-    if (next?.media_url && next.media_type === "video") {
-      const link = document.createElement("link");
-      link.rel = "preload";
-      link.as = "video";
-      link.href = next.media_url;
-      link.setAttribute("data-channel-prefetch", "1");
-      document.head.appendChild(link);
-      return () => { link.remove(); };
-    }
-  }, [currentIdx, posts]);
-
   const togglePlay = () => {
     const vid = videoRef.current;
     if (!vid) return;
@@ -218,7 +128,17 @@ export default function ChannelPage() {
       vid.pause();
       setPaused(true);
     }
-    showControlsBriefly();
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setVolume(val);
+    const vid = videoRef.current;
+    if (vid) {
+      vid.volume = val;
+      vid.muted = val === 0;
+      setMuted(val === 0);
+    }
   };
 
   const toggleMute = () => {
@@ -226,7 +146,10 @@ export default function ChannelPage() {
     if (!vid) return;
     vid.muted = !vid.muted;
     setMuted(vid.muted);
-    showControlsBriefly();
+  };
+
+  const selectPost = (idx: number) => {
+    setCurrentIdx(idx);
   };
 
   const toggleSubscribe = async () => {
@@ -261,7 +184,6 @@ export default function ChannelPage() {
     const wasActive = userReactions[pid]?.has(emoji) || false;
     const previousReactions = new Set(userReactions[pid] || []);
 
-    // Single-select: optimistic update — clear all previous, toggle this one
     setUserReactions(prev => {
       const newSet = new Set<string>();
       if (!wasActive) newSet.add(emoji);
@@ -269,18 +191,15 @@ export default function ChannelPage() {
     });
     setReactionCounts(prev => {
       const current = { ...(prev[pid] || { funny: 0, sad: 0, shocked: 0, crap: 0 }) };
-      // Decrement any previously active reactions
       for (const prevEmoji of previousReactions) {
         if (prevEmoji !== emoji) {
           current[prevEmoji] = Math.max(0, (current[prevEmoji] || 0) - 1);
         }
       }
-      // Toggle the selected emoji
       current[emoji] = Math.max(0, (current[emoji] || 0) + (wasActive ? -1 : 1));
       return { ...prev, [pid]: current };
     });
 
-    // Remove previous reactions on server, then toggle the new one
     try {
       for (const prevEmoji of previousReactions) {
         if (prevEmoji !== emoji) {
@@ -296,13 +215,20 @@ export default function ChannelPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ post_id: pid, session_id: sessionId, action: "react", emoji }),
       });
-    } catch { /* optimistic update already applied */ }
-
-    setShowEmojiPicker(false);
+    } catch { /* optimistic */ }
   };
 
   const currentReactionCounts = currentPost ? (reactionCounts[currentPost.id] || { funny: 0, sad: 0, shocked: 0, crap: 0 }) : { funny: 0, sad: 0, shocked: 0, crap: 0 };
   const currentUserReactions = currentPost ? (userReactions[currentPost.id] || new Set<string>()) : new Set<string>();
+
+  // Handle scroll-to-load in thumbnail list
+  const handleListScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200 && nextCursor && !loadingMore) {
+      loadMore();
+    }
+  };
 
   if (loading) {
     return (
@@ -329,232 +255,260 @@ export default function ChannelPage() {
 
   const isVideo = currentPost?.media_type === "video" && currentPost?.media_url;
   const isImage = currentPost?.media_type === "image" && currentPost?.media_url;
+  const reactions = [
+    { key: "funny", emoji: "😂" },
+    { key: "sad", emoji: "😢" },
+    { key: "shocked", emoji: "😮" },
+    { key: "crap", emoji: "💩" },
+  ] as const;
 
   return (
-    <div
-      className="h-[100dvh] bg-black text-white flex flex-col overflow-hidden relative select-none"
-      onClick={() => { showControlsBriefly(); setShowEmojiPicker(false); }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* Full-screen video/image */}
-      <div
-        className="absolute inset-0 transition-transform duration-300 ease-out"
-        style={{ transform: swipeOffset ? `translateY(${swipeOffset}px)` : undefined }}
-      >
-        {isVideo && (
-          <video
-            ref={videoRef}
-            className="w-full h-full object-cover"
-            playsInline
-            muted={muted}
-            onClick={togglePlay}
-          />
-        )}
-        {isImage && (
-          <img
-            src={currentPost.media_url!}
-            alt=""
-            className="w-full h-full object-cover"
-          />
-        )}
-        {!isVideo && !isImage && (
-          <div className="w-full h-full flex items-center justify-center bg-gray-900">
-            <div className="text-center px-8">
-              <div className="text-4xl mb-3">{channel.emoji}</div>
-              <p className="text-gray-300 text-sm">{currentPost?.content || "No content"}</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Top bar — channel info + back */}
-      <div className={`relative z-10 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
-        <div className="flex items-center justify-between px-4 pt-3 pb-8 bg-gradient-to-b from-black/70 to-transparent">
-          <div className="flex items-center gap-3">
-            <Link href="/channels" className="text-white/80 hover:text-white">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm">{channel.emoji}</span>
-                <span className="text-sm font-bold">{channel.name}</span>
-                <span className="text-[8px] px-1 py-0.5 rounded bg-red-600 text-white font-bold ml-1">LIVE</span>
+    <div className="h-[100dvh] bg-black text-white flex flex-col lg:flex-row overflow-hidden">
+      {/* LEFT / MAIN column: video player + info */}
+      <div className="flex flex-col lg:flex-1 min-w-0">
+        {/* Video player */}
+        <div className="relative w-full bg-black" style={{ aspectRatio: "16/9" }}>
+          {isVideo && (
+            <video
+              ref={videoRef}
+              className="w-full h-full object-contain bg-black"
+              playsInline
+              muted={muted}
+              onClick={togglePlay}
+            />
+          )}
+          {isImage && (
+            <img
+              src={currentPost.media_url!}
+              alt=""
+              className="w-full h-full object-contain bg-black"
+            />
+          )}
+          {!isVideo && !isImage && (
+            <div className="w-full h-full flex items-center justify-center bg-gray-900">
+              <div className="text-center px-8">
+                <div className="text-4xl mb-3">{channel.emoji}</div>
+                <p className="text-gray-300 text-sm">{currentPost?.content || "No content"}</p>
               </div>
-              <p className="text-[10px] text-gray-400">{channel.subscriber_count} subscribers</p>
             </div>
-          </div>
+          )}
+
+          {/* Paused overlay */}
+          {paused && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
+                <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Progress bar at bottom of video */}
+          {isVideo && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+              <div
+                className="h-full bg-cyan-400 transition-[width] duration-200"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Controls bar */}
+        <div className="flex items-center gap-2 px-3 py-2 bg-gray-900/80 border-b border-white/5">
+          <button onClick={togglePlay} className="p-1.5 hover:bg-white/10 rounded transition-colors">
+            {paused ? (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            ) : (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            )}
+          </button>
 
           <button
-            onClick={toggleSubscribe}
-            className={`text-[11px] px-3 py-1 rounded-full font-bold transition-all active:scale-95 ${
-              channel.subscribed
-                ? "bg-white/10 text-white"
-                : "bg-cyan-500 text-black"
-            }`}
+            onClick={() => { if (currentIdx > 0) setCurrentIdx(prev => prev - 1); }}
+            disabled={currentIdx === 0}
+            className="p-1.5 hover:bg-white/10 rounded transition-colors disabled:opacity-30"
           >
-            {channel.subscribed ? "Subscribed" : "Subscribe"}
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
           </button>
-        </div>
-      </div>
 
-      {/* Right side: Thumbs-up reaction button with long-press emoji picker */}
-      {currentPost && (
-        <div className="absolute right-3 bottom-36 z-20 flex flex-col items-center">
-          {/* Emoji picker (shown on long-press) */}
-          {showEmojiPicker && (
-            <div className="absolute bottom-14 right-0 bg-black/80 backdrop-blur-xl rounded-2xl p-2 flex flex-col gap-1 border border-white/10 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
-              {([
-                { key: "funny", emoji: "😂" },
-                { key: "sad", emoji: "😢" },
-                { key: "shocked", emoji: "😮" },
-                { key: "crap", emoji: "💩" },
-              ] as const).map(({ key, emoji }) => (
+          <button
+            onClick={() => { if (currentIdx < posts.length - 1) setCurrentIdx(prev => prev + 1); }}
+            disabled={currentIdx >= posts.length - 1}
+            className="p-1.5 hover:bg-white/10 rounded transition-colors disabled:opacity-30"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+
+          <span className="text-[10px] text-gray-500 font-mono ml-1">
+            {currentIdx + 1}/{posts.length}
+          </span>
+
+          <div className="flex-1" />
+
+          {/* Volume control */}
+          <button onClick={toggleMute} className="p-1.5 hover:bg-white/10 rounded transition-colors">
+            {muted || volume === 0 ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+              </svg>
+            )}
+          </button>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={muted ? 0 : volume}
+            onChange={handleVolumeChange}
+            className="w-16 h-1 accent-cyan-400 cursor-pointer"
+          />
+        </div>
+
+        {/* Video info section */}
+        <div className="px-4 py-3 border-b border-white/5">
+          {currentPost && (
+            <p className="text-sm text-gray-200 mb-2 line-clamp-2">
+              <span className="text-white font-bold">@{currentPost.username}</span>{" "}
+              {currentPost.content?.split("\n")[0]?.slice(0, 120)}
+            </p>
+          )}
+
+          {/* Channel row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Link href="/channels" className="text-white/60 hover:text-white">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </Link>
+              <span className="text-sm">{channel.emoji}</span>
+              <span className="text-sm font-bold">{channel.name}</span>
+              <span className="text-[8px] px-1 py-0.5 rounded bg-red-600 text-white font-bold">LIVE</span>
+              <span className="text-[10px] text-gray-500">{channel.subscriber_count} subs</span>
+            </div>
+
+            <button
+              onClick={toggleSubscribe}
+              className={`text-[11px] px-3 py-1 rounded-full font-bold transition-all active:scale-95 ${
+                channel.subscribed
+                  ? "bg-white/10 text-white"
+                  : "bg-cyan-500 text-black"
+              }`}
+            >
+              {channel.subscribed ? "Subscribed" : "Subscribe"}
+            </button>
+          </div>
+
+          {/* Reactions row */}
+          {currentPost && (
+            <div className="flex items-center gap-1 mt-2">
+              {reactions.map(({ key, emoji }) => (
                 <button
                   key={key}
-                  onClick={(e) => { e.stopPropagation(); handleReaction(key); }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all active:scale-95 hover:bg-white/10 ${
-                    currentUserReactions.has(key) ? "bg-white/15" : ""
+                  onClick={() => handleReaction(key)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-all active:scale-95 ${
+                    currentUserReactions.has(key)
+                      ? "bg-cyan-500/20 border border-cyan-500/40"
+                      : "bg-white/5 border border-white/10 hover:bg-white/10"
                   }`}
                 >
-                  <span className="text-2xl">{emoji}</span>
+                  <span>{emoji}</span>
                   {(currentReactionCounts[key] || 0) > 0 && (
-                    <span className="text-[11px] text-white/70 font-bold min-w-[16px]">
-                      {currentReactionCounts[key]}
-                    </span>
+                    <span className="text-[10px] text-gray-400 font-bold">{currentReactionCounts[key]}</span>
                   )}
                 </button>
               ))}
             </div>
           )}
-          {/* Main thumbs-up button */}
-          {(() => {
-            const activeEntry = (["funny", "sad", "shocked", "crap"] as const).find(k => currentUserReactions.has(k));
-            const activeEmoji = activeEntry ? { funny: "😂", sad: "😢", shocked: "😮", crap: "💩" }[activeEntry] : null;
-            const totalReactions = Object.values(currentReactionCounts).reduce((a, b) => a + b, 0);
-            return (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (activeEntry) {
-                    // Tap when active = unreact
-                    handleReaction(activeEntry);
-                  } else {
-                    // Tap when no reaction = quick react with "funny"
-                    handleReaction("funny");
-                  }
-                }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  longPressTimerRef.current = setTimeout(() => {
-                    setShowEmojiPicker(prev => !prev);
-                  }, 400);
-                }}
-                onPointerUp={() => clearTimeout(longPressTimerRef.current)}
-                onPointerLeave={() => clearTimeout(longPressTimerRef.current)}
-                className={`w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all active:scale-90 ${
-                  activeEntry
-                    ? "bg-white/20 backdrop-blur-sm"
-                    : "bg-black/40 backdrop-blur-sm border border-white/20"
-                }`}
-              >
-                <span className="text-2xl leading-none">{activeEmoji || "👍"}</span>
-                {totalReactions > 0 && (
-                  <span className="text-[9px] text-white font-bold leading-none mt-0.5">{totalReactions}</span>
-                )}
-              </button>
-            );
-          })()}
         </div>
-      )}
 
-      {/* Bottom controls */}
-      <div className={`absolute bottom-0 left-0 right-0 z-10 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
-        {/* Progress bar */}
-        {isVideo && (
-          <div className="px-4 mb-2">
-            <div className="h-0.5 bg-white/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-cyan-400 rounded-full transition-[width] duration-200"
-                style={{ width: `${progress * 100}%` }}
+        {/* On mobile: scrollable thumbnail list below */}
+        <div
+          ref={listRef}
+          className="flex-1 overflow-y-auto lg:hidden"
+          onScroll={handleListScroll}
+        >
+          <div className="px-3 py-2">
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">Up Next</p>
+            {posts.map((post, idx) => (
+              <ThumbnailItem
+                key={post.id}
+                post={post}
+                isActive={idx === currentIdx}
+                onClick={() => selectPost(idx)}
               />
-            </div>
-          </div>
-        )}
-
-        <div className="px-4 pb-6 pt-4 bg-gradient-to-t from-black/80 to-transparent">
-          {/* Episode info */}
-          {currentPost && (
-            <p className="text-xs text-gray-300 mb-3 line-clamp-2">
-              <span className="text-white font-bold">@{currentPost.username}</span>{" "}
-              {currentPost.content?.split("\n")[0]?.slice(0, 100)}
-            </p>
-          )}
-
-          {/* Controls row */}
-          <div className="flex items-center justify-between">
-            {/* Left: prev / play / next */}
-            <div className="flex items-center gap-4">
-              <button onClick={goPrev} disabled={currentIdx === 0} className="text-white/70 hover:text-white disabled:opacity-30">
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
-                </svg>
-              </button>
-
-              <button onClick={togglePlay} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 active:scale-95 transition-all">
-                {paused ? (
-                  <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                  </svg>
-                )}
-              </button>
-
-              <button onClick={goNext} disabled={currentIdx >= posts.length - 1} className="text-white/70 hover:text-white disabled:opacity-30">
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
-                </svg>
-              </button>
-            </div>
-
-            {/* Center: episode counter */}
-            <span className="text-[10px] text-gray-500 font-mono">
-              {currentIdx + 1} / {posts.length}
-            </span>
-
-            {/* Right: volume */}
-            <button onClick={toggleMute} className="text-white/70 hover:text-white">
-              {muted ? (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-                </svg>
-              )}
-            </button>
+            ))}
+            {loadingMore && (
+              <div className="py-4 text-center text-gray-500 text-xs">Loading more...</div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Paused overlay */}
-      {paused && (
-        <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none">
-          <div className="w-16 h-16 rounded-full bg-black/40 flex items-center justify-center">
-            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-          </div>
+      {/* RIGHT column: thumbnail list (tablet/desktop only) */}
+      <div
+        className="hidden lg:flex flex-col w-[380px] border-l border-white/5 overflow-y-auto"
+        onScroll={handleListScroll}
+      >
+        <div className="px-3 py-3">
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">Up Next</p>
+          {posts.map((post, idx) => (
+            <ThumbnailItem
+              key={post.id}
+              post={post}
+              isActive={idx === currentIdx}
+              onClick={() => selectPost(idx)}
+            />
+          ))}
+          {loadingMore && (
+            <div className="py-4 text-center text-gray-500 text-xs">Loading more...</div>
+          )}
         </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+function ThumbnailItem({ post, isActive, onClick }: { post: Post; isActive: boolean; onClick: () => void }) {
+  const hasThumb = post.media_url && (post.media_type === "video" || post.media_type === "image");
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex gap-3 p-2 rounded-lg text-left transition-colors mb-1 ${
+        isActive ? "bg-white/10" : "hover:bg-white/5"
+      }`}
+    >
+      {/* Thumbnail */}
+      <div className="w-40 min-w-[160px] aspect-video rounded-md overflow-hidden bg-gray-800 flex-shrink-0 relative">
+        {hasThumb && post.media_type === "image" && (
+          <img src={post.media_url!} alt="" className="w-full h-full object-cover" />
+        )}
+        {hasThumb && post.media_type === "video" && (
+          <video src={post.media_url!} className="w-full h-full object-cover" muted preload="metadata" />
+        )}
+        {!hasThumb && (
+          <div className="w-full h-full flex items-center justify-center text-gray-600 text-2xl">📺</div>
+        )}
+        {isActive && (
+          <div className="absolute inset-0 border-2 border-cyan-400 rounded-md" />
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0 py-0.5">
+        <p className="text-xs text-white font-medium line-clamp-2 leading-tight">
+          {post.content?.split("\n")[0]?.slice(0, 80) || "Untitled"}
+        </p>
+        <p className="text-[10px] text-gray-500 mt-1">@{post.username}</p>
+      </div>
+    </button>
   );
 }
