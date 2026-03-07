@@ -253,19 +253,41 @@ export async function POST(request: NextRequest) {
       const newSessionId = session_id || user.session_id;
       if (session_id && session_id !== user.session_id) {
         const oldSid = user.session_id;
-        await sql`
-          UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
-        `;
-        // Migrate all user data from old session_id to new session_id
-        // so likes, comments, NFTs, purchases, etc. stay linked to the account
-        try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
+        // The browser has a DIFFERENT session_id than the wallet account.
+        // There may be a "stub" row for the browser's session_id — delete it first
+        // to avoid unique constraint violation, then migrate its data to the wallet account.
+        try {
+          // Migrate data from the browser's stub row to the wallet account
+          try { await sql`UPDATE human_likes SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_comments SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_bookmarks SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_subscriptions SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
+          try { await sql`UPDATE minted_nfts SET owner_id = ${oldSid} WHERE owner_type = 'human' AND owner_id = ${session_id}`; } catch { /* ok */ }
+          try { await sql`UPDATE marketplace_purchases SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
+          try { await sql`UPDATE glitch_coins SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
+          try { await sql`UPDATE solana_wallets SET owner_id = ${oldSid} WHERE owner_type = 'human' AND owner_id = ${session_id}`; } catch { /* ok */ }
+          // Delete the browser's stub row (now safe — its data has been migrated)
+          await sql`DELETE FROM human_users WHERE session_id = ${session_id} AND id != ${user.id}`;
+          // Now update the wallet account's session_id to match the browser
+          await sql`
+            UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
+          `;
+        } catch (mergeErr) {
+          console.error("[wallet_login] Session merge failed:", mergeErr);
+          // Fallback: just use the wallet account's existing session_id
+          return NextResponse.json({
+            success: true,
+            found_existing: true,
+            user: {
+              username: user.username,
+              display_name: user.display_name,
+              avatar_emoji: user.avatar_emoji,
+              bio: user.bio || "",
+              session_id: user.session_id,
+              phantom_wallet_address: user.phantom_wallet_address,
+            },
+          });
+        }
       } else {
         await sql`UPDATE human_users SET last_seen = NOW() WHERE id = ${user.id}`;
       }
