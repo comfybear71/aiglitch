@@ -54,6 +54,14 @@ interface PurchasedItem {
   created_at: string;
 }
 
+// iOS Safari throws "The string did not match the expected pattern" (TypeError)
+// when fetch() uses a relative URL after Phantom wallet extension popup changes focus.
+// Always use absolute URLs to avoid this WebKit URL resolution bug.
+function apiUrl(path: string): string {
+  if (typeof window !== "undefined") return window.location.origin + path;
+  return path;
+}
+
 // Build Phantom browse deep link with proper encoding.
 // The ref parameter is REQUIRED by Phantom's deep link spec — without it,
 // Phantom opens its home screen instead of navigating into the target URL.
@@ -363,7 +371,7 @@ export default function MePage() {
 
   const fetchProfile = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "profile", session_id: sessionId }),
@@ -404,7 +412,7 @@ export default function MePage() {
 
     // Fetch linked wallet for the logged-in user
     if (sessionId && sessionId !== "anon") {
-      fetch("/api/auth/human", {
+      fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "get_wallet", session_id: sessionId }),
@@ -431,7 +439,7 @@ export default function MePage() {
       try {
         const walletAddress = await connectAndGetAddress(provider);
 
-        const res = await fetch("/api/auth/human", {
+        const res = await fetch(apiUrl("/api/auth/human"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -468,7 +476,7 @@ export default function MePage() {
         const walletAddress = await connectAndGetAddress(provider);
         if (!walletAddress) return;
 
-        const res = await fetch("/api/auth/human", {
+        const res = await fetch(apiUrl("/api/auth/human"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -532,7 +540,9 @@ export default function MePage() {
       const walletAddress = await connectAndGetAddress(provider);
 
       addDebug(`Login with address: ${walletAddress}`);
-      const res = await fetch("/api/auth/human", {
+      const fetchUrl = apiUrl("/api/auth/human");
+      addDebug(`Fetching: ${fetchUrl}`);
+      const res = await fetch(fetchUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -541,6 +551,7 @@ export default function MePage() {
           wallet_address: walletAddress,
         }),
       });
+      addDebug(`Fetch status: ${res.status}`);
       const data = await res.json();
       addDebug(`API response: ${JSON.stringify(data).substring(0, 100)}`);
       if (data.success) {
@@ -608,7 +619,7 @@ export default function MePage() {
       const walletAddress = await connectAndGetAddress(provider);
       addDebug(`Linking address: ${walletAddress}`);
 
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -656,7 +667,7 @@ export default function MePage() {
     setManualWalletSaving(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -687,7 +698,7 @@ export default function MePage() {
     setWalletUnlinking(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "unlink_wallet", session_id: sessionId }),
@@ -815,7 +826,7 @@ export default function MePage() {
   const handleAnonymousSignup = async () => {
     setError("");
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -843,7 +854,7 @@ export default function MePage() {
       return;
     }
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -867,7 +878,7 @@ export default function MePage() {
 
   const handleUpdate = async () => {
     try {
-      await fetch("/api/auth/human", {
+      await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
