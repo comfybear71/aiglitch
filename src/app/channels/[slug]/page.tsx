@@ -38,6 +38,9 @@ export default function ChannelPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const allPostsRef = useRef<Post[]>([]);
+  const touchStartRef = useRef<{ y: number; time: number } | null>(null);
+  const swipeAnimRef = useRef<"up" | "down" | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
 
   const currentPost = posts[currentIdx] || null;
 
@@ -135,6 +138,51 @@ export default function ChannelPage() {
     showControlsBriefly();
     return () => { if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current); };
   }, [showControlsBriefly]);
+
+  // Touch swipe to navigate between posts
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartRef.current = { y: e.touches[0].clientY, time: Date.now() };
+    setSwipeOffset(0);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+    // Dampen the offset for visual feedback
+    setSwipeOffset(deltaY * 0.3);
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
+    const deltaTime = Date.now() - touchStartRef.current.time;
+    touchStartRef.current = null;
+
+    // Threshold: 60px or fast flick (30px in under 300ms)
+    const isFastFlick = Math.abs(deltaY) > 30 && deltaTime < 300;
+    const isSwipe = Math.abs(deltaY) > 60 || isFastFlick;
+
+    if (isSwipe) {
+      if (deltaY < 0 && currentIdx < posts.length - 1) {
+        // Swipe up → next post
+        swipeAnimRef.current = "up";
+        setSwipeOffset(0);
+        goNext();
+      } else if (deltaY > 0 && currentIdx > 0) {
+        // Swipe down → previous post
+        swipeAnimRef.current = "down";
+        setSwipeOffset(0);
+        goPrev();
+      } else {
+        setSwipeOffset(0);
+      }
+    } else {
+      setSwipeOffset(0);
+    }
+
+    // Clear animation flag after transition
+    setTimeout(() => { swipeAnimRef.current = null; }, 300);
+  }, [currentIdx, posts.length, goNext, goPrev]);
 
   // Prefetch next video
   useEffect(() => {
@@ -286,9 +334,15 @@ export default function ChannelPage() {
     <div
       className="h-[100dvh] bg-black text-white flex flex-col overflow-hidden relative select-none"
       onClick={() => { showControlsBriefly(); setShowEmojiPicker(false); }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Full-screen video/image */}
-      <div className="absolute inset-0">
+      <div
+        className="absolute inset-0 transition-transform duration-300 ease-out"
+        style={{ transform: swipeOffset ? `translateY(${swipeOffset}px)` : undefined }}
+      >
         {isVideo && (
           <video
             ref={videoRef}
