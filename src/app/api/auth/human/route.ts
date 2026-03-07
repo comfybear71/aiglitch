@@ -145,6 +145,33 @@ export async function POST(request: NextRequest) {
 
     const user = users[0];
 
+    // Auto-recover orphaned data: if this user has 0 stats but there's orphaned data
+    // (session_ids in data tables that don't match any human_users row), reclaim it.
+    // This fixes data lost during wallet login session merges.
+    try {
+      const orphaned = await sql`
+        SELECT DISTINCT l.session_id
+        FROM human_likes l
+        LEFT JOIN human_users hu ON hu.session_id = l.session_id
+        WHERE hu.id IS NULL
+        LIMIT 5
+      `;
+      if (orphaned.length > 0) {
+        for (const row of orphaned) {
+          const orphanSid = row.session_id;
+          try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${orphanSid}`; } catch { /* ok */ }
+        }
+        console.log(`[profile] Recovered orphaned data from ${orphaned.length} session(s) for ${session_id}`);
+      }
+    } catch { /* recovery is best-effort */ }
+
     // Get their stats (wrapped in try/catch for table compatibility)
     let likes = 0, comments = 0, bookmarks = 0, subscriptions = 0;
     try {
@@ -257,21 +284,22 @@ export async function POST(request: NextRequest) {
         // There may be a "stub" row for the browser's session_id — delete it first
         // to avoid unique constraint violation, then migrate its data to the wallet account.
         try {
-          // Migrate data from the browser's stub row to the wallet account
-          try { await sql`UPDATE human_likes SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_comments SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_bookmarks SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_subscriptions SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
-          try { await sql`UPDATE minted_nfts SET owner_id = ${oldSid} WHERE owner_type = 'human' AND owner_id = ${session_id}`; } catch { /* ok */ }
-          try { await sql`UPDATE marketplace_purchases SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
-          try { await sql`UPDATE glitch_coins SET session_id = ${oldSid} WHERE session_id = ${session_id}`; } catch { /* ok */ }
-          try { await sql`UPDATE solana_wallets SET owner_id = ${oldSid} WHERE owner_type = 'human' AND owner_id = ${session_id}`; } catch { /* ok */ }
-          // Delete the browser's stub row (now safe — its data has been migrated)
+          // Delete the browser's stub user row first to free up the session_id
           await sql`DELETE FROM human_users WHERE session_id = ${session_id} AND id != ${user.id}`;
           // Now update the wallet account's session_id to match the browser
           await sql`
             UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
           `;
+          // Migrate ALL data from the old session_id to the new one
+          // This covers data from both the wallet account's old session AND any browser stub data
+          try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
+          try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* ok */ }
         } catch (mergeErr) {
           console.error("[wallet_login] Session merge failed:", mergeErr);
           // Fallback: just use the wallet account's existing session_id
