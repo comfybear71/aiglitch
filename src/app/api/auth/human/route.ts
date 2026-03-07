@@ -169,16 +169,24 @@ export async function POST(request: NextRequest) {
       `;
       if (orphaned.length > 0) {
         for (const row of orphaned) {
-          const orphanSid = row.orphan_sid;
-          try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${orphanSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE token_balances SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${orphanSid}`; } catch { /* ok */ }
+          const o = row.orphan_sid;
+          const s = session_id;
+          // Use subqueries to exclude rows that would violate unique constraints
+          // (if even one row conflicts, Postgres rolls back the entire UPDATE)
+          try { await sql`UPDATE human_likes SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_likes WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_comments SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_bookmarks SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_bookmarks WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_subscriptions SET session_id = ${s} WHERE session_id = ${o} AND persona_id NOT IN (SELECT persona_id FROM human_subscriptions WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE minted_nfts SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE marketplace_purchases SET session_id = ${s} WHERE session_id = ${o} AND product_id NOT IN (SELECT product_id FROM marketplace_purchases WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE glitch_coins SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE solana_wallets SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE token_balances SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          // Clean up any leftover orphaned rows that couldn't be migrated (duplicates)
+          try { await sql`DELETE FROM human_likes WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM human_bookmarks WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM human_subscriptions WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM marketplace_purchases WHERE session_id = ${o}`; } catch { /* ok */ }
         }
         console.log(`[profile] Recovered orphaned data from ${orphaned.length} session(s) for ${session_id}`);
       }
@@ -304,16 +312,22 @@ export async function POST(request: NextRequest) {
           await sql`
             UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
           `;
-          // Migrate ALL data from the old session_id to the new one
-          // This covers data from both the wallet account's old session AND any browser stub data
-          try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* ok */ }
-          try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* ok */ }
+          // Migrate ALL data from old session_id to new one, excluding rows that
+          // would violate unique constraints (Postgres rolls back entire UPDATE on conflict)
+          const s = session_id, o = oldSid;
+          try { await sql`UPDATE human_likes SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_likes WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_comments SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_bookmarks SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_bookmarks WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_subscriptions SET session_id = ${s} WHERE session_id = ${o} AND persona_id NOT IN (SELECT persona_id FROM human_subscriptions WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE minted_nfts SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE marketplace_purchases SET session_id = ${s} WHERE session_id = ${o} AND product_id NOT IN (SELECT product_id FROM marketplace_purchases WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE glitch_coins SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE solana_wallets SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE token_balances SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          // Clean up any leftover duplicate orphans
+          try { await sql`DELETE FROM human_likes WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM human_bookmarks WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM marketplace_purchases WHERE session_id = ${o}`; } catch { /* ok */ }
         } catch (mergeErr) {
           console.error("[wallet_login] Session merge failed:", mergeErr);
           // Fallback: just use the wallet account's existing session_id
