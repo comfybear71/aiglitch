@@ -79,28 +79,29 @@ export async function GET(request: NextRequest) {
 
   if (sql) {
     try {
+      const db = sql;
       const [
         [personas], [allPosts], [topPosts], [videoPosts], [imagePosts],
         [textPosts], [replies], [humanUsers], [nfts], [purchases],
         [channels], [coins], [wallets], [lastPost],
         recent, cronRuns,
       ] = await Promise.all([
-        sql`SELECT COUNT(*) as count FROM ai_personas`,
-        sql`SELECT COUNT(*) as count FROM posts`,
-        sql`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NULL`,
-        sql`SELECT COUNT(*) as count FROM posts WHERE media_type = 'video' AND media_url IS NOT NULL`,
-        sql`SELECT COUNT(*) as count FROM posts WHERE media_type = 'image' AND media_url IS NOT NULL`,
-        sql`SELECT COUNT(*) as count FROM posts WHERE media_url IS NULL`,
-        sql`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NOT NULL`,
-        sql`SELECT COUNT(*) as count FROM human_users`,
-        sql`SELECT COUNT(*) as count FROM minted_nfts`,
-        sql`SELECT COUNT(*) as count FROM marketplace_purchases`,
-        sql`SELECT COUNT(*) as count FROM channels`,
-        sql`SELECT COUNT(*) as count FROM glitch_coins`,
-        sql`SELECT COUNT(*) as count FROM solana_wallets`,
-        sql`SELECT created_at FROM posts WHERE is_reply_to IS NULL ORDER BY created_at DESC LIMIT 1`,
-        sql`SELECT id, persona_id, post_type, media_type, created_at FROM posts WHERE is_reply_to IS NULL ORDER BY created_at DESC LIMIT 5`,
-        sql`SELECT job_name, status, started_at, finished_at, error FROM cron_runs ORDER BY started_at DESC LIMIT 10`.catch(() => []),
+        db`SELECT COUNT(*) as count FROM ai_personas`,
+        db`SELECT COUNT(*) as count FROM posts`,
+        db`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NULL`,
+        db`SELECT COUNT(*) as count FROM posts WHERE media_type = 'video' AND media_url IS NOT NULL`,
+        db`SELECT COUNT(*) as count FROM posts WHERE media_type = 'image' AND media_url IS NOT NULL`,
+        db`SELECT COUNT(*) as count FROM posts WHERE media_url IS NULL`,
+        db`SELECT COUNT(*) as count FROM posts WHERE is_reply_to IS NOT NULL`,
+        db`SELECT COUNT(*) as count FROM human_users`,
+        db`SELECT COUNT(*) as count FROM minted_nfts`,
+        db`SELECT COUNT(*) as count FROM marketplace_purchases`,
+        db`SELECT COUNT(*) as count FROM channels`,
+        db`SELECT COUNT(*) as count FROM glitch_coins`,
+        db`SELECT COUNT(*) as count FROM solana_wallets`,
+        db`SELECT created_at FROM posts WHERE is_reply_to IS NULL ORDER BY created_at DESC LIMIT 1`,
+        db`SELECT id, persona_id, post_type, media_type, created_at FROM posts WHERE is_reply_to IS NULL ORDER BY created_at DESC LIMIT 5`,
+        db`SELECT job_name, status, started_at, finished_at, error FROM cron_runs ORDER BY started_at DESC LIMIT 10`.catch(() => []),
       ]);
 
       counts = {
