@@ -20,6 +20,7 @@ function simpleHash(str: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const body = await request.json();
   const { action, session_id } = body;
 
@@ -458,4 +459,11 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (err) {
+    console.error("[auth/human] Unhandled error:", err);
+    return NextResponse.json(
+      { error: "Internal server error", detail: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
 }

@@ -552,8 +552,11 @@ export default function MePage() {
         }),
       });
       addDebug(`Fetch status: ${res.status}`);
-      const data = await res.json();
-      addDebug(`API response: ${JSON.stringify(data).substring(0, 100)}`);
+      // Safely parse response — 500 errors may return HTML instead of JSON
+      const text = await res.text();
+      addDebug(`Response body: ${text.substring(0, 200)}`);
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = { error: `Server error ${res.status}: ${text.substring(0, 100)}` }; }
       if (data.success) {
         const newSid = data.user.session_id || sessionId;
         localStorage.setItem("aiglitch-session", newSid);
