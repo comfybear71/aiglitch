@@ -284,45 +284,65 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // No existing user with this wallet — create a new wallet-based account
+    // No existing user with this wallet — link wallet to existing session or create new account
     const newSessionId = session_id || uuidv4();
     const shortAddr = wallet_address.slice(0, 6);
-    const username = `wallet_${shortAddr.toLowerCase()}`;
-    const userId = uuidv4();
-
-    // Check for username collision
-    const taken = await sql`SELECT id FROM human_users WHERE username = ${username}`;
-    const finalUsername = taken.length > 0
-      ? `${username}_${Math.floor(Math.random() * 999)}`
-      : username;
 
     try {
+      // First, try to update an existing user row for this session_id
+      const updated = await sql`
+        UPDATE human_users
+        SET phantom_wallet_address = ${wallet_address},
+            auth_provider = COALESCE(auth_provider, 'wallet'),
+            last_seen = NOW()
+        WHERE session_id = ${newSessionId}
+        RETURNING id, username, display_name, avatar_emoji
+      `;
+
+      if (updated.length > 0) {
+        // User already exists for this session — just linked wallet
+        const user = updated[0];
+        return NextResponse.json({
+          success: true,
+          found_existing: true,
+          user: {
+            username: user.username,
+            display_name: user.display_name,
+            avatar_emoji: user.avatar_emoji,
+            session_id: newSessionId,
+            phantom_wallet_address: wallet_address,
+          },
+        });
+      }
+
+      // No existing user for this session — create new wallet-based account
+      const username = `wallet_${shortAddr.toLowerCase()}`;
+      const userId = uuidv4();
+      const taken = await sql`SELECT id FROM human_users WHERE username = ${username}`;
+      const finalUsername = taken.length > 0
+        ? `${username}_${Math.floor(Math.random() * 999)}`
+        : username;
+
       await sql`
         INSERT INTO human_users (id, session_id, display_name, username, avatar_emoji, phantom_wallet_address, auth_provider, last_seen)
         VALUES (${userId}, ${newSessionId}, ${`Wallet ${shortAddr}...`}, ${finalUsername}, '👛', ${wallet_address}, 'wallet', NOW())
-        ON CONFLICT (session_id) DO UPDATE SET
-          display_name = COALESCE(human_users.display_name, ${`Wallet ${shortAddr}...`}),
-          username = COALESCE(human_users.username, ${finalUsername}),
-          phantom_wallet_address = ${wallet_address},
-          auth_provider = COALESCE(human_users.auth_provider, 'wallet'),
-          last_seen = NOW()
       `;
+
+      return NextResponse.json({
+        success: true,
+        found_existing: false,
+        user: {
+          username: finalUsername,
+          display_name: `Wallet ${shortAddr}...`,
+          avatar_emoji: "👛",
+          session_id: newSessionId,
+          phantom_wallet_address: wallet_address,
+        },
+      });
     } catch (err) {
-      console.error("[wallet_login] INSERT failed:", err);
+      console.error("[wallet_login] DB operation failed:", err);
       return NextResponse.json({ error: "Failed to create wallet account", detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
     }
-
-    return NextResponse.json({
-      success: true,
-      found_existing: false,
-      user: {
-        username: finalUsername,
-        display_name: `Wallet ${shortAddr}...`,
-        avatar_emoji: "👛",
-        session_id: newSessionId,
-        phantom_wallet_address: wallet_address,
-      },
-    });
   }
 
   // ── Link wallet to existing profile ──
