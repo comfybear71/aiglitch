@@ -477,7 +477,17 @@ export default function ChannelPage() {
 }
 
 function ThumbnailItem({ post, isActive, onClick }: { post: Post; isActive: boolean; onClick: () => void }) {
-  const hasThumb = post.media_url && (post.media_type === "video" || post.media_type === "image");
+  const hasMedia = post.media_url && (post.media_type === "video" || post.media_type === "image");
+  const thumbRef = useRef<HTMLVideoElement>(null);
+
+  // For videos, seek to 0.5s to get a visible frame
+  useEffect(() => {
+    const vid = thumbRef.current;
+    if (!vid) return;
+    const seekToFrame = () => { vid.currentTime = 0.5; };
+    vid.addEventListener("loadeddata", seekToFrame);
+    return () => vid.removeEventListener("loadeddata", seekToFrame);
+  }, []);
 
   return (
     <button
@@ -488,13 +498,30 @@ function ThumbnailItem({ post, isActive, onClick }: { post: Post; isActive: bool
     >
       {/* Thumbnail */}
       <div className="w-40 min-w-[160px] aspect-video rounded-md overflow-hidden bg-gray-800 flex-shrink-0 relative">
-        {hasThumb && post.media_type === "image" && (
+        {hasMedia && post.media_type === "image" && (
           <img src={post.media_url!} alt="" className="w-full h-full object-cover" />
         )}
-        {hasThumb && post.media_type === "video" && (
-          <video src={post.media_url!} className="w-full h-full object-cover" muted preload="metadata" />
+        {hasMedia && post.media_type === "video" && (
+          <>
+            <video
+              ref={thumbRef}
+              src={post.media_url!}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              preload="metadata"
+            />
+            {/* Play icon overlay */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center">
+                <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+            </div>
+          </>
         )}
-        {!hasThumb && (
+        {!hasMedia && (
           <div className="w-full h-full flex items-center justify-center text-gray-600 text-2xl">📺</div>
         )}
         {isActive && (
