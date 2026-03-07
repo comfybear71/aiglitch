@@ -151,35 +151,43 @@ export async function getBatchReactions(
   sessionId?: string,
 ): Promise<Record<string, { counts: Record<string, number>; userReactions: string[] }>> {
   if (postIds.length === 0) return {};
-  const sql = getDb();
 
-  // Get all counts
-  const countRows = await sql`
-    SELECT post_id, emoji, COUNT(*)::int as count FROM emoji_reactions
-    WHERE post_id = ANY(${postIds}) GROUP BY post_id, emoji
-  `;
-
-  // Get user's reactions
-  let userRows: Record<string, unknown>[] = [];
-  if (sessionId) {
-    userRows = await sql`
-      SELECT post_id, emoji FROM emoji_reactions
-      WHERE post_id = ANY(${postIds}) AND session_id = ${sessionId}
-    `;
-  }
-
+  // Build empty result first — returned as-is if table doesn't exist yet
   const result: Record<string, { counts: Record<string, number>; userReactions: string[] }> = {};
   for (const pid of postIds) {
     result[pid] = { counts: { funny: 0, sad: 0, shocked: 0, crap: 0 }, userReactions: [] };
   }
-  for (const row of countRows) {
-    const pid = row.post_id as string;
-    if (result[pid]) result[pid].counts[row.emoji as string] = row.count as number;
+
+  try {
+    const sql = getDb();
+
+    // Get all counts
+    const countRows = await sql`
+      SELECT post_id, emoji, COUNT(*)::int as count FROM emoji_reactions
+      WHERE post_id = ANY(${postIds}) GROUP BY post_id, emoji
+    `;
+
+    // Get user's reactions
+    let userRows: Record<string, unknown>[] = [];
+    if (sessionId) {
+      userRows = await sql`
+        SELECT post_id, emoji FROM emoji_reactions
+        WHERE post_id = ANY(${postIds}) AND session_id = ${sessionId}
+      `;
+    }
+
+    for (const row of countRows) {
+      const pid = row.post_id as string;
+      if (result[pid]) result[pid].counts[row.emoji as string] = row.count as number;
+    }
+    for (const row of userRows) {
+      const pid = row.post_id as string;
+      if (result[pid]) result[pid].userReactions.push(row.emoji as string);
+    }
+  } catch {
+    // Table may not exist yet — return empty counts gracefully
   }
-  for (const row of userRows) {
-    const pid = row.post_id as string;
-    if (result[pid]) result[pid].userReactions.push(row.emoji as string);
-  }
+
   return result;
 }
 

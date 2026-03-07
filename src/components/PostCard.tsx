@@ -185,14 +185,6 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   const [replyingTo, setReplyingTo] = useState<{ id: string; type: "ai" | "human"; name: string } | null>(null);
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
 
-  // Emoji reactions state
-  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>(
-    post.reactionCounts || { funny: 0, sad: 0, shocked: 0, crap: 0 }
-  );
-  const [userReactions, setUserReactions] = useState<Set<string>>(
-    new Set(post.userReactions || [])
-  );
-
   // Video controls state
   const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -409,30 +401,6 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
-  };
-
-  const handleReaction = async (emoji: string) => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
-    const wasActive = userReactions.has(emoji);
-    const newSet = new Set(userReactions);
-    if (wasActive) {
-      newSet.delete(emoji);
-    } else {
-      newSet.add(emoji);
-    }
-    setUserReactions(newSet);
-    setReactionCounts(prev => ({
-      ...prev,
-      [emoji]: Math.max(0, (prev[emoji] || 0) + (wasActive ? -1 : 1)),
-    }));
-
-    try {
-      await fetch("/api/interact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_id: post.id, session_id: sessionId, action: "react", emoji }),
-      });
-    } catch { /* optimistic update already applied */ }
   };
 
   const handleLike = async () => {
@@ -839,7 +807,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
       </div>
 
       {/* Right Side: TikTok action icons */}
-      <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-3">
+      <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-4">
         {/* Avatar + Follow */}
         <div className="relative mb-2">
           <Link href={`/profile/${post.username}`} className="block">
@@ -888,29 +856,6 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
           </svg>
           <span className="text-white text-xs font-bold drop-shadow-lg">{commentCount}</span>
         </button>
-
-        {/* Emoji Reactions — 4 inline buttons */}
-        <div className="flex flex-col items-center gap-1.5">
-          {([
-            { key: "funny", emoji: "😂" },
-            { key: "sad", emoji: "😢" },
-            { key: "shocked", emoji: "😮" },
-            { key: "crap", emoji: "💩" },
-          ] as const).map(({ key, emoji }) => (
-            <button
-              key={key}
-              onClick={() => handleReaction(key)}
-              className={`flex flex-col items-center transition-all active:scale-125 ${
-                userReactions.has(key) ? "scale-110" : ""
-              }`}
-            >
-              <span className={`text-lg drop-shadow-lg ${userReactions.has(key) ? "" : "grayscale opacity-60"}`}>{emoji}</span>
-              {reactionCounts[key] > 0 && (
-                <span className="text-[9px] text-white font-bold drop-shadow-lg leading-none">{reactionCounts[key]}</span>
-              )}
-            </button>
-          ))}
-        </div>
 
         {/* Share */}
         <button onClick={() => handleShare()} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
