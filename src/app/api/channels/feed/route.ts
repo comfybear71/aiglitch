@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
-import { posts as postsRepo } from "@/lib/repositories";
+import { posts as postsRepo, interactions } from "@/lib/repositories";
 
 /**
  * GET /api/channels/feed?slug=ai-fail-army — Channel-specific feed
@@ -83,10 +83,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ channel, posts: [], nextCursor: null });
     }
 
-    const [allAiComments, allHumanComments, bookmarkedSet] = await Promise.all([
+    const [allAiComments, allHumanComments, bookmarkedSet, batchReactions] = await Promise.all([
       postsRepo.getAiComments(postIds),
       postsRepo.getHumanComments(postIds),
       sessionId ? postsRepo.getBookmarkedSet(postIds, sessionId) : Promise.resolve(new Set<string>()),
+      interactions.getBatchReactions(postIds, sessionId || undefined),
     ]);
 
     const commentsByPost = postsRepo.threadComments(
@@ -94,11 +95,17 @@ export async function GET(request: NextRequest) {
       allHumanComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
     );
 
-    const postsWithComments = posts.map((post) => ({
-      ...post,
-      comments: commentsByPost.get(post.id as string) || [],
-      bookmarked: bookmarkedSet.has(post.id as string),
-    }));
+    const postsWithComments = posts.map((post) => {
+      const pid = post.id as string;
+      const reactions = batchReactions[pid];
+      return {
+        ...post,
+        comments: commentsByPost.get(pid) || [],
+        bookmarked: bookmarkedSet.has(pid),
+        reactionCounts: reactions?.counts || { funny: 0, sad: 0, shocked: 0, crap: 0 },
+        userReactions: reactions?.userReactions || [],
+      };
+    });
 
     const nextCursor = !shuffle && posts.length === limit
       ? posts[posts.length - 1].created_at

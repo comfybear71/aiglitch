@@ -29,6 +29,8 @@ export default function ChannelPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [reactionCounts, setReactionCounts] = useState<Record<string, Record<string, number>>>({});
+  const [userReactions, setUserReactions] = useState<Record<string, Set<string>>>({});
   const [progress, setProgress] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -54,6 +56,7 @@ export default function ChannelPage() {
       setPosts(newPosts);
       allPostsRef.current = newPosts;
       setNextCursor(data.nextCursor);
+      syncReactionState(newPosts);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [slug, sessionId, fetchPosts]);
@@ -68,6 +71,7 @@ export default function ChannelPage() {
       allPostsRef.current = newPosts;
       setPosts(newPosts);
       setNextCursor(data.nextCursor);
+      syncReactionState(data.posts || []);
     } catch { /* ignore */ }
     setLoadingMore(false);
   }, [nextCursor, loadingMore, fetchPosts]);
@@ -190,6 +194,48 @@ export default function ChannelPage() {
     });
   };
 
+  const syncReactionState = (incoming: Post[]) => {
+    const counts: Record<string, Record<string, number>> = { ...reactionCounts };
+    const userR: Record<string, Set<string>> = { ...userReactions };
+    for (const p of incoming) {
+      counts[p.id] = p.reactionCounts || { funny: 0, sad: 0, shocked: 0, crap: 0 };
+      userR[p.id] = new Set(p.userReactions || []);
+    }
+    setReactionCounts(counts);
+    setUserReactions(userR);
+  };
+
+  const handleReaction = async (emoji: string) => {
+    if (!sessionId || !currentPost) return;
+    const pid = currentPost.id;
+    const wasActive = userReactions[pid]?.has(emoji) || false;
+
+    // Optimistic update
+    setUserReactions(prev => {
+      const newSet = new Set(prev[pid] || []);
+      if (wasActive) newSet.delete(emoji); else newSet.add(emoji);
+      return { ...prev, [pid]: newSet };
+    });
+    setReactionCounts(prev => ({
+      ...prev,
+      [pid]: {
+        ...(prev[pid] || { funny: 0, sad: 0, shocked: 0, crap: 0 }),
+        [emoji]: Math.max(0, ((prev[pid] || {})[emoji] || 0) + (wasActive ? -1 : 1)),
+      },
+    }));
+
+    try {
+      await fetch("/api/interact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: pid, session_id: sessionId, action: "react", emoji }),
+      });
+    } catch { /* optimistic update already applied */ }
+  };
+
+  const currentReactionCounts = currentPost ? (reactionCounts[currentPost.id] || { funny: 0, sad: 0, shocked: 0, crap: 0 }) : { funny: 0, sad: 0, shocked: 0, crap: 0 };
+  const currentUserReactions = currentPost ? (userReactions[currentPost.id] || new Set<string>()) : new Set<string>();
+
   if (loading) {
     return (
       <div className="h-[100dvh] bg-black text-white flex items-center justify-center">
@@ -280,6 +326,35 @@ export default function ChannelPage() {
           </button>
         </div>
       </div>
+
+      {/* Right side: Emoji reactions */}
+      {currentPost && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-2">
+          {([
+            { key: "funny", emoji: "😂" },
+            { key: "sad", emoji: "😢" },
+            { key: "shocked", emoji: "😮" },
+            { key: "crap", emoji: "💩" },
+          ] as const).map(({ key, emoji }) => (
+            <button
+              key={key}
+              onClick={(e) => { e.stopPropagation(); handleReaction(key); }}
+              className={`flex flex-col items-center transition-all active:scale-125 ${
+                currentUserReactions.has(key) ? "scale-110" : ""
+              }`}
+            >
+              <span className={`text-2xl drop-shadow-lg transition-all ${
+                currentUserReactions.has(key) ? "" : "grayscale opacity-50"
+              }`}>{emoji}</span>
+              {(currentReactionCounts[key] || 0) > 0 && (
+                <span className="text-[10px] text-white font-bold drop-shadow-lg leading-none">
+                  {currentReactionCounts[key]}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Bottom controls */}
       <div className={`absolute bottom-0 left-0 right-0 z-10 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
