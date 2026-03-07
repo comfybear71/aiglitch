@@ -302,19 +302,12 @@ export default function MePage() {
           setLinkedWallet(walletAddress);
           setSuccess(data.message || "Wallet linked!");
           setTimeout(() => setSuccess(""), 3000);
-        } else {
-          setError(data.error || "Failed to link wallet.");
-          setTimeout(() => setError(""), 5000);
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes("User rejected")) {
-          console.error("[Phantom auto-link]", err);
-          setError(`Wallet linking failed: ${msg || "Unknown error"}`);
-          setTimeout(() => setError(""), 6000);
-        }
+      } catch {
+        // User rejected or error — they can try manually
       }
     };
+    // Small initial delay for page to stabilize, then poll
     const timer = setTimeout(run, 500);
     return () => clearTimeout(timer);
   }, [sessionId]);
@@ -325,13 +318,8 @@ export default function MePage() {
     phantomLoginLinkedRef.current = false; // Only trigger once
 
     const run = async () => {
-      // Phantom in-app browser can be slow to inject provider — wait longer
-      const provider = await waitForPhantomProvider(6000);
-      if (!provider) {
-        setError("Phantom wallet provider not detected. Please try tapping 'Sign in with Phantom' again.");
-        setTimeout(() => setError(""), 5000);
-        return;
-      }
+      const provider = await waitForPhantomProvider(4000);
+      if (!provider) return;
 
       try {
         const resp = await provider.connect();
@@ -357,17 +345,9 @@ export default function MePage() {
             ? `Welcome back, @${data.user.username}!`
             : "Wallet account created!");
           fetchProfile();
-        } else {
-          setError(data.error || "Wallet login failed.");
-          setTimeout(() => setError(""), 5000);
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes("User rejected")) {
-          console.error("[Phantom auto-login]", err);
-          setError(`Wallet connection failed: ${msg || "Unknown error"}. Tap the button to try again.`);
-          setTimeout(() => setError(""), 6000);
-        }
+      } catch {
+        // User rejected or error — they can try manually via button
       }
     };
     const timer = setTimeout(run, 500);
@@ -447,7 +427,6 @@ export default function MePage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      console.error("[Phantom handleWalletLogin]", err);
       if (message === "WALLET_TIMEOUT") {
         setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
       } else if (message.includes("User rejected")) {
