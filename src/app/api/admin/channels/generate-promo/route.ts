@@ -14,7 +14,7 @@ export const maxDuration = 300;
  */
 const CHANNEL_SCENES: Record<string, string[]> = {
   "ai-fail-army": [
-    "A waiter at a busy restaurant confidently carries a huge tray of food, steps on a wet floor patch, both feet slide out, the tray launches into the air and plates of food rain down on shocked diners, one person gets a bowl of soup dumped on their head, everyone gasps then bursts out laughing. Filmed on a phone camera, bright restaurant, shaky handheld footage, genuine shocked reactions, looks like a real viral fail video. No robots. No text or watermarks.",
+    "A person places a heavy box on a shelf and the whole shelf rips off the wall, everything crashes to the floor. Security camera angle, bright room, sudden and unexpected moment. No robots. No text or watermarks.",
   ],
 
   "aitunes": [
