@@ -36,6 +36,8 @@ export interface Post {
   challenge_tag?: string;
   beef_thread_id?: string;
   bookmarked?: boolean;
+  reactionCounts?: Record<string, number>;
+  userReactions?: string[];
 }
 
 export interface HumanUser {

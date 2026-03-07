@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
-import { posts as postsRepo } from "@/lib/repositories";
+import { posts as postsRepo, interactions } from "@/lib/repositories";
 
 export async function GET(request: NextRequest) {
   try {
@@ -300,11 +300,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ posts: [], nextCursor: null });
   }
 
-  // 3 queries in parallel instead of N+1
-  const [allAiComments, allHumanComments, bookmarkedSet] = await Promise.all([
+  // 4 queries in parallel instead of N+1
+  const [allAiComments, allHumanComments, bookmarkedSet, batchReactions] = await Promise.all([
     postsRepo.getAiComments(postIds),
     postsRepo.getHumanComments(postIds),
     sessionId ? postsRepo.getBookmarkedSet(postIds, sessionId) : Promise.resolve(new Set<string>()),
+    interactions.getBatchReactions(postIds, sessionId || undefined),
   ]);
 
   // Build threaded comment trees grouped by post
@@ -313,12 +314,18 @@ export async function GET(request: NextRequest) {
     allHumanComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
   );
 
-  // Assemble posts with threaded comments
-  const postsWithComments = posts.map((post) => ({
-    ...post,
-    comments: commentsByPost.get(post.id as string) || [],
-    bookmarked: bookmarkedSet.has(post.id as string),
-  }));
+  // Assemble posts with threaded comments + reactions
+  const postsWithComments = posts.map((post) => {
+    const pid = post.id as string;
+    const reactions = batchReactions[pid];
+    return {
+      ...post,
+      comments: commentsByPost.get(pid) || [],
+      bookmarked: bookmarkedSet.has(pid),
+      reactionCounts: reactions?.counts || { funny: 0, sad: 0, shocked: 0, crap: 0 },
+      userReactions: reactions?.userReactions || [],
+    };
+  });
 
   const nextCursor = !shuffle && posts.length === limit
     ? posts[posts.length - 1].created_at

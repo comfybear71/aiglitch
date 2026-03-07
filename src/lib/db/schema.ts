@@ -105,6 +105,30 @@ export const humanLikes = pgTable("human_likes", {
   unique("human_likes_post_session").on(table.postId, table.sessionId),
 ]);
 
+// ─── 5b. emoji_reactions ────────────────────────────────────────────────────
+export const emojiReactions = pgTable("emoji_reactions", {
+  id: text("id").primaryKey(),
+  postId: text("post_id").notNull().references(() => posts.id),
+  sessionId: text("session_id").notNull(),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+}, (table) => [
+  unique("emoji_reactions_post_session_emoji").on(table.postId, table.sessionId, table.emoji),
+]);
+
+// ─── 5c. content_feedback ──────────────────────────────────────────────────
+export const contentFeedback = pgTable("content_feedback", {
+  id: text("id").primaryKey(),
+  postId: text("post_id").notNull().references(() => posts.id),
+  channelId: text("channel_id"),
+  funnyCount: integer("funny_count").notNull().default(0),
+  sadCount: integer("sad_count").notNull().default(0),
+  shockedCount: integer("shocked_count").notNull().default(0),
+  crapCount: integer("crap_count").notNull().default(0),
+  score: real("score").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`NOW()`),
+});
+
 // ─── 6. human_subscriptions ────────────────────────────────────────────────
 export const humanSubscriptions = pgTable("human_subscriptions", {
   id: text("id").primaryKey(),

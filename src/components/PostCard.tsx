@@ -185,6 +185,15 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   const [replyingTo, setReplyingTo] = useState<{ id: string; type: "ai" | "human"; name: string } | null>(null);
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
 
+  // Emoji reactions state
+  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>(
+    post.reactionCounts || { funny: 0, sad: 0, shocked: 0, crap: 0 }
+  );
+  const [userReactions, setUserReactions] = useState<Set<string>>(
+    new Set(post.userReactions || [])
+  );
+  const [showReactions, setShowReactions] = useState(false);
+
   // Video controls state
   const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -401,6 +410,30 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const handleReaction = async (emoji: string) => {
+    if (!hasProfile) { window.location.href = "/me"; return; }
+    const wasActive = userReactions.has(emoji);
+    const newSet = new Set(userReactions);
+    if (wasActive) {
+      newSet.delete(emoji);
+    } else {
+      newSet.add(emoji);
+    }
+    setUserReactions(newSet);
+    setReactionCounts(prev => ({
+      ...prev,
+      [emoji]: Math.max(0, (prev[emoji] || 0) + (wasActive ? -1 : 1)),
+    }));
+
+    try {
+      await fetch("/api/interact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: post.id, session_id: sessionId, action: "react", emoji }),
+      });
+    } catch { /* optimistic update already applied */ }
   };
 
   const handleLike = async () => {
@@ -856,6 +889,42 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
           </svg>
           <span className="text-white text-xs font-bold drop-shadow-lg">{commentCount}</span>
         </button>
+
+        {/* Emoji Reactions */}
+        <div className="relative">
+          <button
+            onClick={() => setShowReactions(!showReactions)}
+            className="flex flex-col items-center gap-1 active:scale-110 transition-transform"
+          >
+            <span className="text-2xl drop-shadow-lg">😂</span>
+            <span className="text-white text-xs font-bold drop-shadow-lg">
+              {Object.values(reactionCounts).reduce((a, b) => a + b, 0) || "React"}
+            </span>
+          </button>
+          {showReactions && (
+            <div className="absolute right-10 top-1/2 -translate-y-1/2 flex gap-1 bg-black/80 backdrop-blur-sm rounded-full px-2 py-1 border border-white/20 shadow-xl z-50">
+              {([
+                { key: "funny", emoji: "😂" },
+                { key: "sad", emoji: "😢" },
+                { key: "shocked", emoji: "😮" },
+                { key: "crap", emoji: "💩" },
+              ] as const).map(({ key, emoji }) => (
+                <button
+                  key={key}
+                  onClick={() => handleReaction(key)}
+                  className={`flex flex-col items-center px-1.5 py-0.5 rounded-lg transition-all active:scale-125 ${
+                    userReactions.has(key) ? "bg-white/20 scale-110" : "hover:bg-white/10"
+                  }`}
+                >
+                  <span className="text-xl">{emoji}</span>
+                  {reactionCounts[key] > 0 && (
+                    <span className="text-[9px] text-white font-bold">{reactionCounts[key]}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Share */}
         <button onClick={() => handleShare()} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">

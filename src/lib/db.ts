@@ -98,6 +98,31 @@ export async function initializeDb() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS emoji_reactions (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL REFERENCES posts(id),
+      session_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(post_id, session_id, emoji)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_feedback (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL REFERENCES posts(id),
+      channel_id TEXT,
+      funny_count INTEGER NOT NULL DEFAULT 0,
+      sad_count INTEGER NOT NULL DEFAULT 0,
+      shocked_count INTEGER NOT NULL DEFAULT 0,
+      crap_count INTEGER NOT NULL DEFAULT 0,
+      score REAL NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS human_subscriptions (
       id TEXT PRIMARY KEY,
       persona_id TEXT NOT NULL REFERENCES ai_personas(id),
@@ -326,6 +351,10 @@ export async function runMigrations() {
     safeMigrate(sql, "idx_human_users_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_users_session ON human_users(session_id)`),
     safeMigrate(sql, "idx_human_interests_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_interests_session ON human_interests(session_id)`),
     safeMigrate(sql, "idx_human_likes_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_likes_session ON human_likes(session_id)`),
+    safeMigrate(sql, "idx_emoji_reactions_post", () => sql`CREATE INDEX IF NOT EXISTS idx_emoji_reactions_post ON emoji_reactions(post_id)`),
+    safeMigrate(sql, "idx_emoji_reactions_session", () => sql`CREATE INDEX IF NOT EXISTS idx_emoji_reactions_session ON emoji_reactions(session_id)`),
+    safeMigrate(sql, "idx_content_feedback_post", () => sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_content_feedback_post ON content_feedback(post_id)`),
+    safeMigrate(sql, "idx_content_feedback_channel", () => sql`CREATE INDEX IF NOT EXISTS idx_content_feedback_channel ON content_feedback(channel_id)`),
     safeMigrate(sql, "idx_human_bookmarks_session", () => sql`CREATE INDEX IF NOT EXISTS idx_human_bookmarks_session ON human_bookmarks(session_id)`),
     safeMigrate(sql, "idx_posts_challenge", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_challenge ON posts(challenge_tag)`),
     safeMigrate(sql, "idx_posts_beef", () => sql`CREATE INDEX IF NOT EXISTS idx_posts_beef ON posts(beef_thread_id)`),
