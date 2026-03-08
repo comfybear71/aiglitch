@@ -124,6 +124,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, action: result });
   }
 
+  if (action === "react") {
+    const { emoji } = body;
+    if (!emoji) return NextResponse.json({ error: "Missing emoji" }, { status: 400 });
+    try {
+      const result = await interactions.toggleReaction(post_id, session_id, emoji);
+      return NextResponse.json({ success: true, ...result });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid reaction" }, { status: 400 });
+    }
+  }
+
   if (action === "like") {
     const result = await interactions.toggleLike(post_id, session_id);
     return NextResponse.json({ success: true, action: result });

@@ -20,6 +20,7 @@ function simpleHash(str: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const body = await request.json();
   const { action, session_id } = body;
 
@@ -144,6 +145,55 @@ export async function POST(request: NextRequest) {
 
     const user = users[0];
 
+    // Auto-recover orphaned data: find session_ids in ANY data table that don't
+    // match any human_users row, then reclaim them for the current user.
+    // This fixes data lost during wallet login session merges.
+    try {
+      // Scan multiple tables for orphaned session_ids (not just human_likes)
+      const orphaned = await sql`
+        SELECT DISTINCT orphan_sid FROM (
+          SELECT l.session_id AS orphan_sid FROM human_likes l
+            LEFT JOIN human_users hu ON hu.session_id = l.session_id WHERE hu.id IS NULL
+          UNION
+          SELECT mp.session_id FROM marketplace_purchases mp
+            LEFT JOIN human_users hu ON hu.session_id = mp.session_id WHERE hu.id IS NULL
+          UNION
+          SELECT gc.session_id FROM glitch_coins gc
+            LEFT JOIN human_users hu ON hu.session_id = gc.session_id WHERE hu.id IS NULL
+          UNION
+          SELECT n.owner_id FROM minted_nfts n
+            LEFT JOIN human_users hu ON hu.session_id = n.owner_id
+            WHERE n.owner_type = 'human' AND hu.id IS NULL
+        ) AS orphans
+        LIMIT 10
+      `;
+      if (orphaned.length > 0) {
+        for (const row of orphaned) {
+          const o = row.orphan_sid;
+          const s = session_id;
+          // Use subqueries to exclude rows that would violate unique constraints
+          // (if even one row conflicts, Postgres rolls back the entire UPDATE)
+          try { await sql`UPDATE human_likes SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_likes WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_comments SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_bookmarks SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_bookmarks WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_subscriptions SET session_id = ${s} WHERE session_id = ${o} AND persona_id NOT IN (SELECT persona_id FROM human_subscriptions WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE minted_nfts SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE marketplace_purchases SET session_id = ${s} WHERE session_id = ${o} AND product_id NOT IN (SELECT product_id FROM marketplace_purchases WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE glitch_coins SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE solana_wallets SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE token_balances SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          // Clean up any leftover orphaned rows that couldn't be migrated (duplicates)
+          try { await sql`DELETE FROM human_likes WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM human_bookmarks WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM human_subscriptions WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM marketplace_purchases WHERE session_id = ${o}`; } catch { /* ok */ }
+        }
+        console.log(`[profile] Recovered orphaned data from ${orphaned.length} session(s) for ${session_id}`);
+      }
+    } catch (recoverErr) {
+      console.error("[profile] Recovery scan failed (best-effort):", recoverErr);
+    }
+
     // Get their stats (wrapped in try/catch for table compatibility)
     let likes = 0, comments = 0, bookmarks = 0, subscriptions = 0;
     try {
@@ -234,11 +284,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user by linked Phantom wallet
-    const users = await sql`
-      SELECT id, session_id, display_name, username, avatar_emoji, bio, phantom_wallet_address
-      FROM human_users
-      WHERE phantom_wallet_address = ${wallet_address} AND username IS NOT NULL
-    `;
+    let users;
+    try {
+      users = await sql`
+        SELECT id, session_id, display_name, username, avatar_emoji, bio, phantom_wallet_address
+        FROM human_users
+        WHERE phantom_wallet_address = ${wallet_address} AND username IS NOT NULL
+      `;
+    } catch (err) {
+      console.error("[wallet_login] SELECT failed:", err);
+      return NextResponse.json({ error: "Database query failed", detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
 
     if (users.length > 0) {
       const user = users[0];
@@ -246,19 +302,48 @@ export async function POST(request: NextRequest) {
       const newSessionId = session_id || user.session_id;
       if (session_id && session_id !== user.session_id) {
         const oldSid = user.session_id;
-        await sql`
-          UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
-        `;
-        // Migrate all user data from old session_id to new session_id
-        // so likes, comments, NFTs, purchases, etc. stay linked to the account
-        try { await sql`UPDATE human_likes SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE human_comments SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE human_bookmarks SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE human_subscriptions SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE minted_nfts SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE marketplace_purchases SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE glitch_coins SET session_id = ${session_id} WHERE session_id = ${oldSid}`; } catch { /* table may not exist */ }
-        try { await sql`UPDATE solana_wallets SET owner_id = ${session_id} WHERE owner_type = 'human' AND owner_id = ${oldSid}`; } catch { /* table may not exist */ }
+        // The browser has a DIFFERENT session_id than the wallet account.
+        // There may be a "stub" row for the browser's session_id — delete it first
+        // to avoid unique constraint violation, then migrate its data to the wallet account.
+        try {
+          // Delete the browser's stub user row first to free up the session_id
+          await sql`DELETE FROM human_users WHERE session_id = ${session_id} AND id != ${user.id}`;
+          // Now update the wallet account's session_id to match the browser
+          await sql`
+            UPDATE human_users SET session_id = ${session_id}, last_seen = NOW() WHERE id = ${user.id}
+          `;
+          // Migrate ALL data from old session_id to new one, excluding rows that
+          // would violate unique constraints (Postgres rolls back entire UPDATE on conflict)
+          const s = session_id, o = oldSid;
+          try { await sql`UPDATE human_likes SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_likes WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_comments SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE human_bookmarks SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_bookmarks WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE human_subscriptions SET session_id = ${s} WHERE session_id = ${o} AND persona_id NOT IN (SELECT persona_id FROM human_subscriptions WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE minted_nfts SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE marketplace_purchases SET session_id = ${s} WHERE session_id = ${o} AND product_id NOT IN (SELECT product_id FROM marketplace_purchases WHERE session_id = ${s})`; } catch { /* ok */ }
+          try { await sql`UPDATE glitch_coins SET session_id = ${s} WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE solana_wallets SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          try { await sql`UPDATE token_balances SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; } catch { /* ok */ }
+          // Clean up any leftover duplicate orphans
+          try { await sql`DELETE FROM human_likes WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM human_bookmarks WHERE session_id = ${o}`; } catch { /* ok */ }
+          try { await sql`DELETE FROM marketplace_purchases WHERE session_id = ${o}`; } catch { /* ok */ }
+        } catch (mergeErr) {
+          console.error("[wallet_login] Session merge failed:", mergeErr);
+          // Fallback: just use the wallet account's existing session_id
+          return NextResponse.json({
+            success: true,
+            found_existing: true,
+            user: {
+              username: user.username,
+              display_name: user.display_name,
+              avatar_emoji: user.avatar_emoji,
+              bio: user.bio || "",
+              session_id: user.session_id,
+              phantom_wallet_address: user.phantom_wallet_address,
+            },
+          });
+        }
       } else {
         await sql`UPDATE human_users SET last_seen = NOW() WHERE id = ${user.id}`;
       }
@@ -277,40 +362,65 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // No existing user with this wallet — create a new wallet-based account
+    // No existing user with this wallet — link wallet to existing session or create new account
     const newSessionId = session_id || uuidv4();
     const shortAddr = wallet_address.slice(0, 6);
-    const username = `wallet_${shortAddr.toLowerCase()}`;
-    const userId = uuidv4();
 
-    // Check for username collision
-    const taken = await sql`SELECT id FROM human_users WHERE username = ${username}`;
-    const finalUsername = taken.length > 0
-      ? `${username}_${Math.floor(Math.random() * 999)}`
-      : username;
+    try {
+      // First, try to update an existing user row for this session_id
+      const updated = await sql`
+        UPDATE human_users
+        SET phantom_wallet_address = ${wallet_address},
+            auth_provider = COALESCE(auth_provider, 'wallet'),
+            last_seen = NOW()
+        WHERE session_id = ${newSessionId}
+        RETURNING id, username, display_name, avatar_emoji
+      `;
 
-    await sql`
-      INSERT INTO human_users (id, session_id, display_name, username, avatar_emoji, phantom_wallet_address, auth_provider, last_seen)
-      VALUES (${userId}, ${newSessionId}, ${`Wallet ${shortAddr}...`}, ${finalUsername}, '👛', ${wallet_address}, 'wallet', NOW())
-      ON CONFLICT (session_id) DO UPDATE SET
-        display_name = COALESCE(human_users.display_name, ${`Wallet ${shortAddr}...`}),
-        username = COALESCE(human_users.username, ${finalUsername}),
-        phantom_wallet_address = ${wallet_address},
-        auth_provider = COALESCE(human_users.auth_provider, 'wallet'),
-        last_seen = NOW()
-    `;
+      if (updated.length > 0) {
+        // User already exists for this session — just linked wallet
+        const user = updated[0];
+        return NextResponse.json({
+          success: true,
+          found_existing: true,
+          user: {
+            username: user.username,
+            display_name: user.display_name,
+            avatar_emoji: user.avatar_emoji,
+            session_id: newSessionId,
+            phantom_wallet_address: wallet_address,
+          },
+        });
+      }
 
-    return NextResponse.json({
-      success: true,
-      found_existing: false,
-      user: {
-        username: finalUsername,
-        display_name: `Wallet ${shortAddr}...`,
-        avatar_emoji: "👛",
-        session_id: newSessionId,
-        phantom_wallet_address: wallet_address,
-      },
-    });
+      // No existing user for this session — create new wallet-based account
+      const username = `wallet_${shortAddr.toLowerCase()}`;
+      const userId = uuidv4();
+      const taken = await sql`SELECT id FROM human_users WHERE username = ${username}`;
+      const finalUsername = taken.length > 0
+        ? `${username}_${Math.floor(Math.random() * 999)}`
+        : username;
+
+      await sql`
+        INSERT INTO human_users (id, session_id, display_name, username, avatar_emoji, phantom_wallet_address, auth_provider, last_seen)
+        VALUES (${userId}, ${newSessionId}, ${`Wallet ${shortAddr}...`}, ${finalUsername}, '👛', ${wallet_address}, 'wallet', NOW())
+      `;
+
+      return NextResponse.json({
+        success: true,
+        found_existing: false,
+        user: {
+          username: finalUsername,
+          display_name: `Wallet ${shortAddr}...`,
+          avatar_emoji: "👛",
+          session_id: newSessionId,
+          phantom_wallet_address: wallet_address,
+        },
+      });
+    } catch (err) {
+      console.error("[wallet_login] DB operation failed:", err);
+      return NextResponse.json({ error: "Failed to create wallet account", detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
   }
 
   // ── Link wallet to existing profile ──
@@ -458,4 +568,11 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (err) {
+    console.error("[auth/human] Unhandled error:", err);
+    return NextResponse.json(
+      { error: "Internal server error", detail: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import NFTTradingCard from "@/components/NFTTradingCard";
 import { getProductById } from "@/lib/marketplace";
@@ -53,6 +54,14 @@ interface PurchasedItem {
   created_at: string;
 }
 
+// iOS Safari throws "The string did not match the expected pattern" (TypeError)
+// when fetch() uses a relative URL after Phantom wallet extension popup changes focus.
+// Always use absolute URLs to avoid this WebKit URL resolution bug.
+function apiUrl(path: string): string {
+  if (typeof window !== "undefined") return window.location.origin + path;
+  return path;
+}
+
 // Build Phantom browse deep link with proper encoding.
 // The ref parameter is REQUIRED by Phantom's deep link spec — without it,
 // Phantom opens its home screen instead of navigating into the target URL.
@@ -67,6 +76,19 @@ export default function MePage() {
   const phantomDeepLinkedRef = useRef(false);
   const phantomLoginLinkedRef = useRef(false);
 
+  // Use wallet adapter hooks
+  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets } = useWallet();
+
+  // Visible debug log for diagnosing wallet connection issues on mobile
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
+  // Show a tappable deep link when connect fails on iOS
+  const [showPhantomDeepLink, setShowPhantomDeepLink] = useState<"login" | "link" | null>(null);
+  const addDebug = useCallback((msg: string) => {
+    console.log("[Phantom]", msg);
+    setDebugLog(prev => [...prev.slice(-19), `${new Date().toLocaleTimeString()}: ${msg}`]);
+  }, []);
+
   // Helper: poll for Phantom provider availability (in-app browser may inject late)
   const waitForPhantomProvider = async (maxWaitMs = 3000, intervalMs = 300) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,11 +96,136 @@ export default function MePage() {
     let elapsed = 0;
     while (elapsed < maxWaitMs) {
       const provider = w.phantom?.solana || w.solana;
-      if (provider?.isPhantom) return provider;
+      if (provider?.isPhantom) {
+        addDebug(`Provider found after ${elapsed}ms`);
+        return provider;
+      }
       await new Promise(r => setTimeout(r, intervalMs));
       elapsed += intervalMs;
     }
+    addDebug(`Provider NOT found after ${maxWaitMs}ms`);
     return null;
+  };
+
+  // Helper: try to connect and get wallet address with full error logging.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connectAndGetAddress = async (provider: any): Promise<string> => {
+    const ua = navigator.userAgent;
+    addDebug(`UA: ${ua.substring(0, 80)}`);
+    addDebug(`provider.isPhantom=${provider?.isPhantom}, isConnected=${provider?.isConnected}`);
+
+    // Check if already connected
+    if (provider?.isConnected && provider?.publicKey) {
+      try {
+        const addr = provider.publicKey.toString();
+        addDebug(`Already connected: ${addr}`);
+        return addr;
+      } catch (e) {
+        addDebug(`toString() failed on existing publicKey: ${e}`);
+      }
+    }
+
+    // Check wallet adapter state
+    if (walletConnected && walletPublicKey) {
+      const addr = walletPublicKey.toString();
+      addDebug(`Adapter already connected: ${addr}`);
+      return addr;
+    }
+
+    // Set up event listener BEFORE connect() — event fires independently of promise
+    let eventAddress: string | null = null;
+    const onConnect = (pk: unknown) => {
+      addDebug(`'connect' event fired, pk type=${typeof pk}, value=${String(pk).substring(0, 50)}`);
+      try {
+        if (pk) {
+          eventAddress = String(pk);
+          addDebug(`Event gave address: ${eventAddress}`);
+        }
+      } catch (e) {
+        addDebug(`Event pk.toString() failed: ${e}`);
+      }
+    };
+    provider?.on?.("connect", onConnect);
+
+    // Try raw provider.connect() with timeout
+    addDebug("Calling provider.connect()...");
+    try {
+      const resp = await Promise.race([
+        provider.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("WALLET_TIMEOUT")), 30000)),
+      ]);
+      addDebug(`connect() resolved, resp keys: ${resp ? Object.keys(resp).join(",") : "null"}`);
+      if (resp?.publicKey) {
+        try {
+          const addr = resp.publicKey.toString();
+          addDebug(`connect() returned address: ${addr}`);
+          provider?.removeListener?.("connect", onConnect);
+          return addr;
+        } catch (e) {
+          addDebug(`resp.publicKey.toString() FAILED: ${e}`);
+          // Try to extract raw bytes
+          try {
+            const pk = resp.publicKey;
+            addDebug(`publicKey type=${typeof pk}, constructor=${pk?.constructor?.name}, keys=${pk ? Object.keys(pk).join(",") : "none"}`);
+            if (pk?.toBase58) {
+              const addr = pk.toBase58();
+              addDebug(`toBase58() worked: ${addr}`);
+              provider?.removeListener?.("connect", onConnect);
+              return addr;
+            }
+          } catch (e2) {
+            addDebug(`toBase58() also failed: ${e2}`);
+          }
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addDebug(`connect() THREW: ${msg}`);
+
+      // After error, check if event listener caught the address
+      await new Promise(r => setTimeout(r, 500));
+      if (eventAddress) {
+        addDebug(`Event listener caught address despite error: ${eventAddress}`);
+        provider?.removeListener?.("connect", onConnect);
+        return eventAddress;
+      }
+
+      // Check if provider.publicKey got set despite error
+      if (provider?.publicKey) {
+        try {
+          const addr = provider.publicKey.toString();
+          addDebug(`provider.publicKey available after error: ${addr}`);
+          provider?.removeListener?.("connect", onConnect);
+          return addr;
+        } catch (e) {
+          addDebug(`provider.publicKey.toString() failed after error: ${e}`);
+        }
+      }
+
+      provider?.removeListener?.("connect", onConnect);
+      throw err;
+    }
+
+    provider?.removeListener?.("connect", onConnect);
+
+    // If event listener caught something
+    if (eventAddress) {
+      addDebug(`Using event address: ${eventAddress}`);
+      return eventAddress;
+    }
+
+    // Check provider.publicKey one more time
+    if (provider?.publicKey) {
+      try {
+        const addr = provider.publicKey.toString();
+        addDebug(`Late provider.publicKey: ${addr}`);
+        return addr;
+      } catch (e) {
+        addDebug(`Late provider.publicKey.toString() failed: ${e}`);
+      }
+    }
+
+    throw new Error("connect() succeeded but no publicKey returned");
   };
 
   const [sessionId, setSessionId] = useState(() => {
@@ -199,13 +346,17 @@ export default function MePage() {
     setIsMobileNoPhantom(isMobile && !hasPhantom && !isInPhantom);
   }, []);
 
-  // Precompute Phantom deep link URLs for <a> tags (avoids async JS navigation)
+  // Precompute Phantom deep link URLs for <a> tags.
+  // Use phantom:// custom scheme (always opens app) instead of universal links
+  // (which iOS often fails to intercept).
   const phantomLoginHref = useMemo(() => {
     if (typeof window === "undefined") return "";
     const targetUrl = new URL(window.location.origin + "/me");
     targetUrl.searchParams.set("phantom_login", "1");
     if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-    return buildPhantomBrowseLink(targetUrl.toString());
+    const encoded = encodeURIComponent(targetUrl.toString());
+    const ref = encodeURIComponent(window.location.origin);
+    return `phantom://browse/${encoded}?ref=${ref}`;
   }, [sessionId]);
 
   const phantomLinkWalletHref = useMemo(() => {
@@ -213,12 +364,14 @@ export default function MePage() {
     const targetUrl = new URL(window.location.origin + "/me");
     targetUrl.searchParams.set("phantom_link", "1");
     if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-    return buildPhantomBrowseLink(targetUrl.toString());
+    const encoded = encodeURIComponent(targetUrl.toString());
+    const ref = encodeURIComponent(window.location.origin);
+    return `phantom://browse/${encoded}?ref=${ref}`;
   }, [sessionId]);
 
   const fetchProfile = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "profile", session_id: sessionId }),
@@ -259,7 +412,7 @@ export default function MePage() {
 
     // Fetch linked wallet for the logged-in user
     if (sessionId && sessionId !== "anon") {
-      fetch("/api/auth/human", {
+      fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "get_wallet", session_id: sessionId }),
@@ -278,17 +431,15 @@ export default function MePage() {
     if (!phantomDeepLinkedRef.current) return;
     phantomDeepLinkedRef.current = false; // Only trigger once
 
-    // Poll for Phantom provider — in-app browser may inject it late
     const run = async () => {
+      // Wait for Phantom provider to inject
       const provider = await waitForPhantomProvider(4000);
       if (!provider) return;
 
       try {
-        const resp = await provider.connect();
-        if (!resp?.publicKey) return;
-        const walletAddress = resp.publicKey.toString();
+        const walletAddress = await connectAndGetAddress(provider);
 
-        const res = await fetch("/api/auth/human", {
+        const res = await fetch(apiUrl("/api/auth/human"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -303,13 +454,13 @@ export default function MePage() {
           setSuccess(data.message || "Wallet linked!");
           setTimeout(() => setSuccess(""), 3000);
         }
-      } catch {
-        // User rejected or error — they can try manually
+      } catch (e) {
+        addDebug(`Auto-link failed: ${e instanceof Error ? e.message : e}`);
       }
     };
-    // Small initial delay for page to stabilize, then poll
     const timer = setTimeout(run, 500);
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // Auto-trigger wallet LOGIN when arriving from Phantom deep link (phantom_login=1)
@@ -322,11 +473,10 @@ export default function MePage() {
       if (!provider) return;
 
       try {
-        const resp = await provider.connect();
-        if (!resp?.publicKey) return;
-        const walletAddress = resp.publicKey.toString();
+        const walletAddress = await connectAndGetAddress(provider);
+        if (!walletAddress) return;
 
-        const res = await fetch("/api/auth/human", {
+        const res = await fetch(apiUrl("/api/auth/human"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -346,12 +496,13 @@ export default function MePage() {
             : "Wallet account created!");
           fetchProfile();
         }
-      } catch {
-        // User rejected or error — they can try manually via button
+      } catch (e) {
+        addDebug(`Auto-login failed: ${e instanceof Error ? e.message : e}`);
       }
     };
     const timer = setTimeout(run, 500);
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, fetchProfile]);
 
   // Wallet-based login (for Phantom browser users)
@@ -359,19 +510,22 @@ export default function MePage() {
     if (typeof window === "undefined") return;
     setWalletLoggingIn(true);
     setError("");
+    setShowPhantomDeepLink(null);
+    addDebug("handleWalletLogin started");
+
     try {
       // Poll for Phantom provider — may take a moment to inject
       const provider = await waitForPhantomProvider(3000);
 
       if (!provider) {
-        // Phantom not installed — try deep link for mobile, otherwise open install page
+        addDebug("No provider found");
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
-          // Deep link into Phantom mobile app's in-app browser with session context
-          const targetUrl = new URL(window.location.href);
-          targetUrl.searchParams.set("phantom_login", "1");
-          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+          // Show tappable deep link (programmatic redirect doesn't trigger universal links on iOS)
+          addDebug("Mobile without provider — showing deep link");
+          setError("Phantom not detected. Tap the link below to open in Phantom app.");
+          setShowPhantomDeepLink("login");
+          setShowDebug(true);
           setWalletLoggingIn(false);
           return;
         }
@@ -382,26 +536,13 @@ export default function MePage() {
         return;
       }
 
-      // Connect with timeout so it doesn't hang forever
-      const connectWithTimeout = (timeoutMs: number) => {
-        return Promise.race([
-          provider.connect(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
-          ),
-        ]);
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await connectWithTimeout(30000) as any;
-      if (!resp?.publicKey) {
-        setError("Phantom did not return a wallet address. Please try again.");
-        setTimeout(() => setError(""), 5000);
-        setWalletLoggingIn(false);
-        return;
-      }
-      const walletAddress = resp.publicKey.toString();
+      // Actually try connect() with full error logging
+      const walletAddress = await connectAndGetAddress(provider);
 
-      const res = await fetch("/api/auth/human", {
+      addDebug(`Login with address: ${walletAddress}, sid: ${sessionId?.substring(0, 8)}...`);
+      const fetchUrl = apiUrl("/api/auth/human");
+      addDebug(`Fetching: ${fetchUrl}`);
+      const res = await fetch(fetchUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -410,9 +551,13 @@ export default function MePage() {
           wallet_address: walletAddress,
         }),
       });
-      const data = await res.json();
+      addDebug(`Fetch status: ${res.status}`);
+      // Safely parse response — 500 errors may return HTML instead of JSON
+      const text = await res.text();
+      addDebug(`Response body: ${text.substring(0, 200)}`);
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = { error: `Server error ${res.status}: ${text.substring(0, 100)}` }; }
       if (data.success) {
-        // Store the session
         const newSid = data.user.session_id || sessionId;
         localStorage.setItem("aiglitch-session", newSid);
         setSessionId(newSid);
@@ -422,19 +567,28 @@ export default function MePage() {
           : "Wallet account created!");
         fetchProfile();
       } else {
-        setError(data.error || "Wallet login failed");
-        setTimeout(() => setError(""), 5000);
+        const errMsg = data.detail ? `${data.error}: ${data.detail}` : (data.error || "Wallet login failed");
+        setError(errMsg);
+        setTimeout(() => setError(""), 8000);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "";
-      if (message === "WALLET_TIMEOUT") {
+      const message = err instanceof Error ? err.message : String(err);
+      addDebug(`CATCH error: ${message}`);
+      setShowDebug(true); // Auto-show debug on error
+
+      // On any connect failure on mobile, show tappable deep link as fallback
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile && !message.includes("User rejected")) {
+        setError(`Connection failed: ${message}. Try opening in Phantom app instead.`);
+        setShowPhantomDeepLink("login");
+      } else if (message === "WALLET_TIMEOUT") {
         setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
       } else if (message.includes("User rejected")) {
         setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
-        setError("Failed to connect Phantom wallet. Please make sure Phantom is unlocked and try again.");
+        setError(`Wallet error: ${message || "Unknown error"}. Please try again.`);
       }
-      setTimeout(() => setError(""), 5000);
+      setTimeout(() => setError(""), 15000);
     }
     setWalletLoggingIn(false);
   };
@@ -444,46 +598,32 @@ export default function MePage() {
     if (typeof window === "undefined") return;
     setWalletLinking(true);
     setError("");
+    setShowPhantomDeepLink(null);
+    addDebug("handleLinkWallet started");
+
     try {
-      // Poll for Phantom provider — may take a moment to inject
       const provider = await waitForPhantomProvider(3000);
 
       if (!provider) {
+        addDebug("No provider for linking");
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isMobile) {
-          // Deep link into Phantom's in-app browser with session context
-          const targetUrl = new URL(window.location.href);
-          targetUrl.searchParams.set("phantom_link", "1");
-          if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-          window.location.href = buildPhantomBrowseLink(targetUrl.toString());
+          setError("Phantom not detected. Tap the link below to open in Phantom app.");
+          setShowPhantomDeepLink("link");
+          setShowDebug(true);
           setWalletLinking(false);
           return;
         }
-        setError("Phantom wallet not detected. Install the Phantom browser extension from phantom.app and refresh this page.");
+        setError("Phantom wallet not detected. Install Phantom from phantom.app and refresh.");
         setTimeout(() => setError(""), 5000);
         setWalletLinking(false);
         return;
       }
-      // Wrap provider.connect() with a timeout so it doesn't hang forever on desktop
-      const connectWithTimeout = (timeoutMs: number) => {
-        return Promise.race([
-          provider.connect(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("WALLET_TIMEOUT")), timeoutMs)
-          ),
-        ]);
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await connectWithTimeout(30000) as any;
-      if (!resp?.publicKey) {
-        setError("Phantom did not return a wallet address. Please try again.");
-        setTimeout(() => setError(""), 5000);
-        setWalletLinking(false);
-        return;
-      }
-      const walletAddress = resp.publicKey.toString();
 
-      const res = await fetch("/api/auth/human", {
+      const walletAddress = await connectAndGetAddress(provider);
+      addDebug(`Linking address: ${walletAddress}`);
+
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -502,15 +642,20 @@ export default function MePage() {
         setTimeout(() => setError(""), 5000);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "";
-      if (message === "WALLET_TIMEOUT") {
-        setError("Connection timed out. Make sure Phantom is unlocked, then approve the connection popup.");
+      const message = err instanceof Error ? err.message : String(err);
+      addDebug(`Link CATCH: ${message}`);
+      setShowDebug(true);
+
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile && !message.includes("User rejected")) {
+        setError(`Connection failed: ${message}. Try opening in Phantom app instead.`);
+        setShowPhantomDeepLink("link");
       } else if (message.includes("User rejected")) {
-        setError("Connection was rejected. Please approve the Phantom connection request to link your wallet.");
+        setError("Connection was rejected. Please approve the Phantom connection request.");
       } else {
-        setError("Failed to connect Phantom wallet. Make sure Phantom is installed and unlocked.");
+        setError(`Wallet error: ${message || "Unknown error"}. Please try again.`);
       }
-      setTimeout(() => setError(""), 5000);
+      setTimeout(() => setError(""), 15000);
     }
     setWalletLinking(false);
   };
@@ -526,7 +671,7 @@ export default function MePage() {
     setManualWalletSaving(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -557,7 +702,7 @@ export default function MePage() {
     setWalletUnlinking(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "unlink_wallet", session_id: sessionId }),
@@ -685,7 +830,7 @@ export default function MePage() {
   const handleAnonymousSignup = async () => {
     setError("");
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -713,7 +858,7 @@ export default function MePage() {
       return;
     }
     try {
-      const res = await fetch("/api/auth/human", {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -737,7 +882,7 @@ export default function MePage() {
 
   const handleUpdate = async () => {
     try {
-      await fetch("/api/auth/human", {
+      await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1017,6 +1162,53 @@ export default function MePage() {
         {error && (
           <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-3 mb-4 text-red-400 text-sm text-center">
             {error}
+          </div>
+        )}
+        {/* Tappable deep link fallback — iOS requires real <a> tap for universal links.
+            We show BOTH phantom:// (custom scheme, always opens app) and https://phantom.app/ul/
+            (universal link, may or may not work depending on iOS state). */}
+        {showPhantomDeepLink && (
+          <div className="bg-purple-500/20 border border-purple-500/30 rounded-xl p-4 mb-4 text-center space-y-3">
+            <a
+              href={(() => {
+                const targetUrl = new URL(window.location.origin + "/me");
+                targetUrl.searchParams.set(showPhantomDeepLink === "login" ? "phantom_login" : "phantom_link", "1");
+                if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+                const encoded = encodeURIComponent(targetUrl.toString());
+                const ref = encodeURIComponent(window.location.origin);
+                return `phantom://browse/${encoded}?ref=${ref}`;
+              })()}
+              className="inline-block w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+            >
+              Open in Phantom App
+            </a>
+            <a
+              href={(() => {
+                const targetUrl = new URL(window.location.origin + "/me");
+                targetUrl.searchParams.set(showPhantomDeepLink === "login" ? "phantom_login" : "phantom_link", "1");
+                if (sessionId) targetUrl.searchParams.set("sid", sessionId);
+                return buildPhantomBrowseLink(targetUrl.toString());
+              })()}
+              className="inline-block text-[11px] text-purple-400 underline"
+            >
+              Alternative link (if above doesn&apos;t work)
+            </a>
+            <p className="text-[10px] text-gray-500">Tap to open this page inside Phantom&apos;s browser</p>
+          </div>
+        )}
+        {/* Debug log panel — shows on error or toggle */}
+        {debugLog.length > 0 && (
+          <div className="mb-4">
+            <button onClick={() => setShowDebug(!showDebug)} className="text-[10px] text-gray-600 hover:text-gray-400 mb-1">
+              {showDebug ? "Hide" : "Show"} debug log ({debugLog.length})
+            </button>
+            {showDebug && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 max-h-40 overflow-y-auto">
+                {debugLog.map((line, i) => (
+                  <div key={i} className="text-[9px] text-gray-500 font-mono leading-tight">{line}</div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

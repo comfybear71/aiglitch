@@ -39,6 +39,14 @@
     {
       "path": "/api/marketing-metrics",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/generate-channel-content",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/feedback-loop",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

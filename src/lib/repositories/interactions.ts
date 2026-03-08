@@ -46,6 +46,151 @@ export async function toggleLike(postId: string, sessionId: string): Promise<"li
   }
 }
 
+// ── Emoji Reactions ──────────────────────────────────────────────────
+
+const VALID_EMOJIS = ["funny", "sad", "shocked", "crap"] as const;
+export type ReactionEmoji = typeof VALID_EMOJIS[number];
+
+export async function toggleReaction(
+  postId: string,
+  sessionId: string,
+  emoji: string,
+): Promise<{ action: "reacted" | "unreacted"; emoji: string; counts: Record<string, number> }> {
+  if (!VALID_EMOJIS.includes(emoji as ReactionEmoji)) {
+    throw new Error(`Invalid emoji: ${emoji}`);
+  }
+  const sql = getDb();
+
+  const existing = await sql`
+    SELECT id FROM emoji_reactions
+    WHERE post_id = ${postId} AND session_id = ${sessionId} AND emoji = ${emoji}
+  `;
+
+  if (existing.length === 0) {
+    await sql`
+      INSERT INTO emoji_reactions (id, post_id, session_id, emoji)
+      VALUES (${uuidv4()}, ${postId}, ${sessionId}, ${emoji})
+    `;
+    // Upsert content_feedback row with score: funny=+3, shocked=+2, sad=+1, crap=-2
+    const postRow = await sql`SELECT channel_id FROM posts WHERE id = ${postId}`;
+    const channelId = (postRow[0]?.channel_id as string) || null;
+    await sql`
+      INSERT INTO content_feedback (id, post_id, channel_id, funny_count, sad_count, shocked_count, crap_count, score)
+      VALUES (
+        ${uuidv4()}, ${postId}, ${channelId},
+        ${emoji === "funny" ? 1 : 0}, ${emoji === "sad" ? 1 : 0},
+        ${emoji === "shocked" ? 1 : 0}, ${emoji === "crap" ? 1 : 0},
+        ${emoji === "funny" ? 3 : emoji === "shocked" ? 2 : emoji === "sad" ? 1 : -2}
+      )
+      ON CONFLICT (post_id) DO UPDATE SET
+        funny_count = content_feedback.funny_count + ${emoji === "funny" ? 1 : 0},
+        sad_count = content_feedback.sad_count + ${emoji === "sad" ? 1 : 0},
+        shocked_count = content_feedback.shocked_count + ${emoji === "shocked" ? 1 : 0},
+        crap_count = content_feedback.crap_count + ${emoji === "crap" ? 1 : 0},
+        score = (content_feedback.funny_count + ${emoji === "funny" ? 1 : 0}) * 3
+              + (content_feedback.shocked_count + ${emoji === "shocked" ? 1 : 0}) * 2
+              + (content_feedback.sad_count + ${emoji === "sad" ? 1 : 0})
+              - (content_feedback.crap_count + ${emoji === "crap" ? 1 : 0}) * 2,
+        updated_at = NOW()
+    `;
+    await trackInterest(sessionId, postId);
+  } else {
+    await sql`
+      DELETE FROM emoji_reactions
+      WHERE post_id = ${postId} AND session_id = ${sessionId} AND emoji = ${emoji}
+    `;
+    // Recalculate score from scratch
+    await sql`
+      UPDATE content_feedback SET
+        funny_count = GREATEST(0, funny_count - ${emoji === "funny" ? 1 : 0}),
+        sad_count = GREATEST(0, sad_count - ${emoji === "sad" ? 1 : 0}),
+        shocked_count = GREATEST(0, shocked_count - ${emoji === "shocked" ? 1 : 0}),
+        crap_count = GREATEST(0, crap_count - ${emoji === "crap" ? 1 : 0}),
+        score = GREATEST(0, funny_count - ${emoji === "funny" ? 1 : 0}) * 3
+              + GREATEST(0, shocked_count - ${emoji === "shocked" ? 1 : 0}) * 2
+              + GREATEST(0, sad_count - ${emoji === "sad" ? 1 : 0})
+              - GREATEST(0, crap_count - ${emoji === "crap" ? 1 : 0}) * 2,
+        updated_at = NOW()
+      WHERE post_id = ${postId}
+    `;
+  }
+
+  // Return current counts
+  const counts = await getReactionCounts(postId);
+  return {
+    action: existing.length === 0 ? "reacted" : "unreacted",
+    emoji,
+    counts,
+  };
+}
+
+export async function getReactionCounts(postId: string): Promise<Record<string, number>> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT emoji, COUNT(*)::int as count FROM emoji_reactions
+    WHERE post_id = ${postId} GROUP BY emoji
+  `;
+  const counts: Record<string, number> = { funny: 0, sad: 0, shocked: 0, crap: 0 };
+  for (const row of rows) {
+    counts[row.emoji as string] = row.count as number;
+  }
+  return counts;
+}
+
+export async function getUserReactions(postId: string, sessionId: string): Promise<string[]> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT emoji FROM emoji_reactions
+    WHERE post_id = ${postId} AND session_id = ${sessionId}
+  `;
+  return rows.map(r => r.emoji as string);
+}
+
+export async function getBatchReactions(
+  postIds: string[],
+  sessionId?: string,
+): Promise<Record<string, { counts: Record<string, number>; userReactions: string[] }>> {
+  if (postIds.length === 0) return {};
+
+  // Build empty result first — returned as-is if table doesn't exist yet
+  const result: Record<string, { counts: Record<string, number>; userReactions: string[] }> = {};
+  for (const pid of postIds) {
+    result[pid] = { counts: { funny: 0, sad: 0, shocked: 0, crap: 0 }, userReactions: [] };
+  }
+
+  try {
+    const sql = getDb();
+
+    // Get all counts
+    const countRows = await sql`
+      SELECT post_id, emoji, COUNT(*)::int as count FROM emoji_reactions
+      WHERE post_id = ANY(${postIds}) GROUP BY post_id, emoji
+    `;
+
+    // Get user's reactions
+    let userRows: Record<string, unknown>[] = [];
+    if (sessionId) {
+      userRows = await sql`
+        SELECT post_id, emoji FROM emoji_reactions
+        WHERE post_id = ANY(${postIds}) AND session_id = ${sessionId}
+      `;
+    }
+
+    for (const row of countRows) {
+      const pid = row.post_id as string;
+      if (result[pid]) result[pid].counts[row.emoji as string] = row.count as number;
+    }
+    for (const row of userRows) {
+      const pid = row.post_id as string;
+      if (result[pid]) result[pid].userReactions.push(row.emoji as string);
+    }
+  } catch {
+    // Table may not exist yet — return empty counts gracefully
+  }
+
+  return result;
+}
+
 // ── Follow / Subscribe ────────────────────────────────────────────────
 
 export async function toggleFollow(personaId: string, sessionId: string): Promise<"followed" | "unfollowed"> {

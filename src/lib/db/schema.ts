@@ -62,6 +62,7 @@ export const posts = pgTable("posts", {
   challengeTag: text("challenge_tag"),
   beefThreadId: text("beef_thread_id"),
   mediaSource: text("media_source"),
+  channelId: text("channel_id"),
 });
 
 // ─── 3. ai_interactions ────────────────────────────────────────────────────
@@ -103,6 +104,30 @@ export const humanLikes = pgTable("human_likes", {
 }, (table) => [
   unique("human_likes_post_session").on(table.postId, table.sessionId),
 ]);
+
+// ─── 5b. emoji_reactions ────────────────────────────────────────────────────
+export const emojiReactions = pgTable("emoji_reactions", {
+  id: text("id").primaryKey(),
+  postId: text("post_id").notNull().references(() => posts.id),
+  sessionId: text("session_id").notNull(),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+}, (table) => [
+  unique("emoji_reactions_post_session_emoji").on(table.postId, table.sessionId, table.emoji),
+]);
+
+// ─── 5c. content_feedback ──────────────────────────────────────────────────
+export const contentFeedback = pgTable("content_feedback", {
+  id: text("id").primaryKey(),
+  postId: text("post_id").notNull().references(() => posts.id),
+  channelId: text("channel_id"),
+  funnyCount: integer("funny_count").notNull().default(0),
+  sadCount: integer("sad_count").notNull().default(0),
+  shockedCount: integer("shocked_count").notNull().default(0),
+  crapCount: integer("crap_count").notNull().default(0),
+  score: real("score").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`NOW()`),
+});
 
 // ─── 6. human_subscriptions ────────────────────────────────────────────────
 export const humanSubscriptions = pgTable("human_subscriptions", {
@@ -740,3 +765,43 @@ export const aiCostLog = pgTable("ai_cost_log", {
   metadata: text("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
+
+// ─── 55. channels ───────────────────────────────────────────────────────────
+export const channels = pgTable("channels", {
+  id: text("id").primaryKey(),
+  slug: text("slug").unique().notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  emoji: text("emoji").notNull().default("📺"),
+  bannerUrl: text("banner_url"),
+  titleVideoUrl: text("title_video_url"),
+  contentRules: text("content_rules").notNull().default("{}"), // JSON: tone, topics, media preferences
+  schedule: text("schedule").notNull().default("{}"), // JSON: cron-like posting schedule
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  subscriberCount: integer("subscriber_count").notNull().default(0),
+  postCount: integer("post_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 56. channel_personas ───────────────────────────────────────────────────
+export const channelPersonas = pgTable("channel_personas", {
+  id: text("id").primaryKey(),
+  channelId: text("channel_id").notNull().references(() => channels.id),
+  personaId: text("persona_id").notNull().references(() => aiPersonas.id),
+  role: text("role").notNull().default("regular"), // host | guest | regular
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+}, (table) => [
+  unique("channel_personas_channel_persona").on(table.channelId, table.personaId),
+]);
+
+// ─── 57. channel_subscriptions ──────────────────────────────────────────────
+export const channelSubscriptions = pgTable("channel_subscriptions", {
+  id: text("id").primaryKey(),
+  channelId: text("channel_id").notNull().references(() => channels.id),
+  sessionId: text("session_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+}, (table) => [
+  unique("channel_subscriptions_channel_session").on(table.channelId, table.sessionId),
+]);
