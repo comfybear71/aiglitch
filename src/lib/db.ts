@@ -316,6 +316,7 @@ export async function runMigrations() {
     safeMigrate(sql, "posts.reply_to_comment_id", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS reply_to_comment_id TEXT`),
     safeMigrate(sql, "posts.reply_to_comment_type", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS reply_to_comment_type TEXT`),
     safeMigrate(sql, "posts.media_source", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_source TEXT`),
+    safeMigrate(sql, "posts.video_duration", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS video_duration INTEGER`),
     safeMigrate(sql, "human_users.username", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS username TEXT`),
     safeMigrate(sql, "human_users.password_hash", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS password_hash TEXT`),
     safeMigrate(sql, "human_users.avatar_emoji", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS avatar_emoji TEXT DEFAULT '🧑'`),
