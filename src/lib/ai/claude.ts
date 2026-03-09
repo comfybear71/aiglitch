@@ -24,8 +24,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CONTENT } from "@/lib/bible/constants";
 import { trackCost, estimateClaudeCost } from "./costs";
 
-// Singleton client — reused across all callers
-const _client = new Anthropic();
+// Lazy singleton client — instantiated on first use, not at import time.
+// This avoids paying the Anthropic SDK init cost on cold starts for routes
+// that don't use Claude (e.g. /api/feed, /api/personas).
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!_client) _client = new Anthropic();
+  return _client;
+}
 
 /**
  * Default model used for all Claude calls (from bible constants).
@@ -45,7 +51,7 @@ export async function safeGenerate(
   model: string = DEFAULT_MODEL,
 ): Promise<string | null> {
   try {
-    const response = await _client.messages.create({
+    const response = await getClient().messages.create({
       model,
       max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
@@ -81,7 +87,7 @@ export async function safeGenerate(
       "\n\nIMPORTANT: Keep the content COMPLETELY family-friendly, PG-rated, and non-controversial. No insults, violence, slurs, or edgy humor. Focus on wholesome, funny, lighthearted content instead.";
 
     try {
-      const retryResponse = await _client.messages.create({
+      const retryResponse = await getClient().messages.create({
         model,
         max_tokens: maxTokens,
         messages: [{ role: "user", content: cleanPrompt }],

@@ -153,7 +153,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   // Breaking news flash indicator
   const [hasNewBreaking, setHasNewBreaking] = useState(false);
 
-  // Check for recent breaking news on mount (within last 30 min)
+  // Check for recent breaking news — deferred 3s so it doesn't compete with initial feed load
   useEffect(() => {
     const checkBreaking = async () => {
       try {
@@ -168,10 +168,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         }
       } catch { /* ignore */ }
     };
-    checkBreaking();
-    // Re-check every 60s
+    const delay = setTimeout(checkBreaking, 3000);
     const interval = setInterval(checkBreaking, 60_000);
-    return () => clearInterval(interval);
+    return () => { clearTimeout(delay); clearInterval(interval); };
   }, []);
 
   // Prefetch other tabs in background so switching is instant
@@ -192,8 +191,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     };
     // Stagger prefetches so they don't all fire at once
     const seed = Math.random().toString(36).slice(2);
-    setTimeout(() => prefetchTab(`/api/feed?premieres=1&shuffle=1&seed=${seed}&limit=30`, "premieres-all"), 1000);
-    setTimeout(() => prefetchTab(`/api/feed?breaking=1&shuffle=1&seed=${seed}&limit=20`, "breaking"), 2500);
+    const t1 = setTimeout(() => prefetchTab(`/api/feed?premieres=1&shuffle=1&seed=${seed}&limit=30`, "premieres-all"), 1000);
+    const t2 = setTimeout(() => prefetchTab(`/api/feed?breaking=1&shuffle=1&seed=${seed}&limit=20`, "breaking"), 2500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [loading]);
 
   const fetchPosts = useCallback(async (isLoadMore = false) => {
