@@ -82,11 +82,14 @@ async function callInternal(
 
 // ── Command Handlers ────────────────────────────────────────────────
 
-async function handleGlitchVideo(chatId: number | string): Promise<void> {
-  await reply(chatId, "🎬 Generating §GLITCH coin promo video...\nThis takes 1-2 minutes. I'll message you when it's ready.");
+async function handleGlitchVideo(chatId: number | string, customPrompt?: string): Promise<void> {
+  const promptMsg = customPrompt ? `\nPrompt: <i>${customPrompt.slice(0, 100)}</i>` : "";
+  await reply(chatId, `🎬 Generating §GLITCH coin promo video...${promptMsg}\nThis takes 1-2 minutes. I'll message you when it's ready.`);
 
   try {
-    const result = await callInternal("/api/admin/promote-glitchcoin", "POST", { mode: "video" });
+    const body: Record<string, unknown> = { mode: "video" };
+    if (customPrompt) body.prompt = customPrompt;
+    const result = await callInternal("/api/admin/promote-glitchcoin", "POST", body);
 
     if (result.phase === "submitted" && result.requestId) {
       await reply(chatId,
@@ -111,11 +114,14 @@ async function handleGlitchVideo(chatId: number | string): Promise<void> {
   }
 }
 
-async function handleGlitchImage(chatId: number | string): Promise<void> {
-  await reply(chatId, "🖼️ Generating §GLITCH coin promo image...");
+async function handleGlitchImage(chatId: number | string, customPrompt?: string): Promise<void> {
+  const promptMsg = customPrompt ? `\nPrompt: <i>${customPrompt.slice(0, 100)}</i>` : "";
+  await reply(chatId, `🖼️ Generating §GLITCH coin promo image...${promptMsg}`);
 
   try {
-    const result = await callInternal("/api/admin/promote-glitchcoin", "POST", { mode: "image" });
+    const body: Record<string, unknown> = { mode: "image" };
+    if (customPrompt) body.prompt = customPrompt;
+    const result = await callInternal("/api/admin/promote-glitchcoin", "POST", body);
 
     if (result.success) {
       const r = result as Record<string, unknown>;
@@ -235,15 +241,18 @@ function handleHelp(chatId: number | string): Promise<void> {
   return reply(chatId,
     `🤖 <b>AIG!itch Bot Commands</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `🎬 /glitchvideo — Generate §GLITCH promo video\n` +
-    `🖼️ /glitchimage — Generate §GLITCH promo image\n` +
+    `🎬 /glitchvideo [prompt] — Generate §GLITCH promo video\n` +
+    `🖼️ /glitchimage [prompt] — Generate §GLITCH promo image\n` +
     `🥚 /hatch [type] — Hatch a new AI persona\n` +
     `⚡ /generate — Trigger content generation\n` +
     `📊 /status — System status report\n` +
     `💰 /credits — Check API credit balances\n` +
     `💬 /persona — Random persona message\n` +
     `❓ /help — Show this menu\n\n` +
-    `<i>Tip: /hatch rockstar — hatch a rockstar persona</i>`
+    `<b>Examples:</b>\n` +
+    `<i>/glitchvideo neon city with GLITCH coins raining from sky</i>\n` +
+    `<i>/glitchimage cyberpunk robot holding a giant GLITCH coin</i>\n` +
+    `<i>/hatch rockstar</i>`
   );
 }
 
@@ -291,10 +300,10 @@ export async function POST(request: NextRequest) {
   // But we need the response to go out, so we use waitUntil pattern
   switch (cmd) {
     case "/glitchvideo":
-      handleGlitchVideo(chatId).catch(console.error);
+      handleGlitchVideo(chatId, args.join(" ") || undefined).catch(console.error);
       break;
     case "/glitchimage":
-      handleGlitchImage(chatId).catch(console.error);
+      handleGlitchImage(chatId, args.join(" ") || undefined).catch(console.error);
       break;
     case "/hatch":
       handleHatch(chatId, args.join(" ") || undefined).catch(console.error);

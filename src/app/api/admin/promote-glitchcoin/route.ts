@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { env } from "@/lib/bible/env";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
@@ -127,7 +128,10 @@ async function spreadToSocials(
  * POST — Generate §GLITCH promo content (image or video) and spread to socials.
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  // Allow admin cookie auth OR cron Bearer token (for Telegram webhook)
+  const isAdmin = await isAdminAuthenticated();
+  const isCron = await checkCronAuth(request);
+  if (!isAdmin && !isCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -137,12 +141,15 @@ export async function POST(request: NextRequest) {
 
   const contentType = request.headers.get("content-type") || "";
   let mode: string;
+  let customPrompt: string | null = null;
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
     mode = (formData.get("mode") as string) || "image";
+    customPrompt = (formData.get("prompt") as string) || null;
   } else {
     const body = await request.json().catch(() => ({}));
     mode = body.mode || "image";
+    customPrompt = body.prompt || null;
   }
 
   const sql = getDb();
@@ -150,7 +157,7 @@ export async function POST(request: NextRequest) {
 
   if (mode === "image") {
     // ── Generate promotional image ──────────────────────────────────
-    const prompt = buildImagePrompt();
+    const prompt = customPrompt || buildImagePrompt();
     console.log(`[promote-glitchcoin] Generating image: "${prompt.slice(0, 80)}..."`);
 
     try {
@@ -216,7 +223,7 @@ export async function POST(request: NextRequest) {
     }
   } else {
     // ── Generate promotional video (submit + poll pattern) ──────────
-    const prompt = buildVideoPrompt();
+    const prompt = customPrompt || buildVideoPrompt();
     console.log(`[promote-glitchcoin] Submitting video: "${prompt.slice(0, 80)}..."`);
 
     try {
@@ -281,7 +288,9 @@ export async function POST(request: NextRequest) {
  * GET — Poll video generation status. When done, save + spread.
  */
 export async function GET(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  const isAdmin = await isAdminAuthenticated();
+  const isCron = await checkCronAuth(request);
+  if (!isAdmin && !isCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
