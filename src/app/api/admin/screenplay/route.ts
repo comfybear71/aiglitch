@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
     directorName: profile.displayName,
     directorId: director.id,
     castList: screenplay.castList,
+    screenplayProvider: screenplay.screenplayProvider || "claude",
     scenes: screenplay.scenes.map(s => ({
       sceneNumber: s.sceneNumber,
       title: s.title,

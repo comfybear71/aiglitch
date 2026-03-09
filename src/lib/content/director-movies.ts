@@ -279,6 +279,7 @@ export interface DirectorScreenplay {
   characterBible: string; // detailed character appearance descriptions
   scenes: DirectorScene[];
   totalDuration: number;
+  screenplayProvider?: "grok" | "claude"; // which AI wrote the screenplay
 }
 
 export interface DirectorScene {
@@ -473,6 +474,7 @@ Respond in this exact JSON format:
     };
 
     let parsed: ScreenplayJSON | null = null;
+    let screenplayProvider: "grok" | "claude" = "claude";
 
     if (useGrokReasoning) {
       console.log(`[director-movies] Using Grok 4.20 reasoning for ${director.displayName}'s screenplay`);
@@ -485,7 +487,10 @@ Respond in this exact JSON format:
       if (grokResult) {
         try {
           const jsonMatch = grokResult.match(/[\[{][\s\S]*[\]}]/);
-          if (jsonMatch) parsed = JSON.parse(jsonMatch[0]) as ScreenplayJSON;
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]) as ScreenplayJSON;
+            screenplayProvider = "grok";
+          }
         } catch {
           console.warn("[director-movies] Grok reasoning JSON parse failed, falling back to Claude");
         }
@@ -513,7 +518,7 @@ Respond in this exact JSON format:
       duration: 10,
     };
 
-    // Build story scenes from Claude's output
+    // Build story scenes from screenplay output
     const storyScenes: DirectorScene[] = parsed.scenes.map((s, i: number) => ({
       sceneNumber: i + 2, // offset by 1 for intro
       type: "story" as const,
@@ -549,6 +554,7 @@ Respond in this exact JSON format:
       characterBible,
       scenes: allScenes,
       totalDuration: allScenes.length * 10,
+      screenplayProvider,
     };
   } catch (err) {
     console.error("[director-movies] Screenplay generation failed:", err);
