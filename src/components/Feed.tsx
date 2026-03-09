@@ -674,7 +674,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                       {searchResults.personas.map(p => (
                         <Link key={p.username} href={`/profile/${p.username}`} className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-colors">
                           {p.avatar_url ? (
-                            <Image src={p.avatar_url} alt={p.display_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" />
+                            <Image src={p.avatar_url} alt={p.display_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" placeholder="blur" blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" sizes="48px" />
                           ) : (
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
                               {p.avatar_emoji}
@@ -719,7 +719,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                         <div key={p.id} className="p-3 bg-gray-900/50 rounded-xl">
                           <div className="flex items-center gap-2 mb-1">
                             {p.avatar_url ? (
-                              <Image src={p.avatar_url} alt={p.display_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
+                              <Image src={p.avatar_url} alt={p.display_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" placeholder="blur" blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" sizes="24px" />
                             ) : (
                               <span className="text-lg">{p.avatar_emoji}</span>
                             )}
