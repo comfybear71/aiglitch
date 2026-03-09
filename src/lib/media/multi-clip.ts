@@ -275,6 +275,7 @@ export async function submitMultiClipJobs(
       xai_request_id TEXT,
       video_url TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
+      fail_reason TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       completed_at TIMESTAMPTZ
     )
@@ -370,7 +371,13 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
         headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
       });
 
-      if (!pollRes.ok) continue;
+      if (!pollRes.ok) {
+        const errBody = await pollRes.text().catch(() => "(unreadable)");
+        console.error(`[multi-clip] Poll HTTP ${pollRes.status} for scene ${scene.scene_number} (job ${scene.job_id}, req ${scene.xai_request_id}): ${errBody.slice(0, 300)}`);
+        // Store the failure reason on the scene for diagnostics
+        await sql`UPDATE multi_clip_scenes SET fail_reason = ${`poll_http_${pollRes.status}`} WHERE id = ${scene.id}`;
+        continue;
+      }
       const pollData = await pollRes.json();
 
       if (pollData.status === "done" && pollData.respect_moderation !== false && pollData.video?.url) {
@@ -380,11 +387,18 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
         result.completed++;
         console.log(`[multi-clip] Scene ${scene.scene_number} done for job ${scene.job_id}`);
       } else if (pollData.status === "expired" || pollData.status === "failed" || pollData.respect_moderation === false) {
-        await sql`UPDATE multi_clip_scenes SET status = 'failed', completed_at = NOW() WHERE id = ${scene.id}`;
-        console.log(`[multi-clip] Scene ${scene.scene_number} failed for job ${scene.job_id}`);
+        const reason = pollData.respect_moderation === false
+          ? "moderation_blocked"
+          : `grok_${pollData.status}`;
+        await sql`UPDATE multi_clip_scenes SET status = 'failed', completed_at = NOW(), fail_reason = ${reason} WHERE id = ${scene.id}`;
+        console.log(`[multi-clip] Scene ${scene.scene_number} FAILED for job ${scene.job_id}: ${reason} (request ${scene.xai_request_id})`);
+      } else {
+        // Still processing — log the actual status for diagnostics
+        console.log(`[multi-clip] Scene ${scene.scene_number} still ${pollData.status || "unknown"} for job ${scene.job_id} (request ${scene.xai_request_id})`);
       }
     } catch (err) {
-      console.error(`[multi-clip] Poll error for scene ${scene.id}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[multi-clip] Poll network error for scene ${scene.scene_number} (job ${scene.job_id}): ${msg}`);
     }
   }
 
@@ -416,11 +430,15 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
     }
   }
 
-  // Mark scenes stuck as "submitted" for over 3 hours as failed
-  await sql`
-    UPDATE multi_clip_scenes SET status = 'failed', completed_at = NOW()
+  // Mark scenes stuck as "submitted" for over 3 hours as failed (with reason)
+  const timedOut = await sql`
+    UPDATE multi_clip_scenes SET status = 'failed', completed_at = NOW(), fail_reason = 'timeout_3h'
     WHERE status = 'submitted' AND created_at < NOW() - INTERVAL '3 hours'
-  `;
+    RETURNING id, job_id, scene_number
+  ` as unknown as { id: string; job_id: string; scene_number: number }[];
+  if (timedOut.length > 0) {
+    console.warn(`[multi-clip] Timed out ${timedOut.length} scenes after 3 hours: ${timedOut.map(s => `scene ${s.scene_number} (job ${s.job_id})`).join(", ")}`);
+  }
 
   // Check for jobs where some clips failed but enough succeeded (at least 50%),
   // OR where all remaining scenes are failed/done (no more pending).

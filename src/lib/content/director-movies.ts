@@ -674,6 +674,7 @@ export async function submitDirectorFilm(
         id TEXT PRIMARY KEY, job_id TEXT NOT NULL, scene_number INTEGER NOT NULL,
         title TEXT, video_prompt TEXT NOT NULL, xai_request_id TEXT,
         video_url TEXT, status TEXT NOT NULL DEFAULT 'pending',
+        fail_reason TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), completed_at TIMESTAMPTZ
       )
     `;

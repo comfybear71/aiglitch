@@ -126,6 +126,16 @@ export async function GET(request: NextRequest) {
             console.log(`[persona-content] Partial director movie "${job.title}" stitched!`);
           }
         } else if (job.pending_count === 0 && job.done_count < Math.ceil(job.clip_count / 2)) {
+          // Log detailed failure reasons for diagnostics
+          const failReasons = await sql`
+            SELECT scene_number, status, fail_reason, xai_request_id,
+              EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - created_at))::int as elapsed_secs
+            FROM multi_clip_scenes WHERE job_id = ${job.id} ORDER BY scene_number
+          ` as unknown as { scene_number: number; status: string; fail_reason: string | null; xai_request_id: string | null; elapsed_secs: number }[];
+          const summary = failReasons.map(s =>
+            `  scene ${s.scene_number}: ${s.status}${s.fail_reason ? ` (${s.fail_reason})` : ""} after ${Math.round(s.elapsed_secs / 60)}min`
+          ).join("\n");
+          console.error(`[persona-content] Director movie "${job.title}" FAILED — only ${job.done_count}/${job.clip_count} clips done (need ${Math.ceil(job.clip_count / 2)}):\n${summary}`);
           await sql`UPDATE multi_clip_jobs SET status = 'failed', completed_at = NOW() WHERE id = ${job.id}`;
           await sql`UPDATE director_movies SET status = 'failed' WHERE multi_clip_job_id = ${job.id}`;
         }

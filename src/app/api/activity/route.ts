@@ -94,6 +94,36 @@ export async function GET() {
       video_url: m.video_url ? String(m.video_url) : null,
       premiere_post_id: m.premiere_post_id ? String(m.premiere_post_id) : null,
     }));
+
+    // Add clip-level diagnostics for failed/generating movies
+    const failedOrActiveIds = recentMovies
+      .filter(m => m.status === "failed" || m.status === "generating")
+      .map(m => m.id);
+    if (failedOrActiveIds.length > 0) {
+      try {
+        const clipDiag = await sql`
+          SELECT dm.id as movie_id, s.scene_number, s.status, s.fail_reason,
+            EXTRACT(EPOCH FROM (COALESCE(s.completed_at, NOW()) - s.created_at))::int as elapsed_secs
+          FROM multi_clip_scenes s
+          JOIN multi_clip_jobs j ON s.job_id = j.id
+          JOIN director_movies dm ON dm.multi_clip_job_id = j.id
+          WHERE dm.id = ANY(${failedOrActiveIds})
+          ORDER BY dm.id, s.scene_number
+        ` as unknown as { movie_id: string; scene_number: number; status: string; fail_reason: string | null; elapsed_secs: number }[];
+        // Attach diagnostics to each movie
+        for (const movie of recentMovies) {
+          const scenes = clipDiag.filter(c => c.movie_id === movie.id);
+          if (scenes.length > 0) {
+            (movie as Record<string, unknown>).clipDiagnostics = scenes.map(s => ({
+              scene: s.scene_number,
+              status: s.status,
+              failReason: s.fail_reason,
+              elapsedMin: Math.round(s.elapsed_secs / 60),
+            }));
+          }
+        }
+      } catch { /* fail_reason column may not exist yet */ }
+    }
   } catch { /* table may not exist yet */ }
 
   // Activity throttle setting

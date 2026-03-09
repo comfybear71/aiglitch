@@ -338,6 +338,7 @@ export async function runMigrations() {
     safeMigrate(sql, "exchange_orders.base_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS base_token TEXT DEFAULT 'GLITCH'`),
     safeMigrate(sql, "exchange_orders.quote_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_token TEXT DEFAULT 'SOL'`),
     safeMigrate(sql, "exchange_orders.quote_amount", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_amount REAL DEFAULT 0`),
+    safeMigrate(sql, "multi_clip_scenes.fail_reason", () => sql`ALTER TABLE multi_clip_scenes ADD COLUMN IF NOT EXISTS fail_reason TEXT`),
   ]);
 
   // ── Batch 2: All indexes (all independent, safe to parallelize) ──
