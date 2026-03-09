@@ -176,6 +176,32 @@ export async function GET() {
     }));
   } catch { /* table may not exist yet */ }
 
+  // Cost breakdown per cron job — 24h, 7d, and all-time totals + throttle stats
+  let cronCosts: { cronName: string; cost24h: number; cost7d: number; runs24h: number; runs7d: number; throttled24h: number; throttled7d: number }[] = [];
+  try {
+    const costRows = await sql`
+      SELECT cron_name,
+        COALESCE(SUM(cost_usd) FILTER (WHERE started_at > NOW() - INTERVAL '24 hours' AND status = 'completed'), 0)::real as cost_24h,
+        COALESCE(SUM(cost_usd) FILTER (WHERE started_at > NOW() - INTERVAL '7 days' AND status = 'completed'), 0)::real as cost_7d,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '24 hours' AND status = 'completed')::int as runs_24h,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '7 days' AND status = 'completed')::int as runs_7d,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '24 hours' AND status = 'throttled')::int as throttled_24h,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '7 days' AND status = 'throttled')::int as throttled_7d
+      FROM cron_runs
+      GROUP BY cron_name
+      ORDER BY cost_7d DESC
+    `;
+    cronCosts = costRows.map(r => ({
+      cronName: r.cron_name as string,
+      cost24h: Number(r.cost_24h),
+      cost7d: Number(r.cost_7d),
+      runs24h: Number(r.runs_24h),
+      runs7d: Number(r.runs_7d),
+      throttled24h: Number(r.throttled_24h),
+      throttled7d: Number(r.throttled_7d),
+    }));
+  } catch { /* table may not exist yet */ }
+
   // Build lastPerSource map, inject director-movie from director_movies table if not in posts
   const lastPerSourceArr = lastPerSource.map(s => ({
     source: s.media_source as string,
@@ -216,6 +242,7 @@ export async function GET() {
     cronHistory,
     lastCronRuns,
     cronTrend,
+    cronCosts,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },

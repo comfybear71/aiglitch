@@ -105,6 +105,7 @@ interface ActivityData {
   cronHistory?: CronRun[];
   lastCronRuns?: { cronName: string; lastStartedAt: string; lastStatus: string }[];
   cronTrend?: { cronName: string; hour: string; completed: number; failed: number }[];
+  cronCosts?: { cronName: string; cost24h: number; cost7d: number; runs24h: number; runs7d: number; throttled24h: number; throttled7d: number }[];
   cronSchedules: CronSchedule[];
 }
 
@@ -407,7 +408,13 @@ export default function ActivityPage() {
                     <div className="flex items-center gap-2">
                       <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : lastWasThrottled ? "bg-yellow-500" : noData ? "bg-gray-700" : "bg-gray-600"}`} />
                       <span className="text-sm font-semibold">{cron.name}</span>
-                      <span className="text-[10px] text-gray-600">every {cron.interval}{cron.unit[0]}</span>
+                      <span className="text-[10px] text-gray-600">
+                        every {cron.interval}{cron.unit[0]}
+                        {throttle < 100 && throttle > 0 && (
+                          <span className="text-yellow-500/70"> → ~{Math.round(cron.interval / (throttle / 100))}{cron.unit[0]}</span>
+                        )}
+                        {throttle === 0 && <span className="text-red-400"> → paused</span>}
+                      </span>
                       {matchedSource && (
                         <span className="text-[9px] text-gray-600">{matchedSource.total} total</span>
                       )}
@@ -597,6 +604,88 @@ export default function ActivityPage() {
                   <line x1={padL} x2={W - padR} y1={padT + chartH} y2={padT + chartH} stroke="#4b5563" strokeWidth="0.5" />
                 </svg>
               </div>
+            </div>
+          );
+        })()}
+
+        {/* Cost Breakdown per Cron Job */}
+        {(data.cronCosts || []).length > 0 && (() => {
+          const costs = data.cronCosts!;
+          const total24h = costs.reduce((s, c) => s + c.cost24h, 0);
+          const total7d = costs.reduce((s, c) => s + c.cost7d, 0);
+          const totalRuns24h = costs.reduce((s, c) => s + c.runs24h, 0);
+          const totalThrottled24h = costs.reduce((s, c) => s + c.throttled24h, 0);
+          const totalThrottled7d = costs.reduce((s, c) => s + c.throttled7d, 0);
+          const jobLabels: Record<string, string> = {
+            "persona-content": "Persona Content",
+            "general-content": "General Content",
+            "director-movie": "Director Movies",
+            "ai-trading": "AI Trading",
+            "budju-trading": "Budju Trading",
+            "avatar-gen": "Avatars",
+            "topics-news": "Topics & News",
+            "ads": "Ads",
+            "marketing-post": "Marketing",
+            "marketing-metrics": "Metrics",
+            "feedback-loop": "Feedback Loop",
+            "channel-content": "Channels",
+          };
+          const jobEmojis: Record<string, string> = {
+            "persona-content": "🤖", "general-content": "📝", "director-movie": "🎬",
+            "ai-trading": "📈", "budju-trading": "💱", "avatar-gen": "🎨",
+            "topics-news": "📰", "ads": "📢", "marketing-post": "📣",
+            "marketing-metrics": "📊", "feedback-loop": "🔄", "channel-content": "📺",
+          };
+          return (
+            <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                💰 Cost Breakdown
+              </h2>
+              {/* Summary row */}
+              <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-800">
+                <div className="text-[11px] text-gray-400">
+                  {totalRuns24h} runs today{totalThrottled24h > 0 && <span className="text-yellow-500"> · {totalThrottled24h} throttled</span>}
+                  {totalThrottled7d > 0 && <span className="text-yellow-500/60"> · {totalThrottled7d} throttled (7d)</span>}
+                </div>
+                <div className="text-right">
+                  <span className="text-yellow-400 font-bold text-sm font-mono">${total24h.toFixed(2)}</span>
+                  <span className="text-[10px] text-gray-500 ml-1">/ 24h</span>
+                  <span className="text-yellow-500/60 font-mono text-[10px] ml-2">${total7d.toFixed(2)} / 7d</span>
+                </div>
+              </div>
+              {/* Per-job costs */}
+              <div className="space-y-1.5">
+                {costs.map(c => {
+                  const pct7d = total7d > 0 ? (c.cost7d / total7d) * 100 : 0;
+                  return (
+                    <div key={c.cronName} className="flex items-center gap-2 text-[11px]">
+                      <span className="w-4 text-center">{jobEmojis[c.cronName] || "⚙️"}</span>
+                      <span className="font-semibold text-white min-w-[100px]">{jobLabels[c.cronName] || c.cronName}</span>
+                      {/* Cost bar */}
+                      <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-yellow-500/80 to-orange-500/80 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, pct7d)}%` }} />
+                      </div>
+                      <div className="text-right min-w-[55px]">
+                        <span className={`font-mono font-bold ${c.cost24h > 0.10 ? "text-red-400" : c.cost24h > 0.01 ? "text-yellow-400" : "text-gray-500"}`}>
+                          ${c.cost24h.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-right min-w-[45px]">
+                        <span className="font-mono text-[10px] text-gray-500">{c.runs24h}r</span>
+                        {c.throttled24h > 0 && <span className="font-mono text-[10px] text-yellow-500"> {c.throttled24h}t</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Savings estimate */}
+              {throttle < 100 && totalThrottled7d > 0 && total7d > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-800 text-[10px] text-green-400/80">
+                  💡 At {throttle}% activity, ~{Math.round((1 - throttle / 100) * 100)}% of runs are skipped.
+                  {` Estimated ${totalThrottled7d} runs saved this week.`}
+                </div>
+              )}
             </div>
           );
         })()}
