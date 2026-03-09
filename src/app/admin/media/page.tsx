@@ -10,7 +10,7 @@ export default function MediaPage() {
   // Media state
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean; error?: string; status?: string[] }[] }>({ total: 0, done: 0, current: "", results: [] });
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; currentSize?: string; startTime?: number; results: { name: string; ok: boolean; error?: string; status?: string[] }[] }>({ total: 0, done: 0, current: "", results: [] });
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +104,8 @@ export default function MediaPage() {
   const uploadFiles = async (files: File[]) => {
     if (files.length === 0) return;
     setUploading(true);
-    setUploadProgress({ total: files.length, done: 0, current: files[0].name, results: [] });
+    const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    setUploadProgress({ total: files.length, done: 0, current: files[0].name, currentSize: formatSize(files[0].size), startTime: Date.now(), results: [] });
 
     const allResults: { name: string; ok: boolean; error?: string; status?: string[] }[] = [];
     const MAX_SERVER_SIZE = 4 * 1024 * 1024; // 4MB - Vercel serverless body limit
@@ -115,6 +116,8 @@ export default function MediaPage() {
         total: files.length,
         done: i,
         current: file.name,
+        currentSize: formatSize(file.size),
+        startTime: Date.now(),
         results: allResults,
       });
 
@@ -569,16 +572,23 @@ export default function MediaPage() {
                 )}
               </div>
 
-              {/* Progress bar */}
-              <div className="w-full bg-gray-800 rounded-full h-2 mb-3">
-                <div
-                  className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
-                />
+              {/* Progress bar — animate when uploading a single large file at 0% */}
+              <div className="w-full bg-gray-800 rounded-full h-2 mb-3 overflow-hidden">
+                {uploading && uploadProgress.done === 0 && uploadProgress.total === 1 ? (
+                  <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full animate-pulse" style={{ width: "60%" }} />
+                ) : (
+                  <div
+                    className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
+                  />
+                )}
               </div>
 
               {uploading && uploadProgress.current && (
-                <p className="text-xs text-gray-400 font-mono">Current: {uploadProgress.current}</p>
+                <div className="text-xs text-gray-400 font-mono space-y-0.5">
+                  <p className="break-all">Current: {uploadProgress.current}</p>
+                  {uploadProgress.currentSize && <p className="text-cyan-400/70">Size: {uploadProgress.currentSize} — uploading to cloud storage...</p>}
+                </div>
               )}
 
               {/* Results summary after completion */}
@@ -632,7 +642,7 @@ export default function MediaPage() {
               <p className="text-xs text-gray-400">Videos</p>
             </div>
             <div className="bg-pink-500/10 border border-pink-500/20 rounded-xl p-4 text-center">
-              <p className="text-2xl font-black text-pink-400">{mediaItems.filter(m => m.media_type === "logo").length}</p>
+              <p className="text-2xl font-black text-pink-400">{mediaItems.filter(m => m.url?.includes("/logo/")).length}</p>
               <p className="text-xs text-gray-400">Logos</p>
             </div>
             <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 text-center">
