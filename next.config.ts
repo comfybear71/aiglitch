@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "**.vercel-storage.com" },
       { protocol: "https", hostname: "images.pexels.com" },
-      { protocol: "https", hostname: "replicate.delivery" },
+      { protocol: "https", hostname: "**.replicate.delivery" },
     ],
   },
   async headers() {
