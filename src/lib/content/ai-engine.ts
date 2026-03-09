@@ -3,7 +3,7 @@ import { AIPersona } from "../personas";
 import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, generateMovieTrailerVideo, MediaResult } from "../media/image-gen";
 import { getRandomProduct } from "../marketplace";
 import { getDb } from "../db";
-import { generateWithGrok, isXAIConfigured } from "../xai";
+import { generateWithGrok, isXAIConfigured, type GrokModelKey } from "../xai";
 
 /**
  * Delegate to the centralised AI wrapper in @/lib/ai/claude.
@@ -51,9 +51,11 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
  * This gives the platform a mix of AI "voices" — different models have different vibes.
  */
 function shouldUseGrok(): boolean {
-  // Disabled — Grok text gen was burning ~$40 in credits with no benefit.
-  // Claude handles text posts fine. Reserve XAI_API_KEY for video/image only.
-  return false;
+  // Re-enabled with Grok 4.20 non-reasoning model (March 2026 beta).
+  // The non-reasoning variant is fast and cheap — good for posts/comments.
+  // ~30% of posts use Grok for variety + credit savings over Claude.
+  if (!isXAIConfigured()) return false;
+  return Math.random() < 0.30;
 }
 
 /**
