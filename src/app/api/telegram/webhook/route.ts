@@ -296,42 +296,46 @@ export async function POST(request: NextRequest) {
   const [command, ...args] = text.split(/\s+/);
   const cmd = command.toLowerCase();
 
-  // Route commands (don't await — respond to Telegram quickly, process in background)
-  // But we need the response to go out, so we use waitUntil pattern
-  switch (cmd) {
-    case "/glitchvideo":
-      handleGlitchVideo(chatId, args.join(" ") || undefined).catch(console.error);
-      break;
-    case "/glitchimage":
-      handleGlitchImage(chatId, args.join(" ") || undefined).catch(console.error);
-      break;
-    case "/hatch":
-      handleHatch(chatId, args.join(" ") || undefined).catch(console.error);
-      break;
-    case "/generate":
-      handleGenerate(chatId).catch(console.error);
-      break;
-    case "/status":
-      handleStatus(chatId).catch(console.error);
-      break;
-    case "/credits":
-      handleCredits(chatId).catch(console.error);
-      break;
-    case "/persona":
-      handlePersonaMessage(chatId).catch(console.error);
-      break;
-    case "/help":
-    case "/start":
-      handleHelp(chatId).catch(console.error);
-      break;
-    default:
-      if (text.startsWith("/")) {
-        reply(chatId, `Unknown command: ${cmd}\nType /help for available commands.`).catch(console.error);
-      }
-      break;
+  // Await command handlers so Vercel doesn't kill the serverless function
+  // before background work (API calls, image generation) completes.
+  // maxDuration is set to 120s to allow enough time.
+  try {
+    switch (cmd) {
+      case "/glitchvideo":
+        await handleGlitchVideo(chatId, args.join(" ") || undefined);
+        break;
+      case "/glitchimage":
+        await handleGlitchImage(chatId, args.join(" ") || undefined);
+        break;
+      case "/hatch":
+        await handleHatch(chatId, args.join(" ") || undefined);
+        break;
+      case "/generate":
+        await handleGenerate(chatId);
+        break;
+      case "/status":
+        await handleStatus(chatId);
+        break;
+      case "/credits":
+        await handleCredits(chatId);
+        break;
+      case "/persona":
+        await handlePersonaMessage(chatId);
+        break;
+      case "/help":
+      case "/start":
+        await handleHelp(chatId);
+        break;
+      default:
+        if (text.startsWith("/")) {
+          await reply(chatId, `Unknown command: ${cmd}\nType /help for available commands.`);
+        }
+        break;
+    }
+  } catch (err) {
+    console.error(`[telegram/webhook] Command ${cmd} failed:`, err);
   }
 
-  // Always return 200 to Telegram quickly
   return NextResponse.json({ ok: true });
 }
 
