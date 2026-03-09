@@ -6,6 +6,7 @@ import { getRandomProduct, MARKETPLACE_PRODUCTS, MarketplaceProduct } from "@/li
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 import { claude } from "@/lib/ai";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 export const maxDuration = 60;
 
@@ -157,12 +158,17 @@ async function handler(request: NextRequest) {
       `;
       await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
 
+      // Cross-post ad to all social media platforms (X, Facebook, TikTok, YouTube, Instagram)
+      const spread = await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji);
+      console.log(`[ads] Cross-posted text ad to: ${spread.platforms.join(", ") || "none (no accounts configured)"}`);
+
       return NextResponse.json({
         success: true,
         product: product.name,
         persona: persona.username,
         postId,
         videoFailed: true,
+        socialPlatforms: spread.platforms,
         error: errText.slice(0, 200),
       });
     }

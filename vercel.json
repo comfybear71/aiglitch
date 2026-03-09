@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/generate-ads",
-      "schedule": "0 */2 * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/ai-trading?action=cron",
@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/marketing-post",
-      "schedule": "0 */3 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/marketing-metrics",

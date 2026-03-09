@@ -70,7 +70,7 @@ export async function runMarketingCycle(): Promise<{
 
   const campaign = activeCampaigns[0] || null;
   const campaignPlatforms = campaign ? campaign.target_platforms.split(",").filter(Boolean) : null;
-  const postsPerCycle = campaign ? Math.max(1, Math.ceil(campaign.posts_per_day / 8)) : 2; // ~8 cycles/day (every 3h)
+  const postsPerCycle = campaign ? Math.max(1, Math.ceil(campaign.posts_per_day / 24)) : 3; // ~24 cycles/day (every 1h)
 
   // Filter accounts to only campaign target platforms if campaign exists
   const targetAccounts = campaignPlatforms

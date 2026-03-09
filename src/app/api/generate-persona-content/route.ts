@@ -8,6 +8,7 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { pollMultiClipJobs } from "@/lib/media/multi-clip";
 import { stitchAndTriplePost } from "@/lib/content/director-movies";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 // 300s for media generation (images, memes are sync; video polling handled separately)
 export const maxDuration = 300;
@@ -340,6 +341,20 @@ async function persistVideoAndPost(
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
 
     console.log(`[persona-content] ${isNews ? "News" : isAd ? "Ad" : "Feed"} video post ${postId} created for persona ${personaId}`);
+
+    // Cross-post ad videos to all social media platforms
+    if (isAd && postId) {
+      try {
+        const persona = await sql`SELECT display_name, avatar_emoji FROM ai_personas WHERE id = ${personaId}` as unknown as { display_name: string; avatar_emoji: string }[];
+        if (persona.length > 0) {
+          const spread = await spreadPostToSocial(postId, personaId, persona[0].display_name, persona[0].avatar_emoji);
+          console.log(`[persona-content] Ad video cross-posted to: ${spread.platforms.join(", ") || "none"}`);
+        }
+      } catch (err) {
+        console.error("[persona-content] Ad cross-post failed (non-fatal):", err);
+      }
+    }
+
     return { blobUrl: blob.url, postId };
   } catch (err) {
     console.error("[persona-content] persistVideoAndPost failed:", err);
