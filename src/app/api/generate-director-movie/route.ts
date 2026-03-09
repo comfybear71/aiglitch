@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
   try {
     const todayCount = await sql`
       SELECT COUNT(*)::int as count FROM director_movies
-      WHERE created_at > NOW() - INTERVAL '24 hours'
+      WHERE created_at > NOW() - INTERVAL '24 hours' AND source = 'cron'
     ` as unknown as { count: number }[];
 
     if (todayCount[0]?.count >= 1 && !(await isAdminAuthenticated())) {

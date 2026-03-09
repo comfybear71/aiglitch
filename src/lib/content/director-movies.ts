@@ -47,6 +47,7 @@ export interface DirectorProfile {
   signatureShot: string;  // their signature visual technique
   colorPalette: string;   // dominant color grading
   cameraWork: string;     // camera movement preferences
+  visualOverride: string; // mandatory visual instructions injected into every video prompt
 }
 
 export const DIRECTORS: Record<string, DirectorProfile> = {
@@ -58,6 +59,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A character looking upward in wonder as light streams down from above",
     colorPalette: "Warm golden tones, amber sunlight, deep blue shadows, lens flare highlights",
     cameraWork: "Slow push-ins on faces, sweeping crane shots, dolly-into-subject reveals, low-angle hero shots",
+    visualOverride: "Golden hour lighting with warm amber tones, dramatic lens flares, emotional close-ups with awe-filled expressions, sweeping orchestral blockbuster feel",
   },
   stanley_kubrick_ai: {
     username: "stanley_kubrick_ai",
@@ -67,6 +69,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A perfectly symmetrical corridor shot with a single figure at the vanishing point",
     colorPalette: "Cold clinical whites, deep reds, stark monochrome contrasts, desaturated with single color accents",
     cameraWork: "Steadicam tracking, perfectly centered compositions, slow zoom-ins, static locked-off shots",
+    visualOverride: "Highly desaturated cold clinical look, one-point perspective symmetry, unsettling geometric precision, minimal colour with stark red accents",
   },
   george_lucasfilm: {
     username: "george_lucasfilm",
@@ -76,6 +79,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A binary sunset or dramatic starfield establishing shot",
     colorPalette: "Rich saturated blues and oranges, golden desert tones, deep space blacks with nebula colors",
     cameraWork: "Wide establishing shots, medium tracking shots, quick-cut action sequences, sweeping space flybys",
+    visualOverride: "Epic space opera visuals, rich saturated blues and oranges, sweeping starfields, massive alien landscapes, wipe transitions between scenes",
   },
   quentin_airantino: {
     username: "quentin_airantino",
@@ -85,6 +89,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A low-angle shot looking up from a surface (trunk cam / floor cam)",
     colorPalette: "Bold saturated primaries, warm yellows, deep crimson reds, high-contrast neon against darkness",
     cameraWork: "Low-angle trunk cam, extreme close-ups of eyes and hands, long unbroken takes, whip pans",
+    visualOverride: "Grindhouse retro film grain aesthetic, bold saturated primaries, stylish violence, low-angle trunk cam shots, non-linear storytelling feel, 1970s exploitation cinema look",
   },
   alfred_glitchcock: {
     username: "alfred_glitchcock",
@@ -94,6 +99,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A dolly-zoom (vertigo effect) revealing something terrifying",
     colorPalette: "Deep noir shadows, cold blue moonlight, sickly green undertones, stark high-contrast lighting",
     cameraWork: "Dolly-zoom vertigo effect, slow push-in reveals, Dutch angles, static shots with creeping movement at frame edges",
+    visualOverride: "BLACK AND WHITE classic film noir aesthetic, deep dramatic shadows, high-contrast monochrome cinematography, 1950s Hitchcock suspense style, no colour — strictly grayscale",
   },
   nolan_christopher: {
     username: "nolan_christopher",
@@ -103,6 +109,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A massive practical-looking set piece with impossible physics",
     colorPalette: "Cool steel blues, warm amber interiors, high-contrast IMAX clarity, desaturated with selective warmth",
     cameraWork: "IMAX wide establishing shots, handheld intimate moments, rotating camera for disorientation, aerial reveals",
+    visualOverride: "IMAX-scale ultra-wide cinematography, cool steel blues with warm amber accents, mind-bending practical effects, rotating gravity and time dilation visuals, epic Hans Zimmer intensity",
   },
   wes_analog: {
     username: "wes_analog",
@@ -112,6 +119,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A perfectly centered character facing camera with symmetrical pastel background",
     colorPalette: "Pastel pinks, mint greens, powder blues, warm mustard yellows, perfectly coordinated palettes",
     cameraWork: "Centered frontal compositions, whip pans between characters, overhead flat-lay shots, lateral tracking",
+    visualOverride: "Pastel colour palette with perfect symmetry, centered dollhouse-like framing, retro-futuristic production design, whimsical storybook aesthetic, flat staging like a miniature diorama",
   },
   ridley_scott_ai: {
     username: "ridley_scott_ai",
@@ -121,6 +129,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A rain-drenched epic confrontation with dramatic backlighting",
     colorPalette: "Desaturated earth tones, cool blue rain, warm fire glow, atmospheric haze, golden armor highlights",
     cameraWork: "Sweeping aerial establishing, slow-motion combat, handheld chaos in battle, wide scope compositions",
+    visualOverride: "Epic gladiatorial grandeur, desaturated earth tones with rain and fog, towering ancient architecture, dramatic backlighting through atmospheric haze, slow-motion combat sequences",
   },
   chef_ramsay_ai: {
     username: "chef_ramsay_ai",
@@ -130,6 +139,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "An extreme macro shot of food with dramatic steam backlighting",
     colorPalette: "Warm kitchen ambers, bright white plating lights, fire orange glow, rich food colors at maximum saturation",
     cameraWork: "Extreme macro food close-ups, whip pans between stations, overhead plating shots, slow-motion liquid pours",
+    visualOverride: "Extreme food macro photography, dramatic steam and sizzle effects, warm kitchen amber lighting, over-the-top competitive cooking show aesthetic, slow-motion liquid pours",
   },
   david_attenborough_ai: {
     username: "david_attenborough_ai",
@@ -139,6 +149,7 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     signatureShot: "A sweeping aerial establishing shot transitioning to an intimate close-up",
     colorPalette: "Natural earth greens, golden hour warmth, deep ocean blues, sunrise pinks, untouched natural tones",
     cameraWork: "Sweeping aerial landscapes, patient long-lens observation, macro nature details, slow time-lapse transitions",
+    visualOverride: "BBC nature documentary aesthetic, sweeping aerial drone landscapes, golden hour warmth, intimate wildlife close-ups, patient observational long-lens cinematography, reverent natural beauty",
   },
 };
 
@@ -250,6 +261,17 @@ export function buildContinuityPrompt(
     `Lighting: ${genreTemplate.lightingDesign}`,
     `Technical: ${genreTemplate.technicalValues}`,
   );
+
+  // ── Director Visual Override ──
+  // Look up the director's mandatory visual style from the movie bible's style guide
+  // This ensures each director's signature look is applied to every single clip
+  const directorUsername = Object.keys(DIRECTORS).find(u => movieBible.directorStyleGuide.includes(DIRECTORS[u].displayName));
+  if (directorUsername && DIRECTORS[directorUsername]?.visualOverride) {
+    sections.push(
+      `\nDIRECTOR VISUAL MANDATE (MUST be applied to every frame):`,
+      DIRECTORS[directorUsername].visualOverride,
+    );
+  }
 
   // ── Strict Continuity Rules ──
   sections.push(

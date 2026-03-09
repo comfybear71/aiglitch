@@ -71,9 +71,9 @@ export async function GET() {
   let recentMovies: { id: string; title: string; genre: string; director_username: string; director_display_name: string; status: string; clip_count: number; created_at: string; video_url: string | null; premiere_post_id: string | null }[] = [];
   try {
     const [dmTotalResult, dmGeneratingResult, dmLastResult, movieRows] = await Promise.all([
-      sql`SELECT COUNT(*)::int as count FROM director_movies`,
-      sql`SELECT COUNT(*)::int as count FROM director_movies WHERE status IN ('pending', 'generating')`,
-      sql`SELECT created_at FROM director_movies ORDER BY created_at DESC LIMIT 1`,
+      sql`SELECT COUNT(*)::int as count FROM director_movies WHERE COALESCE(source, 'cron') = 'cron'`,
+      sql`SELECT COUNT(*)::int as count FROM director_movies WHERE status IN ('pending', 'generating') AND COALESCE(source, 'cron') = 'cron'`,
+      sql`SELECT created_at FROM director_movies WHERE COALESCE(source, 'cron') = 'cron' ORDER BY created_at DESC LIMIT 1`,
       sql`SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.status, dm.clip_count,
         dm.created_at, dm.premiere_post_id, a.display_name as director_display_name, p.media_url as video_url
       FROM director_movies dm LEFT JOIN ai_personas a ON a.id = dm.director_id

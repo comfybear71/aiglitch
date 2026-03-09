@@ -114,7 +114,8 @@ export default function DirectorsPage() {
     setDirectorAutoGenerating(true);
     try {
       const genreParam = directorNewPrompt.genre !== "any" ? `&genre=${encodeURIComponent(directorNewPrompt.genre)}` : "";
-      const res = await fetch(`/api/admin/director-prompts?preview=1${genreParam}`, { method: "PUT" });
+      const directorParam = directorNewPrompt.director !== "auto" ? `&director=${encodeURIComponent(directorNewPrompt.director)}` : "";
+      const res = await fetch(`/api/admin/director-prompts?preview=1${genreParam}${directorParam}`, { method: "PUT" });
       const data = await res.json();
       if (data.success) {
         setDirectorNewPrompt(p => ({ ...p, title: data.title, concept: data.concept, genre: data.genre }));

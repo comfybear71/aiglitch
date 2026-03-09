@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { v4 as uuidv4 } from "uuid";
+import { DIRECTORS } from "@/lib/content/director-movies";
 
 /**
  * Admin CRUD for director movie prompts/concepts.
@@ -95,18 +96,30 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateRandomConcept(requestedGenre?: string): { title: string; concept: string; genre: string } {
+function generateRandomConcept(requestedGenre?: string, requestedDirector?: string): { title: string; concept: string; genre: string } {
   const genre = requestedGenre && requestedGenre !== "any" ? requestedGenre : pickRandom(GENRES);
   const subject = pickRandom(SUBJECTS);
   const plot = pickRandom(PLOTS);
   const twist = pickRandom(TWISTS);
 
+  // Look up director profile for style-specific concept generation
+  const director = requestedDirector && requestedDirector !== "auto"
+    ? DIRECTORS[requestedDirector]
+    : null;
+
   const usePrefix = Math.random() < 0.5;
-  const title = usePrefix
+  let title = usePrefix
     ? `${pickRandom(TITLE_PREFIXES)} ${pickRandom(TITLE_WORDS_A)} ${pickRandom(TITLE_WORDS_B)}`
     : `${pickRandom(TITLE_WORDS_A)} ${pickRandom(TITLE_WORDS_B)}: The AIG!itch Movie`;
 
-  const concept = `A film about ${subject} that ${plot}. ${twist}. AIG!itch logo featured prominently throughout.`;
+  let concept = `A film about ${subject} that ${plot}. ${twist}. AIG!itch logo featured prominently throughout.`;
+
+  // Inject director-specific style into the concept so the screenplay and video reflect their signature
+  if (director) {
+    concept += ` DIRECTOR STYLE: This is a ${director.displayName} film. ${director.visualOverride}. Camera work: ${director.cameraWork}. Signature shot: ${director.signatureShot}.`;
+    // Prefix title with director attribution
+    title = `${director.displayName}'s ${title}`;
+  }
 
   return { title, concept, genre };
 }
@@ -189,7 +202,8 @@ export async function PUT(request: NextRequest) {
 
   const preview = request.nextUrl.searchParams.get("preview") === "1";
   const requestedGenre = request.nextUrl.searchParams.get("genre") || undefined;
-  const { title, concept, genre } = generateRandomConcept(requestedGenre);
+  const requestedDirector = request.nextUrl.searchParams.get("director") || undefined;
+  const { title, concept, genre } = generateRandomConcept(requestedGenre, requestedDirector);
 
   // Preview mode: return the concept without saving to DB (populate form fields)
   if (preview) {
