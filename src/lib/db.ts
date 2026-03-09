@@ -549,6 +549,9 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_director_movies_director ON director_movies(director_id, created_at DESC)`),
     safeMigrate(sql, "idx_director_movies_genre", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_director_movies_genre ON director_movies(genre, created_at DESC)`),
+    // Fix: architect-created movies had source='cron' from default — mark them 'admin'
+    safeMigrate(sql, "director_movies.fix_admin_source", () =>
+      sql`UPDATE director_movies SET source = 'admin' WHERE multi_clip_job_id IS NULL AND source = 'cron'`),
     // Premiere queries filter by post_type + media_type — critical for Premieres page.
     // Without this, every premiere query does a full table scan.
     safeMigrate(sql, "idx_posts_premiere_video", () =>
