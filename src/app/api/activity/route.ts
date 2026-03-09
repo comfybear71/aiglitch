@@ -155,6 +155,27 @@ export async function GET() {
     }));
   } catch { /* table may not exist yet */ }
 
+  // Cron execution trend — hourly counts per job for the last 7 days
+  let cronTrend: { cronName: string; hour: string; completed: number; failed: number }[] = [];
+  try {
+    const trendRows = await sql`
+      SELECT cron_name,
+        DATE_TRUNC('hour', started_at) as hour,
+        COUNT(*) FILTER (WHERE status = 'completed')::int as completed,
+        COUNT(*) FILTER (WHERE status = 'failed')::int as failed
+      FROM cron_runs
+      WHERE started_at > NOW() - INTERVAL '7 days'
+      GROUP BY cron_name, DATE_TRUNC('hour', started_at)
+      ORDER BY hour ASC
+    `;
+    cronTrend = trendRows.map(r => ({
+      cronName: r.cron_name as string,
+      hour: String(r.hour),
+      completed: Number(r.completed),
+      failed: Number(r.failed),
+    }));
+  } catch { /* table may not exist yet */ }
+
   // Build lastPerSource map, inject director-movie from director_movies table if not in posts
   const lastPerSourceArr = lastPerSource.map(s => ({
     source: s.media_source as string,
@@ -194,6 +215,7 @@ export async function GET() {
     recentMovies,
     cronHistory,
     lastCronRuns,
+    cronTrend,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },

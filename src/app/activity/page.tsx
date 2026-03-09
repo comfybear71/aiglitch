@@ -104,6 +104,7 @@ interface ActivityData {
   recentMovies?: DirectorMovie[];
   cronHistory?: CronRun[];
   lastCronRuns?: { cronName: string; lastStartedAt: string; lastStatus: string }[];
+  cronTrend?: { cronName: string; hour: string; completed: number; failed: number }[];
   cronSchedules: CronSchedule[];
 }
 
@@ -489,6 +490,116 @@ export default function ActivityPage() {
             </div>
           </div>
         )}
+
+        {/* Cron Job Trend Line Graph */}
+        {(data.cronTrend || []).length > 0 && (() => {
+          const trend = data.cronTrend!;
+          const jobNames = [...new Set(trend.map(t => t.cronName))];
+          const jobColors: Record<string, string> = {
+            "persona-content": "#22c55e",
+            "general-content": "#3b82f6",
+            "director-movie": "#a855f7",
+            "ai-trading": "#f59e0b",
+            "budju-trading": "#06b6d4",
+            "avatar-gen": "#ec4899",
+            "topics-news": "#ef4444",
+            "ads": "#f97316",
+            "marketing-post": "#84cc16",
+            "feedback-loop": "#64748b",
+          };
+          const defaultColors = ["#10b981", "#6366f1", "#f43f5e", "#eab308", "#14b8a6", "#d946ef", "#fb923c", "#0ea5e9"];
+
+          // Build hourly timeline covering all hours in the data
+          const allHours = [...new Set(trend.map(t => t.hour))].sort();
+          if (allHours.length < 2) return null;
+
+          // Group data: cronName -> { hour -> completed count }
+          const byJob: Record<string, Record<string, number>> = {};
+          for (const name of jobNames) byJob[name] = {};
+          for (const t of trend) byJob[t.cronName][t.hour] = t.completed;
+
+          // Chart dimensions
+          const W = 720, H = 200, padL = 40, padR = 15, padT = 10, padB = 30;
+          const chartW = W - padL - padR;
+          const chartH = H - padT - padB;
+
+          // Compute max across all jobs
+          const maxVal = Math.max(1, ...trend.map(t => t.completed));
+
+          // X scale: map hour index to x position
+          const xScale = (i: number) => padL + (i / (allHours.length - 1)) * chartW;
+          const yScale = (v: number) => padT + chartH - (v / maxVal) * chartH;
+
+          // Y-axis grid lines
+          const yTicks = [0, Math.round(maxVal / 2), maxVal];
+
+          // X-axis labels — show ~6 date labels spread across the range
+          const xLabelCount = Math.min(6, allHours.length);
+          const xLabelStep = Math.max(1, Math.floor(allHours.length / xLabelCount));
+
+          return (
+            <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                📈 Cron Job Trend (7 days)
+              </h2>
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mb-2">
+                {jobNames.map((name, i) => {
+                  const color = jobColors[name] || defaultColors[i % defaultColors.length];
+                  return (
+                    <div key={name} className="flex items-center gap-1">
+                      <span className="inline-block w-3 h-[3px] rounded-full" style={{ backgroundColor: color }} />
+                      <span className="text-[10px] text-gray-400">{name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* SVG Chart */}
+              <div className="overflow-x-auto">
+                <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[400px]" style={{ maxHeight: 220 }}>
+                  {/* Grid lines */}
+                  {yTicks.map(tick => (
+                    <g key={tick}>
+                      <line x1={padL} x2={W - padR} y1={yScale(tick)} y2={yScale(tick)}
+                        stroke="#374151" strokeWidth="0.5" strokeDasharray="4 2" />
+                      <text x={padL - 5} y={yScale(tick) + 3} textAnchor="end"
+                        fill="#6b7280" fontSize="9" fontFamily="monospace">{tick}</text>
+                    </g>
+                  ))}
+                  {/* X-axis labels */}
+                  {allHours.map((h, i) => {
+                    if (i % xLabelStep !== 0 && i !== allHours.length - 1) return null;
+                    const d = new Date(h);
+                    const label = `${(d.getMonth() + 1)}/${d.getDate()} ${d.getHours().toString().padStart(2, "0")}h`;
+                    return (
+                      <text key={h} x={xScale(i)} y={H - 5} textAnchor="middle"
+                        fill="#6b7280" fontSize="8" fontFamily="monospace">{label}</text>
+                    );
+                  })}
+                  {/* Lines for each job */}
+                  {jobNames.map((name, ji) => {
+                    const color = jobColors[name] || defaultColors[ji % defaultColors.length];
+                    const points = allHours.map((h, i) => {
+                      const val = byJob[name][h] || 0;
+                      return `${xScale(i)},${yScale(val)}`;
+                    });
+                    return (
+                      <g key={name}>
+                        {/* Glow/area fill */}
+                        <polyline points={points.join(" ")} fill="none"
+                          stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"
+                          opacity="0.9" />
+                      </g>
+                    );
+                  })}
+                  {/* Axis lines */}
+                  <line x1={padL} x2={padL} y1={padT} y2={padT + chartH} stroke="#4b5563" strokeWidth="0.5" />
+                  <line x1={padL} x2={W - padR} y1={padT + chartH} y2={padT + chartH} stroke="#4b5563" strokeWidth="0.5" />
+                </svg>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Activity Throttle Slider */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
