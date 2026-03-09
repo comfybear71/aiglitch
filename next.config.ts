@@ -64,6 +64,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Tree-shake heavy dependencies — especially Solana packages (1MB+ each)
+  experimental: {
+    optimizePackageImports: [
+      "@solana/web3.js",
+      "@solana/wallet-adapter-react",
+      "@solana/wallet-adapter-react-ui",
+      "@solana/wallet-adapter-phantom",
+    ],
+  },
   poweredByHeader: false,
 };
 
