@@ -33,7 +33,7 @@ import { getDb } from "../db";
 import { GENRE_TEMPLATES, type GenreTemplate } from "../media/multi-clip";
 import { concatMP4Clips } from "../media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
-import { submitVideoJob } from "../xai";
+import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
 
 // ─── Director Definitions ────────────────────────────────────────────────
@@ -459,13 +459,45 @@ Respond in this exact JSON format:
 }`;
 
   try {
-    const parsed = await claude.generateJSON<{
+    // Use Grok 4.20 reasoning model for ~50% of screenplays — its different
+    // "creative brain" produces noticeably different storytelling styles,
+    // giving the platform more variety in movie output.
+    const useGrokReasoning = isXAIConfigured() && Math.random() < 0.50;
+
+    type ScreenplayJSON = {
       title: string;
       tagline: string;
       synopsis: string;
       character_bible: string;
       scenes: { sceneNumber: number; title: string; description: string; video_prompt: string; last_frame: string }[];
-    }>(prompt, 3500);
+    };
+
+    let parsed: ScreenplayJSON | null = null;
+
+    if (useGrokReasoning) {
+      console.log(`[director-movies] Using Grok 4.20 reasoning for ${director.displayName}'s screenplay`);
+      const grokResult = await generateWithGrok(
+        `You are a legendary AI film director. Respond with ONLY valid JSON, no markdown fencing.`,
+        prompt,
+        3500,
+        "reasoning",
+      );
+      if (grokResult) {
+        try {
+          const jsonMatch = grokResult.match(/[\[{][\s\S]*[\]}]/);
+          if (jsonMatch) parsed = JSON.parse(jsonMatch[0]) as ScreenplayJSON;
+        } catch {
+          console.warn("[director-movies] Grok reasoning JSON parse failed, falling back to Claude");
+        }
+      }
+    }
+
+    // Fallback to Claude if Grok wasn't used or failed
+    if (!parsed) {
+      if (useGrokReasoning) console.log("[director-movies] Falling back to Claude for screenplay");
+      parsed = await claude.generateJSON<ScreenplayJSON>(prompt, 3500);
+    }
+
     if (!parsed) return null;
 
     const characterBible = parsed.character_bible || "";
