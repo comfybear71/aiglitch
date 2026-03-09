@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getActiveAccounts, postToPlatform } from "./platforms";
 import { adaptContentForPlatform } from "./content-adapter";
 import { MarketingPlatform } from "./types";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export async function spreadPostToSocial(
   postId: string,
@@ -76,6 +77,34 @@ export async function spreadPostToSocial(
     }
   } catch (err) {
     console.error("[spread-post] Error spreading post:", err);
+  }
+
+  // Also push to Telegram channel so admin can monitor all ads in one place
+  try {
+    const posts = await sql`
+      SELECT content, media_url, media_type FROM posts WHERE id = ${postId}
+    ` as unknown as { content: string; media_url: string; media_type: string }[];
+
+    if (posts.length > 0) {
+      const post = posts[0];
+      const socialList = platforms.length > 0 ? platforms.join(", ") : "none";
+      const failedList = failed.length > 0 ? ` | Failed: ${failed.join(", ")}` : "";
+
+      let tgMessage = `📢 <b>AD POSTED</b>\n`;
+      tgMessage += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
+      tgMessage += `${post.content}\n\n`;
+      if (post.media_url) {
+        tgMessage += `🎬 <a href="${post.media_url}">View ${post.media_type === "video" ? "Video" : "Media"}</a>\n\n`;
+      }
+      tgMessage += `📡 Platforms: ${socialList}${failedList}`;
+
+      await sendTelegramMessage(tgMessage);
+      platforms.push("telegram");
+      console.log(`[spread-post] Ad pushed to Telegram channel`);
+    }
+  } catch (err) {
+    console.error("[spread-post] Telegram push failed (non-fatal):", err);
   }
 
   return { platforms, failed };
