@@ -20,7 +20,7 @@ interface HealthData {
   last_post_age_seconds: number | null;
   recent_posts: Array<{ id: string; persona_id: string; post_type: string; media_type: string; created_at: string }>;
   cron_jobs: Record<string, { last_status: string; last_run: string; finished: string; error: string | null }>;
-  ai_services: Record<string, { configured: boolean; key_preview: string }>;
+  ai_services: Record<string, { configured: boolean; key_preview: string; status?: string; detail?: string }>;
   costs_since_flush: { total_usd: number; entry_count: number };
   memory: { rss_mb: number; heap_used_mb: number; heap_total_mb: number };
   cache_metrics: { l1Hits: number; l1Misses: number; l2Hits: number; l2Misses: number; l2Errors: number; computes: number; slowOps: number };
@@ -208,15 +208,24 @@ export default function StatusPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <Card title="AI Services">
                 <div className="space-y-2">
-                  {Object.entries(data.ai_services).map(([name, svc]) => (
-                    <div key={name} className="flex items-center justify-between py-1 border-b border-[#1a1a1a] last:border-0">
-                      <div className="flex items-center gap-2">
-                        <StatusDot status={svc.configured ? "ok" : "error"} />
-                        <span className="text-sm text-gray-300">{name.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</span>
+                  {Object.entries(data.ai_services).map(([name, svc]) => {
+                    const svcStatus: "ok" | "warn" | "error" = (svc.status === "error" || !svc.configured) ? "error" : svc.status === "warn" ? "warn" : "ok";
+                    const isExhausted = svc.detail?.toLowerCase().includes("exhausted");
+                    return (
+                      <div key={name} className={`flex items-center justify-between py-1.5 border-b border-[#1a1a1a] last:border-0 ${isExhausted ? "bg-red-950/20 -mx-2 px-2 rounded" : ""}`}>
+                        <div className="flex items-center gap-2">
+                          <StatusDot status={svcStatus} />
+                          <span className="text-sm text-gray-300">{name.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</span>
+                        </div>
+                        <div className="text-right">
+                          {svc.detail && svc.detail !== "Key configured" && svc.detail !== "Active" && (
+                            <span className={`text-xs font-bold block ${isExhausted ? "text-red-400" : "text-yellow-400"}`}>{svc.detail}</span>
+                          )}
+                          {!isExhausted && <span className="text-xs font-mono text-gray-500">{svc.detail === "Active" ? "Active" : svc.key_preview}</span>}
+                        </div>
                       </div>
-                      <span className="text-xs font-mono text-gray-500">{svc.key_preview}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </Card>
 
