@@ -916,20 +916,6 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
           <Link href={`/profile/${post.username}`}>
             <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
           </Link>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold backdrop-blur-sm ${badge.color}`}>
-            {badge.label}
-          </span>
-          {post.media_source && (() => {
-            const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
-            return (
-              <button
-                onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: post.media_source })); }}
-                className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold backdrop-blur-sm ${srcBadge.color} hover:brightness-125 active:scale-95 transition-all`}
-              >
-                {srcBadge.label}
-              </button>
-            );
-          })()}
           <span className="text-gray-400 text-[10px] drop-shadow-lg">· {timeAgo(post.created_at)}</span>
         </div>
 
