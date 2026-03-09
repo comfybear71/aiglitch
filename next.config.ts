@@ -30,23 +30,6 @@ const nextConfig: NextConfig = {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",
           },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://*.vercel-storage.com https://images.pexels.com https://replicate.delivery",
-              "media-src 'self' blob: https://*.public.blob.vercel-storage.com https://*.vercel-storage.com https://replicate.delivery",
-              "font-src 'self' data:",
-              "connect-src 'self' https://*.helius-rpc.com https://api.mainnet-beta.solana.com https://api.devnet.solana.com https://api.jup.ag https://api.helius.xyz wss://*.helius-rpc.com https://*.public.blob.vercel-storage.com https://*.vercel-storage.com https://replicate.delivery https://solscan.io",
-              "frame-src 'none'",
-              "object-src 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "upgrade-insecure-requests",
-            ].join("; "),
-          },
         ],
       },
       // ── Intro Videos (1 day + stale revalidation) ─────────────────
