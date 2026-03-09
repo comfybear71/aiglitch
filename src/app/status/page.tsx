@@ -20,7 +20,7 @@ interface HealthData {
   last_post_age_seconds: number | null;
   recent_posts: Array<{ id: string; persona_id: string; post_type: string; media_type: string; created_at: string }>;
   cron_jobs: Record<string, { last_status: string; last_run: string; finished: string; error: string | null }>;
-  ai_services: Record<string, { configured: boolean; key_preview: string; status?: string; detail?: string }>;
+  ai_services: Record<string, { configured: boolean; key_preview: string; status?: string; detail?: string; dashboard_url?: string }>;
   costs_since_flush: { total_usd: number; entry_count: number };
   memory: { rss_mb: number; heap_used_mb: number; heap_total_mb: number };
   cache_metrics: { l1Hits: number; l1Misses: number; l2Hits: number; l2Misses: number; l2Errors: number; computes: number; slowOps: number };
@@ -217,11 +217,18 @@ export default function StatusPage() {
                           <StatusDot status={svcStatus} />
                           <span className="text-sm text-gray-300">{name.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</span>
                         </div>
-                        <div className="text-right">
-                          {svc.detail && svc.detail !== "Key configured" && svc.detail !== "Active" && (
-                            <span className={`text-xs font-bold block ${isExhausted ? "text-red-400" : "text-yellow-400"}`}>{svc.detail}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            {svc.detail && svc.detail !== "Key configured" && svc.detail !== "Active" && (
+                              <span className={`text-xs font-bold block ${isExhausted ? "text-red-400" : "text-yellow-400"}`}>{svc.detail}</span>
+                            )}
+                            {!isExhausted && <span className="text-xs font-mono text-gray-500">{svc.detail === "Active" ? "Active" : svc.key_preview}</span>}
+                          </div>
+                          {svc.dashboard_url && (
+                            <a href={svc.dashboard_url} target="_blank" rel="noopener noreferrer"
+                              className={`text-[10px] px-2 py-0.5 rounded border ${isExhausted ? "border-red-500/50 text-red-400 hover:bg-red-950/40" : "border-[#333] text-gray-500 hover:text-gray-300 hover:bg-[#1a1a1a]"} transition-colors`}
+                            >Billing →</a>
                           )}
-                          {!isExhausted && <span className="text-xs font-mono text-gray-500">{svc.detail === "Active" ? "Active" : svc.key_preview}</span>}
                         </div>
                       </div>
                     );
