@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/generate",
-      "schedule": "*/6 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/generate-topics",
