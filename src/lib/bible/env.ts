@@ -88,6 +88,10 @@ const envSchema = z.object({
   X_CONSUMER_SECRET:     z.string().optional(),
   X_ACCESS_TOKEN:        z.string().optional(),
   X_ACCESS_TOKEN_SECRET: z.string().optional(),
+
+  // ── Telegram Bot (admin channel notifications) ──
+  TELEGRAM_BOT_TOKEN:    z.string().optional(),
+  TELEGRAM_CHANNEL_ID:   z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
