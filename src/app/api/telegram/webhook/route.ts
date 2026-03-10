@@ -36,6 +36,17 @@ function getAdminChatId(): string | undefined {
   return process.env.TELEGRAM_CHANNEL_ID;
 }
 
+function getGroupId(): string | undefined {
+  return process.env.TELEGRAM_GROUP_ID;
+}
+
+/** Check if a chat is an authorized admin chat (DM or group) */
+function isAuthorizedChat(chatId: string): boolean {
+  const adminId = getAdminChatId();
+  const groupId = getGroupId();
+  return chatId === adminId || (!!groupId && chatId === groupId);
+}
+
 /** Send a reply to a specific chat */
 async function reply(chatId: number | string, text: string): Promise<void> {
   const token = getBotToken();
@@ -198,8 +209,13 @@ async function handleGenerate(chatId: number | string): Promise<void> {
 
 async function handleStatus(chatId: number | string): Promise<void> {
   try {
-    await callInternal("/api/telegram/status");
-    // The status endpoint sends its own Telegram message
+    const result = await callInternal("/api/telegram/status");
+    // The status endpoint sends to TELEGRAM_CHANNEL_ID via sendTelegramMessage.
+    // If command came from the group (different from channel), also reply there.
+    const channelId = getAdminChatId();
+    if (String(chatId) !== channelId && result.error) {
+      await reply(chatId, `❌ ${result.error}`);
+    }
   } catch (err) {
     await reply(chatId, `❌ Error: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -248,6 +264,7 @@ function handleHelp(chatId: number | string): Promise<void> {
     `📊 /status — System status report\n` +
     `💰 /credits — Check API credit balances\n` +
     `💬 /persona — Random persona message\n` +
+    `🆔 /chatid — Show this chat's ID (for setup)\n` +
     `❓ /help — Show this menu\n\n` +
     `<b>Examples:</b>\n` +
     `<i>/glitchvideo neon city with GLITCH coins raining from sky</i>\n` +
@@ -286,15 +303,28 @@ export async function POST(request: NextRequest) {
   const chatId = String(chat?.id);
   const text = (message.text as string || "").trim();
 
-  // Security: only allow commands from admin chat
-  if (chatId !== adminChatId) {
-    console.warn(`[telegram/webhook] Ignoring message from unauthorized chat: ${chatId}`);
-    return NextResponse.json({ ok: true });
-  }
-
   // Parse command
   const [command, ...args] = text.split(/\s+/);
   const cmd = command.toLowerCase();
+
+  // /chatid works from ANY chat — so you can discover group IDs
+  if (cmd === "/chatid") {
+    const chatType = (chat?.type as string) || "unknown";
+    await reply(chatId,
+      `🆔 <b>Chat Info</b>\n\n` +
+      `Chat ID: <code>${chatId}</code>\n` +
+      `Type: ${chatType}\n\n` +
+      `To use this as your group, set:\n` +
+      `<code>TELEGRAM_GROUP_ID=${chatId}</code>`
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  // Security: only allow other commands from admin chat or authorized group
+  if (!isAuthorizedChat(chatId)) {
+    console.warn(`[telegram/webhook] Ignoring message from unauthorized chat: ${chatId}`);
+    return NextResponse.json({ ok: true });
+  }
 
   // Await command handlers so Vercel doesn't kill the serverless function
   // before background work (API calls, image generation) completes.
@@ -385,6 +415,7 @@ export async function GET(request: NextRequest) {
           { command: "status", description: "System status report" },
           { command: "credits", description: "Check API credit balances" },
           { command: "persona", description: "Random persona message" },
+          { command: "chatid", description: "Show this chat's ID" },
           { command: "help", description: "Show all commands" },
         ],
       }),

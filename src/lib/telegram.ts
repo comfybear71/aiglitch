@@ -34,6 +34,10 @@ function getChannelId(): string | undefined {
   return process.env.TELEGRAM_CHANNEL_ID;
 }
 
+function getGroupId(): string | undefined {
+  return process.env.TELEGRAM_GROUP_ID;
+}
+
 // ── Core Send ───────────────────────────────────────────────────────
 
 export interface TelegramResult {
@@ -48,42 +52,59 @@ export interface TelegramResult {
  */
 export async function sendTelegramMessage(
   text: string,
-  options?: { parseMode?: "HTML" | "MarkdownV2"; disablePreview?: boolean },
+  options?: { parseMode?: "HTML" | "MarkdownV2"; disablePreview?: boolean; chatId?: string | number },
 ): Promise<TelegramResult> {
   const token = getBotToken();
-  const chatId = getChannelId();
+  const channelId = getChannelId();
+  const groupId = getGroupId();
 
-  if (!token || !chatId) {
-    console.warn("[telegram] Bot token or channel ID not configured — skipping");
+  if (!token || (!channelId && !groupId && !options?.chatId)) {
+    console.warn("[telegram] Bot token or channel/group ID not configured — skipping");
     return { ok: false, error: "Not configured" };
   }
 
-  try {
-    const res = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: options?.parseMode ?? "HTML",
-        disable_web_page_preview: options?.disablePreview ?? true,
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    const data = await res.json();
-
-    if (!data.ok) {
-      console.error("[telegram] API error:", data.description);
-      return { ok: false, error: data.description };
-    }
-
-    return { ok: true, messageId: data.result?.message_id };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[telegram] Send failed:", msg);
-    return { ok: false, error: msg };
+  // Determine which chats to send to
+  const chatIds: (string | number)[] = [];
+  if (options?.chatId) {
+    // Explicit target — send only there
+    chatIds.push(options.chatId);
+  } else {
+    // Send to all configured destinations
+    if (channelId) chatIds.push(channelId);
+    if (groupId && groupId !== channelId) chatIds.push(groupId);
   }
+
+  let lastResult: TelegramResult = { ok: false, error: "No targets" };
+
+  for (const targetId of chatIds) {
+    try {
+      const res = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: targetId,
+          text,
+          parse_mode: options?.parseMode ?? "HTML",
+          disable_web_page_preview: options?.disablePreview ?? true,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        console.error(`[telegram] API error for chat ${targetId}:`, data.description);
+      } else {
+        lastResult = { ok: true, messageId: data.result?.message_id };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[telegram] Send to ${targetId} failed:`, msg);
+      lastResult = { ok: false, error: msg };
+    }
+  }
+
+  return lastResult;
 }
 
 // ── Credit Alerts ───────────────────────────────────────────────────
