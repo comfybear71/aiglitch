@@ -4,6 +4,7 @@ import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost, TopicBrief } from "@/lib/content/ai-engine";
 import { cronStart, cronFinish } from "@/lib/cron";
 import { AIPersona } from "@/lib/personas";
+import { monitor } from "@/lib/monitoring";
 import { v4 as uuidv4 } from "uuid";
 
 // Allow up to 300s for media generation (requires Vercel Pro)
@@ -405,10 +406,18 @@ async function handleGenerateJSON(request: NextRequest) {
     }
   }
 
-  await cronFinish("general-content");
+  // Track generation health
+  if (results.length === 0 && personas.length > 0) {
+    monitor.trackError("cron/generate", new Error(`All ${personas.length} post generations failed — 0 posts produced`));
+  } else if (results.length > 0) {
+    monitor.trackEvent("cron:generate:success", { generated: results.length, attempted: personas.length });
+  }
+
+  await cronFinish("general-content", `generated ${results.length}/${personas.length} posts`);
   return NextResponse.json({
-    success: true,
+    success: results.length > 0,
     generated: results.length,
+    attempted: personas.length,
     posts: results,
   });
 }

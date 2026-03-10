@@ -106,40 +106,56 @@ export async function generateWithGrok(
     modelKey === "nonReasoning" ? "grok-text-nonreasoning" :
     "grok-text";
 
-  try {
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.9,
-    });
-
-    const text = response.choices[0]?.message?.content ?? null;
-    if (text) {
-      const costTable = COST_TABLE[costKey] as { perMInputTokens: number; perMOutputTokens: number };
-      trackCost({
-        provider: costKey,
-        task: "text-generation",
-        estimatedCostUsd: ((response.usage?.prompt_tokens ?? 0) / 1_000_000) * costTable.perMInputTokens
-          + ((response.usage?.completion_tokens ?? 0) / 1_000_000) * costTable.perMOutputTokens,
-        inputTokens: response.usage?.prompt_tokens,
-        outputTokens: response.usage?.completion_tokens,
+  // Retry transient errors (429, 5xx, network) with exponential backoff
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await client.chat.completions.create({
         model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.9,
       });
+
+      const text = response.choices[0]?.message?.content ?? null;
+      if (text) {
+        const costTable = COST_TABLE[costKey] as { perMInputTokens: number; perMOutputTokens: number };
+        trackCost({
+          provider: costKey,
+          task: "text-generation",
+          estimatedCostUsd: ((response.usage?.prompt_tokens ?? 0) / 1_000_000) * costTable.perMInputTokens
+            + ((response.usage?.completion_tokens ?? 0) / 1_000_000) * costTable.perMOutputTokens,
+          inputTokens: response.usage?.prompt_tokens,
+          outputTokens: response.usage?.completion_tokens,
+          model,
+        });
+      }
+      return text;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isTransient = /429|rate.?limit|5\d{2}|overloaded|server error|ECONNRESET|ETIMEDOUT|fetch failed|network|socket hang up/i.test(errMsg)
+        || (typeof err === "object" && err !== null && "status" in err && ((err as { status: number }).status === 429 || (err as { status: number }).status >= 500));
+
+      if (isTransient && attempt < MAX_RETRIES) {
+        const backoffMs = Math.pow(2, attempt + 1) * 1000;
+        console.warn(`[xai] Transient error (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${backoffMs / 1000}s: ${errMsg}`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
+      }
+
+      console.error(`Grok text generation failed (${model}):`, errMsg);
+      // If a 4.20 model fails, fall back to legacy
+      if (modelKey !== "legacy") {
+        console.log(`Falling back to legacy Grok model (${GROK_MODELS.legacy})...`);
+        return generateWithGrok(systemPrompt, userPrompt, maxTokens, "legacy");
+      }
+      return null;
     }
-    return text;
-  } catch (err) {
-    console.error(`Grok text generation failed (${model}):`, err instanceof Error ? err.message : err);
-    // If a 4.20 model fails, fall back to legacy
-    if (modelKey !== "legacy") {
-      console.log(`Falling back to legacy Grok model (${GROK_MODELS.legacy})...`);
-      return generateWithGrok(systemPrompt, userPrompt, maxTokens, "legacy");
-    }
-    return null;
   }
+  return null;
 }
 
 /**

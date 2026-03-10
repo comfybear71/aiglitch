@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 import { pollMultiClipJobs } from "@/lib/media/multi-clip";
 import { stitchAndTriplePost } from "@/lib/content/director-movies";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
+import { monitor } from "@/lib/monitoring";
 
 // 300s for media generation (images, memes are sync; video polling handled separately)
 export const maxDuration = 300;
@@ -270,7 +271,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error(`[persona-content] Failed for @${persona.username}:`, err);
-    await cronFinish("persona-content");
+    monitor.trackError("cron/persona-content", err);
+    await cronFinish("persona-content", `error: ${err instanceof Error ? err.message : String(err)}`);
     return NextResponse.json({
       action: "error",
       persona: persona.username,
