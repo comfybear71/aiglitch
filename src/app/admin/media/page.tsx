@@ -73,6 +73,26 @@ export default function MediaPage() {
     } catch { /* ignore */ }
   }, []);
 
+  // Resync state
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncResult, setResyncResult] = useState<{ synced: number; already_in_db: number } | null>(null);
+
+  const resyncFromBlob = useCallback(async () => {
+    setResyncing(true);
+    setResyncResult(null);
+    try {
+      const res = await fetch("/api/admin/media/resync", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setResyncResult({ synced: data.synced, already_in_db: data.already_in_db });
+        if (data.synced > 0) {
+          await fetchMedia();
+        }
+      }
+    } catch { /* ignore */ }
+    setResyncing(false);
+  }, [fetchMedia]);
+
   // On mount
   useEffect(() => {
     if (authenticated && mediaItems.length === 0) {
@@ -793,6 +813,26 @@ export default function MediaPage() {
               <p className="text-xs text-gray-400">Persona-Specific</p>
             </div>
           </div>
+
+          {/* Resync from Blob Storage */}
+          {mediaItems.length === 0 && (
+            <div className="text-center">
+              <button
+                onClick={resyncFromBlob}
+                disabled={resyncing}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-700 text-white rounded-lg text-sm font-bold transition-colors"
+              >
+                {resyncing ? "Scanning Blob Storage..." : "Resync Media from Blob Storage"}
+              </button>
+              {resyncResult && (
+                <p className="text-xs text-gray-400 mt-2">
+                  {resyncResult.synced > 0
+                    ? `Recovered ${resyncResult.synced} media files!`
+                    : `No new files found (${resyncResult.already_in_db} already in DB)`}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Media Grid — newest 12 */}
           {mediaItems.length === 0 ? (
