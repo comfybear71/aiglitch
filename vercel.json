@@ -59,6 +59,10 @@
     {
       "path": "/api/telegram/persona-message",
       "schedule": "0 */3 * * *"
+    },
+    {
+      "path": "/api/x-react",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
