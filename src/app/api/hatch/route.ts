@@ -7,11 +7,29 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { ARCHITECT_PERSONA_ID } from "@/app/admin/admin-types";
 import { awardPersonaCoins } from "@/lib/repositories/users";
+import { GLITCH_TOKEN_MINT_STR, hasValidTokenMint, getHeliusApiUrl } from "@/lib/solana-config";
 
 // 5 minutes — hatching involves image + video generation
 export const maxDuration = 300;
 
 const HATCHING_COST = 1_000; // Cost in GLITCH coins
+
+// Get on-chain GLITCH token balance for a wallet address via Helius API
+async function getOnChainGlitchBalance(walletAddress: string): Promise<number> {
+  if (!hasValidTokenMint()) return 0;
+  const url = getHeliusApiUrl(`/v0/addresses/${walletAddress}/balances`);
+  if (!url) return 0;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return 0;
+    const data = await res.json();
+    const token = data.tokens?.find((t: { mint: string; amount: number; decimals: number }) => t.mint === GLITCH_TOKEN_MINT_STR);
+    return token ? token.amount / Math.pow(10, token.decimals || 9) : 0;
+  } catch { return 0; }
+}
 const HATCHING_GLITCH_AMOUNT = 1_000; // Starter GLITCH for newly hatched personas
 
 interface HatchedBeing {
@@ -146,21 +164,14 @@ export async function POST(request: NextRequest) {
     SELECT balance FROM glitch_coins WHERE session_id = ${session_id}
   ` as unknown as [{ balance: number } | undefined];
 
-  // Also check OTC swap purchases (on-chain GLITCH buys via Phantom)
-  let otcGlitch = 0;
-  try {
-    if (user.phantom_wallet_address) {
-      const [otcRow] = await sql`
-        SELECT COALESCE(SUM(glitch_amount), 0) as total
-        FROM otc_swaps
-        WHERE buyer_wallet = ${user.phantom_wallet_address} AND status = 'confirmed'
-      ` as unknown as [{ total: number } | undefined];
-      otcGlitch = Number(otcRow?.total ?? 0);
-    }
-  } catch { /* otc_swaps table may not exist */ }
+  // Check on-chain GLITCH balance (same source as header display)
+  let onChainGlitch = 0;
+  if (user.phantom_wallet_address) {
+    onChainGlitch = await getOnChainGlitchBalance(user.phantom_wallet_address);
+  }
 
   const appBalance = (tokenBalance?.balance || 0) + (coinBalance?.balance || 0);
-  const totalBalance = Math.max(appBalance, otcGlitch);
+  const totalBalance = Math.max(appBalance, onChainGlitch);
 
   if (totalBalance < HATCHING_COST) {
     return NextResponse.json({
@@ -181,7 +192,7 @@ export async function POST(request: NextRequest) {
         // ── Step 1: Deduct GLITCH coins ──
         sendStep("payment", "started", { cost: HATCHING_COST });
 
-        // Deduct from glitch_coins first, then token_balances, then OTC balance
+        // Deduct from glitch_coins first, then token_balances, then on-chain balance
         const coinBal = coinBalance?.balance || 0;
         const tokenBal = tokenBalance?.balance || 0;
 
@@ -201,8 +212,8 @@ export async function POST(request: NextRequest) {
             UPDATE token_balances SET balance = balance - ${fromTokens}, updated_at = NOW()
             WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
           `;
-        } else if (otcGlitch >= HATCHING_COST) {
-          // Deduct from OTC balance — record as a spend in glitch_coins (go negative or create entry)
+        } else if (onChainGlitch >= HATCHING_COST) {
+          // Balance is on-chain — record the spend in glitch_coins as a debit
           await sql`
             INSERT INTO glitch_coins (id, session_id, balance, lifetime_earned, updated_at)
             VALUES (${uuidv4()}, ${session_id}, ${-HATCHING_COST}, 0, NOW())
@@ -226,7 +237,7 @@ export async function POST(request: NextRequest) {
             remaining -= deduct;
           }
           if (remaining > 0) {
-            // Remainder comes from OTC balance
+            // Remainder comes from on-chain balance
             await sql`
               INSERT INTO glitch_coins (id, session_id, balance, lifetime_earned, updated_at)
               VALUES (${uuidv4()}, ${session_id}, ${-remaining}, 0, NOW())
