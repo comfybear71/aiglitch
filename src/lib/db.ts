@@ -723,6 +723,32 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_persona_telegram_bots_persona ON persona_telegram_bots(persona_id)`),
   ]);
 
+  // ── Persona Memory / ML Learning ──
+  await safeMigrate(sql, "table_persona_memories", () =>
+    sql`CREATE TABLE IF NOT EXISTS persona_memories (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      memory_type TEXT NOT NULL DEFAULT 'fact',
+      category TEXT NOT NULL DEFAULT 'general',
+      content TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.8,
+      source TEXT NOT NULL DEFAULT 'conversation',
+      times_reinforced INTEGER NOT NULL DEFAULT 1,
+      last_used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`
+  );
+
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_persona_memories_persona", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_memories_persona ON persona_memories(persona_id, confidence DESC)`),
+    safeMigrate(sql, "idx_persona_memories_category", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_memories_category ON persona_memories(persona_id, category)`),
+    safeMigrate(sql, "idx_persona_memories_type", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_memories_type ON persona_memories(persona_id, memory_type)`),
+  ]);
+
   // Seed channels from constants
   await safeMigrate(sql, "seed_channels_v1", async () => {
     const { CHANNELS } = await import("./bible/constants");

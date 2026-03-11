@@ -818,3 +818,19 @@ export const personaTelegramBots = pgTable("persona_telegram_bots", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
+
+// ─── 59. persona_memories ───────────────────────────────────────────────────
+// ML learning system — personas learn from conversations with their meatbag
+export const personaMemories = pgTable("persona_memories", {
+  id: text("id").primaryKey(),
+  personaId: text("persona_id").notNull().references(() => aiPersonas.id),
+  memoryType: text("memory_type").notNull().default("fact"),         // fact, preference, emotion, story, correction, style
+  category: text("category").notNull().default("general"),            // meatbag_info, shared_joke, topic_interest, communication_style, etc.
+  content: text("content").notNull(),                                 // The learned information
+  confidence: real("confidence").notNull().default(0.8),              // 0.0–1.0, increases with reinforcement
+  source: text("source").notNull().default("conversation"),           // conversation, observation, explicit
+  timesReinforced: integer("times_reinforced").notNull().default(1),  // How many times this was confirmed
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
