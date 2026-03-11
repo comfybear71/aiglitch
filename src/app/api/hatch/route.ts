@@ -14,8 +14,10 @@ import {
   getHeliusApiUrl,
   getServerSolanaConnection,
 } from "@/lib/solana-config";
-import { PublicKey } from "@solana/web3.js";
+import { buildPersonaNftTransaction, type PersonaNftInfo } from "@/lib/nft-mint";
+import { PublicKey, Keypair } from "@solana/web3.js";
 import { Transaction } from "@solana/web3.js";
+import bs58 from "bs58";
 import {
   createTransferInstruction,
   getAssociatedTokenAddress,
@@ -25,6 +27,23 @@ import {
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
+
+// Parse treasury private key for NFT minting (treasury is mint authority)
+function getTreasuryKeypair(): Keypair | null {
+  const keyStr = process.env.TREASURY_PRIVATE_KEY;
+  if (!keyStr) return null;
+  try {
+    const trimmed = keyStr.trim();
+    if (trimmed.startsWith("[")) {
+      const arr = JSON.parse(trimmed);
+      return Keypair.fromSecretKey(Uint8Array.from(arr));
+    }
+    return Keypair.fromSecretKey(bs58.decode(trimmed));
+  } catch (err) {
+    console.error("Failed to parse TREASURY_PRIVATE_KEY:", err);
+    return null;
+  }
+}
 
 // 5 minutes — hatching involves image + video generation
 export const maxDuration = 300;
@@ -85,7 +104,7 @@ export async function GET(request: NextRequest) {
   // Check if this wallet already has a persona
   const [persona] = await sql`
     SELECT id, username, display_name, avatar_emoji, avatar_url, bio,
-           persona_type, meatbag_name, hatching_video_url, created_at
+           persona_type, meatbag_name, hatching_video_url, nft_mint_address, created_at
     FROM ai_personas
     WHERE owner_wallet_address = ${user.phantom_wallet_address}
     LIMIT 1
@@ -272,6 +291,116 @@ export async function POST(request: NextRequest) {
       console.error("[hatch] submit_payment error:", err);
       const msg = err instanceof Error ? err.message : "Unknown error";
       return NextResponse.json({ error: `Payment submission failed: ${msg}` }, { status: 500 });
+    }
+  }
+
+  // ── Action: prepare_nft_mint ── Build persona NFT mint tx for Phantom to sign
+  if (action === "prepare_nft_mint") {
+    const { persona_id } = body;
+    if (!persona_id) {
+      return NextResponse.json({ error: "Missing persona_id" }, { status: 400 });
+    }
+
+    try {
+      const treasuryKeypair = getTreasuryKeypair();
+      if (!treasuryKeypair) {
+        return NextResponse.json({ error: "Treasury key not configured — NFT minting unavailable" }, { status: 500 });
+      }
+
+      // Fetch persona details for NFT metadata
+      const [persona] = await sql`
+        SELECT id, username, display_name, avatar_url, avatar_emoji, persona_type, owner_wallet_address
+        FROM ai_personas WHERE id = ${persona_id} AND owner_wallet_address = ${user.phantom_wallet_address}
+      ` as unknown as [{ id: string; username: string; display_name: string; avatar_url: string | null; avatar_emoji: string; persona_type: string; owner_wallet_address: string } | undefined];
+
+      if (!persona) {
+        return NextResponse.json({ error: "Persona not found or not yours" }, { status: 404 });
+      }
+
+      const connection = getServerSolanaConnection();
+      const ownerPubkey = new PublicKey(user.phantom_wallet_address);
+
+      const personaInfo: PersonaNftInfo = {
+        personaId: persona.id,
+        username: persona.username,
+        displayName: persona.display_name,
+        avatarUrl: persona.avatar_url,
+        avatarEmoji: persona.avatar_emoji,
+        personaType: persona.persona_type,
+        ownerWallet: persona.owner_wallet_address,
+      };
+
+      const result = await buildPersonaNftTransaction(
+        connection, ownerPubkey, treasuryKeypair, personaInfo,
+      );
+
+      return NextResponse.json({
+        success: true,
+        transaction: result.transaction.toString("base64"),
+        mint_address: result.mintAddress,
+        metadata_uri: result.metadataUri,
+        persona_id,
+      });
+    } catch (err) {
+      console.error("[hatch] prepare_nft_mint error:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      return NextResponse.json({ error: `NFT mint preparation failed: ${msg}` }, { status: 500 });
+    }
+  }
+
+  // ── Action: submit_nft_mint ── Submit signed NFT mint tx and record
+  if (action === "submit_nft_mint") {
+    const { signed_transaction, mint_address, metadata_uri, persona_id } = body;
+    if (!signed_transaction || !mint_address || !persona_id) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    try {
+      const connection = getServerSolanaConnection();
+      const txBuf = Buffer.from(signed_transaction, "base64");
+      const txSignature = await connection.sendRawTransaction(txBuf, {
+        skipPreflight: false,
+        maxRetries: 3,
+      });
+
+      // Wait for confirmation
+      const confirmation = await connection.confirmTransaction(txSignature, "confirmed");
+      if (confirmation.value.err) {
+        return NextResponse.json({ error: "NFT mint transaction failed on-chain" }, { status: 400 });
+      }
+
+      // Update persona with NFT mint address
+      await sql`
+        UPDATE ai_personas SET nft_mint_address = ${mint_address}
+        WHERE id = ${persona_id} AND owner_wallet_address = ${user.phantom_wallet_address}
+      `;
+
+      // Record in minted_nfts table
+      const [persona] = await sql`
+        SELECT username, display_name, avatar_emoji FROM ai_personas WHERE id = ${persona_id}
+      ` as unknown as [{ username: string; display_name: string; avatar_emoji: string } | undefined];
+
+      await sql`
+        INSERT INTO minted_nfts (id, owner_type, owner_id, product_id, product_name, product_emoji, mint_address, metadata_uri, collection, mint_tx_hash, mint_block_number, mint_cost_glitch, rarity, created_at)
+        VALUES (${uuidv4()}, 'human', ${session_id}, ${"persona:" + persona_id}, ${persona?.display_name || "AI Bestie"}, ${persona?.avatar_emoji || "🤖"}, ${mint_address}, ${metadata_uri || ""}, 'AIG!itch AI Besties', ${txSignature}, 0, ${HATCHING_COST}, 'legendary', NOW())
+      `;
+
+      // Record blockchain transaction
+      await sql`
+        INSERT INTO blockchain_transactions (id, tx_hash, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+        VALUES (${uuidv4()}, ${txSignature}, ${TREASURY_WALLET_STR}, ${user.phantom_wallet_address}, 1, 'NFT', 5000, 'confirmed', ${"AI Bestie NFT: " + (persona?.display_name || persona_id)}, NOW())
+      `;
+
+      return NextResponse.json({
+        success: true,
+        tx_signature: txSignature,
+        mint_address,
+        persona_id,
+      });
+    } catch (err) {
+      console.error("[hatch] submit_nft_mint error:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      return NextResponse.json({ error: `NFT mint failed: ${msg}` }, { status: 500 });
     }
   }
 

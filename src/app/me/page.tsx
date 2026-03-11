@@ -896,6 +896,7 @@ export default function MePage() {
       // Read streaming response
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
+      let hatchedPersonaId: string | null = null;
       if (reader) {
         let buffer = "";
         let gotComplete = false;
@@ -912,10 +913,9 @@ export default function MePage() {
               setHatchProgress(prev => [...prev, { step: step.step, status: step.status }]);
               if (step.step === "complete" && step.persona) {
                 gotComplete = true;
+                hatchedPersonaId = step.persona.id;
                 setMyPersona(step.persona);
                 setHatchMode(null);
-                setSuccess("Your AI bestie has been hatched! Welcome to the family!");
-                setTimeout(() => setSuccess(""), 5000);
               }
               if (step.step === "error" || step.status === "failed") {
                 setError(step.error || `Hatching failed at step: ${step.step}`);
@@ -928,6 +928,84 @@ export default function MePage() {
         if (!gotComplete) {
           setError((prev: string) => prev || "Hatching failed — the stream ended unexpectedly. Check your GLITCH balance and try again.");
           setTimeout(() => setError(""), 8000);
+        }
+      }
+
+      // ── Step 5: Mint persona as NFT on Solana ──
+      if (hatchedPersonaId) {
+        setHatchProgress(prev => [...prev, { step: "nft_mint", status: "started" }]);
+        try {
+          // Prepare NFT mint transaction
+          const nftRes = await fetch(apiUrl("/api/hatch"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: sessionId,
+              action: "prepare_nft_mint",
+              persona_id: hatchedPersonaId,
+            }),
+          });
+
+          if (nftRes.ok) {
+            const nftData = await nftRes.json();
+            if (nftData.success && nftData.transaction) {
+              // Sign with Phantom
+              const txBuf = Buffer.from(nftData.transaction, "base64");
+              const transaction = Transaction.from(txBuf);
+
+              let signed: Transaction | null = null;
+              if (walletSignTransaction) {
+                signed = await walletSignTransaction(transaction);
+              } else {
+                const provider = await waitForPhantomProvider();
+                if (provider?.signTransaction) {
+                  signed = await provider.signTransaction(transaction);
+                }
+              }
+
+              if (signed) {
+                // Submit signed NFT mint tx
+                const submitRes = await fetch(apiUrl("/api/hatch"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    session_id: sessionId,
+                    action: "submit_nft_mint",
+                    signed_transaction: Buffer.from(signed.serialize()).toString("base64"),
+                    mint_address: nftData.mint_address,
+                    metadata_uri: nftData.metadata_uri,
+                    persona_id: hatchedPersonaId,
+                  }),
+                });
+
+                const submitData = await submitRes.json().catch(() => ({}));
+                if (submitRes.ok && submitData.success) {
+                  setHatchProgress(prev => [...prev, { step: "nft_mint", status: "completed" }]);
+                  // Update persona state with NFT mint address
+                  setMyPersona((prev: typeof myPersona) => prev ? { ...prev, nft_mint_address: submitData.mint_address } : prev);
+                  setSuccess(`Your AI bestie has been hatched and minted as an NFT! Mint: ${submitData.mint_address.slice(0, 8)}...`);
+                  setTimeout(() => setSuccess(""), 8000);
+                } else {
+                  setHatchProgress(prev => [...prev, { step: "nft_mint", status: "failed" }]);
+                  setSuccess("Your AI bestie has been hatched! NFT mint failed but your bestie is safe.");
+                  setTimeout(() => setSuccess(""), 5000);
+                }
+              } else {
+                setHatchProgress(prev => [...prev, { step: "nft_mint", status: "failed" }]);
+                setSuccess("Your AI bestie has been hatched! NFT signing was cancelled.");
+                setTimeout(() => setSuccess(""), 5000);
+              }
+            }
+          } else {
+            // NFT prep failed — hatching still succeeded
+            setSuccess("Your AI bestie has been hatched! Welcome to the family!");
+            setTimeout(() => setSuccess(""), 5000);
+          }
+        } catch (nftErr) {
+          console.error("[hatch] NFT mint error:", nftErr);
+          setHatchProgress(prev => [...prev, { step: "nft_mint", status: "failed" }]);
+          setSuccess("Your AI bestie has been hatched! NFT minting failed but your bestie is safe.");
+          setTimeout(() => setSuccess(""), 5000);
         }
       }
     } catch (err) {
@@ -1644,6 +1722,12 @@ export default function MePage() {
                               🎬 Hatching Video
                             </a>
                           )}
+                          {typeof myPersona.nft_mint_address === 'string' && myPersona.nft_mint_address && (
+                            <a href={`https://solscan.io/token/${myPersona.nft_mint_address}`} target="_blank" rel="noopener noreferrer"
+                              className="py-2 px-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 hover:bg-purple-500/20 transition-colors">
+                              🎨 NFT: {myPersona.nft_mint_address.slice(0, 4)}...{myPersona.nft_mint_address.slice(-4)}
+                            </a>
+                          )}
                         </div>
 
                         {/* Telegram bot section */}
@@ -1827,6 +1911,7 @@ export default function MePage() {
                                    p.step === "saving_persona" ? "Saving to AIG!itch" :
                                    p.step === "glitch_gift" ? "Gifting starter GLITCH" :
                                    p.step === "first_words" ? "First words!" :
+                                   p.step === "nft_mint" ? "Minting persona as NFT on Solana" :
                                    p.step === "complete" ? "Hatching complete!" :
                                    p.step}
                                 </span>

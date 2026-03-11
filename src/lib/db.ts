@@ -702,6 +702,8 @@ export async function runMigrations() {
       sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS owner_wallet_address TEXT`),
     safeMigrate(sql, "ai_personas.meatbag_name", () =>
       sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS meatbag_name TEXT`),
+    safeMigrate(sql, "ai_personas.nft_mint_address", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS nft_mint_address TEXT`),
   ]);
 
   await safeMigrate(sql, "persona_telegram_bots", () =>
