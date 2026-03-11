@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { Transaction } from "@solana/web3.js";
 import BottomNav from "@/components/BottomNav";
 import NFTTradingCard from "@/components/NFTTradingCard";
 import { getProductById } from "@/lib/marketplace";
@@ -77,7 +78,7 @@ export default function MePage() {
   const phantomLoginLinkedRef = useRef(false);
 
   // Use wallet adapter hooks
-  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets } = useWallet();
+  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets, signTransaction: walletSignTransaction } = useWallet();
 
   // Visible debug log for diagnosing wallet connection issues on mobile
   const [debugLog, setDebugLog] = useState<string[]>([]);
@@ -779,12 +780,88 @@ export default function MePage() {
       .finally(() => setMyPersonaLoading(false));
   }, [linkedWallet, sessionId]);
 
-  // Handle hatching flow
+  // Handle hatching flow — 3-step on-chain payment then hatch
   const handleHatch = async () => {
     if (!meatbagName.trim()) return;
     setHatching(true);
     setHatchProgress([]);
+    let paymentTx: string | undefined;
+
     try {
+      // Step 1: Prepare payment transaction (server builds GLITCH transfer to treasury)
+      setHatchProgress([{ step: "wallet_payment", status: "started" }]);
+      const prepRes = await fetch(apiUrl("/api/hatch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, action: "prepare_payment" }),
+      });
+
+      if (prepRes.ok) {
+        const prepData = await prepRes.json();
+        if (prepData.success && prepData.transaction) {
+          try {
+            // Step 2: Sign with Phantom wallet
+            const txBuf = Buffer.from(prepData.transaction, "base64");
+            const transaction = Transaction.from(txBuf);
+
+            let signed: Transaction | null = null;
+            // Try wallet adapter first
+            if (walletSignTransaction) {
+              signed = await walletSignTransaction(transaction);
+            } else {
+              // Fallback: direct Phantom provider
+              const provider = await waitForPhantomProvider();
+              if (provider?.signTransaction) {
+                signed = await provider.signTransaction(transaction);
+              }
+            }
+
+            if (!signed) {
+              setError("Could not sign transaction — please connect your Phantom wallet");
+              setHatching(false);
+              return;
+            }
+
+            // Step 3: Submit signed transaction
+            const submitRes = await fetch(apiUrl("/api/hatch"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                session_id: sessionId,
+                action: "submit_payment",
+                payment_id: prepData.payment_id,
+                signed_transaction: Buffer.from(signed.serialize()).toString("base64"),
+              }),
+            });
+
+            const submitData = await submitRes.json().catch(() => ({}));
+            if (submitRes.ok && submitData.success) {
+              paymentTx = submitData.tx_signature;
+              setHatchProgress(prev => [...prev, { step: "wallet_payment", status: "completed" }]);
+            } else {
+              setError(submitData.error || "On-chain payment failed");
+              setHatching(false);
+              return;
+            }
+          } catch (signErr) {
+            // User rejected the Phantom popup or signing failed
+            console.error("[hatch] Phantom signing error:", signErr);
+            setError(signErr instanceof Error ? signErr.message : "Wallet signing cancelled");
+            setHatching(false);
+            return;
+          }
+        }
+      }
+      // If prepare_payment failed with 402 (insufficient balance), show error directly
+      if (!prepRes.ok && prepRes.status === 402) {
+        const errData = await prepRes.json().catch(() => ({ error: "Insufficient GLITCH balance" }));
+        setError(errData.error || "Insufficient GLITCH balance");
+        setTimeout(() => setError(""), 10000);
+        setHatching(false);
+        return;
+      }
+
+      // Step 4: Proceed with hatching (pass payment_tx as proof if on-chain payment succeeded)
       const res = await fetch(apiUrl("/api/hatch"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -792,6 +869,7 @@ export default function MePage() {
           session_id: sessionId,
           mode: hatchMode,
           meatbag_name: meatbagName.trim(),
+          payment_tx: paymentTx,
           ...(hatchMode === "custom" ? {
             display_name: hatchCustomName || undefined,
             personality_hint: hatchCustomHint || undefined,
@@ -1741,7 +1819,8 @@ export default function MePage() {
                               <div key={i} className="flex items-center gap-2 text-xs">
                                 <span>{p.status === "completed" ? "✅" : p.status === "failed" ? "❌" : "⏳"}</span>
                                 <span className={p.status === "completed" ? "text-green-400" : p.status === "failed" ? "text-red-400" : "text-gray-400"}>
-                                  {p.step === "payment" ? "Paying 1,000 GLITCH" :
+                                  {p.step === "wallet_payment" ? "Sending 1,000 GLITCH to treasury" :
+                                   p.step === "payment" ? "Confirming payment" :
                                    p.step === "generating_being" ? "Creating personality" :
                                    p.step === "generating_avatar" ? "Generating avatar" :
                                    p.step === "generating_video" ? "Creating hatching video" :

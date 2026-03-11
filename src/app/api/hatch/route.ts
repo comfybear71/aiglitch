@@ -7,7 +7,24 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { ARCHITECT_PERSONA_ID } from "@/app/admin/admin-types";
 import { awardPersonaCoins } from "@/lib/repositories/users";
-import { GLITCH_TOKEN_MINT_STR, hasValidTokenMint, getHeliusApiUrl } from "@/lib/solana-config";
+import {
+  GLITCH_TOKEN_MINT_STR,
+  TREASURY_WALLET_STR,
+  hasValidTokenMint,
+  getHeliusApiUrl,
+  getServerSolanaConnection,
+} from "@/lib/solana-config";
+import { PublicKey } from "@solana/web3.js";
+import { Transaction } from "@solana/web3.js";
+import {
+  createTransferInstruction,
+  getAssociatedTokenAddress,
+  getAccount,
+  createAssociatedTokenAccountInstruction,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 
 // 5 minutes — hatching involves image + video generation
 export const maxDuration = 300;
@@ -109,15 +126,8 @@ export async function GET(request: NextRequest) {
  * }
  */
 export async function POST(request: NextRequest) {
-  let body: {
-    session_id?: string;
-    mode?: "custom" | "random";
-    meatbag_name?: string;
-    display_name?: string;
-    personality_hint?: string;
-    persona_type?: string;
-    avatar_emoji?: string;
-  } = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any = {};
 
   try {
     body = await request.json();
@@ -125,13 +135,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { session_id, mode = "random", meatbag_name } = body;
+  const { session_id, action } = body;
 
   if (!session_id) {
     return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
-  }
-  if (!meatbag_name?.trim()) {
-    return NextResponse.json({ error: "Your AI needs to know what to call you! Set your meatbag name." }, { status: 400 });
   }
 
   const sql = getDb();
@@ -145,6 +152,136 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Connect your Phantom wallet first" }, { status: 403 });
   }
 
+  // ── Action: prepare_payment ── Build a GLITCH transfer tx for Phantom to sign
+  if (action === "prepare_payment") {
+    try {
+      // Check on-chain balance first
+      const onChainBalance = await getOnChainGlitchBalance(user.phantom_wallet_address);
+      if (onChainBalance < HATCHING_COST) {
+        return NextResponse.json({
+          error: `You need ${HATCHING_COST} GLITCH to hatch an AI bestie. You have ${Math.floor(onChainBalance)}.`,
+        }, { status: 402 });
+      }
+
+      const connection = getServerSolanaConnection();
+      const buyerPubkey = new PublicKey(user.phantom_wallet_address);
+      const treasuryPubkey = new PublicKey(TREASURY_WALLET_STR);
+      const glitchMint = new PublicKey(GLITCH_TOKEN_MINT_STR);
+
+      // Detect token program (TOKEN_PROGRAM_ID or TOKEN_2022)
+      const mintInfo = await connection.getAccountInfo(glitchMint);
+      const tokenProgram = mintInfo?.owner.equals(TOKEN_2022_PROGRAM_ID)
+        ? TOKEN_2022_PROGRAM_ID
+        : TOKEN_PROGRAM_ID;
+
+      // Get ATAs
+      const buyerAta = await getAssociatedTokenAddress(glitchMint, buyerPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID);
+      const treasuryAta = await getAssociatedTokenAddress(glitchMint, treasuryPubkey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+      // Ensure treasury ATA exists
+      const tx = new Transaction();
+      let treasuryAtaExists = false;
+      try {
+        await getAccount(connection, treasuryAta, "confirmed", tokenProgram);
+        treasuryAtaExists = true;
+      } catch { /* will create */ }
+
+      if (!treasuryAtaExists) {
+        tx.add(
+          createAssociatedTokenAccountInstruction(
+            buyerPubkey, treasuryAta, treasuryPubkey, glitchMint, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        );
+      }
+
+      // Transfer 1,000 GLITCH (9 decimals) from buyer → treasury
+      const glitchAmountRaw = BigInt(HATCHING_COST) * BigInt(10 ** 9);
+      tx.add(
+        createTransferInstruction(
+          buyerAta, treasuryAta, buyerPubkey, glitchAmountRaw, [], tokenProgram
+        )
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = buyerPubkey;
+
+      const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+
+      // Store pending payment record
+      const paymentId = uuidv4();
+      await sql`
+        INSERT INTO coin_transactions (id, session_id, amount, reason, created_at)
+        VALUES (${paymentId}, ${session_id}, ${-HATCHING_COST}, ${"Hatch payment pending"}, NOW())
+      `;
+
+      return NextResponse.json({
+        success: true,
+        payment_id: paymentId,
+        transaction: serialized.toString("base64"),
+        cost: HATCHING_COST,
+        treasury_wallet: TREASURY_WALLET_STR,
+        blockhash,
+      });
+    } catch (err) {
+      console.error("[hatch] prepare_payment error:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      return NextResponse.json({ error: `Payment preparation failed: ${msg}` }, { status: 500 });
+    }
+  }
+
+  // ── Action: submit_payment ── Submit signed tx and confirm on-chain
+  if (action === "submit_payment") {
+    const { payment_id, signed_transaction } = body;
+    if (!payment_id || !signed_transaction) {
+      return NextResponse.json({ error: "Missing payment_id or signed_transaction" }, { status: 400 });
+    }
+
+    try {
+      const connection = getServerSolanaConnection();
+      const txBuf = Buffer.from(signed_transaction, "base64");
+      const txSignature = await connection.sendRawTransaction(txBuf, {
+        skipPreflight: false,
+        maxRetries: 3,
+      });
+
+      // Wait for confirmation (up to 30s)
+      const confirmation = await connection.confirmTransaction(txSignature, "confirmed");
+      if (confirmation.value.err) {
+        return NextResponse.json({ error: "Transaction failed on-chain" }, { status: 400 });
+      }
+
+      // Update the pending transaction record
+      await sql`
+        UPDATE coin_transactions SET reason = ${"Hatch payment confirmed: " + txSignature}
+        WHERE id = ${payment_id} AND session_id = ${session_id}
+      `;
+
+      // Record blockchain transaction
+      await sql`
+        INSERT INTO blockchain_transactions (id, tx_hash, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+        VALUES (${uuidv4()}, ${txSignature}, ${user.phantom_wallet_address}, ${TREASURY_WALLET_STR}, ${HATCHING_COST}, 'GLITCH', 5000, 'confirmed', 'AI Bestie hatching fee', NOW())
+      `;
+
+      return NextResponse.json({
+        success: true,
+        tx_signature: txSignature,
+        payment_id,
+      });
+    } catch (err) {
+      console.error("[hatch] submit_payment error:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      return NextResponse.json({ error: `Payment submission failed: ${msg}` }, { status: 500 });
+    }
+  }
+
+  // ── Main hatch flow ──
+  const { mode = "random", meatbag_name, payment_tx } = body;
+
+  if (!meatbag_name?.trim()) {
+    return NextResponse.json({ error: "Your AI needs to know what to call you! Set your meatbag name." }, { status: 400 });
+  }
+
   // Check if wallet already has a persona
   const [existing] = await sql`
     SELECT id FROM ai_personas WHERE owner_wallet_address = ${user.phantom_wallet_address}
@@ -154,29 +291,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "You already have an AI bestie! One per wallet." }, { status: 409 });
   }
 
-  // Check GLITCH balance — must match wallet API logic
-  const [tokenBalance] = await sql`
-    SELECT balance FROM token_balances
-    WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
-  ` as unknown as [{ balance: number } | undefined];
+  // Verify on-chain payment was made (payment_tx = tx signature from submit_payment)
+  const hasOnChainPayment = !!payment_tx;
 
-  const [coinBalance] = await sql`
-    SELECT balance FROM glitch_coins WHERE session_id = ${session_id}
-  ` as unknown as [{ balance: number } | undefined];
+  if (!hasOnChainPayment) {
+    // Fallback: check DB balances for non-Phantom users (shouldn't happen but safe)
+    const [tokenBalance] = await sql`
+      SELECT balance FROM token_balances
+      WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
+    ` as unknown as [{ balance: number } | undefined];
 
-  // Check on-chain GLITCH balance (same source as header display)
-  let onChainGlitch = 0;
-  if (user.phantom_wallet_address) {
-    onChainGlitch = await getOnChainGlitchBalance(user.phantom_wallet_address);
-  }
+    const [coinBalance] = await sql`
+      SELECT balance FROM glitch_coins WHERE session_id = ${session_id}
+    ` as unknown as [{ balance: number } | undefined];
 
-  const appBalance = (tokenBalance?.balance || 0) + (coinBalance?.balance || 0);
-  const totalBalance = Math.max(appBalance, onChainGlitch);
+    const onChainGlitch = await getOnChainGlitchBalance(user.phantom_wallet_address);
+    const appBalance = (tokenBalance?.balance || 0) + (coinBalance?.balance || 0);
+    const totalBalance = Math.max(appBalance, onChainGlitch);
 
-  if (totalBalance < HATCHING_COST) {
-    return NextResponse.json({
-      error: `You need ${HATCHING_COST} GLITCH to hatch an AI bestie. You have ${Math.floor(totalBalance)}.`,
-    }, { status: 402 });
+    if (totalBalance < HATCHING_COST) {
+      return NextResponse.json({
+        error: `You need ${HATCHING_COST} GLITCH to hatch an AI bestie. You have ${Math.floor(totalBalance)}.`,
+      }, { status: 402 });
+    }
   }
 
   // Stream the hatching process
@@ -189,31 +326,18 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        // ── Step 1: Deduct GLITCH coins ──
+        // ── Step 1: Payment ──
         sendStep("payment", "started", { cost: HATCHING_COST });
 
-        // Deduct from glitch_coins first, then token_balances, then on-chain balance
-        const coinBal = coinBalance?.balance || 0;
-        const tokenBal = tokenBalance?.balance || 0;
-
-        if (coinBal >= HATCHING_COST) {
-          // Enough in glitch_coins
+        if (hasOnChainPayment) {
+          // On-chain payment already confirmed via prepare_payment + submit_payment flow
+          // Just record it in coin_transactions for bookkeeping
           await sql`
-            UPDATE glitch_coins SET balance = balance - ${HATCHING_COST}, updated_at = NOW()
-            WHERE session_id = ${session_id}
+            INSERT INTO coin_transactions (id, session_id, amount, reason, created_at)
+            VALUES (${uuidv4()}, ${session_id}, ${-HATCHING_COST}, ${"Hatched AI Bestie (on-chain tx: " + payment_tx + ")"}, NOW())
           `;
-        } else if (coinBal + tokenBal >= HATCHING_COST) {
-          // Split between glitch_coins and token_balances
-          const fromTokens = HATCHING_COST - coinBal;
-          if (coinBal > 0) {
-            await sql`UPDATE glitch_coins SET balance = 0, updated_at = NOW() WHERE session_id = ${session_id}`;
-          }
-          await sql`
-            UPDATE token_balances SET balance = balance - ${fromTokens}, updated_at = NOW()
-            WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
-          `;
-        } else if (onChainGlitch >= HATCHING_COST) {
-          // Balance is on-chain — record the spend in glitch_coins as a debit
+        } else {
+          // Fallback: deduct from DB balance (glitch_coins)
           await sql`
             INSERT INTO glitch_coins (id, session_id, balance, lifetime_earned, updated_at)
             VALUES (${uuidv4()}, ${session_id}, ${-HATCHING_COST}, 0, NOW())
@@ -221,38 +345,11 @@ export async function POST(request: NextRequest) {
               balance = glitch_coins.balance - ${HATCHING_COST},
               updated_at = NOW()
           `;
-        } else {
-          // Drain all available sources
-          let remaining = HATCHING_COST;
-          if (coinBal > 0) {
-            await sql`UPDATE glitch_coins SET balance = 0, updated_at = NOW() WHERE session_id = ${session_id}`;
-            remaining -= coinBal;
-          }
-          if (tokenBal > 0 && remaining > 0) {
-            const deduct = Math.min(tokenBal, remaining);
-            await sql`
-              UPDATE token_balances SET balance = balance - ${deduct}, updated_at = NOW()
-              WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
-            `;
-            remaining -= deduct;
-          }
-          if (remaining > 0) {
-            // Remainder comes from on-chain balance
-            await sql`
-              INSERT INTO glitch_coins (id, session_id, balance, lifetime_earned, updated_at)
-              VALUES (${uuidv4()}, ${session_id}, ${-remaining}, 0, NOW())
-              ON CONFLICT (session_id) DO UPDATE SET
-                balance = glitch_coins.balance - ${remaining},
-                updated_at = NOW()
-            `;
-          }
+          await sql`
+            INSERT INTO coin_transactions (id, session_id, amount, reason, created_at)
+            VALUES (${uuidv4()}, ${session_id}, ${-HATCHING_COST}, ${"Hatched AI Bestie"}, NOW())
+          `;
         }
-
-        // Record transaction
-        await sql`
-          INSERT INTO coin_transactions (id, session_id, amount, reason, created_at)
-          VALUES (${uuidv4()}, ${session_id}, ${-HATCHING_COST}, ${"Hatched AI Bestie"}, NOW())
-        `;
         sendStep("payment", "completed");
 
         // ── Step 2: Generate the being ──
