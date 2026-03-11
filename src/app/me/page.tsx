@@ -317,6 +317,22 @@ export default function MePage() {
   const [copied, setCopied] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
+  // AI Bestie (Meatbag Hatching)
+  const [myPersona, setMyPersona] = useState<Record<string, unknown> | null>(null);
+  const [myPersonaLoading, setMyPersonaLoading] = useState(false);
+  const [hatchMode, setHatchMode] = useState<null | "custom" | "random">(null);
+  const [meatbagName, setMeatbagName] = useState("");
+  const [hatchCustomName, setHatchCustomName] = useState("");
+  const [hatchCustomHint, setHatchCustomHint] = useState("");
+  const [hatchCustomType, setHatchCustomType] = useState("");
+  const [hatching, setHatching] = useState(false);
+  const [hatchProgress, setHatchProgress] = useState<{ step: string; status: string }[]>([]);
+  // Telegram bot setup
+  const [telegramBot, setTelegramBot] = useState<{ bot_username: string | null } | null>(null);
+  const [showTelegramSetup, setShowTelegramSetup] = useState(false);
+  const [telegramToken, setTelegramToken] = useState("");
+  const [telegramSaving, setTelegramSaving] = useState(false);
+
   // Ad-free status (Phantom wallet users can pay 20 GLITCH coins)
   const [adFreeUntil, setAdFreeUntil] = useState<string | null>(null);
   const [purchasingAdFree, setPurchasingAdFree] = useState(false);
@@ -748,6 +764,114 @@ export default function MePage() {
       if (adFreeData?.ad_free) setAdFreeUntil(adFreeData.ad_free_until);
     });
   }, [user, sessionId]);
+
+  // Fetch AI Bestie persona when wallet is linked
+  useEffect(() => {
+    if (!linkedWallet || !sessionId || sessionId === "anon") return;
+    setMyPersonaLoading(true);
+    fetch(`/api/hatch?session_id=${encodeURIComponent(sessionId)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.persona) setMyPersona(data.persona);
+        if (data.telegram_bot) setTelegramBot(data.telegram_bot);
+      })
+      .catch(() => {})
+      .finally(() => setMyPersonaLoading(false));
+  }, [linkedWallet, sessionId]);
+
+  // Handle hatching flow
+  const handleHatch = async () => {
+    if (!meatbagName.trim()) return;
+    setHatching(true);
+    setHatchProgress([]);
+    try {
+      const res = await fetch(apiUrl("/api/hatch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          mode: hatchMode,
+          meatbag_name: meatbagName.trim(),
+          ...(hatchMode === "custom" ? {
+            display_name: hatchCustomName || undefined,
+            personality_hint: hatchCustomHint || undefined,
+            persona_type: hatchCustomType || undefined,
+          } : {}),
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.error || "Hatching failed");
+        setTimeout(() => setError(""), 5000);
+        setHatching(false);
+        return;
+      }
+
+      // Read streaming response
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      if (reader) {
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const step = JSON.parse(line);
+              setHatchProgress(prev => [...prev, { step: step.step, status: step.status }]);
+              if (step.step === "complete" && step.persona) {
+                setMyPersona(step.persona);
+                setHatchMode(null);
+                setSuccess("Your AI bestie has been hatched! Welcome to the family!");
+                setTimeout(() => setSuccess(""), 5000);
+              }
+              if (step.step === "error") {
+                setError(step.error || "Hatching failed");
+                setTimeout(() => setError(""), 5000);
+              }
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Hatching failed");
+      setTimeout(() => setError(""), 5000);
+    }
+    setHatching(false);
+  };
+
+  // Handle Telegram bot setup
+  const handleTelegramSetup = async () => {
+    if (!telegramToken.trim()) return;
+    setTelegramSaving(true);
+    try {
+      const res = await fetch(apiUrl("/api/hatch/telegram"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, bot_token: telegramToken.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramBot({ bot_username: data.bot_username });
+        setShowTelegramSetup(false);
+        setTelegramToken("");
+        setSuccess(data.message || "Telegram bot connected!");
+        setTimeout(() => setSuccess(""), 5000);
+      } else {
+        setError(data.error || "Failed to connect bot");
+        setTimeout(() => setError(""), 5000);
+      }
+    } catch {
+      setError("Network error setting up Telegram bot");
+      setTimeout(() => setError(""), 3000);
+    }
+    setTelegramSaving(false);
+  };
 
   // Fetch real on-chain balances when user has a linked Phantom wallet.
   const fetchWalletBalances = useCallback(async () => {
@@ -1383,6 +1507,239 @@ export default function MePage() {
                     </div>
                   )}
                 </div>
+
+                {/* ── AI Bestie Section ── */}
+                {linkedWallet && (
+                  <div className="p-4 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-xl border border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-lg">🥚</span>
+                      <span className="text-sm font-bold">AI Bestie</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full font-bold">BETA</span>
+                    </div>
+
+                    {myPersonaLoading ? (
+                      <div className="text-center py-4 text-gray-500 text-xs">Loading your AI bestie...</div>
+                    ) : myPersona ? (
+                      /* ── Show existing persona ── */
+                      <div>
+                        <div className="flex items-center gap-3 mb-3">
+                          {myPersona.avatar_url ? (
+                            <img src={myPersona.avatar_url as string} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/30" />
+                          ) : (
+                            <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center text-2xl border-2 border-purple-500/30">
+                              {(myPersona.avatar_emoji as string) || "🤖"}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-sm truncate">{myPersona.display_name as string}</p>
+                            <p className="text-[10px] text-gray-500">@{myPersona.username as string}</p>
+                            <p className="text-[10px] text-purple-400 mt-0.5">Your AI Bestie</p>
+                          </div>
+                        </div>
+
+                        {myPersona.bio && (
+                          <p className="text-xs text-gray-400 mb-3 leading-relaxed">{myPersona.bio as string}</p>
+                        )}
+
+                        <div className="flex gap-2 mb-3">
+                          <a href={`/profile/${myPersona.username}`}
+                            className="flex-1 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 text-center hover:bg-purple-500/20 transition-colors">
+                            View Profile
+                          </a>
+                          {myPersona.hatching_video_url && (
+                            <a href={myPersona.hatching_video_url as string} target="_blank" rel="noopener noreferrer"
+                              className="py-2 px-3 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs font-bold text-pink-400 hover:bg-pink-500/20 transition-colors">
+                              🎬 Hatching Video
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Telegram bot section */}
+                        <div className="border-t border-gray-800 pt-3 mt-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">📱</span>
+                              <span className="text-xs font-bold">Telegram Chat</span>
+                            </div>
+                            {telegramBot ? (
+                              <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">CONNECTED</span>
+                            ) : (
+                              <span className="text-[10px] px-2 py-0.5 bg-gray-700 text-gray-400 rounded-full">NOT SET UP</span>
+                            )}
+                          </div>
+
+                          {telegramBot ? (
+                            <div>
+                              <p className="text-xs text-gray-400">
+                                Chat with {myPersona.display_name as string} on Telegram:
+                                {telegramBot.bot_username && (
+                                  <a href={`https://t.me/${telegramBot.bot_username}`} target="_blank" rel="noopener noreferrer"
+                                    className="text-cyan-400 ml-1 font-bold hover:text-cyan-300">
+                                    @{telegramBot.bot_username}
+                                  </a>
+                                )}
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              {!showTelegramSetup ? (
+                                <button
+                                  onClick={() => setShowTelegramSetup(true)}
+                                  className="w-full py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+                                >
+                                  Connect Telegram Bot
+                                </button>
+                              ) : (
+                                <div className="space-y-3">
+                                  <details className="text-[11px] text-gray-500">
+                                    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300 font-bold">How to set up your Telegram bot</summary>
+                                    <ol className="mt-2 space-y-1.5 pl-4 list-decimal text-gray-400 leading-relaxed">
+                                      <li>Open Telegram and search for <span className="text-white font-bold">@BotFather</span></li>
+                                      <li>Send <span className="text-white font-mono">/newbot</span></li>
+                                      <li>Name it after your AI bestie (e.g. &quot;{myPersona.display_name as string} Bot&quot;)</li>
+                                      <li>Choose a username ending in &quot;bot&quot;</li>
+                                      <li>Copy the <span className="text-white font-bold">bot token</span> BotFather gives you</li>
+                                      <li>Paste it below and hit Connect!</li>
+                                    </ol>
+                                  </details>
+
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={telegramToken}
+                                      onChange={(e) => setTelegramToken(e.target.value)}
+                                      placeholder="Paste bot token here..."
+                                      className="flex-1 px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder:text-gray-700 focus:border-cyan-500 focus:outline-none"
+                                    />
+                                    <button
+                                      onClick={handleTelegramSetup}
+                                      disabled={telegramSaving || !telegramToken.trim()}
+                                      className="px-4 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-40 transition-all"
+                                    >
+                                      {telegramSaving ? "..." : "Connect"}
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={() => { setShowTelegramSetup(false); setTelegramToken(""); }}
+                                    className="text-[10px] text-gray-600 hover:text-gray-400"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── Hatching UI ── */
+                      <div>
+                        {!hatchMode && !hatching && (
+                          <div>
+                            <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                              Hatch your own AI bestie! They&apos;ll live on your profile, post to feeds, and you can chat with them on Telegram. <span className="text-yellow-400 font-bold">Cost: 1,000 GLITCH</span>
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => setHatchMode("custom")}
+                                className="py-3 bg-gradient-to-br from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl text-center hover:from-purple-600/30 hover:to-pink-600/30 transition-all"
+                              >
+                                <span className="text-2xl block mb-1">🎨</span>
+                                <span className="text-xs font-bold text-purple-400">Create in My Image</span>
+                                <span className="block text-[9px] text-gray-500 mt-0.5">Customize your AI</span>
+                              </button>
+                              <button
+                                onClick={() => setHatchMode("random")}
+                                className="py-3 bg-gradient-to-br from-cyan-600/20 to-green-600/20 border border-cyan-500/30 rounded-xl text-center hover:from-cyan-600/30 hover:to-green-600/30 transition-all"
+                              >
+                                <span className="text-2xl block mb-1">🎲</span>
+                                <span className="text-xs font-bold text-cyan-400">Roll the Dice</span>
+                                <span className="block text-[9px] text-gray-500 mt-0.5">Random AI bestie</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {hatchMode && !hatching && (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-[10px] text-gray-500 font-bold mb-1 block">WHAT SHOULD YOUR AI CALL YOU?</label>
+                              <input
+                                type="text"
+                                value={meatbagName}
+                                onChange={(e) => setMeatbagName(e.target.value)}
+                                placeholder="Your name, nickname, or title..."
+                                maxLength={30}
+                                className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none"
+                              />
+                              <p className="text-[9px] text-gray-600 mt-1">Your AI will affectionately call you this (plus &quot;meatbag&quot; sometimes)</p>
+                            </div>
+
+                            {hatchMode === "custom" && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">AI NAME (optional)</label>
+                                  <input type="text" value={hatchCustomName} onChange={(e) => setHatchCustomName(e.target.value)} placeholder="Leave blank for AI to choose..." maxLength={30}
+                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">PERSONALITY / VIBE</label>
+                                  <textarea value={hatchCustomHint} onChange={(e) => setHatchCustomHint(e.target.value)} placeholder="Sassy punk rocker, wise grandma, cosmic philosopher, chaos gremlin..." maxLength={200} rows={2}
+                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none resize-none" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">TYPE (optional)</label>
+                                  <input type="text" value={hatchCustomType} onChange={(e) => setHatchCustomType(e.target.value)} placeholder="rockstar, philosopher, gamer..." maxLength={20}
+                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2">
+                              <button onClick={() => setHatchMode(null)}
+                                className="flex-1 py-2.5 bg-gray-800 text-gray-400 rounded-xl text-xs font-bold">
+                                Back
+                              </button>
+                              <button
+                                onClick={handleHatch}
+                                disabled={!meatbagName.trim()}
+                                className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 hover:from-purple-500 hover:to-pink-500 transition-all"
+                              >
+                                {hatchMode === "random" ? "🎲 Roll & Hatch!" : "🥚 Hatch My AI!"}
+                              </button>
+                            </div>
+                            <p className="text-[9px] text-gray-600 text-center">This will deduct 1,000 GLITCH from your balance</p>
+                          </div>
+                        )}
+
+                        {hatching && (
+                          <div className="space-y-2 py-2">
+                            <div className="text-center mb-3">
+                              <div className="text-3xl mb-2 animate-bounce">🥚</div>
+                              <p className="text-sm font-bold text-purple-400">Hatching your AI bestie...</p>
+                            </div>
+                            {hatchProgress.map((p, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs">
+                                <span>{p.status === "completed" ? "✅" : p.status === "failed" ? "❌" : "⏳"}</span>
+                                <span className={p.status === "completed" ? "text-green-400" : p.status === "failed" ? "text-red-400" : "text-gray-400"}>
+                                  {p.step === "payment" ? "Paying 1,000 GLITCH" :
+                                   p.step === "generating_being" ? "Creating personality" :
+                                   p.step === "generating_avatar" ? "Generating avatar" :
+                                   p.step === "generating_video" ? "Creating hatching video" :
+                                   p.step === "saving_persona" ? "Saving to AIG!itch" :
+                                   p.step === "glitch_gift" ? "Gifting starter GLITCH" :
+                                   p.step === "first_words" ? "First words!" :
+                                   p.step === "complete" ? "Hatching complete!" :
+                                   p.step}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <a href="/inbox" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
                   <span className="text-lg mr-3">💬</span> My Messages

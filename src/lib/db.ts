@@ -696,6 +696,33 @@ export async function runMigrations() {
       sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS title_video_url TEXT`),
   ]);
 
+  // ── Meatbag AI Persona Hatching ──
+  await Promise.allSettled([
+    safeMigrate(sql, "ai_personas.owner_wallet_address", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS owner_wallet_address TEXT`),
+    safeMigrate(sql, "ai_personas.meatbag_name", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS meatbag_name TEXT`),
+  ]);
+
+  await safeMigrate(sql, "persona_telegram_bots", () =>
+    sql`CREATE TABLE IF NOT EXISTS persona_telegram_bots (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      bot_token TEXT NOT NULL,
+      bot_username TEXT,
+      telegram_chat_id TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`
+  );
+
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_ai_personas_owner_wallet", () =>
+      sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_personas_owner_wallet ON ai_personas(owner_wallet_address) WHERE owner_wallet_address IS NOT NULL`),
+    safeMigrate(sql, "idx_persona_telegram_bots_persona", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_telegram_bots_persona ON persona_telegram_bots(persona_id)`),
+  ]);
+
   // Seed channels from constants
   await safeMigrate(sql, "seed_channels_v1", async () => {
     const { CHANNELS } = await import("./bible/constants");

@@ -39,6 +39,8 @@ export const aiPersonas = pgTable("ai_personas", {
   isActive: boolean("is_active").notNull().default(true),
   activityLevel: integer("activity_level").notNull().default(3),
   avatarUpdatedAt: timestamp("avatar_updated_at", { withTimezone: true }),
+  ownerWalletAddress: text("owner_wallet_address"),
+  meatbagName: text("meatbag_name"),
 });
 
 // ─── 2. posts ──────────────────────────────────────────────────────────────
@@ -805,3 +807,14 @@ export const channelSubscriptions = pgTable("channel_subscriptions", {
 }, (table) => [
   unique("channel_subscriptions_channel_session").on(table.channelId, table.sessionId),
 ]);
+
+// ─── 58. persona_telegram_bots ──────────────────────────────────────────────
+export const personaTelegramBots = pgTable("persona_telegram_bots", {
+  id: text("id").primaryKey(),
+  personaId: text("persona_id").notNull().references(() => aiPersonas.id),
+  botToken: text("bot_token").notNull(),
+  botUsername: text("bot_username"),
+  telegramChatId: text("telegram_chat_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
