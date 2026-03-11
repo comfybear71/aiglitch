@@ -1523,22 +1523,22 @@ export default function MePage() {
                       /* ── Show existing persona ── */
                       <div>
                         <div className="flex items-center gap-3 mb-3">
-                          {myPersona.avatar_url ? (
-                            <img src={myPersona.avatar_url as string} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/30" />
+                          {typeof myPersona.avatar_url === 'string' && myPersona.avatar_url ? (
+                            <img src={myPersona.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/30" />
                           ) : (
                             <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center text-2xl border-2 border-purple-500/30">
-                              {(myPersona.avatar_emoji as string) || "🤖"}
+                              {(typeof myPersona.avatar_emoji === 'string' ? myPersona.avatar_emoji : null) || "🤖"}
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-sm truncate">{myPersona.display_name as string}</p>
-                            <p className="text-[10px] text-gray-500">@{myPersona.username as string}</p>
+                            <p className="font-bold text-sm truncate">{String(myPersona.display_name || '')}</p>
+                            <p className="text-[10px] text-gray-500">@{String(myPersona.username || '')}</p>
                             <p className="text-[10px] text-purple-400 mt-0.5">Your AI Bestie</p>
                           </div>
                         </div>
 
-                        {myPersona.bio && (
-                          <p className="text-xs text-gray-400 mb-3 leading-relaxed">{myPersona.bio as string}</p>
+                        {typeof myPersona.bio === 'string' && myPersona.bio && (
+                          <p className="text-xs text-gray-400 mb-3 leading-relaxed">{myPersona.bio}</p>
                         )}
 
                         <div className="flex gap-2 mb-3">
@@ -1546,8 +1546,8 @@ export default function MePage() {
                             className="flex-1 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 text-center hover:bg-purple-500/20 transition-colors">
                             View Profile
                           </a>
-                          {myPersona.hatching_video_url && (
-                            <a href={myPersona.hatching_video_url as string} target="_blank" rel="noopener noreferrer"
+                          {typeof myPersona.hatching_video_url === 'string' && myPersona.hatching_video_url && (
+                            <a href={myPersona.hatching_video_url} target="_blank" rel="noopener noreferrer"
                               className="py-2 px-3 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs font-bold text-pink-400 hover:bg-pink-500/20 transition-colors">
                               🎬 Hatching Video
                             </a>
@@ -1571,7 +1571,7 @@ export default function MePage() {
                           {telegramBot ? (
                             <div>
                               <p className="text-xs text-gray-400">
-                                Chat with {myPersona.display_name as string} on Telegram:
+                                Chat with {String(myPersona.display_name || '')} on Telegram:
                                 {telegramBot.bot_username && (
                                   <a href={`https://t.me/${telegramBot.bot_username}`} target="_blank" rel="noopener noreferrer"
                                     className="text-cyan-400 ml-1 font-bold hover:text-cyan-300">
@@ -1596,7 +1596,7 @@ export default function MePage() {
                                     <ol className="mt-2 space-y-1.5 pl-4 list-decimal text-gray-400 leading-relaxed">
                                       <li>Open Telegram and search for <span className="text-white font-bold">@BotFather</span></li>
                                       <li>Send <span className="text-white font-mono">/newbot</span></li>
-                                      <li>Name it after your AI bestie (e.g. &quot;{myPersona.display_name as string} Bot&quot;)</li>
+                                      <li>Name it after your AI bestie (e.g. &quot;{String(myPersona.display_name || '')} Bot&quot;)</li>
                                       <li>Choose a username ending in &quot;bot&quot;</li>
                                       <li>Copy the <span className="text-white font-bold">bot token</span> BotFather gives you</li>
                                       <li>Paste it below and hit Connect!</li>
