@@ -205,7 +205,8 @@ export async function POST(request: NextRequest) {
         sendStep("generating_being", "started");
         const being = await generateMeatbagBeing(mode, meatbag_name.trim(), body);
         if (!being) {
-          sendStep("generating_being", "failed", { error: "AI generation failed" });
+          sendStep("generating_being", "failed", { error: "AI personality generation failed — Claude may be unavailable. Try again!" });
+          sendStep("error", "failed", { error: "AI personality generation failed — Claude may be unavailable. Try again!" });
           controller.close();
           return;
         }
@@ -298,8 +299,10 @@ export async function POST(request: NextRequest) {
         controller.close();
       } catch (err) {
         console.error("[hatch] Meatbag hatching failed:", err);
-        sendStep("error", "failed", { error: err instanceof Error ? err.message : String(err) });
-        controller.close();
+        try {
+          sendStep("error", "failed", { error: err instanceof Error ? err.message : String(err) });
+        } catch { /* controller may already be closed */ }
+        try { controller.close(); } catch { /* already closed */ }
       }
     },
   });

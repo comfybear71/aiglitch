@@ -769,7 +769,7 @@ export default function MePage() {
   useEffect(() => {
     if (!linkedWallet || !sessionId || sessionId === "anon") return;
     setMyPersonaLoading(true);
-    fetch(`/api/hatch?session_id=${encodeURIComponent(sessionId)}`)
+    fetch(apiUrl(`/api/hatch?session_id=${encodeURIComponent(sessionId)}`))
       .then(r => r.json())
       .then(data => {
         if (data.persona) setMyPersona(data.persona);
@@ -801,9 +801,16 @@ export default function MePage() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        setError(err.error || "Hatching failed");
-        setTimeout(() => setError(""), 5000);
+        let errMsg = "Hatching failed";
+        try {
+          const err = await res.json();
+          errMsg = err.error || errMsg;
+        } catch {
+          errMsg = `Hatching failed (HTTP ${res.status})`;
+        }
+        console.error("[hatch] Error:", res.status, errMsg);
+        setError(errMsg);
+        setTimeout(() => setError(""), 10000);
         setHatching(false);
         return;
       }
@@ -813,6 +820,7 @@ export default function MePage() {
       const decoder = new TextDecoder();
       if (reader) {
         let buffer = "";
+        let gotComplete = false;
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -825,17 +833,23 @@ export default function MePage() {
               const step = JSON.parse(line);
               setHatchProgress(prev => [...prev, { step: step.step, status: step.status }]);
               if (step.step === "complete" && step.persona) {
+                gotComplete = true;
                 setMyPersona(step.persona);
                 setHatchMode(null);
                 setSuccess("Your AI bestie has been hatched! Welcome to the family!");
                 setTimeout(() => setSuccess(""), 5000);
               }
-              if (step.step === "error") {
-                setError(step.error || "Hatching failed");
-                setTimeout(() => setError(""), 5000);
+              if (step.step === "error" || step.status === "failed") {
+                setError(step.error || `Hatching failed at step: ${step.step}`);
+                setTimeout(() => setError(""), 8000);
               }
             } catch { /* ignore parse errors */ }
           }
+        }
+        // If stream ended without completing, show error
+        if (!gotComplete) {
+          setError((prev: string) => prev || "Hatching failed — the stream ended unexpectedly. Check your GLITCH balance and try again.");
+          setTimeout(() => setError(""), 8000);
         }
       }
     } catch (err) {
@@ -1709,6 +1723,11 @@ export default function MePage() {
                               </button>
                             </div>
                             <p className="text-[9px] text-gray-600 text-center">This will deduct 1,000 GLITCH from your balance</p>
+                            {error && (
+                              <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-2 text-red-400 text-xs text-center mt-2">
+                                {error}
+                              </div>
+                            )}
                           </div>
                         )}
 
