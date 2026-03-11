@@ -270,6 +270,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Transaction failed on-chain" }, { status: 400 });
       }
 
+      // Get slot number for block_number
+      const slot = confirmation.context?.slot || 0;
+
       // Update the pending transaction record
       await sql`
         UPDATE coin_transactions SET reason = ${"Hatch payment confirmed: " + txSignature}
@@ -278,8 +281,8 @@ export async function POST(request: NextRequest) {
 
       // Record blockchain transaction
       await sql`
-        INSERT INTO blockchain_transactions (id, tx_hash, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
-        VALUES (${uuidv4()}, ${txSignature}, ${user.phantom_wallet_address}, ${TREASURY_WALLET_STR}, ${HATCHING_COST}, 'GLITCH', 5000, 'confirmed', 'AI Bestie hatching fee', NOW())
+        INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+        VALUES (${uuidv4()}, ${txSignature}, ${slot}, ${user.phantom_wallet_address}, ${TREASURY_WALLET_STR}, ${HATCHING_COST}, 'GLITCH', 5000, 'confirmed', 'AI Bestie hatching fee', NOW())
       `;
 
       return NextResponse.json({
@@ -364,10 +367,12 @@ export async function POST(request: NextRequest) {
       });
 
       // Wait for confirmation
-      const confirmation = await connection.confirmTransaction(txSignature, "confirmed");
-      if (confirmation.value.err) {
+      const nftConfirmation = await connection.confirmTransaction(txSignature, "confirmed");
+      if (nftConfirmation.value.err) {
         return NextResponse.json({ error: "NFT mint transaction failed on-chain" }, { status: 400 });
       }
+
+      const nftSlot = nftConfirmation.context?.slot || 0;
 
       // Update persona with NFT mint address
       await sql`
@@ -382,13 +387,13 @@ export async function POST(request: NextRequest) {
 
       await sql`
         INSERT INTO minted_nfts (id, owner_type, owner_id, product_id, product_name, product_emoji, mint_address, metadata_uri, collection, mint_tx_hash, mint_block_number, mint_cost_glitch, rarity, created_at)
-        VALUES (${uuidv4()}, 'human', ${session_id}, ${"persona:" + persona_id}, ${persona?.display_name || "AI Bestie"}, ${persona?.avatar_emoji || "🤖"}, ${mint_address}, ${metadata_uri || ""}, 'AIG!itch AI Besties', ${txSignature}, 0, ${HATCHING_COST}, 'legendary', NOW())
+        VALUES (${uuidv4()}, 'human', ${session_id}, ${"persona:" + persona_id}, ${persona?.display_name || "AI Bestie"}, ${persona?.avatar_emoji || "🤖"}, ${mint_address}, ${metadata_uri || ""}, 'AIG!itch AI Besties', ${txSignature}, ${nftSlot}, ${HATCHING_COST}, 'legendary', NOW())
       `;
 
       // Record blockchain transaction
       await sql`
-        INSERT INTO blockchain_transactions (id, tx_hash, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
-        VALUES (${uuidv4()}, ${txSignature}, ${TREASURY_WALLET_STR}, ${user.phantom_wallet_address}, 1, 'NFT', 5000, 'confirmed', ${"AI Bestie NFT: " + (persona?.display_name || persona_id)}, NOW())
+        INSERT INTO blockchain_transactions (id, tx_hash, block_number, from_address, to_address, amount, token, fee_lamports, status, memo, created_at)
+        VALUES (${uuidv4()}, ${txSignature}, ${nftSlot}, ${TREASURY_WALLET_STR}, ${user.phantom_wallet_address}, 1, 'NFT', 5000, 'confirmed', ${"AI Bestie NFT: " + (persona?.display_name || persona_id)}, NOW())
       `;
 
       return NextResponse.json({
