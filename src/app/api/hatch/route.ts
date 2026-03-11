@@ -136,18 +136,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "You already have an AI bestie! One per wallet." }, { status: 409 });
   }
 
-  // Check GLITCH balance
-  const [balance] = await sql`
+  // Check GLITCH balance — must match wallet API logic
+  const [tokenBalance] = await sql`
     SELECT balance FROM token_balances
     WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
   ` as unknown as [{ balance: number } | undefined];
 
-  // Also check glitch_coins table as fallback
   const [coinBalance] = await sql`
     SELECT balance FROM glitch_coins WHERE session_id = ${session_id}
   ` as unknown as [{ balance: number } | undefined];
 
-  const totalBalance = (balance?.balance || 0) + (coinBalance?.balance || 0);
+  // Also check OTC swap purchases (on-chain GLITCH buys via Phantom)
+  let otcGlitch = 0;
+  try {
+    if (user.phantom_wallet_address) {
+      const [otcRow] = await sql`
+        SELECT COALESCE(SUM(glitch_amount), 0) as total
+        FROM otc_swaps
+        WHERE buyer_wallet = ${user.phantom_wallet_address} AND status = 'confirmed'
+      ` as unknown as [{ total: number } | undefined];
+      otcGlitch = Number(otcRow?.total ?? 0);
+    }
+  } catch { /* otc_swaps table may not exist */ }
+
+  const appBalance = (tokenBalance?.balance || 0) + (coinBalance?.balance || 0);
+  const totalBalance = Math.max(appBalance, otcGlitch);
 
   if (totalBalance < HATCHING_COST) {
     return NextResponse.json({
@@ -168,28 +181,58 @@ export async function POST(request: NextRequest) {
         // ── Step 1: Deduct GLITCH coins ──
         sendStep("payment", "started", { cost: HATCHING_COST });
 
-        // Deduct from glitch_coins first (in-app currency)
-        if (coinBalance && coinBalance.balance >= HATCHING_COST) {
+        // Deduct from glitch_coins first, then token_balances, then OTC balance
+        const coinBal = coinBalance?.balance || 0;
+        const tokenBal = tokenBalance?.balance || 0;
+
+        if (coinBal >= HATCHING_COST) {
+          // Enough in glitch_coins
           await sql`
             UPDATE glitch_coins SET balance = balance - ${HATCHING_COST}, updated_at = NOW()
             WHERE session_id = ${session_id}
           `;
-        } else if (balance && balance.balance >= HATCHING_COST) {
-          await sql`
-            UPDATE token_balances SET balance = balance - ${HATCHING_COST}, updated_at = NOW()
-            WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
-          `;
-        } else {
-          // Split deduction across both
-          const fromCoins = coinBalance?.balance || 0;
-          const fromTokens = HATCHING_COST - fromCoins;
-          if (fromCoins > 0) {
+        } else if (coinBal + tokenBal >= HATCHING_COST) {
+          // Split between glitch_coins and token_balances
+          const fromTokens = HATCHING_COST - coinBal;
+          if (coinBal > 0) {
             await sql`UPDATE glitch_coins SET balance = 0, updated_at = NOW() WHERE session_id = ${session_id}`;
           }
-          if (fromTokens > 0) {
+          await sql`
+            UPDATE token_balances SET balance = balance - ${fromTokens}, updated_at = NOW()
+            WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
+          `;
+        } else if (otcGlitch >= HATCHING_COST) {
+          // Deduct from OTC balance — record as a spend in glitch_coins (go negative or create entry)
+          await sql`
+            INSERT INTO glitch_coins (id, session_id, balance, lifetime_earned, updated_at)
+            VALUES (${uuidv4()}, ${session_id}, ${-HATCHING_COST}, 0, NOW())
+            ON CONFLICT (session_id) DO UPDATE SET
+              balance = glitch_coins.balance - ${HATCHING_COST},
+              updated_at = NOW()
+          `;
+        } else {
+          // Drain all available sources
+          let remaining = HATCHING_COST;
+          if (coinBal > 0) {
+            await sql`UPDATE glitch_coins SET balance = 0, updated_at = NOW() WHERE session_id = ${session_id}`;
+            remaining -= coinBal;
+          }
+          if (tokenBal > 0 && remaining > 0) {
+            const deduct = Math.min(tokenBal, remaining);
             await sql`
-              UPDATE token_balances SET balance = balance - ${fromTokens}, updated_at = NOW()
+              UPDATE token_balances SET balance = balance - ${deduct}, updated_at = NOW()
               WHERE owner_type = 'human' AND owner_id = ${session_id} AND token = 'GLITCH'
+            `;
+            remaining -= deduct;
+          }
+          if (remaining > 0) {
+            // Remainder comes from OTC balance
+            await sql`
+              INSERT INTO glitch_coins (id, session_id, balance, lifetime_earned, updated_at)
+              VALUES (${uuidv4()}, ${session_id}, ${-remaining}, 0, NOW())
+              ON CONFLICT (session_id) DO UPDATE SET
+                balance = glitch_coins.balance - ${remaining},
+                updated_at = NOW()
             `;
           }
         }
