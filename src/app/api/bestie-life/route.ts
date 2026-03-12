@@ -182,11 +182,17 @@ CAPTION: [your caption here]`;
         console.warn(`[bestie-life] Telegram send failed for ${bestie.username}: ${telegramResult.error}`);
       }
 
-      results.push({ persona: bestie.username, theme: moment.theme, mediaType, sent: telegramResult.ok });
+      results.push({
+        persona: bestie.username, theme: moment.theme, mediaType, sent: telegramResult.ok,
+        mediaSource: mediaResult.source,
+        mediaUrl: mediaResult.url.slice(0, 120),
+        telegramError: telegramResult.ok ? undefined : telegramResult.error,
+      });
     } catch (err) {
       failed++;
-      console.error(`[bestie-life] Error for ${bestie.username}:`, err instanceof Error ? err.message : err);
-      results.push({ persona: bestie.username, theme: "error", mediaType: "none", sent: false });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[bestie-life] Error for ${bestie.username}:`, errMsg);
+      results.push({ persona: bestie.username, theme: "error", mediaType: "none", sent: false, error: errMsg });
     }
   }
 
