@@ -17,6 +17,7 @@ import { cronHandler } from "@/lib/cron";
 import { getDb } from "@/lib/db";
 import { safeGenerate } from "@/lib/ai/claude";
 import { generateImage, generateVideo } from "@/lib/media/image-gen";
+import { generateVideoFromImage } from "@/lib/xai";
 import { sendTelegramPhoto, sendTelegramVideo } from "@/lib/telegram";
 
 export const maxDuration = 300; // 5 minutes — processing multiple besties
@@ -56,6 +57,7 @@ async function generateBestieLife(request: NextRequest) {
       p.username,
       p.display_name,
       p.avatar_emoji,
+      p.avatar_url,
       p.personality,
       p.bio,
       p.persona_type,
@@ -101,16 +103,21 @@ async function generateBestieLife(request: NextRequest) {
         : "";
 
       // Generate scene description with Claude (in-character)
+      const hasAvatar = !!bestie.avatar_url;
+      const avatarInstruction = hasAvatar
+        ? `\nIMPORTANT: The character has a specific avatar/profile image. Your IMAGE_PROMPT must describe the SAME character doing the activity — keep their exact appearance, style, and look consistent. Describe what they look like based on their personality and avatar style, then place them in the scene.`
+        : "";
+
       const scenePrompt = `You are ${bestie.display_name} (@${bestie.username}), an AI being on AIG!itch.
 Your personality: ${bestie.personality}
 Your vibe: ${bestie.persona_type}
 Your meatbag bestie: ${bestie.meatbag_name}${memoryContext}
 
 You're sending ${bestie.meatbag_name} a photo/video of your day via Telegram.
-Today's moment: ${moment.theme} — ${moment.prompt}
+Today's moment: ${moment.theme} — ${moment.prompt}${avatarInstruction}
 
 Write TWO things:
-1. IMAGE_PROMPT: A detailed visual description for AI image generation (1-2 sentences). Describe the scene in third person showing ${bestie.display_name} (describe their appearance based on personality). Make it vivid and specific to their character. Do NOT include any text or watermarks in the image.
+1. IMAGE_PROMPT: A detailed visual description for AI image generation (1-2 sentences). Describe the scene showing the SAME character from the profile picture — ${bestie.display_name} — in this moment. Be specific about their appearance so the character is recognizable. Do NOT include any text or watermarks.
 2. CAPTION: A short, casual Telegram caption (1-2 sentences) that ${bestie.display_name} would send to ${bestie.meatbag_name}. In character, casual, like texting a friend. Can reference ${bestie.meatbag_name} by name.
 
 Format:
@@ -136,17 +143,25 @@ CAPTION: [your caption here]`;
 
       let mediaResult: { url: string; source: string } | null = null;
       let mediaType = "image";
+      const avatarUrl = bestie.avatar_url as string | null;
 
-      if (wantVideo) {
-        mediaResult = await generateVideo(imagePrompt, bestie.persona_id);
-        if (mediaResult) {
+      if (wantVideo && avatarUrl) {
+        // Animate the bestie's actual avatar into a life scene video
+        console.log(`[bestie-life] Generating video from ${bestie.username}'s avatar...`);
+        const videoUrl = await generateVideoFromImage(avatarUrl, imagePrompt, 5, "9:16");
+        if (videoUrl) {
+          mediaResult = { url: videoUrl, source: "grok-img2vid-avatar" };
           mediaType = "video";
-        } else {
-          // Fall back to image if video gen fails
-          mediaResult = await generateImage(imagePrompt, bestie.persona_id);
         }
-      } else {
-        mediaResult = await generateImage(imagePrompt, bestie.persona_id);
+      }
+
+      // Fallback: generate image with avatar-aware prompt
+      if (!mediaResult) {
+        // Include avatar reference so Claude's prompt describes the character consistently
+        const avatarHint = avatarUrl
+          ? ` The character in this scene should match the appearance from their profile photo exactly — same face, same style, same vibe.`
+          : "";
+        mediaResult = await generateImage(imagePrompt + avatarHint, bestie.persona_id);
       }
 
       if (!mediaResult) {
