@@ -187,34 +187,99 @@ export async function GET(request: NextRequest) {
   };
   if (solanaResult.check.status === "error" && overallStatus === "ok") overallStatus = "degraded";
 
-  // ── 4. AI API Keys (check configured, not connectivity — saves money) ──
-  const aiServices: Record<string, { configured: boolean; key_preview: string }> = {
-    anthropic_claude: {
-      configured: !!env.ANTHROPIC_API_KEY,
-      key_preview: env.ANTHROPIC_API_KEY ? `${env.ANTHROPIC_API_KEY.slice(0, 8)}...` : "not set",
-    },
-    xai_grok: {
-      configured: !!env.XAI_API_KEY,
-      key_preview: env.XAI_API_KEY ? `${env.XAI_API_KEY.slice(0, 8)}...` : "not set",
-    },
-    replicate: {
-      configured: !!env.REPLICATE_API_TOKEN,
-      key_preview: env.REPLICATE_API_TOKEN ? `${env.REPLICATE_API_TOKEN.slice(0, 8)}...` : "not set",
-    },
-    helius: {
-      configured: !!env.HELIUS_API_KEY,
-      key_preview: env.HELIUS_API_KEY ? `${env.HELIUS_API_KEY.slice(0, 8)}...` : "not set",
-    },
-    pexels: {
-      configured: !!env.PEXELS_API_KEY,
-      key_preview: env.PEXELS_API_KEY ? `${env.PEXELS_API_KEY.slice(0, 8)}...` : "not set",
-    },
-  };
+  // ── 4. AI API Keys — lightweight auth/credit checks ──
+  // These hit cheap endpoints (models list, account info) to detect auth failures & credit exhaustion.
+  type ServiceStatus = { configured: boolean; key_preview: string; status: "ok" | "warn" | "error" | "unchecked"; detail: string; dashboard_url: string };
+  const aiServices: Record<string, ServiceStatus> = {};
+
+  // Check services in parallel
+  const serviceChecks = await Promise.allSettled([
+    // Anthropic — GET /v1/models is free, validates key + credit status
+    (async (): Promise<["anthropic_claude", ServiceStatus]> => {
+      const dash = "https://console.anthropic.com/settings/billing";
+      if (!env.ANTHROPIC_API_KEY) return ["anthropic_claude", { configured: false, key_preview: "not set", status: "error", detail: "No API key", dashboard_url: dash }];
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/models", {
+          headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) return ["anthropic_claude", { configured: true, key_preview: `${env.ANTHROPIC_API_KEY.slice(0, 8)}...`, status: "ok", detail: "Active", dashboard_url: dash }];
+        const body = await res.text().catch(() => "");
+        if (res.status === 429 || body.includes("credit") || body.includes("exhausted") || body.includes("spending"))
+          return ["anthropic_claude", { configured: true, key_preview: `${env.ANTHROPIC_API_KEY.slice(0, 8)}...`, status: "error", detail: `Credits exhausted (HTTP ${res.status})`, dashboard_url: dash }];
+        return ["anthropic_claude", { configured: true, key_preview: `${env.ANTHROPIC_API_KEY.slice(0, 8)}...`, status: "warn", detail: `HTTP ${res.status}`, dashboard_url: dash }];
+      } catch (e) {
+        return ["anthropic_claude", { configured: true, key_preview: `${env.ANTHROPIC_API_KEY.slice(0, 8)}...`, status: "warn", detail: e instanceof Error ? e.message : "Timeout", dashboard_url: dash }];
+      }
+    })(),
+
+    // xAI — GET /v1/models validates key + credit
+    (async (): Promise<["xai_grok", ServiceStatus]> => {
+      const dash = "https://console.x.ai/team/billing";
+      if (!env.XAI_API_KEY) return ["xai_grok", { configured: false, key_preview: "not set", status: "error", detail: "No API key", dashboard_url: dash }];
+      try {
+        const res = await fetch("https://api.x.ai/v1/models", {
+          headers: { Authorization: `Bearer ${env.XAI_API_KEY}` },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) return ["xai_grok", { configured: true, key_preview: `${env.XAI_API_KEY.slice(0, 8)}...`, status: "ok", detail: "Active", dashboard_url: dash }];
+        const body = await res.text().catch(() => "");
+        if (res.status === 429 || body.includes("credit") || body.includes("exhausted") || body.includes("spending"))
+          return ["xai_grok", { configured: true, key_preview: `${env.XAI_API_KEY.slice(0, 8)}...`, status: "error", detail: `Credits exhausted (HTTP ${res.status})`, dashboard_url: dash }];
+        return ["xai_grok", { configured: true, key_preview: `${env.XAI_API_KEY.slice(0, 8)}...`, status: "warn", detail: `HTTP ${res.status}`, dashboard_url: dash }];
+      } catch (e) {
+        return ["xai_grok", { configured: true, key_preview: `${env.XAI_API_KEY.slice(0, 8)}...`, status: "warn", detail: e instanceof Error ? e.message : "Timeout", dashboard_url: dash }];
+      }
+    })(),
+
+    // Replicate
+    (async (): Promise<["replicate", ServiceStatus]> => {
+      return ["replicate", {
+        configured: !!env.REPLICATE_API_TOKEN,
+        key_preview: env.REPLICATE_API_TOKEN ? `${env.REPLICATE_API_TOKEN.slice(0, 8)}...` : "not set",
+        status: env.REPLICATE_API_TOKEN ? "ok" : "error",
+        detail: env.REPLICATE_API_TOKEN ? "Key configured" : "No API key",
+        dashboard_url: "https://replicate.com/account/billing",
+      }];
+    })(),
+
+    // Helius
+    (async (): Promise<["helius", ServiceStatus]> => {
+      return ["helius", {
+        configured: !!env.HELIUS_API_KEY,
+        key_preview: env.HELIUS_API_KEY ? `${env.HELIUS_API_KEY.slice(0, 8)}...` : "not set",
+        status: env.HELIUS_API_KEY ? "ok" : "warn",
+        detail: env.HELIUS_API_KEY ? "Key configured" : "Using public RPC",
+        dashboard_url: "https://dashboard.helius.dev/billing",
+      }];
+    })(),
+
+    // Pexels
+    (async (): Promise<["pexels", ServiceStatus]> => {
+      return ["pexels", {
+        configured: !!env.PEXELS_API_KEY,
+        key_preview: env.PEXELS_API_KEY ? `${env.PEXELS_API_KEY.slice(0, 8)}...` : "not set",
+        status: env.PEXELS_API_KEY ? "ok" : "warn",
+        detail: env.PEXELS_API_KEY ? "Key configured" : "No API key",
+        dashboard_url: "https://www.pexels.com/api/new/",
+      }];
+    })(),
+  ]);
+
+  for (const result of serviceChecks) {
+    if (result.status === "fulfilled") {
+      const [key, svc] = result.value;
+      aiServices[key] = svc;
+    }
+  }
 
   const configuredCount = Object.values(aiServices).filter(s => s.configured).length;
+  const creditErrors = Object.values(aiServices).filter(s => s.status === "error" && s.detail.includes("exhausted")).length;
   checks.ai_services = {
-    status: configuredCount >= 2 ? "ok" : configuredCount >= 1 ? "warn" : "error",
-    message: `${configuredCount}/${Object.keys(aiServices).length} API keys configured`,
+    status: creditErrors > 0 ? "error" : configuredCount >= 2 ? "ok" : configuredCount >= 1 ? "warn" : "error",
+    message: creditErrors > 0
+      ? `${creditErrors} service(s) out of credits!`
+      : `${configuredCount}/${Object.keys(aiServices).length} API keys configured`,
   };
 
   // ── 5. Environment ──

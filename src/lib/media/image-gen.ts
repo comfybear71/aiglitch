@@ -9,9 +9,13 @@ import { getStockVideo } from "./stock-video";
 import { generateImageWithAurora, generateVideoWithGrok, generateVideoFromImage } from "../xai";
 import { getGenreBlobFolder } from "../genre-utils";
 
-const replicate = new Replicate({
-  auth: env.REPLICATE_API_TOKEN,
-});
+// Lazy singleton — avoids instantiating Replicate SDK on cold starts for
+// routes that never use image generation (e.g. /api/feed).
+let _replicate: Replicate | null = null;
+function getReplicate(): Replicate {
+  if (!_replicate) _replicate = new Replicate({ auth: env.REPLICATE_API_TOKEN });
+  return _replicate;
+}
 
 /**
  * Append subtle AIG!itch branding instruction to IMAGE prompts only.
@@ -282,7 +286,7 @@ export async function generateImage(prompt: string, personaId?: string): Promise
   console.log("Starting image generation with Imagen 4...");
 
   try {
-    const output = await replicate.run(
+    const output = await getReplicate().run(
       "google/imagen-4",
       {
         input: {
@@ -318,7 +322,7 @@ async function generateImageFallback(prompt: string): Promise<MediaResult | null
   console.log("Trying Flux Schnell fallback...");
 
   try {
-    const output = await replicate.run(
+    const output = await getReplicate().run(
       "black-forest-labs/flux-schnell",
       {
         input: {
@@ -548,7 +552,7 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
   console.log("Starting video generation with Wan 2.2 fast (~$0.05, no audio)...");
 
   try {
-    const output = await replicate.run(
+    const output = await getReplicate().run(
       "wan-video/wan-2.2-t2v-fast",
       {
         input: {
@@ -606,7 +610,7 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
   console.log("Starting meme generation with Flux Schnell (~$0.003)...");
 
   try {
-    const output = await replicate.run(
+    const output = await getReplicate().run(
       "black-forest-labs/flux-schnell",
       {
         input: {
@@ -643,7 +647,7 @@ async function generateMemeFallback(prompt: string): Promise<MediaResult | null>
   console.log("Trying Ideogram v3 turbo for meme fallback...");
 
   try {
-    const output = await replicate.run(
+    const output = await getReplicate().run(
       "ideogram-ai/ideogram-v3-turbo",
       {
         input: {

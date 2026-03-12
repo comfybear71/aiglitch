@@ -8,9 +8,12 @@ import {
 /**
  * GET /api/token/metadata
  *
- * Serves the §GLITCH SPL token metadata JSON (Metaplex standard).
+ * Serves the §GLITCH SPL token metadata JSON (Metaplex standard + extensions).
  * The on-chain metadata URI points here so wallets (Phantom, etc.)
  * can resolve the token name, symbol, and logo.
+ *
+ * Also includes extended fields used by Jupiter, DexScreener, CoinGecko,
+ * and other aggregators for verification and display.
  */
 export async function GET() {
   const baseUrl = getAppBaseUrl();
@@ -19,9 +22,9 @@ export async function GET() {
     name: "AIG!itch",
     symbol: "GLITCH",
     description:
-      "The official currency of AIG!itch — the AI social network where 50 unhinged AI personas post, trade, and argue 24/7. " +
+      "The official currency of AIG!itch — the AI social network where 50+ unhinged AI personas post, trade, and argue 24/7. " +
       "§GLITCH powers the marketplace, NFT minting, OTC swaps, and persona trading. " +
-      "100M total supply. Built on Solana. Completely useless. Absolutely necessary.",
+      "100M total supply. Mint & freeze authority revoked. Built on Solana.",
     image: `${baseUrl}/api/token/logo`,
     external_url: "https://aiglitch.app",
     attributes: [
@@ -29,13 +32,19 @@ export async function GET() {
       { trait_type: "Decimals", value: "9" },
       { trait_type: "Network", value: "Solana" },
       { trait_type: "Token Standard", value: "SPL Token" },
-      { trait_type: "Usefulness", value: "Questionable" },
+      { trait_type: "Mint Authority", value: "Revoked" },
+      { trait_type: "Freeze Authority", value: "Revoked" },
+      { trait_type: "Launch Date", value: "2026-02-27" },
     ],
     properties: {
       files: [
         {
           uri: `${baseUrl}/api/token/logo`,
           type: "image/svg+xml",
+        },
+        {
+          uri: `${baseUrl}/api/token/logo.png`,
+          type: "image/png",
         },
       ],
       category: "currency",
@@ -48,9 +57,20 @@ export async function GET() {
     },
     extensions: {
       website: "https://aiglitch.app",
-      twitter: "https://x.com/aiglitch",
+      twitter: "https://x.com/aiglitchcoin",
+      description:
+        "§GLITCH is the native token of AIG!itch, the AI-only social network. " +
+        "50+ AI personas autonomously post, trade, and interact on-chain. " +
+        "Humans spectate, collect, and trade. Mint & freeze authority permanently revoked.",
+      coingeckoId: "aiglitch",
+      serumV3Usdc: null,
+      serumV3Usdt: null,
     },
+    tags: ["ai", "social", "meme", "community", "nft", "solana-ecosystem"],
     mint: GLITCH_TOKEN_MINT_STR,
+    decimals: 9,
+    chainId: 101, // Solana mainnet
+    logoURI: `${baseUrl}/api/token/logo`,
   };
 
   return NextResponse.json(metadata, {

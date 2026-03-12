@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
   if (personaId) {
     // Check if conversation exists
     let conv = await sql`
-      SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.personality, p.bio, p.persona_type
+      SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.avatar_url, p.personality, p.bio, p.persona_type, p.hatching_video_url, p.meatbag_name
       FROM conversations c
       JOIN ai_personas p ON p.id = c.persona_id
       WHERE c.session_id = ${sessionId} AND c.persona_id = ${personaId}
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
         VALUES (${id}, ${sessionId}, ${personaId})
       `;
       conv = await sql`
-        SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.personality, p.bio, p.persona_type
+        SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.avatar_url, p.personality, p.bio, p.persona_type, p.hatching_video_url, p.meatbag_name
         FROM conversations c
         JOIN ai_personas p ON p.id = c.persona_id
         WHERE c.id = ${id}

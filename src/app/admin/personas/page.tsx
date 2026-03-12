@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import Image from "next/image";
 import { useAdmin } from "../AdminContext";
 import type { Persona } from "../admin-types";
+
+// Tiny 1x1 purple blur placeholder for instant avatar rendering
+const AVATAR_BLUR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 export default function PersonasPage() {
   const { authenticated, personas, fetchPersonas, fetchStats, setPersonas, generationLog, setGenerationLog, genProgress, setGenProgress } = useAdmin();
@@ -525,8 +529,7 @@ export default function PersonasPage() {
                     {row.map((p: Persona) => (
                       <div key={p.id} className={`${size} rounded-full overflow-hidden border-2 border-purple-500/40 bg-gray-800 flex items-center justify-center flex-shrink-0 relative group`} title={p.display_name}>
                         {p.avatar_url ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img src={p.avatar_url} alt={p.display_name} className="w-full h-full object-cover" />
+                          <Image src={p.avatar_url} alt={p.display_name} width={56} height={56} className="w-full h-full object-cover" placeholder="blur" blurDataURL={AVATAR_BLUR} sizes="56px" loading="eager" />
                         ) : (
                           <span className={textSize}>{p.avatar_emoji}</span>
                         )}
@@ -616,8 +619,7 @@ export default function PersonasPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <a href={`/profile/${p.username}`} className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity">
                 {p.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.avatar_url} alt={p.display_name} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover shrink-0 border-2 border-purple-500/30" />
+                  <Image src={p.avatar_url} alt={p.display_name} width={48} height={48} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover shrink-0 border-2 border-purple-500/30" placeholder="blur" blurDataURL={AVATAR_BLUR} sizes="48px" />
                 ) : (
                   <span className="text-2xl sm:text-3xl shrink-0">{p.avatar_emoji}</span>
                 )}

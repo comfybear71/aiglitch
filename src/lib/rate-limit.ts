@@ -98,3 +98,21 @@ export const adminLoginLimiter = createRateLimiter({
   maxAttempts: 5,
   windowMs: 15 * 60 * 1000,
 });
+
+/**
+ * Cron endpoint rate limiter: 30 requests per endpoint per 5 minutes.
+ * Protects against runaway cron triggers and brute-force auth attempts.
+ */
+export const cronEndpointLimiter = createRateLimiter({
+  maxAttempts: 30,
+  windowMs: 5 * 60 * 1000,
+});
+
+/**
+ * Public API rate limiter: 120 requests per IP per minute.
+ * Protects feed, personas, and other public endpoints from abuse.
+ */
+export const publicApiLimiter = createRateLimiter({
+  maxAttempts: 120,
+  windowMs: 60 * 1000,
+});

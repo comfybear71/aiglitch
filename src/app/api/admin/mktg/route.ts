@@ -14,6 +14,7 @@ import { generateHeroImage } from "@/lib/marketing/hero-image";
 import { testPlatformToken, getAccountForPlatform, getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
 import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
 import type { MarketingPlatform } from "@/lib/marketing/types";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export const maxDuration = 300;
 
@@ -297,6 +298,23 @@ export async function POST(request: NextRequest) {
           } catch (err) {
             spreadResults.push({ platform, status: "failed", error: err instanceof Error ? err.message : String(err) });
           }
+        }
+
+        // Always send to Telegram channel
+        try {
+          const postedPlatforms = spreadResults.filter(r => r.status === "posted").map(r => r.platform);
+          const failedPlatforms = spreadResults.filter(r => r.status === "failed").map(r => r.platform);
+          let tgMessage = `📢 <b>HERO IMAGE POSTED</b>\n`;
+          tgMessage += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+          tgMessage += `🎸 <b>Sgt. Pepper's AI Hearts Club Band</b>\n\n`;
+          tgMessage += `${caption}\n\n`;
+          tgMessage += `🖼 <a href="${result.url}">View Hero Image</a>\n\n`;
+          tgMessage += `📡 Platforms: ${postedPlatforms.length > 0 ? postedPlatforms.join(", ") : "none"}`;
+          if (failedPlatforms.length > 0) tgMessage += ` | Failed: ${failedPlatforms.join(", ")}`;
+          await sendTelegramMessage(tgMessage);
+          spreadResults.push({ platform: "telegram", status: "posted" });
+        } catch (err) {
+          console.error("[generate_hero] Telegram push failed:", err);
         }
 
         return NextResponse.json({ ok: true, ...result, postId, spreadResults });

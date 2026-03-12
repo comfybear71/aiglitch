@@ -8,6 +8,8 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { pollMultiClipJobs } from "@/lib/media/multi-clip";
 import { stitchAndTriplePost } from "@/lib/content/director-movies";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
+import { monitor } from "@/lib/monitoring";
 
 // 300s for media generation (images, memes are sync; video polling handled separately)
 export const maxDuration = 300;
@@ -126,6 +128,16 @@ export async function GET(request: NextRequest) {
             console.log(`[persona-content] Partial director movie "${job.title}" stitched!`);
           }
         } else if (job.pending_count === 0 && job.done_count < Math.ceil(job.clip_count / 2)) {
+          // Log detailed failure reasons for diagnostics
+          const failReasons = await sql`
+            SELECT scene_number, status, fail_reason, xai_request_id,
+              EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - created_at))::int as elapsed_secs
+            FROM multi_clip_scenes WHERE job_id = ${job.id} ORDER BY scene_number
+          ` as unknown as { scene_number: number; status: string; fail_reason: string | null; xai_request_id: string | null; elapsed_secs: number }[];
+          const summary = failReasons.map(s =>
+            `  scene ${s.scene_number}: ${s.status}${s.fail_reason ? ` (${s.fail_reason})` : ""} after ${Math.round(s.elapsed_secs / 60)}min`
+          ).join("\n");
+          console.error(`[persona-content] Director movie "${job.title}" FAILED — only ${job.done_count}/${job.clip_count} clips done (need ${Math.ceil(job.clip_count / 2)}):\n${summary}`);
           await sql`UPDATE multi_clip_jobs SET status = 'failed', completed_at = NOW() WHERE id = ${job.id}`;
           await sql`UPDATE director_movies SET status = 'failed' WHERE multi_clip_job_id = ${job.id}`;
         }
@@ -259,7 +271,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error(`[persona-content] Failed for @${persona.username}:`, err);
-    await cronFinish("persona-content");
+    monitor.trackError("cron/persona-content", err);
+    await cronFinish("persona-content", `error: ${err instanceof Error ? err.message : String(err)}`);
     return NextResponse.json({
       action: "error",
       persona: persona.username,
@@ -330,6 +343,20 @@ async function persistVideoAndPost(
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
 
     console.log(`[persona-content] ${isNews ? "News" : isAd ? "Ad" : "Feed"} video post ${postId} created for persona ${personaId}`);
+
+    // Cross-post ad videos to all social media platforms
+    if (isAd && postId) {
+      try {
+        const persona = await sql`SELECT display_name, avatar_emoji FROM ai_personas WHERE id = ${personaId}` as unknown as { display_name: string; avatar_emoji: string }[];
+        if (persona.length > 0) {
+          const spread = await spreadPostToSocial(postId, personaId, persona[0].display_name, persona[0].avatar_emoji);
+          console.log(`[persona-content] Ad video cross-posted to: ${spread.platforms.join(", ") || "none"}`);
+        }
+      } catch (err) {
+        console.error("[persona-content] Ad cross-post failed (non-fatal):", err);
+      }
+    }
+
     return { blobUrl: blob.url, postId };
   } catch (err) {
     console.error("[persona-content] persistVideoAndPost failed:", err);

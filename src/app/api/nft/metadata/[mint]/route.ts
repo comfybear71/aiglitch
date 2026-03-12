@@ -37,12 +37,67 @@ export async function GET(
   }
 
   const nft = nfts[0];
-  const product = getProductById(nft.product_id as string);
   const baseUrl = getAppBaseUrl();
+  const productId = nft.product_id as string;
+
+  // ── Persona NFT metadata ──
+  if (productId.startsWith("persona:")) {
+    const personaId = productId.replace("persona:", "");
+    const personas = await sql`
+      SELECT username, display_name, avatar_emoji, avatar_url, persona_type, bio, owner_wallet_address, created_at
+      FROM ai_personas WHERE id = ${personaId}
+    `;
+    const persona = personas.length > 0 ? personas[0] : null;
+
+    const imageUrl = persona?.avatar_url
+      ? String(persona.avatar_url)
+      : `${baseUrl}/api/nft/image/persona-${personaId}`;
+
+    const metadata = {
+      name: persona?.display_name || nft.product_name,
+      symbol: "AIGB",
+      description: persona
+        ? `${persona.display_name} (@${persona.username}) — A one-of-a-kind AI Bestie on AIG!itch. ${String(persona.bio).slice(0, 200)}`
+        : `AIG!itch AI Bestie NFT — ${nft.product_name}`,
+      seller_fee_basis_points: 500,
+      image: imageUrl,
+      external_url: `${baseUrl}/${persona?.username || ""}`,
+      attributes: [
+        { trait_type: "Type", value: "AI Bestie" },
+        { trait_type: "Rarity", value: "Legendary" },
+        { trait_type: "Persona Type", value: persona?.persona_type || "unknown" },
+        { trait_type: "Emoji", value: persona?.avatar_emoji || nft.product_emoji },
+        { trait_type: "Collection", value: "AIG!itch AI Besties" },
+        { trait_type: "Hatching Cost", value: "1,000 §GLITCH" },
+      ],
+      properties: {
+        files: [
+          { uri: imageUrl, type: "image/png" },
+        ],
+        category: "image",
+        creators: [
+          { address: TREASURY_WALLET_STR, share: 100 },
+        ],
+      },
+      collection: {
+        name: "AIG!itch AI Besties",
+        family: "AIG!itch",
+      },
+    };
+
+    return NextResponse.json(metadata, {
+      headers: {
+        "Cache-Control": "public, max-age=3600, s-maxage=86400",
+        "Content-Type": "application/json",
+      },
+    });
+  }
+
+  // ── Marketplace NFT metadata ──
+  const product = getProductById(productId);
   const price = product ? parseCoinPrice(product.price) : Number(nft.mint_cost_glitch);
   const rarity = (nft.rarity as string) || getRarity(price);
 
-  // Build Metaplex-standard metadata JSON
   const edNum = nft.edition_number ? Number(nft.edition_number) : null;
   const gen = nft.generation ? Number(nft.generation) : 1;
   const maxSup = nft.max_supply ? Number(nft.max_supply) : 100;
@@ -56,8 +111,8 @@ export async function GET(
     description: product?.description
       ? `${product.description}${edNum ? ` — Edition ${edNum}/${maxSup} (Gen ${gen})` : ""}`
       : `AIG!itch Marketplace NFT — ${nft.product_name}`,
-    seller_fee_basis_points: 500, // 5% royalty
-    image: `${baseUrl}/api/nft/image/${nft.product_id}`,
+    seller_fee_basis_points: 500,
+    image: `${baseUrl}/api/nft/image/${productId}`,
     external_url: `${baseUrl}/marketplace`,
     attributes: [
       { trait_type: "Rarity", value: rarity.charAt(0).toUpperCase() + rarity.slice(1) },
@@ -76,7 +131,7 @@ export async function GET(
     properties: {
       files: [
         {
-          uri: `${baseUrl}/api/nft/image/${nft.product_id}`,
+          uri: `${baseUrl}/api/nft/image/${productId}`,
           type: "image/svg+xml",
         },
       ],

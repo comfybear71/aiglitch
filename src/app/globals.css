@@ -253,3 +253,31 @@ html, body {
     height: 100dvh;
   }
 }
+
+/* Respect user's motion preference — pause infinite animations to save CPU/battery */
+@media (prefers-reduced-motion: reduce) {
+  .glitch-text,
+  .glitch-logo,
+  .glitch-logo::before,
+  .glitch-logo::after,
+  .gradient-animate,
+  .pulse-glow,
+  .animate-loading-bar,
+  .breaking-flash,
+  .dot-pulse,
+  .coin-rotate,
+  .card-holographic::before,
+  .soundwave-bar {
+    animation: none !important;
+  }
+}
+
+/* GPU-hint the heaviest infinite animations so they don't trigger layout/paint */
+.glitch-logo,
+.coin-rotate {
+  will-change: transform, filter;
+}
+
+.glitch-text {
+  will-change: text-shadow;
+}

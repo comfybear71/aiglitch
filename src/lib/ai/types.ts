@@ -8,6 +8,9 @@
 export type AIProvider =
   | "claude"
   | "grok-text"
+  | "grok-text-reasoning"
+  | "grok-text-nonreasoning"
+  | "grok-multi-agent"
   | "grok-image"
   | "grok-image-pro"
   | "grok-video"

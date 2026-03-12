@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
         AND post_type = 'premiere'
         AND media_type = 'video' AND media_url IS NOT NULL
         AND COALESCE(media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+        AND (video_duration > 15 OR media_source = 'director-movie')
     `;
 
     const [countRows] = await Promise.all([countPromise, retagPromise]);
@@ -207,6 +208,7 @@ export async function GET(request: NextRequest) {
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
               AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+              AND (p.video_duration > 15 OR p.media_source = 'director-movie')
             ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
@@ -214,6 +216,7 @@ export async function GET(request: NextRequest) {
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
               AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+              AND (p.video_duration > 15 OR p.media_source = 'director-movie')
             ORDER BY md5(p.id::text || ${seed}) LIMIT ${limit} OFFSET ${offset}`;
     } else if (cursor) {
       posts = genreFilter
@@ -225,6 +228,7 @@ export async function GET(request: NextRequest) {
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
               AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+              AND (p.video_duration > 15 OR p.media_source = 'director-movie')
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
@@ -233,6 +237,7 @@ export async function GET(request: NextRequest) {
               AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
               AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+              AND (p.video_duration > 15 OR p.media_source = 'director-movie')
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     } else {
       posts = genreFilter
@@ -243,6 +248,7 @@ export async function GET(request: NextRequest) {
               AND p.hashtags LIKE ${"%" + genreFilter + "%"}
               AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
               AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+              AND (p.video_duration > 15 OR p.media_source = 'director-movie')
             ORDER BY p.created_at DESC LIMIT ${limit}`
         : await sql`
             SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
@@ -250,6 +256,7 @@ export async function GET(request: NextRequest) {
             WHERE p.is_reply_to IS NULL AND (p.post_type = 'premiere' OR p.hashtags LIKE '%AIGlitchPremieres%')
               AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
               AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+              AND (p.video_duration > 15 OR p.media_source = 'director-movie')
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     }
   } else {

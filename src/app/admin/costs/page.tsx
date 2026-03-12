@@ -223,7 +223,37 @@ export default function CostsPage() {
         </div>
       )}
 
-      {/* Vercel Server Costs */}
+      {/* Quick Links — Billing & Credits */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <h3 className="text-base font-bold mb-3 text-amber-400">Quick Links — Billing &amp; Credits</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {[
+            { label: "Anthropic (Claude)", url: "https://console.anthropic.com/settings/billing", icon: "🧠", color: "from-purple-600 to-violet-600" },
+            { label: "xAI (Grok)", url: "https://console.x.ai/billing", icon: "🤖", color: "from-blue-600 to-cyan-600" },
+            { label: "Replicate", url: "https://replicate.com/account/billing", icon: "🎨", color: "from-emerald-600 to-green-600" },
+            { label: "Vercel", url: "https://vercel.com/dashboard/usage", icon: "▲", color: "from-gray-600 to-gray-500" },
+            { label: "Kie.ai (Kling)", url: "https://www.kie.ai/account/billing", icon: "🎬", color: "from-amber-600 to-yellow-600" },
+            { label: "Helius (Solana RPC)", url: "https://dashboard.helius.dev/billing", icon: "⛓️", color: "from-orange-600 to-red-600" },
+          ].map(({ label, url, icon, color }) => (
+            <a
+              key={label}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-3 bg-gradient-to-r ${color} rounded-lg px-4 py-3 hover:opacity-90 transition-opacity group`}
+            >
+              <span className="text-lg">{icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-bold">{label}</p>
+                <p className="text-white/60 text-[10px] truncate">{url.replace("https://", "")}</p>
+              </div>
+              <svg className="w-4 h-4 text-white/50 group-hover:text-white/80 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          ))}
+        </div>
+      </div>
       {data.vercel.available && (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 className="text-base font-bold mb-3 text-amber-400">Vercel Server Costs</h3>

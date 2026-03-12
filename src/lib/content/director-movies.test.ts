@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock DB ─────────────────────────────────────────────────────────────
 // Track all SQL calls and inserted rows for assertions.
-const insertedPosts: Record<string, Record<string, unknown>>[] = [];
+const insertedPosts: Record<string, unknown>[][] = [];
 const updatedRows: Record<string, unknown>[] = [];
 let sceneStatusUpdates: { jobId: string; from: string; to: string }[] = [];
 
@@ -207,7 +207,7 @@ describe("stitchAndTriplePost", () => {
 
     // 3 fetch calls for 3 scene clip URLs
     const clipFetches = mockFetch.mock.calls.filter(
-      (call: [string]) => call[0].includes("blob.test/clip-")
+      (call: unknown[]) => (call[0] as string).includes("blob.test/clip-")
     );
     expect(clipFetches).toHaveLength(3);
   });

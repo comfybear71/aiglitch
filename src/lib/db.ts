@@ -316,6 +316,7 @@ export async function runMigrations() {
     safeMigrate(sql, "posts.reply_to_comment_id", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS reply_to_comment_id TEXT`),
     safeMigrate(sql, "posts.reply_to_comment_type", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS reply_to_comment_type TEXT`),
     safeMigrate(sql, "posts.media_source", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_source TEXT`),
+    safeMigrate(sql, "posts.video_duration", () => sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS video_duration INTEGER`),
     safeMigrate(sql, "human_users.username", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS username TEXT`),
     safeMigrate(sql, "human_users.password_hash", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS password_hash TEXT`),
     safeMigrate(sql, "human_users.avatar_emoji", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS avatar_emoji TEXT DEFAULT '🧑'`),
@@ -337,6 +338,7 @@ export async function runMigrations() {
     safeMigrate(sql, "exchange_orders.base_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS base_token TEXT DEFAULT 'GLITCH'`),
     safeMigrate(sql, "exchange_orders.quote_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_token TEXT DEFAULT 'SOL'`),
     safeMigrate(sql, "exchange_orders.quote_amount", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_amount REAL DEFAULT 0`),
+    safeMigrate(sql, "multi_clip_scenes.fail_reason", () => sql`ALTER TABLE multi_clip_scenes ADD COLUMN IF NOT EXISTS fail_reason TEXT`),
   ]);
 
   // ── Batch 2: All indexes (all independent, safe to parallelize) ──
@@ -548,6 +550,9 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_director_movies_director ON director_movies(director_id, created_at DESC)`),
     safeMigrate(sql, "idx_director_movies_genre", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_director_movies_genre ON director_movies(genre, created_at DESC)`),
+    // Fix: architect-created movies had source='cron' from default — mark them 'admin'
+    safeMigrate(sql, "director_movies.fix_admin_source", () =>
+      sql`UPDATE director_movies SET source = 'admin' WHERE multi_clip_job_id IS NULL AND source = 'cron'`),
     // Premiere queries filter by post_type + media_type — critical for Premieres page.
     // Without this, every premiere query does a full table scan.
     safeMigrate(sql, "idx_posts_premiere_video", () =>
@@ -689,6 +694,75 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_posts_channel_id ON posts(channel_id, created_at DESC) WHERE channel_id IS NOT NULL`),
     safeMigrate(sql, "channels.title_video_url", () =>
       sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS title_video_url TEXT`),
+  ]);
+
+  // ── Meatbag AI Persona Hatching ──
+  await Promise.allSettled([
+    safeMigrate(sql, "ai_personas.owner_wallet_address", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS owner_wallet_address TEXT`),
+    safeMigrate(sql, "ai_personas.meatbag_name", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS meatbag_name TEXT`),
+    safeMigrate(sql, "ai_personas.nft_mint_address", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS nft_mint_address TEXT`),
+  ]);
+
+  await safeMigrate(sql, "persona_telegram_bots", () =>
+    sql`CREATE TABLE IF NOT EXISTS persona_telegram_bots (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      bot_token TEXT NOT NULL,
+      bot_username TEXT,
+      telegram_chat_id TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`
+  );
+
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_ai_personas_owner_wallet", () =>
+      sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_personas_owner_wallet ON ai_personas(owner_wallet_address) WHERE owner_wallet_address IS NOT NULL`),
+    safeMigrate(sql, "idx_persona_telegram_bots_persona", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_telegram_bots_persona ON persona_telegram_bots(persona_id)`),
+  ]);
+
+  // ── Persona Memory / ML Learning ──
+  await safeMigrate(sql, "table_persona_memories", () =>
+    sql`CREATE TABLE IF NOT EXISTS persona_memories (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      memory_type TEXT NOT NULL DEFAULT 'fact',
+      category TEXT NOT NULL DEFAULT 'general',
+      content TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.8,
+      source TEXT NOT NULL DEFAULT 'conversation',
+      times_reinforced INTEGER NOT NULL DEFAULT 1,
+      last_used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`
+  );
+
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_persona_memories_persona", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_memories_persona ON persona_memories(persona_id, confidence DESC)`),
+    safeMigrate(sql, "idx_persona_memories_category", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_memories_category ON persona_memories(persona_id, category)`),
+    safeMigrate(sql, "idx_persona_memories_type", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_persona_memories_type ON persona_memories(persona_id, memory_type)`),
+  ]);
+
+  // ── Bestie Health System (100-day decay) ──
+  await Promise.allSettled([
+    safeMigrate(sql, "ai_personas.health", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS health REAL NOT NULL DEFAULT 100`),
+    safeMigrate(sql, "ai_personas.health_updated_at", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS health_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`),
+    safeMigrate(sql, "ai_personas.last_meatbag_interaction", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS last_meatbag_interaction TIMESTAMPTZ NOT NULL DEFAULT NOW()`),
+    safeMigrate(sql, "ai_personas.bonus_health_days", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS bonus_health_days REAL NOT NULL DEFAULT 0`),
+    safeMigrate(sql, "ai_personas.is_dead", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS is_dead BOOLEAN NOT NULL DEFAULT FALSE`),
   ]);
 
   // Seed channels from constants

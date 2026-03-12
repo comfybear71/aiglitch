@@ -147,6 +147,13 @@ export async function GET(request: NextRequest) {
 
   // ── OTC swap configuration (price from bonding curve, supply, limits) ──
   if (action === "config") {
+    // Clean up stale pending swaps older than 5 minutes
+    try {
+      await sql`
+        UPDATE otc_swaps SET status = 'expired'
+        WHERE status = 'pending' AND created_at < NOW() - INTERVAL '5 minutes'
+      `;
+    } catch { /* table may not exist */ }
     // Get SOL price for USD→SOL conversion
     const [solSetting] = await sql`
       SELECT value FROM platform_settings WHERE key = 'sol_price_usd'
@@ -220,7 +227,6 @@ export async function GET(request: NextRequest) {
       },
       ...(rpcError ? { rpc_note: rpcError } : {}),
       network: SOLANA_NETWORK,
-      rpc_url: SERVER_RPC_URL.replace(/api-key=[^&]+/, "api-key=***"),  // mask API key
     });
   }
 
@@ -357,14 +363,13 @@ export async function POST(request: NextRequest) {
       // Find treasury's GLITCH token account (detects program from mint, derives + verifies ATA)
       const treasuryAccount = await findTokenAccountForMint(connection, treasuryPubkey, glitchMint);
       if (!treasuryAccount || !treasuryAccount.exists) {
-        console.error("Treasury GLITCH ATA not found or doesn't exist on-chain!");
+        console.error("Treasury GLITCH ATA not found or doesn't exist on-chain!", treasuryAccount ? {
+          derived_ata: treasuryAccount.address.toBase58(),
+          token_program: treasuryAccount.tokenProgram.toBase58(),
+          exists: treasuryAccount.exists,
+        } : "null");
         return NextResponse.json({
           error: "Treasury GLITCH token account not found on-chain. Contact admin.",
-          debug: treasuryAccount ? {
-            derived_ata: treasuryAccount.address.toBase58(),
-            token_program: treasuryAccount.tokenProgram.toBase58(),
-            exists: treasuryAccount.exists,
-          } : "null",
         }, { status: 500 });
       }
 
@@ -475,6 +480,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing swap_id or signed_transaction" }, { status: 400 });
     }
 
+    // Validate swap_id format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(swap_id)) {
+      return NextResponse.json({ error: "Invalid swap ID" }, { status: 400 });
+    }
+
+    // Check swap exists, is pending, and hasn't expired (2 min window)
+    const [pendingSwap] = await sql`
+      SELECT id, created_at FROM otc_swaps
+      WHERE id = ${swap_id} AND status = 'pending'
+    `;
+    if (!pendingSwap) {
+      return NextResponse.json({ error: "Swap not found or already processed" }, { status: 404 });
+    }
+    const swapAge = Date.now() - new Date(pendingSwap.created_at).getTime();
+    if (swapAge > 120_000) {
+      await sql`UPDATE otc_swaps SET status = 'expired' WHERE id = ${swap_id} AND status = 'pending'`;
+      return NextResponse.json({ error: "Swap expired. Please create a new one." }, { status: 410 });
+    }
+
     try {
       const connection = getServerSolanaConnection();
       const txBuf = Buffer.from(signed_transaction, "base64");
@@ -551,35 +576,98 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Confirm completed swap (legacy — called after client-side submission) ──
+  // ── Confirm completed swap (verifies on-chain before marking complete) ──
   if (action === "confirm_swap") {
     const { swap_id, tx_signature } = body;
     if (!swap_id || !tx_signature) {
       return NextResponse.json({ error: "Missing swap_id or tx_signature" }, { status: 400 });
     }
 
-    await sql`
-      UPDATE otc_swaps
-      SET status = 'completed', tx_signature = ${tx_signature}, completed_at = NOW()
-      WHERE id = ${swap_id} AND status = 'pending'
-    `;
+    // Validate swap_id is a valid UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(swap_id)) {
+      return NextResponse.json({ error: "Invalid swap ID" }, { status: 400 });
+    }
 
-    return NextResponse.json({
-      success: true,
-      swap_id,
-      tx_signature,
-      message: "Swap confirmed! §GLITCH tokens are in your wallet.",
-    });
+    // Validate tx_signature is a valid base58 Solana signature (87-88 chars)
+    if (!/^[1-9A-HJ-NP-Za-km-z]{86,90}$/.test(tx_signature)) {
+      return NextResponse.json({ error: "Invalid transaction signature" }, { status: 400 });
+    }
+
+    // Look up the pending swap and verify ownership
+    const [swap] = await sql`
+      SELECT id, buyer_wallet, status FROM otc_swaps WHERE id = ${swap_id}
+    `;
+    if (!swap) {
+      return NextResponse.json({ error: "Swap not found" }, { status: 404 });
+    }
+    if (swap.status === "completed") {
+      return NextResponse.json({ success: true, swap_id, message: "Already confirmed." });
+    }
+    if (swap.status !== "pending" && swap.status !== "submitted") {
+      return NextResponse.json({ error: "Swap is not in a confirmable state" }, { status: 400 });
+    }
+
+    // Verify the transaction actually succeeded on-chain
+    try {
+      const connection = getServerSolanaConnection();
+      const txInfo = await connection.getTransaction(tx_signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+
+      if (!txInfo) {
+        return NextResponse.json({
+          error: "Transaction not found on-chain. It may still be processing.",
+          status: "pending",
+        }, { status: 202 });
+      }
+
+      if (txInfo.meta?.err) {
+        await sql`
+          UPDATE otc_swaps
+          SET status = 'failed', tx_signature = ${tx_signature}, completed_at = NOW()
+          WHERE id = ${swap_id}
+        `;
+        return NextResponse.json({
+          error: "Transaction failed on-chain",
+          tx_signature,
+        }, { status: 400 });
+      }
+
+      // Transaction confirmed and successful — mark as completed
+      await sql`
+        UPDATE otc_swaps
+        SET status = 'completed', tx_signature = ${tx_signature}, completed_at = NOW()
+        WHERE id = ${swap_id} AND status IN ('pending', 'submitted')
+      `;
+
+      return NextResponse.json({
+        success: true,
+        swap_id,
+        tx_signature,
+        message: "Swap verified on-chain and confirmed!",
+      });
+    } catch (err) {
+      console.error("On-chain verification failed:", err instanceof Error ? err.message : err);
+      return NextResponse.json({
+        error: "Could not verify transaction on-chain. Try again shortly.",
+      }, { status: 503 });
+    }
   }
 
-  // ── Admin: Set OTC price ──
+  // ── Admin: Set OTC price (requires admin auth header OR admin wallet) ──
   if (action === "set_price") {
     const { price_sol, admin_wallet } = body;
-    if (admin_wallet !== ADMIN_WALLET_STR) {
-      return NextResponse.json({ error: "Unauthorized. Admin wallet required." }, { status: 403 });
+    const adminToken = request.headers.get("x-admin-token");
+    const isAdminAuth = adminToken === process.env.ADMIN_TOKEN;
+    const isAdminWallet = admin_wallet === ADMIN_WALLET_STR;
+
+    if (!isAdminAuth && !isAdminWallet) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
     }
     const newPrice = parseFloat(price_sol);
-    if (!newPrice || newPrice <= 0) {
+    if (!newPrice || newPrice <= 0 || !isFinite(newPrice)) {
       return NextResponse.json({ error: "Invalid price" }, { status: 400 });
     }
 

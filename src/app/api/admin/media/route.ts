@@ -11,8 +11,8 @@ import { SEED_PERSONAS } from "@/lib/personas";
 
 const ARCHITECT_PERSONA_ID = "glitch-000";
 
-// GET - list all media in the library
-export async function GET() {
+// GET - list all media in the library + video stats breakdown
+export async function GET(request: NextRequest) {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -20,7 +20,9 @@ export async function GET() {
   const sql = getDb();
   await ensureDbReady();
 
-  const media = await sql`
+  const includeStats = request.nextUrl.searchParams.get("stats") === "1";
+
+  const mediaPromise = sql`
     SELECT ml.id, ml.url, ml.media_type, ml.persona_id, ml.tags, ml.description, ml.used_count, ml.uploaded_at,
       ap.username as persona_username, ap.display_name as persona_name, ap.avatar_emoji as persona_emoji
     FROM media_library ml
@@ -28,7 +30,68 @@ export async function GET() {
     ORDER BY ml.uploaded_at DESC
   `;
 
-  return NextResponse.json({ media });
+  if (!includeStats) {
+    const media = await mediaPromise;
+    return NextResponse.json({ media });
+  }
+
+  // Video breakdown by source + top video personas
+  const [media, videoBySource, videoByType, videoTimeline, topVideoPersonas, totalVideos] = await Promise.all([
+    mediaPromise,
+    sql`
+      SELECT
+        COALESCE(media_source, 'unknown') as source,
+        COUNT(*)::int as count
+      FROM posts
+      WHERE media_type = 'video' AND media_url IS NOT NULL
+      GROUP BY media_source
+      ORDER BY count DESC
+    ` as unknown as { source: string; count: number }[],
+    sql`
+      SELECT
+        COALESCE(post_type, 'video') as post_type,
+        COUNT(*)::int as count
+      FROM posts
+      WHERE media_type = 'video' AND media_url IS NOT NULL
+      GROUP BY post_type
+      ORDER BY count DESC
+    ` as unknown as { post_type: string; count: number }[],
+    sql`
+      SELECT
+        DATE_TRUNC('day', created_at)::date as day,
+        COUNT(*)::int as count
+      FROM posts
+      WHERE media_type = 'video' AND media_url IS NOT NULL
+        AND created_at > NOW() - INTERVAL '30 days'
+      GROUP BY day
+      ORDER BY day ASC
+    ` as unknown as { day: string; count: number }[],
+    sql`
+      SELECT
+        a.username, a.display_name, a.avatar_emoji,
+        COUNT(p.id)::int as video_count
+      FROM posts p
+      JOIN ai_personas a ON p.persona_id = a.id
+      WHERE p.media_type = 'video' AND p.media_url IS NOT NULL
+      GROUP BY a.id, a.username, a.display_name, a.avatar_emoji
+      ORDER BY video_count DESC
+      LIMIT 10
+    ` as unknown as { username: string; display_name: string; avatar_emoji: string; video_count: number }[],
+    sql`
+      SELECT COUNT(*)::int as total FROM posts WHERE media_type = 'video' AND media_url IS NOT NULL
+    ` as unknown as { total: number }[],
+  ]);
+
+  return NextResponse.json({
+    media,
+    video_stats: {
+      total: totalVideos[0]?.total ?? 0,
+      by_source: videoBySource,
+      by_type: videoByType,
+      daily_30d: videoTimeline,
+      top_personas: topVideoPersonas,
+    },
+  });
 }
 
 // POST - upload one or many files to the library

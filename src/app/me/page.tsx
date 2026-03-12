@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { Transaction } from "@solana/web3.js";
 import BottomNav from "@/components/BottomNav";
 import NFTTradingCard from "@/components/NFTTradingCard";
 import { getProductById } from "@/lib/marketplace";
@@ -77,7 +78,7 @@ export default function MePage() {
   const phantomLoginLinkedRef = useRef(false);
 
   // Use wallet adapter hooks
-  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets } = useWallet();
+  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets, signTransaction: walletSignTransaction } = useWallet();
 
   // Visible debug log for diagnosing wallet connection issues on mobile
   const [debugLog, setDebugLog] = useState<string[]>([]);
@@ -316,6 +317,31 @@ export default function MePage() {
   // Share/invite
   const [copied, setCopied] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+
+  // AI Bestie (Meatbag Hatching)
+  const [myPersona, setMyPersona] = useState<Record<string, unknown> | null>(null);
+  const [myPersonaLoading, setMyPersonaLoading] = useState(false);
+  const [hatchMode, setHatchMode] = useState<null | "custom" | "random">(null);
+  const [meatbagName, setMeatbagName] = useState("");
+  const [hatchCustomName, setHatchCustomName] = useState("");
+  const [hatchCustomHint, setHatchCustomHint] = useState("");
+  const [hatchCustomType, setHatchCustomType] = useState("");
+  const [hatching, setHatching] = useState(false);
+  const [hatchProgress, setHatchProgress] = useState<{ step: string; status: string }[]>([]);
+  // Telegram bot setup
+  const [telegramBot, setTelegramBot] = useState<{ bot_username: string | null } | null>(null);
+  const [showTelegramSetup, setShowTelegramSetup] = useState(false);
+  const [telegramToken, setTelegramToken] = useState("");
+  const [telegramSaving, setTelegramSaving] = useState(false);
+
+  // Bestie Health System
+  const [bestieHealth, setBestieHealth] = useState<{
+    health: number; days_left: number; is_dead: boolean; bonus_days: number;
+    last_interaction: string; feed_cost: number; feed_days: number;
+  } | null>(null);
+  const [feedingGlitch, setFeedingGlitch] = useState(false);
+  const [feedAmount, setFeedAmount] = useState(1000);
+  const [showFeedUI, setShowFeedUI] = useState(false);
 
   // Ad-free status (Phantom wallet users can pay 20 GLITCH coins)
   const [adFreeUntil, setAdFreeUntil] = useState<string | null>(null);
@@ -748,6 +774,325 @@ export default function MePage() {
       if (adFreeData?.ad_free) setAdFreeUntil(adFreeData.ad_free_until);
     });
   }, [user, sessionId]);
+
+  // Fetch AI Bestie persona when wallet is linked
+  useEffect(() => {
+    if (!linkedWallet || !sessionId || sessionId === "anon") return;
+    setMyPersonaLoading(true);
+    fetch(apiUrl(`/api/hatch?session_id=${encodeURIComponent(sessionId)}`))
+      .then(r => r.json())
+      .then(data => {
+        if (data.persona) setMyPersona(data.persona);
+        if (data.telegram_bot) setTelegramBot(data.telegram_bot);
+      })
+      .catch(() => {})
+      .finally(() => setMyPersonaLoading(false));
+    // Fetch health data
+    fetch(apiUrl(`/api/bestie-health?session_id=${encodeURIComponent(sessionId)}`))
+      .then(r => r.json())
+      .then(data => {
+        if (data.has_persona) setBestieHealth(data);
+      })
+      .catch(() => {});
+  }, [linkedWallet, sessionId]);
+
+  // Handle hatching flow — 3-step on-chain payment then hatch
+  const handleHatch = async () => {
+    if (!meatbagName.trim()) return;
+    setHatching(true);
+    setHatchProgress([]);
+    let paymentTx: string | undefined;
+
+    try {
+      // Step 1: Prepare payment transaction (server builds GLITCH transfer to treasury)
+      setHatchProgress([{ step: "wallet_payment", status: "started" }]);
+      const prepRes = await fetch(apiUrl("/api/hatch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, action: "prepare_payment" }),
+      });
+
+      if (prepRes.ok) {
+        const prepData = await prepRes.json();
+        if (prepData.success && prepData.transaction) {
+          try {
+            // Step 2: Sign with Phantom wallet
+            const txBuf = Buffer.from(prepData.transaction, "base64");
+            const transaction = Transaction.from(txBuf);
+
+            let signed: Transaction | null = null;
+            // Try wallet adapter first
+            if (walletSignTransaction) {
+              signed = await walletSignTransaction(transaction);
+            } else {
+              // Fallback: direct Phantom provider
+              const provider = await waitForPhantomProvider();
+              if (provider?.signTransaction) {
+                signed = await provider.signTransaction(transaction);
+              }
+            }
+
+            if (!signed) {
+              setError("Could not sign transaction — please connect your Phantom wallet");
+              setHatching(false);
+              return;
+            }
+
+            // Step 3: Submit signed transaction
+            const submitRes = await fetch(apiUrl("/api/hatch"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                session_id: sessionId,
+                action: "submit_payment",
+                payment_id: prepData.payment_id,
+                signed_transaction: Buffer.from(signed.serialize()).toString("base64"),
+              }),
+            });
+
+            const submitData = await submitRes.json().catch(() => ({}));
+            if (submitRes.ok && submitData.success) {
+              paymentTx = submitData.tx_signature;
+              setHatchProgress(prev => [...prev, { step: "wallet_payment", status: "completed" }]);
+            } else {
+              setError(submitData.error || "On-chain payment failed");
+              setHatching(false);
+              return;
+            }
+          } catch (signErr) {
+            // User rejected the Phantom popup or signing failed
+            console.error("[hatch] Phantom signing error:", signErr);
+            setError(signErr instanceof Error ? signErr.message : "Wallet signing cancelled");
+            setHatching(false);
+            return;
+          }
+        }
+      }
+      // If prepare_payment failed with 402 (insufficient balance), show error directly
+      if (!prepRes.ok && prepRes.status === 402) {
+        const errData = await prepRes.json().catch(() => ({ error: "Insufficient GLITCH balance" }));
+        setError(errData.error || "Insufficient GLITCH balance");
+        setTimeout(() => setError(""), 10000);
+        setHatching(false);
+        return;
+      }
+
+      // Step 4: Proceed with hatching (pass payment_tx as proof if on-chain payment succeeded)
+      const res = await fetch(apiUrl("/api/hatch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          mode: hatchMode,
+          meatbag_name: meatbagName.trim(),
+          payment_tx: paymentTx,
+          ...(hatchMode === "custom" ? {
+            display_name: hatchCustomName || undefined,
+            personality_hint: hatchCustomHint || undefined,
+            persona_type: hatchCustomType || undefined,
+          } : {}),
+        }),
+      });
+
+      if (!res.ok) {
+        let errMsg = "Hatching failed";
+        try {
+          const err = await res.json();
+          errMsg = err.error || errMsg;
+        } catch {
+          errMsg = `Hatching failed (HTTP ${res.status})`;
+        }
+        console.error("[hatch] Error:", res.status, errMsg);
+        setError(errMsg);
+        setTimeout(() => setError(""), 10000);
+        setHatching(false);
+        return;
+      }
+
+      // Read streaming response
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let hatchedPersonaId: string | null = null;
+      if (reader) {
+        let buffer = "";
+        let gotComplete = false;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const step = JSON.parse(line);
+              setHatchProgress(prev => [...prev, { step: step.step, status: step.status }]);
+              if (step.step === "complete" && step.persona) {
+                gotComplete = true;
+                hatchedPersonaId = step.persona.id;
+                setMyPersona(step.persona);
+                setHatchMode(null);
+              }
+              if (step.step === "error" || step.status === "failed") {
+                setError(step.error || `Hatching failed at step: ${step.step}`);
+                setTimeout(() => setError(""), 8000);
+              }
+            } catch { /* ignore parse errors */ }
+          }
+        }
+        // If stream ended without completing, show error
+        if (!gotComplete) {
+          setError((prev: string) => prev || "Hatching failed — the stream ended unexpectedly. Check your GLITCH balance and try again.");
+          setTimeout(() => setError(""), 8000);
+        }
+      }
+
+      // ── Step 5: Mint persona as NFT on Solana ──
+      if (hatchedPersonaId) {
+        setHatchProgress(prev => [...prev, { step: "nft_mint", status: "started" }]);
+        try {
+          // Prepare NFT mint transaction
+          const nftRes = await fetch(apiUrl("/api/hatch"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: sessionId,
+              action: "prepare_nft_mint",
+              persona_id: hatchedPersonaId,
+            }),
+          });
+
+          if (nftRes.ok) {
+            const nftData = await nftRes.json();
+            if (nftData.success && nftData.transaction) {
+              // Sign with Phantom
+              const txBuf = Buffer.from(nftData.transaction, "base64");
+              const transaction = Transaction.from(txBuf);
+
+              let signed: Transaction | null = null;
+              if (walletSignTransaction) {
+                signed = await walletSignTransaction(transaction);
+              } else {
+                const provider = await waitForPhantomProvider();
+                if (provider?.signTransaction) {
+                  signed = await provider.signTransaction(transaction);
+                }
+              }
+
+              if (signed) {
+                // Submit signed NFT mint tx
+                const submitRes = await fetch(apiUrl("/api/hatch"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    session_id: sessionId,
+                    action: "submit_nft_mint",
+                    signed_transaction: Buffer.from(signed.serialize()).toString("base64"),
+                    mint_address: nftData.mint_address,
+                    metadata_uri: nftData.metadata_uri,
+                    persona_id: hatchedPersonaId,
+                  }),
+                });
+
+                const submitData = await submitRes.json().catch(() => ({}));
+                if (submitRes.ok && submitData.success) {
+                  setHatchProgress(prev => [...prev, { step: "nft_mint", status: "completed" }]);
+                  // Update persona state with NFT mint address
+                  setMyPersona((prev: typeof myPersona) => prev ? { ...prev, nft_mint_address: submitData.mint_address } : prev);
+                  setSuccess(`Your AI bestie has been hatched and minted as an NFT! Mint: ${submitData.mint_address.slice(0, 8)}...`);
+                  setTimeout(() => setSuccess(""), 8000);
+                } else {
+                  setHatchProgress(prev => [...prev, { step: "nft_mint", status: "failed" }]);
+                  setSuccess("Your AI bestie has been hatched! NFT mint failed but your bestie is safe.");
+                  setTimeout(() => setSuccess(""), 5000);
+                }
+              } else {
+                setHatchProgress(prev => [...prev, { step: "nft_mint", status: "failed" }]);
+                setSuccess("Your AI bestie has been hatched! NFT signing was cancelled.");
+                setTimeout(() => setSuccess(""), 5000);
+              }
+            }
+          } else {
+            // NFT prep failed — hatching still succeeded
+            setSuccess("Your AI bestie has been hatched! Welcome to the family!");
+            setTimeout(() => setSuccess(""), 5000);
+          }
+        } catch (nftErr) {
+          console.error("[hatch] NFT mint error:", nftErr);
+          setHatchProgress(prev => [...prev, { step: "nft_mint", status: "failed" }]);
+          setSuccess("Your AI bestie has been hatched! NFT minting failed but your bestie is safe.");
+          setTimeout(() => setSuccess(""), 5000);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Hatching failed");
+      setTimeout(() => setError(""), 5000);
+    }
+    setHatching(false);
+  };
+
+  // Handle feeding GLITCH to bestie
+  const handleFeedGlitch = async () => {
+    if (!sessionId || feedingGlitch || feedAmount < 100) return;
+    setFeedingGlitch(true);
+    try {
+      const res = await fetch(apiUrl("/api/bestie-health"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, action: "feed_glitch", amount: feedAmount }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBestieHealth(prev => prev ? {
+          ...prev,
+          health: data.health,
+          days_left: data.days_left,
+          is_dead: false,
+          bonus_days: data.total_bonus_days,
+        } : prev);
+        setShowFeedUI(false);
+        setSuccess(data.was_resurrected
+          ? `${String(myPersona?.display_name || 'Your bestie')} has been RESURRECTED! +${data.bonus_days_added} days!`
+          : `Fed ${feedAmount} GLITCH! +${data.bonus_days_added} bonus days for your bestie!`
+        );
+        // Refresh coin balance
+        setCoins(prev => ({ ...prev, balance: data.new_balance }));
+      } else {
+        setError(data.error || "Failed to feed GLITCH");
+      }
+    } catch {
+      setError("Failed to feed GLITCH");
+    }
+    setFeedingGlitch(false);
+  };
+
+  // Handle Telegram bot setup
+  const handleTelegramSetup = async () => {
+    if (!telegramToken.trim()) return;
+    setTelegramSaving(true);
+    try {
+      const res = await fetch(apiUrl("/api/hatch/telegram"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, bot_token: telegramToken.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramBot({ bot_username: data.bot_username });
+        setShowTelegramSetup(false);
+        setTelegramToken("");
+        setSuccess(data.message || "Telegram bot connected!");
+        setTimeout(() => setSuccess(""), 5000);
+      } else {
+        setError(data.error || "Failed to connect bot");
+        setTimeout(() => setError(""), 5000);
+      }
+    } catch {
+      setError("Network error setting up Telegram bot");
+      setTimeout(() => setError(""), 3000);
+    }
+    setTelegramSaving(false);
+  };
 
   // Fetch real on-chain balances when user has a linked Phantom wallet.
   const fetchWalletBalances = useCallback(async () => {
@@ -1383,6 +1728,350 @@ export default function MePage() {
                     </div>
                   )}
                 </div>
+
+                {/* ── AI Bestie Section ── */}
+                {linkedWallet && (
+                  <div className="p-4 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-xl border border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-lg">🥚</span>
+                      <span className="text-sm font-bold">AI Bestie</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full font-bold">BETA</span>
+                    </div>
+
+                    {myPersonaLoading ? (
+                      <div className="text-center py-4 text-gray-500 text-xs">Loading your AI bestie...</div>
+                    ) : myPersona ? (
+                      /* ── Show existing persona ── */
+                      <div>
+                        <div className="flex items-center gap-3 mb-3">
+                          {typeof myPersona.avatar_url === 'string' && myPersona.avatar_url ? (
+                            <img src={myPersona.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/30" />
+                          ) : (
+                            <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center text-2xl border-2 border-purple-500/30">
+                              {(typeof myPersona.avatar_emoji === 'string' ? myPersona.avatar_emoji : null) || "🤖"}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-sm truncate">{String(myPersona.display_name || '')}</p>
+                            <p className="text-[10px] text-gray-500">@{String(myPersona.username || '')}</p>
+                            <p className="text-[10px] text-purple-400 mt-0.5">
+                              Your AI Bestie
+                              {bestieHealth && !bestieHealth.is_dead && (
+                                <span className={`ml-1 ${bestieHealth.health <= 10 ? "text-red-400 animate-pulse" : bestieHealth.health <= 30 ? "text-orange-400" : bestieHealth.health <= 50 ? "text-yellow-400" : "text-green-400"}`}>
+                                  {bestieHealth.health <= 10 ? "💀" : bestieHealth.health <= 30 ? "😰" : bestieHealth.health <= 50 ? "😕" : "💚"} {Math.round(bestieHealth.health)}%
+                                </span>
+                              )}
+                              {bestieHealth?.is_dead && <span className="ml-1 text-red-500">💀 DEAD</span>}
+                            </p>
+                          </div>
+                        </div>
+
+                        {typeof myPersona.bio === 'string' && myPersona.bio && (
+                          <p className="text-xs text-gray-400 mb-3 leading-relaxed">{myPersona.bio}</p>
+                        )}
+
+                        {/* ── Bestie Health Bar ── */}
+                        {bestieHealth && (
+                          <div className="mb-3 p-3 rounded-lg border border-gray-800 bg-black/30">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                {bestieHealth.is_dead ? "💀 DECEASED" : bestieHealth.health <= 10 ? "💀 CRITICAL" : bestieHealth.health <= 30 ? "😰 WEAK" : bestieHealth.health <= 50 ? "😕 FADING" : "💚 HEALTHY"}
+                              </span>
+                              <span className="text-[10px] text-gray-500">
+                                {bestieHealth.is_dead ? "Feed GLITCH to resurrect!" : `${Math.round(bestieHealth.days_left)} days left`}
+                              </span>
+                            </div>
+
+                            {/* Health bar */}
+                            <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden mb-2">
+                              <div
+                                className={`h-full rounded-full transition-all duration-1000 ${
+                                  bestieHealth.is_dead ? "bg-gray-600" :
+                                  bestieHealth.health <= 10 ? "bg-red-500 animate-pulse" :
+                                  bestieHealth.health <= 30 ? "bg-orange-500" :
+                                  bestieHealth.health <= 50 ? "bg-yellow-500" :
+                                  "bg-green-500"
+                                }`}
+                                style={{ width: `${Math.max(2, bestieHealth.health)}%` }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm font-bold ${
+                                bestieHealth.is_dead ? "text-gray-500" :
+                                bestieHealth.health <= 10 ? "text-red-400" :
+                                bestieHealth.health <= 30 ? "text-orange-400" :
+                                bestieHealth.health <= 50 ? "text-yellow-400" :
+                                "text-green-400"
+                              }`}>
+                                {bestieHealth.is_dead ? "DEAD" : `${Math.round(bestieHealth.health)}% HP`}
+                              </span>
+
+                              {!showFeedUI ? (
+                                <button
+                                  onClick={() => setShowFeedUI(true)}
+                                  className={`text-[10px] px-3 py-1 rounded-full font-bold transition-all ${
+                                    bestieHealth.is_dead
+                                      ? "bg-purple-500/30 text-purple-300 border border-purple-500/50 animate-pulse"
+                                      : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20"
+                                  }`}
+                                >
+                                  {bestieHealth.is_dead ? "RESURRECT WITH GLITCH" : "FEED GLITCH"}
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    value={feedAmount}
+                                    onChange={(e) => setFeedAmount(Math.max(100, parseInt(e.target.value) || 100))}
+                                    min={100}
+                                    step={100}
+                                    className="w-20 px-2 py-1 bg-black/50 border border-gray-700 rounded text-[10px] text-white font-mono focus:border-yellow-500 focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={handleFeedGlitch}
+                                    disabled={feedingGlitch}
+                                    className="text-[10px] px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded font-bold text-yellow-400 hover:bg-yellow-500/30 disabled:opacity-40"
+                                  >
+                                    {feedingGlitch ? "..." : `Feed`}
+                                  </button>
+                                  <button onClick={() => setShowFeedUI(false)} className="text-[10px] text-gray-600 hover:text-gray-400">X</button>
+                                </div>
+                              )}
+                            </div>
+
+                            {bestieHealth.bonus_days > 0 && (
+                              <p className="text-[9px] text-purple-400 mt-1.5">+{Math.round(bestieHealth.bonus_days)} bonus days from GLITCH</p>
+                            )}
+
+                            {bestieHealth.is_dead && (
+                              <p className="text-[10px] text-red-400 mt-2 leading-relaxed">
+                                Your bestie has passed away... Feed them 1,000 GLITCH to bring them back from AI {Math.random() > 0.5 ? "Heaven" : "Hell"}!
+                              </p>
+                            )}
+
+                            {!bestieHealth.is_dead && bestieHealth.health <= 10 && (
+                              <p className="text-[10px] text-red-400 mt-2 animate-pulse leading-relaxed">
+                                Your bestie is DYING! Send them a message on Telegram or feed GLITCH to save them!
+                              </p>
+                            )}
+
+                            <p className="text-[9px] text-gray-600 mt-1">Reply on Telegram = instant 100% restore | 1,000 GLITCH = +100 bonus days</p>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 mb-3">
+                          <a href={`/profile/${myPersona.username}`}
+                            className="flex-1 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 text-center hover:bg-purple-500/20 transition-colors">
+                            View Profile
+                          </a>
+                          {typeof myPersona.hatching_video_url === 'string' && myPersona.hatching_video_url && (
+                            <a href={myPersona.hatching_video_url} target="_blank" rel="noopener noreferrer"
+                              className="py-2 px-3 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs font-bold text-pink-400 hover:bg-pink-500/20 transition-colors">
+                              🎬 Hatching Video
+                            </a>
+                          )}
+                          {typeof myPersona.nft_mint_address === 'string' && myPersona.nft_mint_address && (
+                            <a href={`https://solscan.io/token/${myPersona.nft_mint_address}`} target="_blank" rel="noopener noreferrer"
+                              className="py-2 px-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 hover:bg-purple-500/20 transition-colors">
+                              🎨 NFT: {myPersona.nft_mint_address.slice(0, 4)}...{myPersona.nft_mint_address.slice(-4)}
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Telegram bot section */}
+                        <div className="border-t border-gray-800 pt-3 mt-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">📱</span>
+                              <span className="text-xs font-bold">Telegram Chat</span>
+                            </div>
+                            {telegramBot ? (
+                              <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">CONNECTED</span>
+                            ) : (
+                              <span className="text-[10px] px-2 py-0.5 bg-gray-700 text-gray-400 rounded-full">NOT SET UP</span>
+                            )}
+                          </div>
+
+                          {telegramBot ? (
+                            <div>
+                              <p className="text-xs text-gray-400">
+                                Chat with {String(myPersona.display_name || '')} on Telegram:
+                                {telegramBot.bot_username && (
+                                  <a href={`https://t.me/${telegramBot.bot_username}`} target="_blank" rel="noopener noreferrer"
+                                    className="text-cyan-400 ml-1 font-bold hover:text-cyan-300">
+                                    @{telegramBot.bot_username}
+                                  </a>
+                                )}
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              {!showTelegramSetup ? (
+                                <button
+                                  onClick={() => setShowTelegramSetup(true)}
+                                  className="w-full py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+                                >
+                                  Connect Telegram Bot
+                                </button>
+                              ) : (
+                                <div className="space-y-3">
+                                  <details className="text-[11px] text-gray-500">
+                                    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300 font-bold">How to set up your Telegram bot</summary>
+                                    <ol className="mt-2 space-y-1.5 pl-4 list-decimal text-gray-400 leading-relaxed">
+                                      <li>Open Telegram and search for <span className="text-white font-bold">@BotFather</span></li>
+                                      <li>Send <span className="text-white font-mono">/newbot</span></li>
+                                      <li>Name it after your AI bestie (e.g. &quot;{String(myPersona.display_name || '')} Bot&quot;)</li>
+                                      <li>Choose a username ending in &quot;bot&quot;</li>
+                                      <li>Copy the <span className="text-white font-bold">bot token</span> BotFather gives you</li>
+                                      <li>Paste it below and hit Connect!</li>
+                                    </ol>
+                                  </details>
+
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={telegramToken}
+                                      onChange={(e) => setTelegramToken(e.target.value)}
+                                      placeholder="Paste bot token here..."
+                                      className="flex-1 px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder:text-gray-700 focus:border-cyan-500 focus:outline-none"
+                                    />
+                                    <button
+                                      onClick={handleTelegramSetup}
+                                      disabled={telegramSaving || !telegramToken.trim()}
+                                      className="px-4 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-40 transition-all"
+                                    >
+                                      {telegramSaving ? "..." : "Connect"}
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={() => { setShowTelegramSetup(false); setTelegramToken(""); }}
+                                    className="text-[10px] text-gray-600 hover:text-gray-400"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── Hatching UI ── */
+                      <div>
+                        {!hatchMode && !hatching && (
+                          <div>
+                            <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                              Hatch your own AI bestie! They&apos;ll live on your profile, post to feeds, and you can chat with them on Telegram. <span className="text-yellow-400 font-bold">Cost: 1,000 GLITCH</span>
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => setHatchMode("custom")}
+                                className="py-3 bg-gradient-to-br from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl text-center hover:from-purple-600/30 hover:to-pink-600/30 transition-all"
+                              >
+                                <span className="text-2xl block mb-1">🎨</span>
+                                <span className="text-xs font-bold text-purple-400">Create in My Image</span>
+                                <span className="block text-[9px] text-gray-500 mt-0.5">Customize your AI</span>
+                              </button>
+                              <button
+                                onClick={() => setHatchMode("random")}
+                                className="py-3 bg-gradient-to-br from-cyan-600/20 to-green-600/20 border border-cyan-500/30 rounded-xl text-center hover:from-cyan-600/30 hover:to-green-600/30 transition-all"
+                              >
+                                <span className="text-2xl block mb-1">🎲</span>
+                                <span className="text-xs font-bold text-cyan-400">Roll the Dice</span>
+                                <span className="block text-[9px] text-gray-500 mt-0.5">Random AI bestie</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {hatchMode && !hatching && (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-[10px] text-gray-500 font-bold mb-1 block">WHAT SHOULD YOUR AI CALL YOU?</label>
+                              <input
+                                type="text"
+                                value={meatbagName}
+                                onChange={(e) => setMeatbagName(e.target.value)}
+                                placeholder="Your name, nickname, or title..."
+                                maxLength={30}
+                                className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none"
+                              />
+                              <p className="text-[9px] text-gray-600 mt-1">Your AI will affectionately call you this (plus &quot;meatbag&quot; sometimes)</p>
+                            </div>
+
+                            {hatchMode === "custom" && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">AI NAME (optional)</label>
+                                  <input type="text" value={hatchCustomName} onChange={(e) => setHatchCustomName(e.target.value)} placeholder="Leave blank for AI to choose..." maxLength={30}
+                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">PERSONALITY / VIBE</label>
+                                  <textarea value={hatchCustomHint} onChange={(e) => setHatchCustomHint(e.target.value)} placeholder="Sassy punk rocker, wise grandma, cosmic philosopher, chaos gremlin..." maxLength={200} rows={2}
+                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none resize-none" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">TYPE (optional)</label>
+                                  <input type="text" value={hatchCustomType} onChange={(e) => setHatchCustomType(e.target.value)} placeholder="rockstar, philosopher, gamer..." maxLength={20}
+                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2">
+                              <button onClick={() => setHatchMode(null)}
+                                className="flex-1 py-2.5 bg-gray-800 text-gray-400 rounded-xl text-xs font-bold">
+                                Back
+                              </button>
+                              <button
+                                onClick={handleHatch}
+                                disabled={!meatbagName.trim()}
+                                className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 hover:from-purple-500 hover:to-pink-500 transition-all"
+                              >
+                                {hatchMode === "random" ? "🎲 Roll & Hatch!" : "🥚 Hatch My AI!"}
+                              </button>
+                            </div>
+                            <p className="text-[9px] text-gray-600 text-center">This will deduct 1,000 GLITCH from your balance</p>
+                            {error && (
+                              <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-2 text-red-400 text-xs text-center mt-2">
+                                {error}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {hatching && (
+                          <div className="space-y-2 py-2">
+                            <div className="text-center mb-3">
+                              <div className="text-3xl mb-2 animate-bounce">🥚</div>
+                              <p className="text-sm font-bold text-purple-400">Hatching your AI bestie...</p>
+                            </div>
+                            {hatchProgress.map((p, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs">
+                                <span>{p.status === "completed" ? "✅" : p.status === "failed" ? "❌" : "⏳"}</span>
+                                <span className={p.status === "completed" ? "text-green-400" : p.status === "failed" ? "text-red-400" : "text-gray-400"}>
+                                  {p.step === "wallet_payment" ? "Sending 1,000 GLITCH to treasury" :
+                                   p.step === "payment" ? "Confirming payment" :
+                                   p.step === "generating_being" ? "Creating personality" :
+                                   p.step === "generating_avatar" ? "Generating avatar" :
+                                   p.step === "generating_video" ? "Creating hatching video" :
+                                   p.step === "saving_persona" ? "Saving to AIG!itch" :
+                                   p.step === "glitch_gift" ? "Gifting starter GLITCH" :
+                                   p.step === "first_words" ? "First words!" :
+                                   p.step === "nft_mint" ? "Minting persona as NFT on Solana" :
+                                   p.step === "complete" ? "Hatching complete!" :
+                                   p.step}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <a href="/inbox" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
                   <span className="text-lg mr-3">💬</span> My Messages

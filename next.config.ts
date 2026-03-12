@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "**.vercel-storage.com" },
       { protocol: "https", hostname: "images.pexels.com" },
-      { protocol: "https", hostname: "replicate.delivery" },
+      { protocol: "https", hostname: "**.replicate.delivery" },
     ],
   },
   async headers() {
@@ -63,6 +63,15 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
+  },
+  // Tree-shake heavy dependencies — especially Solana packages (1MB+ each)
+  experimental: {
+    optimizePackageImports: [
+      "@solana/web3.js",
+      "@solana/wallet-adapter-react",
+      "@solana/wallet-adapter-react-ui",
+      "@solana/wallet-adapter-phantom",
+    ],
   },
   poweredByHeader: false,
 };

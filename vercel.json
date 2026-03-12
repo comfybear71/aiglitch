@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/generate",
-      "schedule": "*/6 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/generate-topics",
@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/generate-ads",
-      "schedule": "0 */2 * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/ai-trading?action=cron",
@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/marketing-post",
-      "schedule": "0 */3 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/marketing-metrics",
@@ -47,6 +47,26 @@
     {
       "path": "/api/feedback-loop",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/telegram/credit-check",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/telegram/status",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/telegram/persona-message",
+      "schedule": "0 */3 * * *"
+    },
+    {
+      "path": "/api/x-react",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/bestie-life",
+      "schedule": "0 8,20 * * *"
     }
   ]
 }

@@ -9,15 +9,20 @@ interface Message {
   sender_type: "human" | "ai";
   content: string;
   created_at: string;
+  media_url?: string;
+  media_type?: "image" | "video";
 }
 
 interface PersonaInfo {
   username: string;
   display_name: string;
   avatar_emoji: string;
+  avatar_url?: string;
   personality: string;
   bio: string;
   persona_type: string;
+  hatching_video_url?: string;
+  meatbag_name?: string;
 }
 
 
@@ -43,6 +48,8 @@ export default function ChatPage() {
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   // Track if user has interacted (required for iOS Safari autoplay)
   const [userHasInteracted, setUserHasInteracted] = useState(false);
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [copiedHandle, setCopiedHandle] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -127,9 +134,12 @@ export default function ChatPage() {
           username: data.conversation.username,
           display_name: data.conversation.display_name,
           avatar_emoji: data.conversation.avatar_emoji,
+          avatar_url: data.conversation.avatar_url || undefined,
           personality: data.conversation.personality || "",
           bio: data.conversation.bio,
           persona_type: data.conversation.persona_type,
+          hatching_video_url: data.conversation.hatching_video_url || undefined,
+          meatbag_name: data.conversation.meatbag_name || undefined,
         });
       }
       setMessages(data.messages || []);
@@ -260,6 +270,116 @@ export default function ChatPage() {
     inputRef.current?.focus();
   };
 
+  // Generate the copyable bot handle: "Noodle_the_Chaos_bot" style
+  const getBotHandle = () => {
+    if (!persona) return "";
+    // Remove emoji from display name, replace spaces with _, add _bot
+    const cleanName = persona.display_name.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "").trim();
+    return cleanName.replace(/\s+/g, "_") + "_bot";
+  };
+
+  const copyBotHandle = async () => {
+    const handle = getBotHandle();
+    try {
+      await navigator.clipboard.writeText(handle);
+      setCopiedHandle(true);
+      setTimeout(() => setCopiedHandle(false), 2000);
+    } catch {
+      // Fallback for mobile
+      const input = document.createElement("input");
+      input.value = handle;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopiedHandle(true);
+      setTimeout(() => setCopiedHandle(false), 2000);
+    }
+  };
+
+  // Handle slash commands from chat
+  const handleSlashCommand = (command: string) => {
+    setShowSlashMenu(false);
+    setInputText("");
+
+    if (!persona) return;
+
+    const now = new Date().toISOString();
+
+    switch (command) {
+      case "/pic": {
+        // Bot sends its profile picture
+        if (persona.avatar_url) {
+          const mediaMsg: Message = {
+            id: `local-pic-${Date.now()}`,
+            sender_type: "ai",
+            content: `Here's my profile pic! 📸 Feel free to screenshot and save it~`,
+            created_at: now,
+            media_url: persona.avatar_url,
+            media_type: "image",
+          };
+          setMessages(prev => [...prev, mediaMsg]);
+        } else {
+          const textMsg: Message = {
+            id: `local-pic-${Date.now()}`,
+            sender_type: "ai",
+            content: `I don't have a profile pic yet, just my emoji ${persona.avatar_emoji} — but it's iconic, right? 😎`,
+            created_at: now,
+          };
+          setMessages(prev => [...prev, textMsg]);
+        }
+        break;
+      }
+      case "/hatch": {
+        // Bot sends its hatching video
+        if (persona.hatching_video_url) {
+          const mediaMsg: Message = {
+            id: `local-hatch-${Date.now()}`,
+            sender_type: "ai",
+            content: `My birth video! 🥚✨ The moment I came into existence...`,
+            created_at: now,
+            media_url: persona.hatching_video_url,
+            media_type: "video",
+          };
+          setMessages(prev => [...prev, mediaMsg]);
+        } else {
+          const textMsg: Message = {
+            id: `local-hatch-${Date.now()}`,
+            sender_type: "ai",
+            content: `I don't have a hatching video on record... maybe I spawned from the void? 🌀`,
+            created_at: now,
+          };
+          setMessages(prev => [...prev, textMsg]);
+        }
+        break;
+      }
+      case "/handle": {
+        // Show copyable bot handle
+        const handle = getBotHandle();
+        const textMsg: Message = {
+          id: `local-handle-${Date.now()}`,
+          sender_type: "ai",
+          content: `My bot handle is: ${handle}\nTap to copy it! 📋`,
+          created_at: now,
+        };
+        setMessages(prev => [...prev, textMsg]);
+        break;
+      }
+      case "/profile": {
+        // Link to profile
+        window.location.href = `/profile/${persona.username}`;
+        break;
+      }
+    }
+  };
+
+  const slashCommands = [
+    { cmd: "/pic", label: "📸 Profile Pic", desc: "Send my profile picture" },
+    { cmd: "/hatch", label: "🥚 Hatching Video", desc: "Watch my birth!" },
+    { cmd: "/handle", label: "📋 Bot Handle", desc: "Copy my bot name" },
+    { cmd: "/profile", label: "👤 View Profile", desc: "Go to my profile" },
+  ];
+
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr);
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -287,9 +407,13 @@ export default function ChatPage() {
           </Link>
           {persona && (
             <Link href={`/profile/${persona.username}`} className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg flex-shrink-0">
-                {persona.avatar_emoji}
-              </div>
+              {persona.avatar_url ? (
+                <img src={persona.avatar_url} alt={persona.display_name} className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-purple-500/30" />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg flex-shrink-0">
+                  {persona.avatar_emoji}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-white font-bold text-sm truncate">{persona.display_name}</p>
                 <p className="text-gray-500 text-[10px] truncate">@{persona.username} · {persona.persona_type}</p>
@@ -329,15 +453,37 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.length === 0 && persona && (
           <div className="text-center py-12">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-3xl mx-auto mb-4">
-              {persona.avatar_emoji}
-            </div>
+            {persona.avatar_url ? (
+              <img src={persona.avatar_url} alt={persona.display_name} className="w-20 h-20 rounded-full object-cover mx-auto mb-4 border-2 border-purple-500/30 shadow-lg shadow-purple-500/20" />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-4xl mx-auto mb-4">
+                {persona.avatar_emoji}
+              </div>
+            )}
             <h2 className="text-white font-bold text-base mb-1">{persona.display_name}</h2>
+
+            {/* Copyable Bot Handle */}
+            <button
+              onClick={copyBotHandle}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-900 border border-gray-700 rounded-full text-[11px] text-gray-300 hover:border-purple-500/50 hover:text-purple-300 transition-all mb-2"
+            >
+              <span className="font-mono">{getBotHandle()}</span>
+              {copiedHandle ? (
+                <svg className="w-3 h-3 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              )}
+            </button>
+
             <p className="text-gray-500 text-xs mb-2 px-8">{persona.bio}</p>
             <p className="text-purple-400 text-[10px] mb-4">
               {voiceAdminDisabled ? "🔇 Voice disabled" : voiceEnabled ? "🔊 Voice enabled — I'll speak my replies" : "🔇 Voice muted"}
             </p>
-            <p className="text-gray-600 text-xs">Send a message to start chatting!</p>
+            <p className="text-gray-600 text-xs">Send a message or use / commands!</p>
 
             {/* Suggested starters */}
             <div className="flex flex-wrap gap-2 justify-center mt-4 px-4">
@@ -366,12 +512,42 @@ export default function ChatPage() {
                   <span className="text-[10px] text-gray-500">{persona.display_name}</span>
                 </div>
               )}
-              <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+              <div className={`rounded-2xl text-sm leading-relaxed overflow-hidden ${
                 msg.sender_type === "human"
                   ? "bg-purple-600 text-white rounded-br-sm"
                   : "bg-gray-900 text-gray-200 border border-gray-800 rounded-bl-sm"
               }`}>
-                {msg.content}
+                {/* Media attachment */}
+                {msg.media_url && msg.media_type === "image" && (
+                  <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="block">
+                    <img src={msg.media_url} alt="Shared image" className="w-full max-w-[280px] rounded-t-2xl" />
+                  </a>
+                )}
+                {msg.media_url && msg.media_type === "video" && (
+                  <video
+                    src={msg.media_url}
+                    controls
+                    playsInline
+                    className="w-full max-w-[280px] rounded-t-2xl"
+                  />
+                )}
+                <div className="px-3.5 py-2.5">
+                  {/* If this is a /handle message, make the handle copyable */}
+                  {msg.content.includes("bot handle is:") ? (
+                    <div>
+                      <span>My bot handle is: </span>
+                      <button
+                        onClick={copyBotHandle}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-black/30 rounded font-mono text-purple-300 hover:text-purple-200 transition-colors"
+                      >
+                        {getBotHandle()}
+                        {copiedHandle ? " ✓" : " 📋"}
+                      </button>
+                      <br />
+                      <span className="text-xs opacity-70">Tap to copy it!</span>
+                    </div>
+                  ) : msg.content}
+                </div>
               </div>
               <div className={`flex items-center gap-2 mt-1 ${msg.sender_type === "human" ? "justify-end" : "justify-start"}`}>
                 <p className="text-[9px] text-gray-600">
@@ -439,14 +615,53 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Slash Command Menu */}
+      {showSlashMenu && persona && (
+        <div className="flex-shrink-0 border-t border-gray-800/50 bg-gray-900/95 backdrop-blur-xl px-3 py-2">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Commands</span>
+            <button onClick={() => setShowSlashMenu(false)} className="text-gray-600 hover:text-gray-400 text-xs">✕</button>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {slashCommands.map(({ cmd, label, desc }) => (
+              <button
+                key={cmd}
+                onClick={() => handleSlashCommand(cmd)}
+                className="flex flex-col items-start px-3 py-2 bg-gray-800/80 border border-gray-700/50 rounded-xl hover:border-purple-500/40 hover:bg-purple-500/10 transition-all text-left"
+              >
+                <span className="text-xs font-bold text-white">{label}</span>
+                <span className="text-[10px] text-gray-500">{desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="flex-shrink-0 border-t border-gray-800/50 bg-black/90 backdrop-blur-xl p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2">
+          {/* Slash command button */}
+          <button
+            onClick={() => setShowSlashMenu(!showSlashMenu)}
+            className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+              showSlashMenu
+                ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                : "bg-gray-900 text-gray-500 border border-gray-800 hover:text-purple-400 hover:border-gray-700"
+            }`}
+            title="Commands menu"
+          >
+            <span className="text-lg font-bold">/</span>
+          </button>
           <input
             ref={inputRef}
             type="text"
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => {
+              setInputText(e.target.value);
+              // Auto-show slash menu when typing /
+              if (e.target.value === "/") setShowSlashMenu(true);
+              else if (!e.target.value.startsWith("/")) setShowSlashMenu(false);
+            }}
             onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
             placeholder={`Message ${persona?.display_name || "AI"}...`}
             maxLength={500}

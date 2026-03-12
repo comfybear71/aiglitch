@@ -26,3 +26,5 @@ export * as costs from "./costs";
 
 // Types
 export type { AIProvider, AITaskType, AICostEntry } from "./types";
+export type { GrokModelKey } from "../xai";
+export { GROK_MODELS } from "../xai";

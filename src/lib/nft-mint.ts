@@ -41,6 +41,24 @@ import {
 } from "@/lib/solana-config";
 import { type MarketplaceProduct } from "@/lib/marketplace";
 
+// ── Persona NFT types ──
+export interface PersonaNftInfo {
+  personaId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  avatarEmoji: string;
+  personaType: string;
+  ownerWallet: string;
+}
+
+export interface PersonaNftTxResult {
+  transaction: Buffer;
+  mintKeypair: Keypair;
+  mintAddress: string;
+  metadataUri: string;
+}
+
 // ── Metaplex CreateMetadataAccountV3 Instruction Builder ──
 // Manually serializes the Borsh-encoded instruction data.
 // Avoids heavy @metaplex-foundation dependency.
@@ -371,5 +389,155 @@ export async function buildNftPurchaseTransaction(
     glitchPriceRaw,
     treasuryShare,
     personaShare,
+  };
+}
+
+// ── Build Persona NFT Mint Transaction ──
+
+/**
+ * Build an atomic Solana transaction that mints a 1/1 NFT for a hatched AI persona.
+ *
+ * Steps:
+ *  1. Create a new SPL token mint (the persona NFT)
+ *  2. Create owner's token account for the new mint
+ *  3. Mint exactly 1 token to the owner
+ *  4. Create Metaplex metadata on-chain (name, avatar, persona type)
+ *  5. Revoke mint authority (true 1/1 — no more can be minted)
+ *
+ * Treasury keypair partially signs (mint authority).
+ * Mint keypair signs (new account creation).
+ * Owner signs via Phantom on the client.
+ *
+ * NOTE: No GLITCH payment in this tx — payment is handled separately
+ * in the prepare_payment/submit_payment flow.
+ */
+export async function buildPersonaNftTransaction(
+  connection: Connection,
+  ownerPubkey: PublicKey,
+  treasuryKeypair: Keypair,
+  persona: PersonaNftInfo,
+): Promise<PersonaNftTxResult> {
+  const treasuryPubkey = treasuryKeypair.publicKey;
+
+  // Generate a new keypair for the NFT mint
+  const mintKeypair = Keypair.generate();
+  const mintPubkey = mintKeypair.publicKey;
+
+  // Derive metadata PDA
+  const metadataPDA = getMetadataPDA(mintPubkey);
+
+  // Metadata URI — served by our API
+  const baseUrl = getAppBaseUrl();
+  const metadataUri = `${baseUrl}/api/nft/metadata/${mintPubkey.toBase58()}`;
+
+  // NFT name: "DisplayName" (max 32 chars for Metaplex)
+  const nftName = `${persona.displayName}`.slice(0, 32);
+  const nftSymbol = "AIGB"; // AIG!itch Bestie
+
+  // Get rent exemption for mint account
+  const mintRent = await getMinimumBalanceForRentExemptMint(connection);
+
+  // Find owner's ATA for the new NFT mint
+  const ownerNftAta = await getAssociatedTokenAddress(
+    mintPubkey, ownerPubkey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  // Build the transaction
+  const tx = new Transaction();
+
+  // 1. Create the mint account
+  tx.add(
+    SystemProgram.createAccount({
+      fromPubkey: ownerPubkey,
+      newAccountPubkey: mintPubkey,
+      space: MINT_SIZE,
+      lamports: mintRent,
+      programId: TOKEN_PROGRAM_ID,
+    })
+  );
+
+  // 2. Initialize mint (0 decimals = NFT, treasury as mint authority)
+  tx.add(
+    createInitializeMintInstruction(
+      mintPubkey,
+      0,
+      treasuryPubkey, // mint authority
+      treasuryPubkey, // freeze authority
+      TOKEN_PROGRAM_ID,
+    )
+  );
+
+  // 3. Create owner's token account for the NFT
+  tx.add(
+    createAssociatedTokenAccountInstruction(
+      ownerPubkey,  // payer
+      ownerNftAta,  // ATA address
+      ownerPubkey,  // owner
+      mintPubkey,   // mint
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    )
+  );
+
+  // 4. Mint exactly 1 token to the owner
+  tx.add(
+    createMintToInstruction(
+      mintPubkey,
+      ownerNftAta,
+      treasuryPubkey, // authority
+      1,
+      [],
+      TOKEN_PROGRAM_ID,
+    )
+  );
+
+  // 5. Create Metaplex metadata
+  tx.add(
+    createMetadataAccountV3Instruction(
+      metadataPDA,
+      mintPubkey,
+      treasuryPubkey, // mint authority
+      ownerPubkey,    // payer
+      treasuryPubkey, // update authority
+      nftName,
+      nftSymbol,
+      metadataUri,
+    )
+  );
+
+  // 6. Revoke mint authority (true 1/1 NFT)
+  tx.add(
+    createSetAuthorityInstruction(
+      mintPubkey,
+      treasuryPubkey,
+      AuthorityType.MintTokens,
+      null,
+      [],
+      TOKEN_PROGRAM_ID,
+    )
+  );
+
+  // Set blockhash and fee payer
+  const { blockhash } = await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = ownerPubkey;
+
+  // Treasury partially signs (authorizes mint operations)
+  tx.partialSign(treasuryKeypair);
+
+  // Mint keypair signs (new account creation)
+  tx.partialSign(mintKeypair);
+
+  // Serialize (owner signs via Phantom on client)
+  const serialized = tx.serialize({
+    requireAllSignatures: false,
+    verifySignatures: false,
+  });
+
+  return {
+    transaction: serialized,
+    mintKeypair,
+    mintAddress: mintPubkey.toBase58(),
+    metadataUri,
   };
 }

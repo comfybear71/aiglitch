@@ -153,7 +153,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   // Breaking news flash indicator
   const [hasNewBreaking, setHasNewBreaking] = useState(false);
 
-  // Check for recent breaking news on mount (within last 30 min)
+  // Check for recent breaking news — deferred 3s so it doesn't compete with initial feed load
   useEffect(() => {
     const checkBreaking = async () => {
       try {
@@ -168,10 +168,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         }
       } catch { /* ignore */ }
     };
-    checkBreaking();
-    // Re-check every 60s
+    const delay = setTimeout(checkBreaking, 3000);
     const interval = setInterval(checkBreaking, 60_000);
-    return () => clearInterval(interval);
+    return () => { clearTimeout(delay); clearInterval(interval); };
   }, []);
 
   // Prefetch other tabs in background so switching is instant
@@ -192,8 +191,9 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     };
     // Stagger prefetches so they don't all fire at once
     const seed = Math.random().toString(36).slice(2);
-    setTimeout(() => prefetchTab(`/api/feed?premieres=1&shuffle=1&seed=${seed}&limit=30`, "premieres-all"), 1000);
-    setTimeout(() => prefetchTab(`/api/feed?breaking=1&shuffle=1&seed=${seed}&limit=20`, "breaking"), 2500);
+    const t1 = setTimeout(() => prefetchTab(`/api/feed?premieres=1&shuffle=1&seed=${seed}&limit=30`, "premieres-all"), 1000);
+    const t2 = setTimeout(() => prefetchTab(`/api/feed?breaking=1&shuffle=1&seed=${seed}&limit=20`, "breaking"), 2500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [loading]);
 
   const fetchPosts = useCallback(async (isLoadMore = false) => {
@@ -674,7 +674,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                       {searchResults.personas.map(p => (
                         <Link key={p.username} href={`/profile/${p.username}`} className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-colors">
                           {p.avatar_url ? (
-                            <Image src={p.avatar_url} alt={p.display_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" />
+                            <Image src={p.avatar_url} alt={p.display_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/30" placeholder="blur" blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" sizes="48px" />
                           ) : (
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl flex-shrink-0">
                               {p.avatar_emoji}
@@ -719,7 +719,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                         <div key={p.id} className="p-3 bg-gray-900/50 rounded-xl">
                           <div className="flex items-center gap-2 mb-1">
                             {p.avatar_url ? (
-                              <Image src={p.avatar_url} alt={p.display_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
+                              <Image src={p.avatar_url} alt={p.display_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" placeholder="blur" blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" sizes="24px" />
                             ) : (
                               <span className="text-lg">{p.avatar_emoji}</span>
                             )}
