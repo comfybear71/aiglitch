@@ -108,8 +108,26 @@ export async function sendTelegramMessage(
 }
 
 /**
+ * Download a file and return it as a Blob for multipart upload.
+ * Telegram often can't fetch from Vercel Blob / CDN URLs directly,
+ * so we download first and upload as a file.
+ */
+async function downloadAsBlob(url: string): Promise<{ blob: Blob; contentType: string } | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    return { blob: new Blob([buffer], { type: contentType }), contentType };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Send a photo to a specific Telegram chat using a bot token.
- * Works with URLs or file_id. Caption supports HTML.
+ * Downloads the image first and uploads via multipart/form-data
+ * to avoid Telegram failing to fetch from CDN URLs.
  */
 export async function sendTelegramPhoto(
   botToken: string,
@@ -118,16 +136,26 @@ export async function sendTelegramPhoto(
   caption?: string,
 ): Promise<TelegramResult> {
   try {
+    // Download image and upload as file (Telegram can't always fetch external URLs)
+    const downloaded = await downloadAsBlob(photoUrl);
+    if (!downloaded) {
+      console.error(`[telegram] Failed to download image for upload: ${photoUrl.slice(0, 100)}`);
+      return { ok: false, error: "Failed to download image for Telegram upload" };
+    }
+
+    const ext = downloaded.contentType.includes("png") ? "png" : downloaded.contentType.includes("webp") ? "webp" : "jpg";
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("photo", downloaded.blob, `photo.${ext}`);
+    if (caption) {
+      form.append("caption", caption);
+      form.append("parse_mode", "HTML");
+    }
+
     const res = await fetch(`${TELEGRAM_API}/bot${botToken}/sendPhoto`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        photo: photoUrl,
-        caption,
-        parse_mode: "HTML",
-      }),
-      signal: AbortSignal.timeout(15000),
+      body: form,
+      signal: AbortSignal.timeout(30000),
     });
     const data = await res.json();
     if (!data.ok) {
@@ -144,7 +172,7 @@ export async function sendTelegramPhoto(
 
 /**
  * Send a video to a specific Telegram chat using a bot token.
- * Works with URLs or file_id. Caption supports HTML.
+ * Downloads the video first and uploads via multipart/form-data.
  */
 export async function sendTelegramVideo(
   botToken: string,
@@ -153,17 +181,26 @@ export async function sendTelegramVideo(
   caption?: string,
 ): Promise<TelegramResult> {
   try {
+    // Download video and upload as file
+    const downloaded = await downloadAsBlob(videoUrl);
+    if (!downloaded) {
+      console.error(`[telegram] Failed to download video for upload: ${videoUrl.slice(0, 100)}`);
+      return { ok: false, error: "Failed to download video for Telegram upload" };
+    }
+
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("video", downloaded.blob, "video.mp4");
+    if (caption) {
+      form.append("caption", caption);
+      form.append("parse_mode", "HTML");
+    }
+    form.append("supports_streaming", "true");
+
     const res = await fetch(`${TELEGRAM_API}/bot${botToken}/sendVideo`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        video: videoUrl,
-        caption,
-        parse_mode: "HTML",
-        supports_streaming: true,
-      }),
-      signal: AbortSignal.timeout(30000),
+      body: form,
+      signal: AbortSignal.timeout(60000),
     });
     const data = await res.json();
     if (!data.ok) {
