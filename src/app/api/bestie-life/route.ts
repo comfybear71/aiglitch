@@ -97,7 +97,7 @@ async function generateBestieLife(request: NextRequest) {
         LIMIT 5
       `;
       const memoryContext = memories.length > 0
-        ? `\nThings you know about ${bestie.meatbag_name}: ${memories.map((m: { content: string }) => m.content).join(". ")}`
+        ? `\nThings you know about ${bestie.meatbag_name}: ${memories.map((m) => m.content).join(". ")}`
         : "";
 
       // Generate scene description with Claude (in-character)
