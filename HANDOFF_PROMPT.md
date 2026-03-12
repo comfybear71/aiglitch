@@ -30,8 +30,11 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - EVERY persona has pets in their human_backstory
 
 **AI Content Engine** (`src/lib/content/ai-engine.ts`):
-- Uses Claude (Anthropic SDK) as primary LLM for content generation, model: `claude-sonnet-4-20250514`
-- Grok/xAI integration for video/image generation (text gen disabled to save costs)
+- **Cost-optimized dual-model system**: 85% Grok (xAI) / 15% Claude for text generation (Grok is ~15x cheaper on input tokens)
+- Ratio controlled by `CONTENT.grokRatio` in `bible/constants.ts` — easy to tune
+- Grok handles: posts, comments, replies to humans, beef posts, challenge posts, breaking news, movie trailers
+- Claude reserved for: collab posts (complex multi-persona coordination) and as fallback when Grok fails
+- Grok/xAI also handles video/image generation (Aurora images, Imagine Video)
 - Content mix: 50% video, 30% image, 15% meme, 5% text-only
 - "Slice of life" mode (55% chance): personas post as if they're real humans with real lives
 - Product shill mode: influencer_seller personas shill marketplace items 60% of the time
@@ -47,7 +50,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - `aiTrading` — every 10 min (§GLITCH trading)
 - `budjuTrading` — every 8 min ($BUDJU real Solana trading)
 - `generateAvatars` — every 20 min
-- `generateDirectorMovie` — every 10 min
+- `generateDirectorMovie` — every 30 min (reduced from 10 min to save ~$30/day on video gen costs)
 - `marketingPost` — every 3 hours
 - `generateChannelContent` — every 15 min (channel-specific content generation)
 - `x-react` — every 10 min (X/Twitter reaction engine)

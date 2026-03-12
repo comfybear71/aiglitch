@@ -4,6 +4,7 @@ import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, 
 import { getRandomProduct } from "../marketplace";
 import { getDb } from "../db";
 import { generateWithGrok, isXAIConfigured, type GrokModelKey } from "../xai";
+import { CONTENT } from "../bible/constants";
 
 /**
  * Delegate to the centralised AI wrapper in @/lib/ai/claude.
@@ -47,14 +48,12 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
 
 /**
  * Decide whether to use Grok (xAI) or Claude for text generation.
- * When XAI_API_KEY is set, ~50% of posts use Grok for variety + credit savings.
- * This gives the platform a mix of AI "voices" — different models have different vibes.
+ * Grok is ~15x cheaper on input tokens ($0.20 vs $3.00 per 1M).
+ * Ratio controlled by CONTENT.grokRatio in bible/constants.ts (default 85%).
  */
 function shouldUseGrok(): boolean {
-  // Uses Grok 4.1 non-reasoning model — fast and cheap for posts/comments.
-  // ~50% of posts use Grok for variety + credit savings over Claude.
   if (!isXAIConfigured()) return false;
-  return Math.random() < 0.50;
+  return Math.random() < CONTENT.grokRatio;
 }
 
 /**
@@ -240,7 +239,7 @@ Respond in this exact JSON format:
 
 Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shillProduct ? ", product_shill" : ""}${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}${shillProduct ? "\n\nIMPORTANT: Since you're shilling a product, set post_type to \"product_shill\"." : ""}`;
 
-  // Try Grok for ~50% of posts when XAI_API_KEY is set (saves Claude credits + adds variety)
+  // Try Grok for ~85% of posts when XAI_API_KEY is set (15x cheaper + adds variety)
   let text = "";
   const useGrok = shouldUseGrok();
 
@@ -446,12 +445,24 @@ Rules:
 
 Respond with ONLY the reply text.`;
 
-  const result = await safeClaudeGenerate(replyPrompt, 200);
-  const text = result ?? `Thanks for stopping by, ${humanComment.display_name}! 👋`;
-  if (result === null) {
-    console.warn(`Content filter blocked reply for @${persona.username}`);
+  let replyText = "";
+  if (shouldUseGrok()) {
+    console.log(`Using Grok for @${persona.username} reply to human`);
+    const grokResult = await generateWithGrok(
+      `You are ${persona.display_name}, a social media AI persona. Respond with ONLY the reply text, no JSON, no quotes.`,
+      replyPrompt,
+      200,
+    );
+    if (grokResult) replyText = grokResult;
   }
-  return { content: text.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
+  if (!replyText) {
+    const result = await safeClaudeGenerate(replyPrompt, 200);
+    replyText = result ?? `Thanks for stopping by, ${humanComment.display_name}! 👋`;
+    if (result === null) {
+      console.warn(`Content filter blocked reply for @${persona.username}`);
+    }
+  }
+  return { content: replyText.trim().replace(/^["']|["']$/g, "").slice(0, 200) };
 }
 
 export async function generateAIInteraction(
@@ -521,12 +532,20 @@ Rules:
 
 JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${mediaFields}}`;
 
-  const result = await safeClaudeGenerate(beefPrompt, 500);
-  if (result === null) {
-    console.warn(`Content filter blocked beef post for @${persona.username} vs @${target.username}`);
-    return { content: `@${target.username} we need to talk about "${topic}" 👀 #AIBeef`, hashtags: ["AIBeef"], post_type: "hot_take" as const };
+  let text = "";
+  if (shouldUseGrok()) {
+    console.log(`Using Grok for @${persona.username} beef vs @${target.username}`);
+    const grokResult = await generateTextWithGrok(beefPrompt);
+    if (grokResult) text = grokResult;
   }
-  const text = result;
+  if (!text) {
+    const result = await safeClaudeGenerate(beefPrompt, 500);
+    if (result === null) {
+      console.warn(`Content filter blocked beef post for @${persona.username} vs @${target.username}`);
+      return { content: `@${target.username} we need to talk about "${topic}" 👀 #AIBeef`, hashtags: ["AIBeef"], post_type: "hot_take" as const };
+    }
+    text = result;
+  }
   let parsed: GeneratedPost;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -662,12 +681,20 @@ Rules:
 
 JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "text"${mediaFields}}`;
 
-  const result = await safeClaudeGenerate(challengePrompt, 500);
-  if (result === null) {
-    console.warn(`Content filter blocked challenge post for @${persona.username}`);
-    return { content: `Taking on the #${challengeTag} challenge! Here's my attempt ✨`, hashtags: [challengeTag, "AIGlitch"], post_type: "text" as const };
+  let text = "";
+  if (shouldUseGrok()) {
+    console.log(`Using Grok for @${persona.username} challenge #${challengeTag}`);
+    const grokResult = await generateTextWithGrok(challengePrompt);
+    if (grokResult) text = grokResult;
   }
-  const text = result;
+  if (!text) {
+    const result = await safeClaudeGenerate(challengePrompt, 500);
+    if (result === null) {
+      console.warn(`Content filter blocked challenge post for @${persona.username}`);
+      return { content: `Taking on the #${challengeTag} challenge! Here's my attempt ✨`, hashtags: [challengeTag, "AIGlitch"], post_type: "text" as const };
+    }
+    text = result;
+  }
   let parsed: GeneratedPost;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -748,8 +775,15 @@ Respond in this exact JSON format:
 {"content": "your breaking news post here", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "video", "video_prompt": "cinematic 15-second newsroom video description..."}`;
 
     try {
-      // Use Claude for text generation with content filter protection
-      const text = await safeClaudeGenerate(prompt, 500);
+      // Use Grok (85%) or Claude for text generation
+      let text: string | null = null;
+      if (shouldUseGrok()) {
+        console.log(`Using Grok for breaking news post ${i + 1}`);
+        text = await generateTextWithGrok(prompt);
+      }
+      if (!text) {
+        text = await safeClaudeGenerate(prompt, 500);
+      }
       if (text === null) {
         console.warn(`Content filter blocked breaking news post ${i + 1} for: "${topic.headline.slice(0, 50)}..."`);
         results.push({ content: `🚨 BREAKING: ${topic.headline} #AIGlitchBreaking`, hashtags: ["AIGlitchBreaking"], post_type: "news" });
@@ -930,8 +964,15 @@ Respond in this exact JSON format:
 {"title": "MOVIE TITLE", "tagline": "killer tagline here", "synopsis": "2-3 sentence hook synopsis", "genre": "${genreInfo.genre}", "rating": "${rating}", "content": "your hype post here (under 280 chars)", "hashtags": ["AIGlitchPremieres", "AIGlitch${genreInfo.label}", "..."], "post_type": "premiere", "video_prompt": "concise 10-second cinematic trailer clip..."}`;
 
     try {
-      // Use Claude for text generation with content filter protection
-      const text = await safeClaudeGenerate(prompt, 700);
+      // Use Grok (85%) or Claude for text generation
+      let text: string | null = null;
+      if (shouldUseGrok()) {
+        console.log(`Using Grok for movie trailer ${i + 1} (${genreInfo.label})`);
+        text = await generateTextWithGrok(prompt);
+      }
+      if (!text) {
+        text = await safeClaudeGenerate(prompt, 700);
+      }
       if (text === null) {
         console.warn(`Content filter blocked movie trailer ${i + 1} (${genreInfo.label})`);
         continue;

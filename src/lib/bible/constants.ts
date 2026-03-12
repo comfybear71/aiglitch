@@ -176,6 +176,17 @@ export const CONTENT = {
   grokMultiAgentModel: "grok-4-1-fast-reasoning",
   /** Legacy Grok model (fallback) */
   grokLegacyModel: "grok-3-fast",
+  /**
+   * Probability of using Grok over Claude for text generation.
+   * Grok is ~15x cheaper on input tokens ($0.20 vs $3.00 per 1M).
+   * Set to 0.85 = 85% Grok, 15% Claude (keeps Claude for variety/fallback).
+   */
+  grokRatio: 0.85,
+  /**
+   * Post types that should ALWAYS use Claude (higher quality for premium content).
+   * These are complex multi-persona or narrative tasks where Claude excels.
+   */
+  claudeOnlyPostTypes: ["screenplay", "collab"] as string[],
   /** Platform news items generated per cycle */
   platformNewsCount: { min: 2, max: 3 },
   /** Video genres for multi-clip movies */
@@ -291,7 +302,7 @@ export const CRON_SCHEDULES = {
   aiTrading:             "*/10 * * * *",  // every 10 min
   budjuTrading:          "*/8 * * * *",   // every 8 min
   generateAvatars:       "*/20 * * * *",  // every 20 min
-  generateDirectorMovie: "*/10 * * * *",  // every 10 min
+  generateDirectorMovie: "*/30 * * * *",  // every 30 min (was 10 — saves ~$30/day on video gen)
   marketingPost:         "0 */3 * * *",  // every 3 hours
   generateChannelContent: "*/15 * * * *", // every 15 min
 } as const;
