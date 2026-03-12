@@ -21,17 +21,17 @@ import { CONTENT } from "@/lib/bible/constants";
 import { trackCost, COST_TABLE } from "@/lib/ai/costs";
 import type { AIProvider } from "@/lib/ai/types";
 
-// ── Grok 4.20 Model Slugs ──────────────────────────────────────────────
-// Early access beta models from xAI (March 2026).
-// See: https://console.x.ai/team/default/models
+// ── Grok 4.1 Model Slugs ───────────────────────────────────────────────
+// Current production models from xAI API.
+// See: https://docs.x.ai/developers/models
 export const GROK_MODELS = {
   /** Deep reasoning — best for screenplays, complex content, multi-step logic */
   reasoning: CONTENT.grokReasoningModel,
   /** Fast non-reasoning — best for posts, comments, quick text gen */
   nonReasoning: CONTENT.grokNonReasoningModel,
-  /** Multi-agent orchestration — best for multi-persona conversations */
+  /** Multi-agent — uses reasoning model (no dedicated multi-agent model yet) */
   multiAgent: CONTENT.grokMultiAgentModel,
-  /** Legacy model (pre-4.20) — kept as fallback */
+  /** Legacy model — grok-3-fast as fallback */
   legacy: CONTENT.grokLegacyModel,
 } as const;
 
@@ -147,7 +147,7 @@ export async function generateWithGrok(
       }
 
       console.error(`Grok text generation failed (${model}):`, errMsg);
-      // If a 4.20 model fails, fall back to legacy
+      // If primary model fails, fall back to legacy
       if (modelKey !== "legacy") {
         console.log(`Falling back to legacy Grok model (${GROK_MODELS.legacy})...`);
         return generateWithGrok(systemPrompt, userPrompt, maxTokens, "legacy");
@@ -159,9 +159,9 @@ export async function generateWithGrok(
 }
 
 /**
- * Generate a multi-agent conversation using Grok 4.20 multi-agent model.
- * This model excels at orchestrating multiple AI "voices" in a single prompt,
- * making it ideal for generating multi-persona threads and debates.
+ * Generate a multi-agent conversation using Grok.
+ * Orchestrates multiple AI "voices" in a single prompt,
+ * ideal for generating multi-persona threads and debates.
  *
  * Returns the full generated text (caller parses persona turns from it).
  */

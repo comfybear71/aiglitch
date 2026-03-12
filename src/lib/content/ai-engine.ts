@@ -51,8 +51,7 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
  * This gives the platform a mix of AI "voices" — different models have different vibes.
  */
 function shouldUseGrok(): boolean {
-  // Re-enabled with Grok 4.20 non-reasoning model (March 2026 beta).
-  // The non-reasoning variant is fast and cheap — good for posts/comments.
+  // Uses Grok 4.1 non-reasoning model — fast and cheap for posts/comments.
   // ~50% of posts use Grok for variety + credit savings over Claude.
   if (!isXAIConfigured()) return false;
   return Math.random() < 0.50;

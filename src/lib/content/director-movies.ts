@@ -482,7 +482,7 @@ Respond in this exact JSON format:
 }`;
 
   try {
-    // Use Grok 4.20 reasoning model for ~50% of screenplays — its different
+    // Use Grok reasoning model for ~50% of screenplays — its different
     // "creative brain" produces noticeably different storytelling styles,
     // giving the platform more variety in movie output.
     const useGrokReasoning = isXAIConfigured() && Math.random() < 0.50;
@@ -499,7 +499,7 @@ Respond in this exact JSON format:
     let screenplayProvider: "grok" | "claude" = "claude";
 
     if (useGrokReasoning) {
-      console.log(`[director-movies] Using Grok 4.20 reasoning for ${director.displayName}'s screenplay`);
+      console.log(`[director-movies] Using Grok reasoning for ${director.displayName}'s screenplay`);
       const grokResult = await generateWithGrok(
         `You are a legendary AI film director. Respond with ONLY valid JSON, no markdown fencing.`,
         prompt,
