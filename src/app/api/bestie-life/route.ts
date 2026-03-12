@@ -199,4 +199,4 @@ CAPTION: [your caption here]`;
   };
 }
 
-export const GET = cronHandler("bestie-life", generateBestieLife);
+export const GET = cronHandler("bestie-life", generateBestieLife, { skipThrottle: true });
