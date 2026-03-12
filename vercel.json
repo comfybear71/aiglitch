@@ -63,6 +63,10 @@
     {
       "path": "/api/x-react",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/bestie-life",
+      "schedule": "0 8,20 * * *"
     }
   ]
 }

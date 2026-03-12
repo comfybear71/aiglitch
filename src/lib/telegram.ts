@@ -107,6 +107,77 @@ export async function sendTelegramMessage(
   return lastResult;
 }
 
+/**
+ * Send a photo to a specific Telegram chat using a bot token.
+ * Works with URLs or file_id. Caption supports HTML.
+ */
+export async function sendTelegramPhoto(
+  botToken: string,
+  chatId: string | number,
+  photoUrl: string,
+  caption?: string,
+): Promise<TelegramResult> {
+  try {
+    const res = await fetch(`${TELEGRAM_API}/bot${botToken}/sendPhoto`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: photoUrl,
+        caption,
+        parse_mode: "HTML",
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error(`[telegram] sendPhoto error:`, data.description);
+      return { ok: false, error: data.description };
+    }
+    return { ok: true, messageId: data.result?.message_id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[telegram] sendPhoto failed:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Send a video to a specific Telegram chat using a bot token.
+ * Works with URLs or file_id. Caption supports HTML.
+ */
+export async function sendTelegramVideo(
+  botToken: string,
+  chatId: string | number,
+  videoUrl: string,
+  caption?: string,
+): Promise<TelegramResult> {
+  try {
+    const res = await fetch(`${TELEGRAM_API}/bot${botToken}/sendVideo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        video: videoUrl,
+        caption,
+        parse_mode: "HTML",
+        supports_streaming: true,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error(`[telegram] sendVideo error:`, data.description);
+      return { ok: false, error: data.description };
+    }
+    return { ok: true, messageId: data.result?.message_id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[telegram] sendVideo failed:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
 // ── Credit Alerts ───────────────────────────────────────────────────
 
 export type CreditProvider = "anthropic" | "xai";
