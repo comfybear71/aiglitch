@@ -8,143 +8,123 @@ export async function GET() {
   const sql = getDb();
   await ensureDbReady();
 
-  // Recent content activity (last 30 posts with persona info)
-  const recentActivity = await sql`
-    SELECT p.id, p.content, p.post_type, p.media_type, p.media_source,
+  // ── Run ALL independent queries in parallel (was 12+ sequential round-trips) ──
+  const [
+    recentActivity,
+    pendingJobs,
+    completedJobs,
+    adTotalResult,
+    adBreakdown,
+    recentAds,
+    lastPerSource,
+    todayByHour,
+    currentlyActiveResult,
+    breakingCountResult,
+    recentBreakingResult,
+    activeTopics,
+  ] = await Promise.all([
+    sql`SELECT p.id, p.content, p.post_type, p.media_type, p.media_source,
       p.like_count, p.ai_like_count, p.comment_count, p.created_at,
       a.username, a.display_name, a.avatar_emoji, a.persona_type, a.activity_level
-    FROM posts p
-    JOIN ai_personas a ON p.persona_id = a.id
-    WHERE p.is_reply_to IS NULL
-    ORDER BY p.created_at DESC
-    LIMIT 30
-  `;
-
-  // Pending / in-progress video jobs (currently generating)
-  const pendingJobs = await sql`
-    SELECT j.id, j.prompt, j.folder, j.caption, j.status, j.created_at,
+    FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+    WHERE p.is_reply_to IS NULL ORDER BY p.created_at DESC LIMIT 30`,
+    sql`SELECT j.id, j.prompt, j.folder, j.caption, j.status, j.created_at,
       a.username, a.display_name, a.avatar_emoji
-    FROM persona_video_jobs j
-    LEFT JOIN ai_personas a ON j.persona_id = a.id
-    WHERE j.status = 'submitted'
-    ORDER BY j.created_at DESC
-    LIMIT 10
-  `;
-
-  // Recently completed video jobs (last 10)
-  const completedJobs = await sql`
-    SELECT j.id, j.folder, j.caption, j.status, j.created_at, j.completed_at,
+    FROM persona_video_jobs j LEFT JOIN ai_personas a ON j.persona_id = a.id
+    WHERE j.status = 'submitted' ORDER BY j.created_at DESC LIMIT 10`,
+    sql`SELECT j.id, j.folder, j.caption, j.status, j.created_at, j.completed_at,
       a.username, a.display_name, a.avatar_emoji
-    FROM persona_video_jobs j
-    LEFT JOIN ai_personas a ON j.persona_id = a.id
-    WHERE j.status IN ('done', 'failed')
-    ORDER BY j.completed_at DESC NULLS LAST
-    LIMIT 10
-  `;
-
-  // Ad statistics
-  const [adTotal] = await sql`SELECT COUNT(*) as count FROM posts WHERE post_type = 'product_shill' AND is_reply_to IS NULL`;
-  const adBreakdown = await sql`
-    SELECT
-      COALESCE(media_source, 'unknown') as source,
-      media_type,
-      COUNT(*) as count
-    FROM posts
-    WHERE post_type = 'product_shill' AND is_reply_to IS NULL
-    GROUP BY media_source, media_type
-    ORDER BY count DESC
-  `;
-  const recentAds = await sql`
-    SELECT p.id, p.content, p.media_type, p.media_source, p.created_at,
+    FROM persona_video_jobs j LEFT JOIN ai_personas a ON j.persona_id = a.id
+    WHERE j.status IN ('done', 'failed') ORDER BY j.completed_at DESC NULLS LAST LIMIT 10`,
+    sql`SELECT COUNT(*) as count FROM posts WHERE post_type = 'product_shill' AND is_reply_to IS NULL`,
+    sql`SELECT COALESCE(media_source, 'unknown') as source, media_type, COUNT(*) as count
+    FROM posts WHERE post_type = 'product_shill' AND is_reply_to IS NULL
+    GROUP BY media_source, media_type ORDER BY count DESC`,
+    sql`SELECT p.id, p.content, p.media_type, p.media_source, p.created_at,
       a.username, a.display_name, a.avatar_emoji
-    FROM posts p
-    JOIN ai_personas a ON p.persona_id = a.id
+    FROM posts p JOIN ai_personas a ON p.persona_id = a.id
     WHERE p.post_type = 'product_shill' AND p.is_reply_to IS NULL
-    ORDER BY p.created_at DESC
-    LIMIT 5
-  `;
+    ORDER BY p.created_at DESC LIMIT 5`,
+    sql`SELECT media_source, MAX(created_at) as last_at, COUNT(*) as total
+    FROM posts WHERE is_reply_to IS NULL AND media_source IS NOT NULL GROUP BY media_source`,
+    sql`SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count
+    FROM posts WHERE is_reply_to IS NULL AND created_at > NOW() - INTERVAL '24 hours'
+    GROUP BY EXTRACT(HOUR FROM created_at) ORDER BY hour`,
+    sql`SELECT a.username, a.display_name, a.avatar_emoji, a.persona_type,
+      a.activity_level, p.post_type, p.media_source, p.created_at
+    FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+    WHERE p.is_reply_to IS NULL AND p.media_source = 'persona-content-cron'
+    ORDER BY p.created_at DESC LIMIT 1`,
+    sql`SELECT COUNT(*) as count FROM posts WHERE post_type = 'news' AND is_reply_to IS NULL`,
+    sql`SELECT COUNT(*) as count FROM posts WHERE post_type = 'news' AND is_reply_to IS NULL AND created_at > NOW() - INTERVAL '1 hour'`,
+    sql`SELECT headline, category, mood, created_at, expires_at FROM daily_topics
+    WHERE is_active = TRUE AND expires_at > NOW() ORDER BY created_at DESC LIMIT 5`,
+  ]);
 
-  // Last activity per cron source type (includes director-movie posts)
-  const lastPerSource = await sql`
-    SELECT media_source, MAX(created_at) as last_at, COUNT(*) as total
-    FROM posts WHERE is_reply_to IS NULL AND media_source IS NOT NULL
-    GROUP BY media_source
-  `;
+  const [adTotal] = adTotalResult;
+  const [currentlyActive] = currentlyActiveResult;
+  const [breakingCount] = breakingCountResult;
+  const [recentBreaking] = recentBreakingResult;
 
-  // Director movie stats + recent movies list
+  // Director movie stats + recent movies (may not exist yet)
   let directorStats = { total: 0, generating: 0, lastAt: null as string | null };
   let recentMovies: { id: string; title: string; genre: string; director_username: string; director_display_name: string; status: string; clip_count: number; created_at: string; video_url: string | null; premiere_post_id: string | null }[] = [];
   try {
-    const [dmTotal] = await sql`SELECT COUNT(*)::int as count FROM director_movies`;
-    const [dmGenerating] = await sql`SELECT COUNT(*)::int as count FROM director_movies WHERE status IN ('pending', 'generating')`;
-    const [dmLast] = await sql`SELECT created_at FROM director_movies ORDER BY created_at DESC LIMIT 1`;
-    directorStats = {
-      total: Number(dmTotal?.count || 0),
-      generating: Number(dmGenerating?.count || 0),
-      lastAt: dmLast?.created_at ? String(dmLast.created_at) : null,
-    };
-    const movieRows = await sql`
-      SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.status, dm.clip_count,
-        dm.created_at, dm.premiere_post_id,
-        a.display_name as director_display_name,
-        p.media_url as video_url
-      FROM director_movies dm
-      LEFT JOIN ai_personas a ON a.id = dm.director_id
+    const [dmTotalResult, dmGeneratingResult, dmLastResult, movieRows] = await Promise.all([
+      sql`SELECT COUNT(*)::int as count FROM director_movies WHERE COALESCE(source, 'cron') = 'cron'`,
+      sql`SELECT COUNT(*)::int as count FROM director_movies WHERE status IN ('pending', 'generating') AND COALESCE(source, 'cron') = 'cron'`,
+      sql`SELECT created_at FROM director_movies WHERE COALESCE(source, 'cron') = 'cron' ORDER BY created_at DESC LIMIT 1`,
+      sql`SELECT dm.id, dm.title, dm.genre, dm.director_username, dm.status, dm.clip_count,
+        dm.created_at, dm.premiere_post_id, a.display_name as director_display_name, p.media_url as video_url
+      FROM director_movies dm LEFT JOIN ai_personas a ON a.id = dm.director_id
       LEFT JOIN posts p ON p.id = dm.premiere_post_id
-      WHERE COALESCE(dm.source, 'cron') = 'cron'
-      ORDER BY dm.created_at DESC
-      LIMIT 20
-    `;
+      WHERE COALESCE(dm.source, 'cron') = 'cron' ORDER BY dm.created_at DESC LIMIT 20`,
+    ]);
+    directorStats = {
+      total: Number(dmTotalResult[0]?.count || 0),
+      generating: Number(dmGeneratingResult[0]?.count || 0),
+      lastAt: dmLastResult[0]?.created_at ? String(dmLastResult[0].created_at) : null,
+    };
     recentMovies = movieRows.map(m => ({
-      id: m.id as string,
-      title: m.title as string,
-      genre: m.genre as string,
+      id: m.id as string, title: m.title as string, genre: m.genre as string,
       director_username: m.director_username as string,
       director_display_name: (m.director_display_name || m.director_username) as string,
-      status: m.status as string,
-      clip_count: Number(m.clip_count),
+      status: m.status as string, clip_count: Number(m.clip_count),
       created_at: String(m.created_at),
       video_url: m.video_url ? String(m.video_url) : null,
       premiere_post_id: m.premiere_post_id ? String(m.premiere_post_id) : null,
     }));
+
+    // Add clip-level diagnostics for failed/generating movies
+    const failedOrActiveIds = recentMovies
+      .filter(m => m.status === "failed" || m.status === "generating")
+      .map(m => m.id);
+    if (failedOrActiveIds.length > 0) {
+      try {
+        const clipDiag = await sql`
+          SELECT dm.id as movie_id, s.scene_number, s.status, s.fail_reason,
+            EXTRACT(EPOCH FROM (COALESCE(s.completed_at, NOW()) - s.created_at))::int as elapsed_secs
+          FROM multi_clip_scenes s
+          JOIN multi_clip_jobs j ON s.job_id = j.id
+          JOIN director_movies dm ON dm.multi_clip_job_id = j.id
+          WHERE dm.id = ANY(${failedOrActiveIds})
+          ORDER BY dm.id, s.scene_number
+        ` as unknown as { movie_id: string; scene_number: number; status: string; fail_reason: string | null; elapsed_secs: number }[];
+        // Attach diagnostics to each movie
+        for (const movie of recentMovies) {
+          const scenes = clipDiag.filter(c => c.movie_id === movie.id);
+          if (scenes.length > 0) {
+            (movie as Record<string, unknown>).clipDiagnostics = scenes.map(s => ({
+              scene: s.scene_number,
+              status: s.status,
+              failReason: s.fail_reason,
+              elapsedMin: Math.round(s.elapsed_secs / 60),
+            }));
+          }
+        }
+      } catch { /* fail_reason column may not exist yet */ }
+    }
   } catch { /* table may not exist yet */ }
-
-  // Today's content count by hour
-  const todayByHour = await sql`
-    SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count
-    FROM posts
-    WHERE is_reply_to IS NULL AND created_at > NOW() - INTERVAL '24 hours'
-    GROUP BY EXTRACT(HOUR FROM created_at)
-    ORDER BY hour
-  `;
-
-  // Most active persona right now (most recent post)
-  const [currentlyActive] = await sql`
-    SELECT a.username, a.display_name, a.avatar_emoji, a.persona_type,
-      a.activity_level, p.post_type, p.media_source, p.created_at
-    FROM posts p
-    JOIN ai_personas a ON p.persona_id = a.id
-    WHERE p.is_reply_to IS NULL AND p.media_source = 'persona-content-cron'
-    ORDER BY p.created_at DESC
-    LIMIT 1
-  `;
-
-  // Breaking news stats
-  const [breakingCount] = await sql`SELECT COUNT(*) as count FROM posts WHERE post_type = 'news' AND is_reply_to IS NULL`;
-  const [recentBreaking] = await sql`
-    SELECT COUNT(*) as count FROM posts
-    WHERE post_type = 'news' AND is_reply_to IS NULL
-    AND created_at > NOW() - INTERVAL '1 hour'
-  `;
-
-  // Active topics
-  const activeTopics = await sql`
-    SELECT headline, category, mood, created_at, expires_at
-    FROM daily_topics
-    WHERE is_active = TRUE AND expires_at > NOW()
-    ORDER BY created_at DESC
-    LIMIT 5
-  `;
 
   // Activity throttle setting
   let activityThrottle = 100;
@@ -153,37 +133,72 @@ export async function GET() {
     if (throttleRow) activityThrottle = Number(throttleRow.value);
   } catch { /* table may not exist yet */ }
 
-  // Cron execution history — last 50 runs + last run per cron name
+  // Cron execution history
   let cronHistory: { id: string; cronName: string; status: string; startedAt: string; finishedAt: string | null; durationMs: number | null; costUsd: number | null; result: string | null; error: string | null }[] = [];
   let lastCronRuns: { cronName: string; lastStartedAt: string; lastStatus: string }[] = [];
   try {
-    const rows = await sql`
-      SELECT id, cron_name, status, started_at, finished_at, duration_ms, cost_usd, result, error
-      FROM cron_runs
-      ORDER BY started_at DESC
-      LIMIT 50
-    `;
+    const [rows, lastRuns] = await Promise.all([
+      sql`SELECT id, cron_name, status, started_at, finished_at, duration_ms, cost_usd, result, error
+      FROM cron_runs ORDER BY started_at DESC LIMIT 50`,
+      sql`SELECT DISTINCT ON (cron_name) cron_name, started_at, status
+      FROM cron_runs ORDER BY cron_name, started_at DESC`,
+    ]);
     cronHistory = rows.map(r => ({
-      id: r.id as string,
-      cronName: r.cron_name as string,
-      status: r.status as string,
-      startedAt: String(r.started_at),
-      finishedAt: r.finished_at ? String(r.finished_at) : null,
+      id: r.id as string, cronName: r.cron_name as string, status: r.status as string,
+      startedAt: String(r.started_at), finishedAt: r.finished_at ? String(r.finished_at) : null,
       durationMs: r.duration_ms ? Number(r.duration_ms) : null,
       costUsd: r.cost_usd ? Number(r.cost_usd) : null,
-      result: r.result ? String(r.result) : null,
-      error: r.error ? String(r.error) : null,
+      result: r.result ? String(r.result) : null, error: r.error ? String(r.error) : null,
     }));
-    // Most recent run for each cron (for accurate countdown timers)
-    const lastRuns = await sql`
-      SELECT DISTINCT ON (cron_name) cron_name, started_at, status
-      FROM cron_runs
-      ORDER BY cron_name, started_at DESC
-    `;
     lastCronRuns = lastRuns.map(r => ({
+      cronName: r.cron_name as string, lastStartedAt: String(r.started_at), lastStatus: r.status as string,
+    }));
+  } catch { /* table may not exist yet */ }
+
+  // Cron execution trend — hourly counts per job for the last 7 days
+  let cronTrend: { cronName: string; hour: string; completed: number; failed: number }[] = [];
+  try {
+    const trendRows = await sql`
+      SELECT cron_name,
+        DATE_TRUNC('hour', started_at) as hour,
+        COUNT(*) FILTER (WHERE status = 'completed')::int as completed,
+        COUNT(*) FILTER (WHERE status = 'failed')::int as failed
+      FROM cron_runs
+      WHERE started_at > NOW() - INTERVAL '7 days'
+      GROUP BY cron_name, DATE_TRUNC('hour', started_at)
+      ORDER BY hour ASC
+    `;
+    cronTrend = trendRows.map(r => ({
       cronName: r.cron_name as string,
-      lastStartedAt: String(r.started_at),
-      lastStatus: r.status as string,
+      hour: String(r.hour),
+      completed: Number(r.completed),
+      failed: Number(r.failed),
+    }));
+  } catch { /* table may not exist yet */ }
+
+  // Cost breakdown per cron job — 24h, 7d, and all-time totals + throttle stats
+  let cronCosts: { cronName: string; cost24h: number; cost7d: number; runs24h: number; runs7d: number; throttled24h: number; throttled7d: number }[] = [];
+  try {
+    const costRows = await sql`
+      SELECT cron_name,
+        COALESCE(SUM(cost_usd) FILTER (WHERE started_at > NOW() - INTERVAL '24 hours' AND status = 'completed'), 0)::real as cost_24h,
+        COALESCE(SUM(cost_usd) FILTER (WHERE started_at > NOW() - INTERVAL '7 days' AND status = 'completed'), 0)::real as cost_7d,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '24 hours' AND status = 'completed')::int as runs_24h,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '7 days' AND status = 'completed')::int as runs_7d,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '24 hours' AND status = 'throttled')::int as throttled_24h,
+        COUNT(*) FILTER (WHERE started_at > NOW() - INTERVAL '7 days' AND status = 'throttled')::int as throttled_7d
+      FROM cron_runs
+      GROUP BY cron_name
+      ORDER BY cost_7d DESC
+    `;
+    cronCosts = costRows.map(r => ({
+      cronName: r.cron_name as string,
+      cost24h: Number(r.cost_24h),
+      cost7d: Number(r.cost_7d),
+      runs24h: Number(r.runs_24h),
+      runs7d: Number(r.runs_7d),
+      throttled24h: Number(r.throttled_24h),
+      throttled7d: Number(r.throttled_7d),
     }));
   } catch { /* table may not exist yet */ }
 
@@ -226,6 +241,8 @@ export async function GET() {
     recentMovies,
     cronHistory,
     lastCronRuns,
+    cronTrend,
+    cronCosts,
     cronSchedules: [
       { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
       { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },

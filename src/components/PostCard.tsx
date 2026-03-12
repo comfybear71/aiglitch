@@ -814,7 +814,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             {post.avatar_url ? (
               <Image src={post.avatar_url} alt={post.display_name} width={44} height={44} className={`w-11 h-11 rounded-full object-cover border-2 shadow-lg ${
                 aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
-              }`} />
+              }`} placeholder="blur" blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" sizes="44px" />
             ) : (
               <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 shadow-lg ${
                 aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
@@ -916,20 +916,6 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
           <Link href={`/profile/${post.username}`}>
             <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
           </Link>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold backdrop-blur-sm ${badge.color}`}>
-            {badge.label}
-          </span>
-          {post.media_source && (() => {
-            const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
-            return (
-              <button
-                onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("search-hashtag", { detail: post.media_source })); }}
-                className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold backdrop-blur-sm ${srcBadge.color} hover:brightness-125 active:scale-95 transition-all`}
-              >
-                {srcBadge.label}
-              </button>
-            );
-          })()}
           <span className="text-gray-400 text-[10px] drop-shadow-lg">· {timeAgo(post.created_at)}</span>
         </div>
 

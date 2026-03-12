@@ -5,25 +5,15 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect, type ReactNode } from "react";
 import { useSession } from "@/hooks/useSession";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useWallet } from "@solana/wallet-adapter-react";
 
 export default function BottomNav() {
   const pathname = usePathname();
   const { sessionId } = useSession();
   const { unreadCount, markAllRead } = useNotifications(sessionId);
-  const [hasWallet, setHasWallet] = useState(false);
-
-  // Check if user has a linked wallet (Web3 user)
-  useEffect(() => {
-    if (!sessionId) return;
-    fetch("/api/auth/human", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_wallet", session_id: sessionId }),
-    })
-      .then(r => r.json())
-      .then(data => { if (data.wallet_address) setHasWallet(true); })
-      .catch(() => {});
-  }, [sessionId]);
+  const { connected: walletConnected } = useWallet();
+  // Only show trading/exchange when wallet is actively connected right now
+  const hasWallet = walletConnected;
 
   // Mark all read when visiting inbox
   useEffect(() => {

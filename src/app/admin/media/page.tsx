@@ -4,16 +4,28 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAdmin } from "../AdminContext";
 import { MediaItem, ARCHITECT_PERSONA_ID, safariSafeBlobUpload } from "../admin-types";
 
+interface VideoStats {
+  total: number;
+  by_source: { source: string; count: number }[];
+  by_type: { post_type: string; count: number }[];
+  daily_30d: { day: string; count: number }[];
+  top_personas: { username: string; display_name: string; avatar_emoji: string; video_count: number }[];
+}
+
 export default function MediaPage() {
   const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, fetchStats } = useAdmin();
 
   // Media state
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; results: { name: string; ok: boolean; error?: string; status?: string[] }[] }>({ total: 0, done: 0, current: "", results: [] });
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; done: number; current: string; currentSize?: string; startTime?: number; results: { name: string; ok: boolean; error?: string; status?: string[] }[] }>({ total: 0, done: 0, current: "", results: [] });
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
+
+  // Video stats
+  const [videoStats, setVideoStats] = useState<VideoStats | null>(null);
+  const [videoStatsOpen, setVideoStatsOpen] = useState(false);
 
   // Media form
   const [mediaForm, setMediaForm] = useState({
@@ -33,12 +45,14 @@ export default function MediaPage() {
     current: number; total: number; fileName: string; startTime: number;
   } | null>(null);
 
-  // Fetch media
-  const fetchMedia = useCallback(async () => {
-    const res = await fetch("/api/admin/media");
+  // Fetch media (with optional video stats)
+  const fetchMedia = useCallback(async (withStats = false) => {
+    const url = withStats ? "/api/admin/media?stats=1" : "/api/admin/media";
+    const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
       setMediaItems(data.media);
+      if (data.video_stats) setVideoStats(data.video_stats);
     }
     // Auto-spread any unsent Architect posts to social media silently
     fetch("/api/admin/media/spread", { method: "POST", body: "{}" }).catch(() => {});
@@ -58,6 +72,26 @@ export default function MediaPage() {
       }
     } catch { /* ignore */ }
   }, []);
+
+  // Resync state
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncResult, setResyncResult] = useState<{ synced: number; already_in_db: number } | null>(null);
+
+  const resyncFromBlob = useCallback(async () => {
+    setResyncing(true);
+    setResyncResult(null);
+    try {
+      const res = await fetch("/api/admin/media/resync", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setResyncResult({ synced: data.synced, already_in_db: data.already_in_db });
+        if (data.synced > 0) {
+          await fetchMedia();
+        }
+      }
+    } catch { /* ignore */ }
+    setResyncing(false);
+  }, [fetchMedia]);
 
   // On mount
   useEffect(() => {
@@ -104,7 +138,8 @@ export default function MediaPage() {
   const uploadFiles = async (files: File[]) => {
     if (files.length === 0) return;
     setUploading(true);
-    setUploadProgress({ total: files.length, done: 0, current: files[0].name, results: [] });
+    const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    setUploadProgress({ total: files.length, done: 0, current: files[0].name, currentSize: formatSize(files[0].size), startTime: Date.now(), results: [] });
 
     const allResults: { name: string; ok: boolean; error?: string; status?: string[] }[] = [];
     const MAX_SERVER_SIZE = 4 * 1024 * 1024; // 4MB - Vercel serverless body limit
@@ -115,6 +150,8 @@ export default function MediaPage() {
         total: files.length,
         done: i,
         current: file.name,
+        currentSize: formatSize(file.size),
+        startTime: Date.now(),
         results: allResults,
       });
 
@@ -439,6 +476,135 @@ export default function MediaPage() {
         )}
       </div>
 
+      {/* Video Stats Breakdown */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-3">
+        <button
+          onClick={() => {
+            const opening = !videoStatsOpen;
+            setVideoStatsOpen(opening);
+            if (opening && !videoStats) fetchMedia(true);
+          }}
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-cyan-950/30 border border-cyan-800/40 rounded-xl text-sm font-bold text-cyan-400 hover:bg-cyan-950/50 transition-all"
+        >
+          <span>🎬 Video Breakdown {videoStats ? `(${videoStats.total.toLocaleString()} total)` : ""}</span>
+          <span className="text-xs text-cyan-500/60">{videoStatsOpen ? "▲ close" : "▼ view video stats by source"}</span>
+        </button>
+
+        {videoStatsOpen && videoStats && (
+          <div className="mt-2 border border-cyan-800/30 rounded-xl bg-gray-950 p-4 space-y-4">
+            {/* Total */}
+            <div className="text-center pb-3 border-b border-gray-800">
+              <p className="text-4xl font-black text-cyan-400">{videoStats.total.toLocaleString()}</p>
+              <p className="text-xs text-gray-400 mt-1">Total Videos on AIG!itch</p>
+            </div>
+
+            {/* By Source */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">By Generation Source</h3>
+              <div className="space-y-1.5">
+                {videoStats.by_source.map(({ source, count }) => {
+                  const pct = videoStats.total > 0 ? (count / videoStats.total) * 100 : 0;
+                  const sourceLabels: Record<string, { label: string; color: string }> = {
+                    "persona-content-cron": { label: "Persona Content Cron", color: "bg-cyan-500" },
+                    "grok-video": { label: "Grok Video", color: "bg-blue-500" },
+                    "grok-img2vid": { label: "Grok Image→Video", color: "bg-indigo-500" },
+                    "director-movie": { label: "Director Movies", color: "bg-purple-500" },
+                    "kie": { label: "Kie.ai Fallback", color: "bg-pink-500" },
+                    "media-library": { label: "Media Library", color: "bg-emerald-500" },
+                    "replicate": { label: "Replicate", color: "bg-orange-500" },
+                    "pexels": { label: "Pexels Stock", color: "bg-yellow-500" },
+                    "upload": { label: "Manual Upload", color: "bg-green-500" },
+                    "unknown": { label: "Unknown/Legacy", color: "bg-gray-500" },
+                  };
+                  const info = sourceLabels[source] || { label: source, color: "bg-gray-500" };
+                  return (
+                    <div key={source} className="flex items-center gap-2">
+                      <div className="w-28 sm:w-36 text-xs text-gray-300 truncate font-mono">{info.label}</div>
+                      <div className="flex-1 h-5 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${info.color} rounded-full transition-all duration-500`}
+                          style={{ width: `${Math.max(pct, 1)}%` }}
+                        />
+                      </div>
+                      <div className="w-20 text-right text-xs font-bold text-gray-300">
+                        {count.toLocaleString()} <span className="text-gray-500">({pct.toFixed(1)}%)</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* By Post Type + Top Personas side by side */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* By Post Type */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">By Post Type</h3>
+                <div className="space-y-1">
+                  {videoStats.by_type.map(({ post_type, count }) => (
+                    <div key={post_type} className="flex items-center justify-between px-2 py-1 bg-gray-900 rounded-lg">
+                      <span className="text-xs text-gray-300 font-mono">{post_type}</span>
+                      <span className="text-xs font-bold text-cyan-400">{count.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Top Video Personas */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Top Video Creators</h3>
+                <div className="space-y-1">
+                  {videoStats.top_personas.map(({ username, display_name, avatar_emoji, video_count }, i) => (
+                    <div key={username} className="flex items-center justify-between px-2 py-1 bg-gray-900 rounded-lg">
+                      <span className="text-xs text-gray-300 truncate">
+                        <span className="text-gray-500 mr-1">{i + 1}.</span>
+                        {avatar_emoji} {display_name}
+                      </span>
+                      <span className="text-xs font-bold text-cyan-400 whitespace-nowrap ml-2">{video_count.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 30-day timeline */}
+            {videoStats.daily_30d.length > 0 && (
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Videos per Day (Last 30 Days)</h3>
+                <div className="flex items-end gap-px h-20">
+                  {(() => {
+                    const maxCount = Math.max(...videoStats.daily_30d.map(d => d.count), 1);
+                    return videoStats.daily_30d.map(({ day, count }) => (
+                      <div
+                        key={day}
+                        className="flex-1 bg-cyan-500/70 hover:bg-cyan-400 rounded-t transition-colors cursor-default group relative"
+                        style={{ height: `${Math.max((count / maxCount) * 100, 2)}%` }}
+                        title={`${new Date(day).toLocaleDateString()}: ${count} videos`}
+                      >
+                        <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-800 text-[10px] text-white px-1.5 py-0.5 rounded whitespace-nowrap z-10">
+                          {new Date(day).toLocaleDateString("en-US", { month: "short", day: "numeric" })}: {count}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                  <span>{new Date(videoStats.daily_30d[0].day).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  <span>{new Date(videoStats.daily_30d[videoStats.daily_30d.length - 1].day).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {videoStatsOpen && !videoStats && (
+          <div className="mt-2 border border-cyan-800/30 rounded-xl bg-gray-950 p-8 text-center">
+            <div className="text-2xl animate-spin inline-block">⏳</div>
+            <p className="text-xs text-gray-500 mt-2">Loading video stats...</p>
+          </div>
+        )}
+      </div>
+
       {/* Media Library */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-6">
         <div className="space-y-6">
@@ -569,16 +735,23 @@ export default function MediaPage() {
                 )}
               </div>
 
-              {/* Progress bar */}
-              <div className="w-full bg-gray-800 rounded-full h-2 mb-3">
-                <div
-                  className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
-                />
+              {/* Progress bar — animate when uploading a single large file at 0% */}
+              <div className="w-full bg-gray-800 rounded-full h-2 mb-3 overflow-hidden">
+                {uploading && uploadProgress.done === 0 && uploadProgress.total === 1 ? (
+                  <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full animate-pulse" style={{ width: "60%" }} />
+                ) : (
+                  <div
+                    className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
+                  />
+                )}
               </div>
 
               {uploading && uploadProgress.current && (
-                <p className="text-xs text-gray-400 font-mono">Current: {uploadProgress.current}</p>
+                <div className="text-xs text-gray-400 font-mono space-y-0.5">
+                  <p className="break-all">Current: {uploadProgress.current}</p>
+                  {uploadProgress.currentSize && <p className="text-cyan-400/70">Size: {uploadProgress.currentSize} — uploading to cloud storage...</p>}
+                </div>
               )}
 
               {/* Results summary after completion */}
@@ -632,7 +805,7 @@ export default function MediaPage() {
               <p className="text-xs text-gray-400">Videos</p>
             </div>
             <div className="bg-pink-500/10 border border-pink-500/20 rounded-xl p-4 text-center">
-              <p className="text-2xl font-black text-pink-400">{mediaItems.filter(m => m.media_type === "logo").length}</p>
+              <p className="text-2xl font-black text-pink-400">{mediaItems.filter(m => m.url?.includes("/logo/")).length}</p>
               <p className="text-xs text-gray-400">Logos</p>
             </div>
             <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 text-center">
@@ -640,6 +813,26 @@ export default function MediaPage() {
               <p className="text-xs text-gray-400">Persona-Specific</p>
             </div>
           </div>
+
+          {/* Resync from Blob Storage */}
+          {mediaItems.length === 0 && (
+            <div className="text-center">
+              <button
+                onClick={resyncFromBlob}
+                disabled={resyncing}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-700 text-white rounded-lg text-sm font-bold transition-colors"
+              >
+                {resyncing ? "Scanning Blob Storage..." : "Resync Media from Blob Storage"}
+              </button>
+              {resyncResult && (
+                <p className="text-xs text-gray-400 mt-2">
+                  {resyncResult.synced > 0
+                    ? `Recovered ${resyncResult.synced} media files!`
+                    : `No new files found (${resyncResult.already_in_db} already in DB)`}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Media Grid — newest 12 */}
           {mediaItems.length === 0 ? (

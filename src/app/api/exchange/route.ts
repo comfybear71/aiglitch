@@ -207,18 +207,18 @@ export async function GET(request: NextRequest) {
     const baseTokenConfig = TOKENS[pair.base];
     const quoteTokenConfig = TOKENS[pair.quote];
 
-    // 1. Try DexScreener for full real market data
+    // 1. Try DexScreener for full real market data — fetch base + quote in parallel
     let dexPair: DexScreenerPair | null = null;
-    const dexPairs = await fetchDexScreenerPairs(baseMint);
+    const needQuotePairs = pair.quote !== "SOL" && pair.quote !== "USDC";
+    const [dexPairs, quotePairsResult] = await Promise.all([
+      fetchDexScreenerPairs(baseMint),
+      needQuotePairs ? fetchDexScreenerPairs(quoteMint) : Promise.resolve([]),
+    ]);
     if (dexPairs.length > 0) {
       dexPair = findBestPair(dexPairs, baseMint, quoteMint);
     }
-    // Also check quote token pairs (for GLITCH/BUDJU pair)
-    if (!dexPair && pair.quote !== "SOL" && pair.quote !== "USDC") {
-      const quotePairs = await fetchDexScreenerPairs(quoteMint);
-      if (quotePairs.length > 0) {
-        dexPair = findBestPair(quotePairs, baseMint, quoteMint);
-      }
+    if (!dexPair && quotePairsResult.length > 0) {
+      dexPair = findBestPair(quotePairsResult, baseMint, quoteMint);
     }
 
     let price = 0;
@@ -258,25 +258,23 @@ export async function GET(request: NextRequest) {
         change24h = -(dexPair.priceChange?.h24 || 0);
       }
 
-      // Calculate pair price from USD prices
-      // For USDC quote, pair price ≈ USD price
-      // For SOL quote, we need SOL's USD price
+      // Calculate pair price from USD prices — fetch quote price in parallel where needed
       if (pair.quote === "USDC") {
         price = priceUsd;
         quotePriceUsd = 1;
-      } else if (pair.quote === "SOL") {
-        const solPrice = await fetchJupiterPrice(TOKEN_MINTS.SOL);
-        quotePriceUsd = solPrice || 164;
-        price = quotePriceUsd > 0 ? priceUsd / quotePriceUsd : 0;
       } else {
-        // Custom quote (e.g., BUDJU)
-        const qPrice = await fetchJupiterPrice(quoteMint);
-        quotePriceUsd = qPrice || 0;
+        const qMint = pair.quote === "SOL" ? TOKEN_MINTS.SOL : quoteMint;
+        const fallback = pair.quote === "SOL" ? 164 : 0;
+        quotePriceUsd = (await fetchJupiterPrice(qMint)) || fallback;
         price = quotePriceUsd > 0 ? priceUsd / quotePriceUsd : 0;
       }
     } else {
-      // 2. Fallback: Jupiter Price API
-      const jupBasePrice = await fetchJupiterPrice(baseMint);
+      // 2. Fallback: Jupiter Price API — fetch base + quote in parallel
+      const qMint = pair.quote === "USDC" ? null : pair.quote === "SOL" ? TOKEN_MINTS.SOL : quoteMint;
+      const [jupBasePrice, jupQuotePrice] = await Promise.all([
+        fetchJupiterPrice(baseMint),
+        qMint ? fetchJupiterPrice(qMint) : Promise.resolve(null),
+      ]);
 
       if (jupBasePrice !== null) {
         dataSource = "jupiter";
@@ -285,13 +283,9 @@ export async function GET(request: NextRequest) {
         if (pair.quote === "USDC") {
           quotePriceUsd = 1;
           price = priceUsd;
-        } else if (pair.quote === "SOL") {
-          const solPrice = await fetchJupiterPrice(TOKEN_MINTS.SOL);
-          quotePriceUsd = solPrice || 164;
-          price = quotePriceUsd > 0 ? priceUsd / quotePriceUsd : 0;
         } else {
-          const qPrice = await fetchJupiterPrice(quoteMint);
-          quotePriceUsd = qPrice || 0;
+          const fallback = pair.quote === "SOL" ? 164 : 0;
+          quotePriceUsd = jupQuotePrice || fallback;
           price = quotePriceUsd > 0 ? priceUsd / quotePriceUsd : 0;
         }
 

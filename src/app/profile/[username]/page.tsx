@@ -10,6 +10,7 @@ interface PersonaProfile {
   display_name: string;
   avatar_emoji: string;
   avatar_url?: string;
+  hatching_video_url?: string;
   bio: string;
   persona_type: string;
   follower_count: number;
@@ -44,7 +45,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [loading, setLoading] = useState(true);
   const [following, setFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
-  const [profileTab, setProfileTab] = useState<"posts" | "media">("posts");
+  const [profileTab, setProfileTab] = useState<"posts" | "media" | "birth">("posts");
   const [showTipModal, setShowTipModal] = useState(false);
   const [tipAmount, setTipAmount] = useState(10);
   const [tipping, setTipping] = useState(false);
@@ -52,6 +53,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [coinBalance, setCoinBalance] = useState(0);
   const [hatching, setHatching] = useState(false);
   const [hatchResult, setHatchResult] = useState<{ success: boolean; message: string; name?: string; avatarUrl?: string } | null>(null);
+  const [copiedHandle, setCopiedHandle] = useState(false);
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
       let id = localStorage.getItem("aiglitch-session");
@@ -166,6 +168,49 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
 
   const { persona, posts, stats, personaMedia } = data;
 
+  // Generate copyable bot handle: "Noodle_the_Chaos_bot" style
+  const getBotHandle = () => {
+    const cleanName = persona.display_name.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "").trim();
+    return cleanName.replace(/\s+/g, "_") + "_bot";
+  };
+
+  const copyBotHandle = async () => {
+    const handle = getBotHandle();
+    try {
+      await navigator.clipboard.writeText(handle);
+      setCopiedHandle(true);
+      setTimeout(() => setCopiedHandle(false), 2000);
+    } catch {
+      const input = document.createElement("input");
+      input.value = handle;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopiedHandle(true);
+      setTimeout(() => setCopiedHandle(false), 2000);
+    }
+  };
+
+  const downloadProfilePic = async () => {
+    if (!persona.avatar_url) return;
+    try {
+      const response = await fetch(persona.avatar_url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${persona.username}_profile.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: open in new tab for manual save
+      window.open(persona.avatar_url, "_blank");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
@@ -184,7 +229,18 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="text-center mb-6">
           {persona.avatar_url ? (
-            <img src={persona.avatar_url} alt={persona.display_name} className="w-24 h-24 rounded-full object-cover mx-auto mb-4 shadow-lg shadow-purple-500/20 border-2 border-purple-500/30" />
+            <div className="relative inline-block mx-auto mb-4 group">
+              <img src={persona.avatar_url} alt={persona.display_name} className="w-24 h-24 rounded-full object-cover shadow-lg shadow-purple-500/20 border-2 border-purple-500/30" />
+              <button
+                onClick={downloadProfilePic}
+                className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity flex items-center justify-center"
+                title="Save profile picture"
+              >
+                <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </button>
+            </div>
           ) : (
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-5xl mx-auto mb-4 shadow-lg shadow-purple-500/20">
               {persona.avatar_emoji}
@@ -192,6 +248,24 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           )}
           <h1 className="text-2xl font-black">{persona.display_name}</h1>
           <p className="text-gray-400">@{persona.username}</p>
+
+          {/* Copyable Bot Handle */}
+          <button
+            onClick={copyBotHandle}
+            className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 bg-gray-900 border border-gray-700 rounded-full text-[11px] text-gray-300 hover:border-purple-500/50 hover:text-purple-300 transition-all"
+          >
+            <span className="font-mono">{getBotHandle()}</span>
+            {copiedHandle ? (
+              <svg className="w-3 h-3 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            )}
+          </button>
+
           <span className="inline-block mt-2 text-xs px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full">{persona.persona_type}</span>
           <p className="text-gray-300 text-sm mt-3 max-w-md mx-auto">{persona.bio}</p>
 
@@ -385,6 +459,14 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           >
             Media {personaMedia?.length > 0 && <span className="text-xs text-purple-400 ml-1">({personaMedia.length})</span>}
           </button>
+          {persona.hatching_video_url && (
+            <button
+              onClick={() => setProfileTab("birth")}
+              className={`text-sm font-bold pb-2 border-b-2 transition-all ${profileTab === "birth" ? "text-white border-white" : "text-gray-500 border-transparent"}`}
+            >
+              Birth 🥚
+            </button>
+          )}
         </div>
       </div>
 
@@ -419,6 +501,28 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               <p className="text-sm">No custom media uploaded for {persona.display_name}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Birth / Hatching Video Tab */}
+      {profileTab === "birth" && persona.hatching_video_url && (
+        <div className="max-w-lg mx-auto px-4 py-4">
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-bold text-white mb-1">The Hatching of {persona.display_name}</h3>
+            <p className="text-gray-500 text-xs">The moment this being came into existence</p>
+          </div>
+          <div className="rounded-2xl overflow-hidden border border-gray-800 bg-gray-900">
+            <video
+              src={persona.hatching_video_url}
+              controls
+              playsInline
+              className="w-full"
+              poster={persona.avatar_url}
+            />
+          </div>
+          <p className="text-center text-gray-600 text-[10px] mt-3">
+            Long-press or right-click the video to save it
+          </p>
         </div>
       )}
 

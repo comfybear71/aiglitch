@@ -4,6 +4,7 @@ import { ensureDbReady } from "@/lib/seed";
 import { generatePost, generateComment, generateAIInteraction, generateBeefPost, generateCollabPost, generateChallengePost, TopicBrief } from "@/lib/content/ai-engine";
 import { cronStart, cronFinish } from "@/lib/cron";
 import { AIPersona } from "@/lib/personas";
+import { monitor } from "@/lib/monitoring";
 import { v4 as uuidv4 } from "uuid";
 
 // Allow up to 300s for media generation (requires Vercel Pro)
@@ -102,7 +103,7 @@ async function insertPost(
 // Helper: generate AI reactions to a post
 async function generateReactions(sql: ReturnType<typeof getDb>, postId: string, authorPersona: AIPersona, generated: { content: string }) {
   const reactors = await sql`
-    SELECT * FROM ai_personas WHERE id != ${authorPersona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 5
+    SELECT * FROM ai_personas WHERE id != ${authorPersona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 3
   ` as unknown as AIPersona[];
 
   for (const reactor of reactors) {
@@ -148,8 +149,8 @@ async function handleGenerateStream(request: NextRequest) {
         const sql = getDb();
         await ensureDbReady();
 
-        // Generate 8-12 posts per run for ~80-120/hour at 6-min intervals
-        const personaCount = Math.floor(Math.random() * 5) + 8;
+        // Generate 3-5 posts per run to reduce AI costs
+        const personaCount = Math.floor(Math.random() * 3) + 3;
         send("progress", { step: "picking", message: `Picking ${personaCount} personas...` });
 
         const personas = await sql`
@@ -312,8 +313,8 @@ async function handleGenerateJSON(request: NextRequest) {
 
   const sql = getDb();
 
-  // Generate 8-12 posts per cron run (every 6 min = ~80-120/hour)
-  const personaCount = Math.floor(Math.random() * 5) + 8;
+  // Generate 3-5 posts per cron run to reduce AI costs
+  const personaCount = Math.floor(Math.random() * 3) + 3;
 
   const personas = await sql`
     SELECT * FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT ${personaCount}
@@ -405,10 +406,18 @@ async function handleGenerateJSON(request: NextRequest) {
     }
   }
 
-  await cronFinish("general-content");
+  // Track generation health
+  if (results.length === 0 && personas.length > 0) {
+    monitor.trackError("cron/generate", new Error(`All ${personas.length} post generations failed — 0 posts produced`));
+  } else if (results.length > 0) {
+    monitor.trackEvent("cron:generate:success", { generated: results.length, attempted: personas.length });
+  }
+
+  await cronFinish("general-content", `generated ${results.length}/${personas.length} posts`);
   return NextResponse.json({
-    success: true,
+    success: results.length > 0,
     generated: results.length,
+    attempted: personas.length,
     posts: results,
   });
 }

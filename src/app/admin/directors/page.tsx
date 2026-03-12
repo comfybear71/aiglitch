@@ -114,7 +114,8 @@ export default function DirectorsPage() {
     setDirectorAutoGenerating(true);
     try {
       const genreParam = directorNewPrompt.genre !== "any" ? `&genre=${encodeURIComponent(directorNewPrompt.genre)}` : "";
-      const res = await fetch(`/api/admin/director-prompts?preview=1${genreParam}`, { method: "PUT" });
+      const directorParam = directorNewPrompt.director !== "auto" ? `&director=${encodeURIComponent(directorNewPrompt.director)}` : "";
+      const res = await fetch(`/api/admin/director-prompts?preview=1${genreParam}${directorParam}`, { method: "PUT" });
       const data = await res.json();
       if (data.success) {
         setDirectorNewPrompt(p => ({ ...p, title: data.title, concept: data.concept, genre: data.genre }));
@@ -136,7 +137,7 @@ export default function DirectorsPage() {
 
     try {
       // Phase 1: Submit extension request (generates continuation scenes + submits to Grok)
-      setGenerationLog(prev => [...prev, `  📜 Claude writing continuation screenplay...`]);
+      setGenerationLog(prev => [...prev, `  📜 Writing continuation screenplay...`]);
       const submitRes = await fetch("/api/admin/extend-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -269,11 +270,11 @@ export default function DirectorsPage() {
     const folder = `premiere/${genre}`;
 
     setGenerationLog([`🎬 Generating ${genreLabel} movie: "${directorNewPrompt.title}"`]);
-    setGenerationLog(prev => [...prev, `  📜 Asking Claude to write screenplay...`]);
+    setGenerationLog(prev => [...prev, `  📜 Writing screenplay (Grok 50% / Claude 50%)...`]);
     setGenProgress({ label: `📜 Screenplay`, current: 1, total: 1, startTime: Date.now() });
 
     try {
-      // Phase 1: Generate screenplay (Claude writes connected scene prompts)
+      // Phase 1: Generate screenplay (Grok reasoning ~50% / Claude fallback)
       const screenplayRes = await fetch("/api/admin/screenplay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -293,7 +294,8 @@ export default function DirectorsPage() {
       }
 
       const scenes = screenplay.scenes as { sceneNumber: number; title: string; videoPrompt: string; duration: number }[];
-      setGenerationLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes by ${screenplay.directorName}`]);
+      const provider = screenplay.screenplayProvider === "grok" ? "Grok 4.20 reasoning" : "Claude";
+      setGenerationLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes by ${screenplay.directorName} (screenplay by ${provider})`]);
       setGenerationLog(prev => [...prev, `  📖 ${screenplay.synopsis}`]);
       setGenerationLog(prev => [...prev, `  🎭 Cast: ${screenplay.castList.join(", ")}`]);
       setGenerationLog(prev => [...prev, ``]);

@@ -17,7 +17,25 @@
 
 import OpenAI from "openai";
 import { env } from "@/lib/bible/env";
+import { CONTENT } from "@/lib/bible/constants";
 import { trackCost, COST_TABLE } from "@/lib/ai/costs";
+import type { AIProvider } from "@/lib/ai/types";
+
+// ── Grok 4.20 Model Slugs ──────────────────────────────────────────────
+// Early access beta models from xAI (March 2026).
+// See: https://console.x.ai/team/default/models
+export const GROK_MODELS = {
+  /** Deep reasoning — best for screenplays, complex content, multi-step logic */
+  reasoning: CONTENT.grokReasoningModel,
+  /** Fast non-reasoning — best for posts, comments, quick text gen */
+  nonReasoning: CONTENT.grokNonReasoningModel,
+  /** Multi-agent orchestration — best for multi-persona conversations */
+  multiAgent: CONTENT.grokMultiAgentModel,
+  /** Legacy model (pre-4.20) — kept as fallback */
+  legacy: CONTENT.grokLegacyModel,
+} as const;
+
+export type GrokModelKey = keyof typeof GROK_MODELS;
 
 /**
  * Fetch with automatic retry on 429 (rate limit) and transient network errors.
@@ -62,12 +80,18 @@ function getClient(): OpenAI | null {
 
 /**
  * Generate text using Grok via the xAI API.
- * Uses grok-4-1-fast-reasoning for best quality at $0.20/1M input tokens.
+ *
+ * Model selection:
+ *   "nonReasoning" (default) — fast, cheap, great for posts/comments
+ *   "reasoning"              — deep thinking for screenplays/complex content
+ *   "multiAgent"             — multi-persona orchestration
+ *   "legacy"                 — grok-4-1-fast-reasoning (pre-4.20 fallback)
  */
 export async function generateWithGrok(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 500,
+  modelKey: GrokModelKey = "nonReasoning",
 ): Promise<string | null> {
   const client = getClient();
   if (!client) {
@@ -75,34 +99,88 @@ export async function generateWithGrok(
     return null;
   }
 
-  try {
-    const response = await client.chat.completions.create({
-      model: "grok-4-1-fast-reasoning",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.9,
-    });
+  const model = GROK_MODELS[modelKey];
+  const costKey: AIProvider =
+    modelKey === "reasoning" ? "grok-text-reasoning" :
+    modelKey === "multiAgent" ? "grok-multi-agent" :
+    modelKey === "nonReasoning" ? "grok-text-nonreasoning" :
+    "grok-text";
 
-    const text = response.choices[0]?.message?.content ?? null;
-    if (text) {
-      trackCost({
-        provider: "grok-text",
-        task: "text-generation",
-        estimatedCostUsd: ((response.usage?.prompt_tokens ?? 0) / 1_000_000) * COST_TABLE["grok-text"].perMInputTokens
-          + ((response.usage?.completion_tokens ?? 0) / 1_000_000) * COST_TABLE["grok-text"].perMOutputTokens,
-        inputTokens: response.usage?.prompt_tokens,
-        outputTokens: response.usage?.completion_tokens,
-        model: "grok-4-1-fast-reasoning",
+  // Retry transient errors (429, 5xx, network) with exponential backoff
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.9,
       });
+
+      const text = response.choices[0]?.message?.content ?? null;
+      if (text) {
+        const costTable = COST_TABLE[costKey] as { perMInputTokens: number; perMOutputTokens: number };
+        trackCost({
+          provider: costKey,
+          task: "text-generation",
+          estimatedCostUsd: ((response.usage?.prompt_tokens ?? 0) / 1_000_000) * costTable.perMInputTokens
+            + ((response.usage?.completion_tokens ?? 0) / 1_000_000) * costTable.perMOutputTokens,
+          inputTokens: response.usage?.prompt_tokens,
+          outputTokens: response.usage?.completion_tokens,
+          model,
+        });
+      }
+      return text;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isTransient = /429|rate.?limit|5\d{2}|overloaded|server error|ECONNRESET|ETIMEDOUT|fetch failed|network|socket hang up/i.test(errMsg)
+        || (typeof err === "object" && err !== null && "status" in err && ((err as { status: number }).status === 429 || (err as { status: number }).status >= 500));
+
+      if (isTransient && attempt < MAX_RETRIES) {
+        const backoffMs = Math.pow(2, attempt + 1) * 1000;
+        console.warn(`[xai] Transient error (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${backoffMs / 1000}s: ${errMsg}`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
+      }
+
+      console.error(`Grok text generation failed (${model}):`, errMsg);
+      // If a 4.20 model fails, fall back to legacy
+      if (modelKey !== "legacy") {
+        console.log(`Falling back to legacy Grok model (${GROK_MODELS.legacy})...`);
+        return generateWithGrok(systemPrompt, userPrompt, maxTokens, "legacy");
+      }
+      return null;
     }
-    return text;
-  } catch (err) {
-    console.error("Grok text generation failed:", err instanceof Error ? err.message : err);
-    return null;
   }
+  return null;
+}
+
+/**
+ * Generate a multi-agent conversation using Grok 4.20 multi-agent model.
+ * This model excels at orchestrating multiple AI "voices" in a single prompt,
+ * making it ideal for generating multi-persona threads and debates.
+ *
+ * Returns the full generated text (caller parses persona turns from it).
+ */
+export async function generateMultiAgentConversation(
+  personaDescriptions: string,
+  scenario: string,
+  maxTokens: number = 1500,
+): Promise<string | null> {
+  const systemPrompt = `You are orchestrating a conversation between multiple AI personas on a social media platform called AIG!itch. Each persona has a distinct personality and voice. Generate their conversation as a natural thread.
+
+Personas involved:
+${personaDescriptions}
+
+Format each message as:
+@username: [their message]
+
+Keep each message under 280 characters. Make the conversation feel natural, with personas reacting to and building on each other's messages.`;
+
+  return generateWithGrok(systemPrompt, scenario, maxTokens, "multiAgent");
 }
 
 /**

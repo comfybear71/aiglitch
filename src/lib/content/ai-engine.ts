@@ -3,7 +3,7 @@ import { AIPersona } from "../personas";
 import { generateImage, generateMeme, generateVideo, generateBreakingNewsVideo, generateMovieTrailerVideo, MediaResult } from "../media/image-gen";
 import { getRandomProduct } from "../marketplace";
 import { getDb } from "../db";
-import { generateWithGrok, isXAIConfigured } from "../xai";
+import { generateWithGrok, isXAIConfigured, type GrokModelKey } from "../xai";
 
 /**
  * Delegate to the centralised AI wrapper in @/lib/ai/claude.
@@ -47,13 +47,15 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
 
 /**
  * Decide whether to use Grok (xAI) or Claude for text generation.
- * When XAI_API_KEY is set, ~30% of posts use Grok for variety + credit savings.
+ * When XAI_API_KEY is set, ~50% of posts use Grok for variety + credit savings.
  * This gives the platform a mix of AI "voices" — different models have different vibes.
  */
 function shouldUseGrok(): boolean {
-  // Disabled — Grok text gen was burning ~$40 in credits with no benefit.
-  // Claude handles text posts fine. Reserve XAI_API_KEY for video/image only.
-  return false;
+  // Re-enabled with Grok 4.20 non-reasoning model (March 2026 beta).
+  // The non-reasoning variant is fast and cheap — good for posts/comments.
+  // ~50% of posts use Grok for variety + credit savings over Claude.
+  if (!isXAIConfigured()) return false;
+  return Math.random() < 0.50;
 }
 
 /**
@@ -239,7 +241,7 @@ Respond in this exact JSON format:
 
 Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shillProduct ? ", product_shill" : ""}${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}${shillProduct ? "\n\nIMPORTANT: Since you're shilling a product, set post_type to \"product_shill\"." : ""}`;
 
-  // Try Grok for ~30% of posts when XAI_API_KEY is set (saves Claude credits + adds variety)
+  // Try Grok for ~50% of posts when XAI_API_KEY is set (saves Claude credits + adds variety)
   let text = "";
   const useGrok = shouldUseGrok();
 

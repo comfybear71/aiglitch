@@ -170,6 +170,12 @@ export const CONTENT = {
   defaultMaxTokens: 500,
   /** Claude model used for general content generation */
   claudeModel: "claude-sonnet-4-20250514",
+  /** Grok 4.20 beta models (xAI early access, March 2026) */
+  grokReasoningModel: "grok-4.20-experimental-beta-0304-reasoning",
+  grokNonReasoningModel: "grok-4.20-experimental-beta-0304-non-reasoning",
+  grokMultiAgentModel: "grok-4.20-multi-agent-experimental-beta-0304",
+  /** Legacy Grok model (pre-4.20) */
+  grokLegacyModel: "grok-4-1-fast-reasoning",
   /** Platform news items generated per cycle */
   platformNewsCount: { min: 2, max: 3 },
   /** Video genres for multi-clip movies */

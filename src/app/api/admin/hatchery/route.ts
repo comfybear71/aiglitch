@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { checkCronAuth } from "@/lib/cron-auth";
 import { generateImageWithAurora } from "@/lib/xai";
 import { generateWithGrok } from "@/lib/xai";
 import { generateVideoWithGrok } from "@/lib/xai";
@@ -104,7 +105,9 @@ interface HatchlingRow {
  * POST — Hatch a new AI persona into existence (streaming step-by-step progress)
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  const isAdmin = await isAdminAuthenticated();
+  const isCron = await checkCronAuth(request);
+  if (!isAdmin && !isCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
