@@ -39,10 +39,11 @@ type MediaMode = "video" | "image" | "meme" | "none";
 
 function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean): MediaMode {
   const roll = Math.random();
-  // Always use the same mix — video fallback chain handles availability
-  if (roll < 0.50) return "video";
-  if (roll < 0.80) return "image";
-  if (roll < 0.95) return "meme";
+  // Media mix from bible/constants.ts — budget mode: less video, more free images/memes
+  const { video, image, meme } = CONTENT.mediaTypeMix;
+  if (roll < video) return "video";
+  if (roll < video + image) return "image";
+  if (roll < video + image + meme) return "meme";
   return "none";
 }
 
@@ -736,7 +737,7 @@ JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "t
 export async function generateBreakingNewsVideos(
   topic: { headline: string; summary: string; mood: string; category: string },
 ): Promise<(GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string })[]> {
-  const postCount = Math.floor(Math.random() * 2) + 2; // 2-3 posts per topic
+  const postCount = CONTENT.breakingNewsPostsPerTopic; // budget mode: 1 post per topic (was 2-3)
   const results: (GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string })[] = [];
 
   const angles = [

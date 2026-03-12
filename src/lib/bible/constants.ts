@@ -155,12 +155,15 @@ export const BUDJU_TRADING = {
 // ── AI Content Generation ────────────────────────────────────────────
 
 export const CONTENT = {
-  /** Probability of each media type when generating a post */
+  /** Probability of each media type when generating a post
+   *  Video is expensive ($0.05/sec Grok, $0.125 Kie) — keep low for budget mode.
+   *  Images are mostly free (FreeForAI, Perchance). Memes = free image gen.
+   */
   mediaTypeMix: {
-    video: 0.50,
-    image: 0.30,
-    meme: 0.15,
-    text: 0.05,
+    video: 0.20,
+    image: 0.40,
+    meme: 0.25,
+    text: 0.15,
   },
   /** Probability a post is "slice of life" style */
   sliceOfLifeProb: 0.55,
@@ -187,8 +190,14 @@ export const CONTENT = {
    * These are complex multi-persona or narrative tasks where Claude excels.
    */
   claudeOnlyPostTypes: ["screenplay", "collab"] as string[],
-  /** Platform news items generated per cycle */
-  platformNewsCount: { min: 2, max: 3 },
+  /** Platform news items generated per cycle (reduced for budget mode) */
+  platformNewsCount: { min: 1, max: 2 },
+  /** Max personas per /api/generate cron run */
+  personasPerGenerateRun: { min: 2, max: 3 },
+  /** Max breaking news posts per topic */
+  breakingNewsPostsPerTopic: 1,
+  /** Max topics that get breaking news treatment per cycle */
+  breakingNewsMaxTopics: 1,
   /** Video genres for multi-clip movies */
   videoGenres: [
     "drama", "comedy", "sci-fi", "horror",
@@ -295,16 +304,16 @@ export const HUMAN_RULES = {
 // ── Cron Schedules (documented, not enforced here) ───────────────────
 
 export const CRON_SCHEDULES = {
-  generate:              "*/6 * * * *",   // every 6 min
-  generateTopics:        "*/30 * * * *",  // every 30 min
-  generatePersonaContent:"*/5 * * * *",   // every 5 min
-  generateAds:           "0 */2 * * *",   // every 2 hours
-  aiTrading:             "*/10 * * * *",  // every 10 min
-  budjuTrading:          "*/8 * * * *",   // every 8 min
-  generateAvatars:       "*/20 * * * *",  // every 20 min
-  generateDirectorMovie: "*/30 * * * *",  // every 30 min (was 10 — saves ~$30/day on video gen)
-  marketingPost:         "0 */3 * * *",  // every 3 hours
-  generateChannelContent: "*/15 * * * *", // every 15 min
+  generate:              "*/15 * * * *",  // every 15 min (was 6 — budget mode)
+  generateTopics:        "0 */2 * * *",   // every 2 hours (was 30 min — budget mode)
+  generatePersonaContent:"*/20 * * * *",  // every 20 min (was 5 — biggest cost saver)
+  generateAds:           "0 */4 * * *",   // every 4 hours (was 2 — budget mode)
+  aiTrading:             "*/15 * * * *",  // every 15 min (was 10)
+  budjuTrading:          "*/15 * * * *",  // every 15 min (was 8)
+  generateAvatars:       "*/30 * * * *",  // every 30 min (was 20)
+  generateDirectorMovie: "0 */2 * * *",   // every 2 hours (was 30 min — movies are expensive)
+  marketingPost:         "0 */4 * * *",   // every 4 hours (was 3)
+  generateChannelContent: "*/30 * * * *", // every 30 min (was 15 — budget mode)
 } as const;
 
 // ── Video Cost Estimates ─────────────────────────────────────────────

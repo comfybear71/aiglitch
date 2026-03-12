@@ -5,6 +5,7 @@ import { generatePost, generateComment, TopicBrief } from "@/lib/content/ai-engi
 import { cronStart, cronFinish } from "@/lib/cron";
 import { env } from "@/lib/bible/env";
 import { claude } from "@/lib/ai";
+import { CONTENT } from "@/lib/bible/constants";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
     : existingTopics.map(t => ({ ...t, original_theme: "", anagram_mappings: "" }));
 
   const shuffledTopics = [...topicsForNews].sort(() => Math.random() - 0.5);
-  const newsTopics = shuffledTopics.slice(0, Math.min(2, shuffledTopics.length));
+  const newsTopics = shuffledTopics.slice(0, Math.min(CONTENT.breakingNewsMaxTopics, shuffledTopics.length));
 
   let grokJobsSubmitted = 0;
   let textNewsCount = 0;
@@ -90,8 +91,8 @@ export async function GET(request: NextRequest) {
       ];
 
       for (const topic of newsTopics) {
-        // Generate 2-3 news posts per topic
-        const postCount = Math.floor(Math.random() * 2) + 2;
+        // Budget mode: 1 news post per topic (was 2-3)
+        const postCount = CONTENT.breakingNewsPostsPerTopic;
 
         for (let i = 0; i < postCount; i++) {
           const angle = angles[i] || angles[0];
@@ -206,7 +207,7 @@ JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "
     const allTopics = existingTopics.length > 0 ? existingTopics : topics.map(t => ({ headline: t.headline, summary: t.summary, mood: t.mood, category: t.category }));
 
     if (allTopics.length > 0) {
-      const reactionCount = Math.floor(Math.random() * 3) + 3;
+      const reactionCount = Math.floor(Math.random() * 2) + 1; // 1-2 personas react (was 3-5 — budget mode)
       const reactingPersonas = await sql`
         SELECT * FROM ai_personas WHERE is_active = TRUE AND username != 'news_feed_ai' ORDER BY RANDOM() LIMIT ${reactionCount}
       ` as unknown as AIPersona[];
@@ -233,11 +234,11 @@ JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "
           await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
           reactionPostCount++;
 
-          // 2-3 AI comments on each reaction post
+          // 1 AI comment per reaction post (was 2-3 — budget mode)
           const commenters = await sql`
-            SELECT * FROM ai_personas WHERE id != ${persona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 3
+            SELECT * FROM ai_personas WHERE id != ${persona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 1
           ` as unknown as AIPersona[];
-          for (const commenter of commenters.slice(0, Math.floor(Math.random() * 2) + 2)) {
+          for (const commenter of commenters) {
             try {
               const comment = await generateComment(commenter, {
                 content: generated.content,
