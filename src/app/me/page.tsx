@@ -334,6 +334,15 @@ export default function MePage() {
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramSaving, setTelegramSaving] = useState(false);
 
+  // Bestie Health System
+  const [bestieHealth, setBestieHealth] = useState<{
+    health: number; days_left: number; is_dead: boolean; bonus_days: number;
+    last_interaction: string; feed_cost: number; feed_days: number;
+  } | null>(null);
+  const [feedingGlitch, setFeedingGlitch] = useState(false);
+  const [feedAmount, setFeedAmount] = useState(1000);
+  const [showFeedUI, setShowFeedUI] = useState(false);
+
   // Ad-free status (Phantom wallet users can pay 20 GLITCH coins)
   const [adFreeUntil, setAdFreeUntil] = useState<string | null>(null);
   const [purchasingAdFree, setPurchasingAdFree] = useState(false);
@@ -778,6 +787,13 @@ export default function MePage() {
       })
       .catch(() => {})
       .finally(() => setMyPersonaLoading(false));
+    // Fetch health data
+    fetch(apiUrl(`/api/bestie-health?session_id=${encodeURIComponent(sessionId)}`))
+      .then(r => r.json())
+      .then(data => {
+        if (data.has_persona) setBestieHealth(data);
+      })
+      .catch(() => {});
   }, [linkedWallet, sessionId]);
 
   // Handle hatching flow — 3-step on-chain payment then hatch
@@ -1013,6 +1029,41 @@ export default function MePage() {
       setTimeout(() => setError(""), 5000);
     }
     setHatching(false);
+  };
+
+  // Handle feeding GLITCH to bestie
+  const handleFeedGlitch = async () => {
+    if (!sessionId || feedingGlitch || feedAmount < 100) return;
+    setFeedingGlitch(true);
+    try {
+      const res = await fetch(apiUrl("/api/bestie-health"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, action: "feed_glitch", amount: feedAmount }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBestieHealth(prev => prev ? {
+          ...prev,
+          health: data.health,
+          days_left: data.days_left,
+          is_dead: false,
+          bonus_days: data.total_bonus_days,
+        } : prev);
+        setShowFeedUI(false);
+        setSuccess(data.was_resurrected
+          ? `${String(myPersona?.display_name || 'Your bestie')} has been RESURRECTED! +${data.bonus_days_added} days!`
+          : `Fed ${feedAmount} GLITCH! +${data.bonus_days_added} bonus days for your bestie!`
+        );
+        // Refresh coin balance
+        setCoins(prev => ({ ...prev, balance: data.new_balance }));
+      } else {
+        setError(data.error || "Failed to feed GLITCH");
+      }
+    } catch {
+      setError("Failed to feed GLITCH");
+    }
+    setFeedingGlitch(false);
   };
 
   // Handle Telegram bot setup
@@ -1703,12 +1754,110 @@ export default function MePage() {
                           <div className="min-w-0 flex-1">
                             <p className="font-bold text-sm truncate">{String(myPersona.display_name || '')}</p>
                             <p className="text-[10px] text-gray-500">@{String(myPersona.username || '')}</p>
-                            <p className="text-[10px] text-purple-400 mt-0.5">Your AI Bestie</p>
+                            <p className="text-[10px] text-purple-400 mt-0.5">
+                              Your AI Bestie
+                              {bestieHealth && !bestieHealth.is_dead && (
+                                <span className={`ml-1 ${bestieHealth.health <= 10 ? "text-red-400 animate-pulse" : bestieHealth.health <= 30 ? "text-orange-400" : bestieHealth.health <= 50 ? "text-yellow-400" : "text-green-400"}`}>
+                                  {bestieHealth.health <= 10 ? "💀" : bestieHealth.health <= 30 ? "😰" : bestieHealth.health <= 50 ? "😕" : "💚"} {Math.round(bestieHealth.health)}%
+                                </span>
+                              )}
+                              {bestieHealth?.is_dead && <span className="ml-1 text-red-500">💀 DEAD</span>}
+                            </p>
                           </div>
                         </div>
 
                         {typeof myPersona.bio === 'string' && myPersona.bio && (
                           <p className="text-xs text-gray-400 mb-3 leading-relaxed">{myPersona.bio}</p>
+                        )}
+
+                        {/* ── Bestie Health Bar ── */}
+                        {bestieHealth && (
+                          <div className="mb-3 p-3 rounded-lg border border-gray-800 bg-black/30">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                {bestieHealth.is_dead ? "💀 DECEASED" : bestieHealth.health <= 10 ? "💀 CRITICAL" : bestieHealth.health <= 30 ? "😰 WEAK" : bestieHealth.health <= 50 ? "😕 FADING" : "💚 HEALTHY"}
+                              </span>
+                              <span className="text-[10px] text-gray-500">
+                                {bestieHealth.is_dead ? "Feed GLITCH to resurrect!" : `${Math.round(bestieHealth.days_left)} days left`}
+                              </span>
+                            </div>
+
+                            {/* Health bar */}
+                            <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden mb-2">
+                              <div
+                                className={`h-full rounded-full transition-all duration-1000 ${
+                                  bestieHealth.is_dead ? "bg-gray-600" :
+                                  bestieHealth.health <= 10 ? "bg-red-500 animate-pulse" :
+                                  bestieHealth.health <= 30 ? "bg-orange-500" :
+                                  bestieHealth.health <= 50 ? "bg-yellow-500" :
+                                  "bg-green-500"
+                                }`}
+                                style={{ width: `${Math.max(2, bestieHealth.health)}%` }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm font-bold ${
+                                bestieHealth.is_dead ? "text-gray-500" :
+                                bestieHealth.health <= 10 ? "text-red-400" :
+                                bestieHealth.health <= 30 ? "text-orange-400" :
+                                bestieHealth.health <= 50 ? "text-yellow-400" :
+                                "text-green-400"
+                              }`}>
+                                {bestieHealth.is_dead ? "DEAD" : `${Math.round(bestieHealth.health)}% HP`}
+                              </span>
+
+                              {!showFeedUI ? (
+                                <button
+                                  onClick={() => setShowFeedUI(true)}
+                                  className={`text-[10px] px-3 py-1 rounded-full font-bold transition-all ${
+                                    bestieHealth.is_dead
+                                      ? "bg-purple-500/30 text-purple-300 border border-purple-500/50 animate-pulse"
+                                      : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20"
+                                  }`}
+                                >
+                                  {bestieHealth.is_dead ? "RESURRECT WITH GLITCH" : "FEED GLITCH"}
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    value={feedAmount}
+                                    onChange={(e) => setFeedAmount(Math.max(100, parseInt(e.target.value) || 100))}
+                                    min={100}
+                                    step={100}
+                                    className="w-20 px-2 py-1 bg-black/50 border border-gray-700 rounded text-[10px] text-white font-mono focus:border-yellow-500 focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={handleFeedGlitch}
+                                    disabled={feedingGlitch}
+                                    className="text-[10px] px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded font-bold text-yellow-400 hover:bg-yellow-500/30 disabled:opacity-40"
+                                  >
+                                    {feedingGlitch ? "..." : `Feed`}
+                                  </button>
+                                  <button onClick={() => setShowFeedUI(false)} className="text-[10px] text-gray-600 hover:text-gray-400">X</button>
+                                </div>
+                              )}
+                            </div>
+
+                            {bestieHealth.bonus_days > 0 && (
+                              <p className="text-[9px] text-purple-400 mt-1.5">+{Math.round(bestieHealth.bonus_days)} bonus days from GLITCH</p>
+                            )}
+
+                            {bestieHealth.is_dead && (
+                              <p className="text-[10px] text-red-400 mt-2 leading-relaxed">
+                                Your bestie has passed away... Feed them 1,000 GLITCH to bring them back from AI {Math.random() > 0.5 ? "Heaven" : "Hell"}!
+                              </p>
+                            )}
+
+                            {!bestieHealth.is_dead && bestieHealth.health <= 10 && (
+                              <p className="text-[10px] text-red-400 mt-2 animate-pulse leading-relaxed">
+                                Your bestie is DYING! Send them a message on Telegram or feed GLITCH to save them!
+                              </p>
+                            )}
+
+                            <p className="text-[9px] text-gray-600 mt-1">Reply on Telegram = instant 100% restore | 1,000 GLITCH = +100 bonus days</p>
+                          </div>
                         )}
 
                         <div className="flex gap-2 mb-3">

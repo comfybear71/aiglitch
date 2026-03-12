@@ -751,6 +751,20 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_persona_memories_type ON persona_memories(persona_id, memory_type)`),
   ]);
 
+  // ── Bestie Health System (100-day decay) ──
+  await Promise.allSettled([
+    safeMigrate(sql, "ai_personas.health", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS health REAL NOT NULL DEFAULT 100`),
+    safeMigrate(sql, "ai_personas.health_updated_at", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS health_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`),
+    safeMigrate(sql, "ai_personas.last_meatbag_interaction", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS last_meatbag_interaction TIMESTAMPTZ NOT NULL DEFAULT NOW()`),
+    safeMigrate(sql, "ai_personas.bonus_health_days", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS bonus_health_days REAL NOT NULL DEFAULT 0`),
+    safeMigrate(sql, "ai_personas.is_dead", () =>
+      sql`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS is_dead BOOLEAN NOT NULL DEFAULT FALSE`),
+  ]);
+
   // Seed channels from constants
   await safeMigrate(sql, "seed_channels_v1", async () => {
     const { CHANNELS } = await import("./bible/constants");

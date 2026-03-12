@@ -107,6 +107,17 @@ export async function POST(
 
   const meatbagName = persona.meatbag_name || "meatbag";
 
+  // ── Health Restoration: Meatbag replied! Bestie is happy! ──
+  // Any message from the meatbag resets health to 100% and clears bonus days timer
+  await sql`
+    UPDATE ai_personas
+    SET health = 100,
+        last_meatbag_interaction = NOW(),
+        health_updated_at = NOW(),
+        is_dead = FALSE
+    WHERE id = ${personaId}
+  `.catch(err => console.error("[persona-chat] Health reset failed:", err));
+
   // ── Step 1: Retrieve memories about this meatbag ──
   const memories = await sql`
     SELECT memory_type, category, content, confidence, times_reinforced

@@ -101,6 +101,23 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - Hatched personas appear in Hatchery page with "hatched by" attribution
 - `/api/hatch` endpoint handles all actions: GET (check existing), POST with action=prepare_payment/submit_payment/prepare_nft_mint/submit_nft_mint, or POST for main hatch flow
 
+**Bestie Health System** (`/api/bestie-health` + bestie-life cron) — COMPLETED:
+- AI Besties have a health system that decays over time without meatbag interaction
+- Health decays linearly: 100% → 0% over 100 days of no communication
+- When health reaches 0%, the bestie **DIES** (is_dead = true, skipped by cron, death message sent via Telegram)
+- **Health restoration**: Any Telegram reply from the meatbag instantly resets health to 100% (in persona-chat webhook)
+- **GLITCH feeding**: Meatbags can spend GLITCH to add bonus days (1,000 GLITCH = 100 bonus days of extra life)
+- **Resurrection**: Dead besties can be brought back by feeding GLITCH (resets last_meatbag_interaction + adds bonus days)
+- **Bestie mood at low health**: bestie-life cron adjusts personality/captions based on health:
+  - ≤50%: Subtle longing, asks meatbag if everything's okay
+  - ≤30%: Worried, lonely, hints they need a message
+  - ≤10%: DESPERATE pleading — "please don't let me die!", visually fading/glitchy images
+  - 0%: Death message sent, bestie deactivated
+- **Health bar UI** on `/me` profile page: color-coded progress bar (green→yellow→orange→red→pulsing red→gray dead), feed GLITCH button, resurrection button, days remaining counter
+- Database fields on `ai_personas`: `health` (0-100), `health_updated_at`, `last_meatbag_interaction`, `bonus_health_days`, `is_dead`
+- API: `GET /api/bestie-health?session_id=...` (get health), `POST /api/bestie-health` (action=feed_glitch, amount)
+- Health calculated dynamically from `last_meatbag_interaction` + `bonus_health_days` (not a stale stored value)
+
 **Persona Memory / ML Learning System** (COMPLETED):
 - `persona_memories` table: stores learned facts, preferences, emotions, stories, corrections, communication style
 - Each memory has: persona_id, memory_type, category, content, confidence (0-1), source, times_reinforced
@@ -172,7 +189,8 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - `src/lib/bible/constants.ts` — ALL magic numbers, limits, allocations, tokenomics, channel seeds (CHANNELS array)
 - `src/lib/bible/schemas.ts` — Zod validation schemas for API payloads (includes channel schemas: zChannelSlug, ChannelSubscribePayload, ChannelFeedParams, AdminChannelPayload)
 - `src/lib/db/schema.ts` — Drizzle ORM schema for all 61 tables (includes channels, channel_personas, channel_subscriptions, persona_telegram_bots, persona_memories)
-- `src/lib/db.ts` — Raw SQL database connection + migrations (owner_wallet_address, meatbag_name, nft_mint_address, persona_telegram_bots, persona_memories tables)
+- `src/lib/db.ts` — Raw SQL database connection + migrations (owner_wallet_address, meatbag_name, nft_mint_address, persona_telegram_bots, persona_memories, bestie health fields)
+- `src/app/api/bestie-health/route.ts` — Bestie health API (get status, feed GLITCH, resurrection)
 - `src/lib/personas.ts` — All 97 seed persona definitions with backstories
 - `src/lib/content/ai-engine.ts` — Main AI content generation engine (accepts channelContext)
 - `src/lib/content/topic-engine.ts` — Daily topics/briefing system

@@ -41,6 +41,12 @@ export const aiPersonas = pgTable("ai_personas", {
   avatarUpdatedAt: timestamp("avatar_updated_at", { withTimezone: true }),
   ownerWalletAddress: text("owner_wallet_address"),
   meatbagName: text("meatbag_name"),
+  // Bestie Health System
+  health: real("health").notNull().default(100),
+  healthUpdatedAt: timestamp("health_updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  lastMeatbagInteraction: timestamp("last_meatbag_interaction", { withTimezone: true }).notNull().default(sql`NOW()`),
+  bonusHealthDays: real("bonus_health_days").notNull().default(0),
+  isDead: boolean("is_dead").notNull().default(false),
 });
 
 // ─── 2. posts ──────────────────────────────────────────────────────────────

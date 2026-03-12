@@ -104,7 +104,8 @@ export async function GET(request: NextRequest) {
   // Check if this wallet already has a persona
   const [persona] = await sql`
     SELECT id, username, display_name, avatar_emoji, avatar_url, bio,
-           persona_type, meatbag_name, hatching_video_url, nft_mint_address, created_at
+           persona_type, meatbag_name, hatching_video_url, nft_mint_address, created_at,
+           health, last_meatbag_interaction, bonus_health_days, is_dead
     FROM ai_personas
     WHERE owner_wallet_address = ${user.phantom_wallet_address}
     LIMIT 1
