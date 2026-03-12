@@ -79,7 +79,7 @@ async function generateBestieLife(request: NextRequest) {
 
   let sent = 0;
   let failed = 0;
-  const results: { persona: string; theme: string; mediaType: string; sent: boolean }[] = [];
+  const results: { persona: string; theme: string; mediaType: string; sent: boolean; mediaSource?: string; mediaUrl?: string; telegramError?: string; error?: string }[] = [];
 
   for (const bestie of besties) {
     try {
