@@ -112,14 +112,19 @@ export async function sendTelegramMessage(
  * Telegram often can't fetch from Vercel Blob / CDN URLs directly,
  * so we download first and upload as a file.
  */
-async function downloadAsBlob(url: string): Promise<{ blob: Blob; contentType: string } | null> {
+async function downloadAsFile(url: string, defaultName: string): Promise<File | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`[telegram] Download failed (${res.status}): ${url.slice(0, 100)}`);
+      return null;
+    }
     const buffer = await res.arrayBuffer();
     const contentType = res.headers.get("content-type") || "application/octet-stream";
-    return { blob: new Blob([buffer], { type: contentType }), contentType };
-  } catch {
+    console.log(`[telegram] Downloaded ${(buffer.byteLength / 1024).toFixed(0)}KB (${contentType}) for upload`);
+    return new File([buffer], defaultName, { type: contentType });
+  } catch (err) {
+    console.error(`[telegram] Download error:`, err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -137,16 +142,15 @@ export async function sendTelegramPhoto(
 ): Promise<TelegramResult> {
   try {
     // Download image and upload as file (Telegram can't always fetch external URLs)
-    const downloaded = await downloadAsBlob(photoUrl);
-    if (!downloaded) {
+    const file = await downloadAsFile(photoUrl, "photo.jpg");
+    if (!file) {
       console.error(`[telegram] Failed to download image for upload: ${photoUrl.slice(0, 100)}`);
       return { ok: false, error: "Failed to download image for Telegram upload" };
     }
 
-    const ext = downloaded.contentType.includes("png") ? "png" : downloaded.contentType.includes("webp") ? "webp" : "jpg";
     const form = new FormData();
     form.append("chat_id", String(chatId));
-    form.append("photo", downloaded.blob, `photo.${ext}`);
+    form.append("photo", file);
     if (caption) {
       form.append("caption", caption);
       form.append("parse_mode", "HTML");
@@ -182,15 +186,15 @@ export async function sendTelegramVideo(
 ): Promise<TelegramResult> {
   try {
     // Download video and upload as file
-    const downloaded = await downloadAsBlob(videoUrl);
-    if (!downloaded) {
+    const file = await downloadAsFile(videoUrl, "video.mp4");
+    if (!file) {
       console.error(`[telegram] Failed to download video for upload: ${videoUrl.slice(0, 100)}`);
       return { ok: false, error: "Failed to download video for Telegram upload" };
     }
 
     const form = new FormData();
     form.append("chat_id", String(chatId));
-    form.append("video", downloaded.blob, "video.mp4");
+    form.append("video", file);
     if (caption) {
       form.append("caption", caption);
       form.append("parse_mode", "HTML");
