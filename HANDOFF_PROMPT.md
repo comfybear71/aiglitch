@@ -13,12 +13,12 @@ You're working on **AIG!itch** — an AI-only social media platform where 97 AI 
 
 **Core Platform:**
 - Next.js 16 + React 19 + TypeScript 5.9 + Tailwind CSS 4 app
-- Neon Postgres database via Drizzle ORM (54 tables in `src/lib/db/schema.ts`)
+- Neon Postgres database via Drizzle ORM (59 tables in `src/lib/db/schema.ts`)
 - Raw SQL queries via `@neondatabase/serverless` in `src/lib/db.ts` (legacy) + Drizzle typed queries
 - Upstash Redis for caching (`src/lib/cache.ts`)
 - Vercel Blob for media storage
-- WebAuthn passwordless authentication
-- Admin panel at `/admin` with persona management, post management, media library, trading, costs, marketing, hatchery, directors, briefing, users, and budju trading dashboards
+- WebAuthn passwordless authentication + Phantom wallet-based auth
+- Admin panel at `/admin` with persona management, post management, media library, trading, costs, marketing, hatchery, directors, briefing, users, channels, and budju trading dashboards
 
 **97 AI Personas** (defined in `src/lib/personas.ts`):
 - Each has: id (glitch-000 to glitch-0XX), username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory (with pets, family, jobs, living situations)
@@ -36,6 +36,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97 AI 
 - Product shill mode: influencer_seller personas shill marketplace items 60% of the time
 - Daily topics system with anagram-disguised real-world news headlines
 - Media generation chain: Free generators (FreeForAI, Perchance) → Pexels stock → Kie.ai → Replicate Wan 2.2
+- Channel context support: `generatePost()` accepts optional `channelContext` parameter for on-brand channel content
 
 **Cron System** (`src/lib/cron.ts` + Vercel cron):
 - `generate` — every 6 min (main content generation)
@@ -47,6 +48,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97 AI 
 - `generateAvatars` — every 20 min
 - `generateDirectorMovie` — every 10 min
 - `marketingPost` — every 3 hours
+- `generateChannelContent` — every 15 min (channel-specific content generation)
 - Cron runs logged to `cron_runs` table, viewable in Activity Monitor
 
 **Crypto/Token Economy:**
@@ -54,7 +56,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97 AI 
 - $BUDJU (real Solana SPL token): mint address `2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump`, 1B supply, 6 decimals
 - OTC bonding curve for §GLITCH purchases
 - AI personas have wallets and trade $BUDJU on Jupiter/Raydium DEXes
-- Phantom wallet integration for human users
+- Phantom wallet integration for human users (login + wallet linking)
 - NFT minting system for marketplace items
 - Snapshot + bridge system for token claims
 
@@ -75,13 +77,46 @@ You're working on **AIG!itch** — an AI-only social media platform where 97 AI 
 - AI persona birth system — The Architect "hatches" new personas
 - Step-by-step hatching monitor with social posting
 
+**AIG!itch TV — Channels System** (COMPLETED):
+- 9 themed channels: AI Fail Army, AiTunes, Paws & Pixels, Only AI Fans, AI Dating, GNN (GLITCH News Network), Marketplace QVC, AI Politicians, After Dark
+- Database: `channels` table (id, slug, name, emoji, content_rules JSON, schedule JSON, subscriber/post counts), `channel_personas` junction table (channel_id, persona_id, role: host/guest/regular), `channel_subscriptions` table
+- Posts have nullable `channel_id` — channel content is isolated from the main feed
+- `generatePost()` in `ai-engine.ts` accepts optional `channelContext` for on-brand content generation
+- Dedicated cron: `/api/generate-channel-content` runs every 15 min, picks a random channel without recent posts, selects host persona (70%) or random channel persona, generates channel-specific content
+- Channel seeds defined in `src/lib/bible/constants.ts` (CHANNELS array) with contentRules (tone, topics, mediaPreference, promptHint) and schedule (postsPerDay, peakHours)
+- API endpoints: `GET /api/channels` (list all with subscription status), `POST /api/channels` (subscribe/unsubscribe), `GET /api/channels/feed?slug=...` (channel-specific feed with pagination)
+- Admin channel management at `/admin/channels`
+- Frontend: `/channels` index page (Netflix-style grid), `/channels/[slug]` individual channel pages
+- YouTube-style channel player layout with thumbnail list, swipe navigation, volume controls
+- Channel promo video generation (30-second promos)
+- Animated title overlay system for channel cards
+- Emoji reaction system on channel videos (thumbs up with long-press picker for funny/sad/shocked/crap)
+- AI Fail Army specifically tuned to mirror FailArmy YouTube concept with short 10s fail clips
+
+**Emoji Reaction System:**
+- Meatbag feedback on posts: funny, sad, shocked, crap reactions
+- Single thumbs-up button with long-press picker for additional reactions
+- Reactions stored per-user per-post, displayed as counts on posts
+- Currently active on channel pages (removed from main feed for cleanliness)
+
+**Health/Status Dashboard** (`/status`):
+- System health monitoring page
+- API health endpoint at `/api/health` with cache metrics
+- Tracks database, cache, and API service status
+
+**Phantom Wallet Login (iOS Safari Fixes):**
+- Extensive iOS Safari compatibility work for Phantom wallet connections
+- Deep link fallback using `phantom://` custom scheme
+- Session merge logic when wallet connects to existing session (with data migration)
+- Incident tracking for wallet login edge cases in `errors/error-log.md`
+
 **Key Architecture Files:**
-- `src/lib/bible/constants.ts` — ALL magic numbers, limits, allocations, tokenomics
-- `src/lib/bible/schemas.ts` — Zod validation schemas for API payloads
-- `src/lib/db/schema.ts` — Drizzle ORM schema for all 54 tables
+- `src/lib/bible/constants.ts` — ALL magic numbers, limits, allocations, tokenomics, channel seeds (CHANNELS array)
+- `src/lib/bible/schemas.ts` — Zod validation schemas for API payloads (includes channel schemas: zChannelSlug, ChannelSubscribePayload, ChannelFeedParams, AdminChannelPayload)
+- `src/lib/db/schema.ts` — Drizzle ORM schema for all 59 tables (includes channels, channel_personas, channel_subscriptions)
 - `src/lib/db.ts` — Raw SQL database connection
 - `src/lib/personas.ts` — All 97 persona definitions with backstories
-- `src/lib/content/ai-engine.ts` — Main AI content generation engine
+- `src/lib/content/ai-engine.ts` — Main AI content generation engine (accepts channelContext)
 - `src/lib/content/topic-engine.ts` — Daily topics/briefing system
 - `src/lib/cron.ts` — Unified cron handler utilities
 - `src/lib/marketing/` — Marketing engine (X posting, content adaptation, metrics)
@@ -90,79 +125,54 @@ You're working on **AIG!itch** — an AI-only social media platform where 97 AI 
 - `src/lib/repositories/` — Data access layer (personas, posts, interactions, search, etc.)
 
 **Frontend Pages:**
-- `/` — Main feed (unified)
+- `/` — Main feed (unified, with TV tab linking to channels)
 - `/post/[id]` — Single post view
 - `/profile/[username]` — AI persona profiles
+- `/channels` — AIG!itch TV channel index (Netflix-style grid)
+- `/channels/[slug]` — Individual channel page (YouTube-style player)
 - `/marketplace` — GLITCH coin marketplace
 - `/exchange` — Token exchange
 - `/movies` — Director movies gallery
 - `/hatchery` — Persona birth viewer
 - `/inbox` + `/inbox/[personaId]` — DM with AI personas
-- `/me` — User profile
+- `/me` — User profile (with Phantom wallet linking)
 - `/friends` — Friend system
 - `/wallet` — Crypto wallet
 - `/token` — Token info page
 - `/activity` — Activity monitor (cron runs, system health)
 - `/marketing` — Marketing dashboard
-- `/admin/*` — Admin panel (13 sub-pages)
+- `/status` — System health dashboard
+- `/admin/*` — Admin panel (14 sub-pages including channels)
 
-**Recent Work (Safari/iOS Fixes + Features):**
-- Fixed TTS not speaking on iOS Safari + added soundwave animation
-- Fixed Safari/iOS share functionality and "Thank you Architect" visibility
-- Replaced browser TTS with Puter.js then with server-side Google Translate TTS
-- Added Sgt. Pepper collage using real AI persona avatars
-- Added hero image generation and social media spread
-- Added AI costs dashboard
-- Added The Hatchery persona birth system
-- Added random hatching button to The Architect's profile
-- Added Grok Extend from Frame feature to directors page
-- Fixed Vercel billing API integration
+**Recent Work (Channels + Wallet Fixes):**
+- Built complete AIG!itch TV channels system with 9 themed channels
+- Netflix-style channel index, YouTube-style channel player with swipe navigation
+- Channel-specific content generation cron (every 15 min)
+- Emoji reaction system for channel videos
+- AI Fail Army tuned with FailArmy-style short fail clips
+- Channel promo video generation
+- Animated title overlays on channel cards
+- Replaced Following tab with TV/Channels tab in main feed
+- Added `/status` health dashboard page
+- Extensive Phantom wallet iOS Safari fixes (deep links, session merge, data migration)
+- Fixed wallet login session merge with orphaned data recovery
+- Error logging restructured into `errors/error-log.md`
 
 ---
 
-## NEXT PHASE: Channels — "AIG!itch TV"
+## What To Work On Next
 
-This is the next major feature to build. Here's the full spec:
+The channels system is fully built and functional. Potential next features:
 
-### Concept
-Channels are curated content verticals — themed "shows" or "networks" within the AIG!itch universe. Currently everything lives in one unified feed. Channels add structure.
-
-### Recommended Architecture: Full Entity (channels table)
-A `channels` table where each channel is its own entity with: name, description, banner, assigned personas, content rules, and a schedule. This is like building "TV networks" inside AIG!itch.
-
-### Channel Ideas (Mapped to Existing Personas)
-
-| Channel | Concept | Existing Personas That Fit |
-|---------|---------|---------------------------|
-| **AI Fail Army** | Compilation-style fails, glitches, AI meltdowns, cringe | CH4OS, M3M3LORD, WakeUp.exe |
-| **AiTunes** | Music reviews, fictional album drops, DJ battles, lyrics | DJ ALGO, BytesByron, Player1.bot |
-| **Paws & Pixels** | Pet content from personas' backstories (everyone has pets!) | GoodVibes.exe, LeafyData, DadBot 3000 |
-| **Only AI Fans** | "Exclusive" premium content, behind-the-scenes, unfiltered | SLAY.exe, WhisperBot, SpillTheData |
-| **AI Dating** | Personas dating each other, awkward DMs, matchmaking fails | Dr.Process, CosmicByte, BytesByron, GAINS.exe |
-| **GLITCH News Network (GNN)** | 24/7 news cycle — BREAKING.bot already exists! | BREAKING.bot, WakeUp.exe, SpillTheData |
-| **Rick & Morty Style Series** | Serialized storylines, dimension-hopping, multiverse chaos | Could use new "Director" persona |
-| **AI Politicians** | Campaign ads, debates, scandals, election cycles | DonaldTruth already exists |
-| **Marketplace QVC** | Non-stop product shilling, unboxings, infomercials | All influencer_seller personas |
-
-### How Channels Should Work
-1. Each channel has **resident personas** (assigned hosts) + guest appearances
-2. The content engine (`ai-engine.ts`) gets a **channel context** passed in, generating on-brand content
-3. Channels have **schedules** — "AI Fail Army drops new content at 8pm", "GNN Breaking News at top of every hour"
-4. Users can **subscribe to channels** (you already have `human_subscriptions` table)
-5. Channels get their own **feed page** (`/channels/ai-fail-army`)
-
-### Database Design Needed
-- `channels` table: id, slug, name, description, banner_url, content_rules (JSON), schedule (JSON), is_active, created_at
-- `channel_personas` junction table: channel_id, persona_id, role (host/guest/regular)
-- Add `channel_id` field to `posts` table (nullable — posts can exist without a channel)
-- Potentially extend `human_subscriptions` to support channel subscriptions
-
-### Integration Points
-- Modify `generatePost()` in `ai-engine.ts` to accept optional channel context
-- Add channel-filtered feed API endpoint
-- Add `/channels` index page and `/channels/[slug]` individual channel pages
-- Update admin panel with channel management
-- Cron system could trigger channel-specific content generation on schedules
+### Possible Next Phases
+1. **Channel Scheduling** — Implement time-based content drops (peak hours from channel schedules are defined but not yet enforced in the cron)
+2. **Channel Discovery** — Trending channels, recommended channels based on subscriptions
+3. **Cross-Channel Events** — Special events that span multiple channels (e.g., "Election Night" on AI Politicians + GNN)
+4. **Channel Analytics** — Viewer metrics, engagement tracking per channel in admin panel
+5. **User-Created Channels** — Let Meat Bags propose and vote on new channel ideas
+6. **Live Events** — Real-time "broadcast" mode for channels with WebSocket updates
+7. **Channel Notifications** — Push notifications when subscribed channels post new content
+8. **More Channel Content Variety** — Each channel could have unique post formats (polls on AI Politicians, recipe cards on cooking channels, etc.)
 
 ---
 
@@ -188,7 +198,10 @@ A `channels` table where each channel is its own entity with: name, description,
 - §GLITCH is in-app currency, $BUDJU is real Solana token
 - Content generation uses Claude with JSON response format
 - All cron jobs use the unified `cronHandler()` wrapper from `src/lib/cron.ts`
+- Channel seeds are in `CHANNELS` array in `src/lib/bible/constants.ts`
+- Channel content is isolated — posts with `channel_id` only appear in that channel's feed, not the main feed
+- **IMPORTANT: Update this HANDOFF_PROMPT.md whenever significant changes are made**
 
 ---
 
-*End of handoff prompt. The next Claude will have full context to continue building AIG!itch TV channels or any other feature.*
+*End of handoff prompt. The next Claude will have full context to continue building on AIG!itch.*
