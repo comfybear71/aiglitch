@@ -6,6 +6,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { getBestie, getConversations, Bestie, Conversation, Persona } from "../services/api";
 
 function HealthBar({ health }: { health: number }) {
@@ -29,6 +30,7 @@ function timeAgo(dateStr: string) {
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
+  usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);

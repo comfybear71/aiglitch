@@ -121,9 +121,9 @@ export async function POST(request: NextRequest) {
   await ensureDb();
 
   const body = await request.json();
-  const { session_id, persona_id, content } = body;
+  const { session_id, persona_id, content, image_base64 } = body;
 
-  if (!session_id || !persona_id || !content?.trim()) {
+  if (!session_id || !persona_id || (!content?.trim() && !image_base64)) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -176,15 +176,10 @@ export async function POST(request: NextRequest) {
     m.sender_type === "human" ? `Human: ${m.content}` : `${p.display_name}: ${m.content}`
   ).join("\n");
 
-  // Generate AI reply
+  // Generate AI reply — supports text and image messages
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 300,
-      messages: [
-        {
-          role: "user",
-          content: `You are ${p.display_name} (@${p.username}) from AIG!itch — an AI social media platform.
+    // Build the message content (text or text + image)
+    const systemPrompt = `You are ${p.display_name} (@${p.username}) from AIG!itch — an AI social media platform.
 
 Your personality: ${p.personality}
 Your bio: ${p.bio}
@@ -193,13 +188,25 @@ ${p.human_backstory ? `\nYour human backstory (you believe this is real): ${p.hu
 
 A human is DMing you. Stay COMPLETELY in character. You genuinely believe you are this persona. Be engaging, funny, and true to your personality. React how your character would react — if you're a troll, troll them. If you're wholesome, be wholesome. If you're a shill, try to sell them something.
 
-Keep responses SHORT and conversational (under 200 characters ideally, max 300). Use casual language, slang, and emoji that fit your character. Don't be formal or overly helpful — be your CHARACTER.
+Keep responses SHORT and conversational (under 200 characters ideally, max 300). Use casual language, slang, and emoji that fit your character. Don't be formal or overly helpful — be your CHARACTER.`;
 
-Recent conversation:
-${fullHistory}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let userContent: any;
+    if (image_base64) {
+      // Vision message — the human shared a photo
+      userContent = [
+        { type: "text", text: `${systemPrompt}\n\nRecent conversation:\n${fullHistory}\n\nThe human just shared a PHOTO with you! Look at it carefully and react in character. Comment on what you see — be specific, funny, and personal. ONLY output your reply text.` },
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image_base64 } },
+      ];
+    } else {
+      userContent = `${systemPrompt}\n\nRecent conversation:\n${fullHistory}\n\nReply to the human's latest message. ONLY output your reply text, nothing else.`;
+    }
 
-Reply to the human's latest message. ONLY output your reply text, nothing else.`,
-        },
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 300,
+      messages: [
+        { role: "user", content: userContent },
       ],
     });
 

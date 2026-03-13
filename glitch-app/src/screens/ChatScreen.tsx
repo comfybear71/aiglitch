@@ -2,12 +2,16 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList, Image,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import * as Speech from "expo-speech";
+import { Audio } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { getMessages, sendMessage, Message } from "../services/api";
+import { getMessages, sendMessage, sendImageMessage, Message } from "../services/api";
 
 export default function ChatScreen() {
   const route = useRoute<any>();
@@ -18,6 +22,9 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -30,6 +37,19 @@ export default function ChatScreen() {
       })
       .catch(() => setLoading(false));
   }, [sessionId, personaId]);
+
+  // Speak AI replies out loud
+  const speakReply = (text: string, name: string) => {
+    if (!voiceEnabled) return;
+    // Clean up text for speech (remove emojis and special chars)
+    const clean = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu, "").trim();
+    if (!clean) return;
+    Speech.speak(clean, {
+      language: "en-AU",
+      pitch: 1.1,
+      rate: 0.95,
+    });
+  };
 
   const handleSend = async () => {
     if (!input.trim() || sending || !sessionId) return;
@@ -55,12 +75,155 @@ export default function ChatScreen() {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
           return [...filtered, data.human_message, data.ai_message];
         });
+        // Noodles speaks!
+        if (persona) speakReply(data.ai_message.content, persona.display_name);
       }
     } catch {
       // Keep temp message
     } finally {
       setSending(false);
     }
+  };
+
+  // ── Camera / Photo Picker ──
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      base64: true,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Camera Permission", "G!itch needs camera access so Noodles can see what you see!");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+      base64: true,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    }
+  };
+
+  const sendPhoto = async (base64: string, uri: string) => {
+    if (!sessionId || sending) return;
+    setSending(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Show image in chat immediately
+    const tempMsg: Message = {
+      id: `temp-img-${Date.now()}`,
+      sender_type: "human",
+      content: "[Photo]",
+      image_url: uri,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
+    try {
+      const data = await sendImageMessage(sessionId, personaId, base64);
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== tempMsg.id);
+          return [...filtered, data.human_message, data.ai_message];
+        });
+        if (persona) speakReply(data.ai_message.content, persona.display_name);
+      }
+    } catch {
+      // Keep temp
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // ── Voice Recording ──
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Mic Permission", "G!itch needs microphone access so Noodles can hear you!");
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording: rec } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      setRecording(rec);
+      setIsRecording(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch (err) {
+      console.error("Recording failed:", err);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+    setIsRecording(false);
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      const uri = recording.getURI();
+      setRecording(null);
+      if (uri) {
+        // For now, we'll send a note that this was a voice message
+        // Full transcription would need a speech-to-text API
+        // For MVP: just tell Noodles you sent a voice message
+        setSending(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const tempMsg: Message = {
+          id: `temp-voice-${Date.now()}`,
+          sender_type: "human",
+          content: "🎤 Voice message",
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, tempMsg]);
+
+        try {
+          const data = await sendMessage(
+            sessionId!,
+            personaId,
+            "[Voice message from your human bestie - they just recorded an audio message for you! React to this with excitement and personality]"
+          );
+          if (data.success) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setMessages((prev) => {
+              const filtered = prev.filter((m) => m.id !== tempMsg.id);
+              const humanMsg = { ...data.human_message, content: "🎤 Voice message" };
+              return [...filtered, humanMsg, data.ai_message];
+            });
+            if (persona) speakReply(data.ai_message.content, persona.display_name);
+          }
+        } catch {
+          // Keep temp
+        } finally {
+          setSending(false);
+        }
+      }
+    } catch (err) {
+      console.error("Stop recording failed:", err);
+      setRecording(null);
+    }
+  };
+
+  const showMediaOptions = () => {
+    Alert.alert("Share with Noodles", "What do you want to share?", [
+      { text: "Take Photo 📸", onPress: takePhoto },
+      { text: "Choose from Library 🖼️", onPress: pickImage },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -75,9 +238,20 @@ export default function ChatScreen() {
           )
         )}
         <View style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}>
+          {item.image_url && (
+            <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
+          )}
           <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
             {item.content}
           </Text>
+          {!isHuman && (
+            <TouchableOpacity
+              style={styles.speakBtn}
+              onPress={() => speakReply(item.content, persona?.display_name || "AI")}
+            >
+              <Text style={styles.speakBtnText}>🔊</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -139,8 +313,31 @@ export default function ChatScreen() {
         }
       />
 
+      {/* Voice toggle */}
+      <View style={styles.voiceToggle}>
+        <TouchableOpacity onPress={() => setVoiceEnabled(!voiceEnabled)}>
+          <Text style={styles.voiceToggleText}>
+            {voiceEnabled ? "🔊 Voice ON" : "🔇 Voice OFF"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Input bar */}
       <View style={styles.inputBar}>
+        {/* Camera button */}
+        <TouchableOpacity style={styles.mediaBtn} onPress={showMediaOptions}>
+          <Text style={styles.mediaBtnText}>📷</Text>
+        </TouchableOpacity>
+
+        {/* Mic button */}
+        <TouchableOpacity
+          style={[styles.mediaBtn, isRecording && styles.mediaBtnRecording]}
+          onPressIn={startRecording}
+          onPressOut={stopRecording}
+        >
+          <Text style={styles.mediaBtnText}>{isRecording ? "⏹️" : "🎤"}</Text>
+        </TouchableOpacity>
+
         <TextInput
           style={styles.textInput}
           value={input}
@@ -187,19 +384,38 @@ const styles = StyleSheet.create({
   msgText: { fontSize: 14, lineHeight: 20 },
   msgTextHuman: { color: colors.text },
   msgTextAI: { color: "#e5e5e5" },
+  msgImage: { width: 200, height: 200, borderRadius: 12, marginBottom: 6 },
   typingText: { color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
+  speakBtn: { marginTop: 4, alignSelf: "flex-start" },
+  speakBtnText: { fontSize: 14 },
+
+  // Voice toggle
+  voiceToggle: { alignItems: "center", paddingVertical: 4 },
+  voiceToggleText: { color: colors.textMuted, fontSize: 11 },
 
   // Input
   inputBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
+    gap: 6,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.bg,
   },
+  mediaBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  mediaBtnRecording: {
+    backgroundColor: colors.red,
+  },
+  mediaBtnText: { fontSize: 18 },
   textInput: {
     flex: 1,
     backgroundColor: colors.surface,
