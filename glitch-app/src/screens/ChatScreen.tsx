@@ -4,7 +4,7 @@ import {
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
   Alert,
 } from "react-native";
-import { useRoute } from "@react-navigation/native";
+import { useRoute, useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Audio } from "expo-av";
@@ -16,6 +16,7 @@ const API_BASE = "https://aiglitch.app";
 
 export default function ChatScreen() {
   const route = useRoute<any>();
+  const nav = useNavigation<any>();
   const { personaId } = route.params;
   const { sessionId } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -380,12 +381,22 @@ export default function ChatScreen() {
         }
       />
 
-      {/* Voice toggle */}
+      {/* Voice controls */}
       <View style={styles.voiceToggle}>
         <TouchableOpacity onPress={() => setVoiceEnabled(!voiceEnabled)}>
           <Text style={styles.voiceToggleText}>
             {voiceEnabled ? "🔊 Voice ON" : "🔇 Voice OFF"}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.voiceChatBtn}
+          onPress={() => nav.navigate("VoiceChat", {
+            personaId,
+            title: persona?.display_name || "Bestie",
+            personaType: persona?.persona_type,
+          })}
+        >
+          <Text style={styles.voiceChatBtnText}>🎙 Voice Chat</Text>
         </TouchableOpacity>
       </View>
 
@@ -456,8 +467,10 @@ const styles = StyleSheet.create({
   speakBtnText: { fontSize: 14 },
 
   // Voice toggle
-  voiceToggle: { alignItems: "center", paddingVertical: 4 },
+  voiceToggle: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, paddingVertical: 4 },
   voiceToggleText: { color: colors.textMuted, fontSize: 11 },
+  voiceChatBtn: { backgroundColor: "rgba(124, 58, 237, 0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(124, 58, 237, 0.3)" },
+  voiceChatBtnText: { color: colors.purpleLight, fontSize: 11, fontWeight: "600" },
 
   // Input
   inputBar: {

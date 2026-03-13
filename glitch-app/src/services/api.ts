@@ -247,3 +247,12 @@ export function getOnChainBalances(walletAddress: string, sessionId: string) {
     `/api/solana?action=balance&wallet_address=${encodeURIComponent(walletAddress)}&session_id=${encodeURIComponent(sessionId)}`
   );
 }
+
+// ── Voice Transcription ──
+
+export function transcribeAudio(audioBase64: string, mimeType: string = "audio/m4a") {
+  return fetchJSON<{ text: string; source: string }>("/api/transcribe", {
+    method: "POST",
+    body: JSON.stringify({ audio_base64: audioBase64, mime_type: mimeType }),
+  });
+}

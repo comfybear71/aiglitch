@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import ChatScreen from "./src/screens/ChatScreen";
+import VoiceChatScreen from "./src/screens/VoiceChatScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -49,6 +50,16 @@ export default function App() {
           options={({ route }: { route: any }) => ({
             headerTitle: route.params?.title || "Chat",
           })}
+        />
+        <Stack.Screen
+          name="VoiceChat"
+          component={VoiceChatScreen}
+          options={{
+            headerTitle: "Voice Chat",
+            headerTransparent: true,
+            headerTintColor: "#ffffff",
+            presentation: "fullScreenModal",
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

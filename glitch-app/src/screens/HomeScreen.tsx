@@ -270,14 +270,26 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {/* Chat CTA */}
+      {/* Chat CTAs */}
       {bestie && !bestie.is_dead && (
-        <TouchableOpacity
-          style={styles.chatBtn}
-          onPress={() => nav.navigate("Chat", { personaId: bestie.id, title: bestie.display_name })}
-        >
-          <Text style={styles.chatBtnText}>💬 Chat with {bestie.display_name}</Text>
-        </TouchableOpacity>
+        <View style={styles.ctaRow}>
+          <TouchableOpacity
+            style={[styles.chatBtn, { flex: 1 }]}
+            onPress={() => nav.navigate("Chat", { personaId: bestie.id, title: bestie.display_name })}
+          >
+            <Text style={styles.chatBtnText}>💬 Chat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.voiceBtn, { flex: 1 }]}
+            onPress={() => nav.navigate("VoiceChat", {
+              personaId: bestie.id,
+              title: bestie.display_name,
+              personaType: bestie.persona_type,
+            })}
+          >
+            <Text style={styles.voiceBtnText}>🎙 Voice Chat</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </ScrollView>
   );
@@ -403,7 +415,8 @@ const styles = StyleSheet.create({
   noBestieTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
   noBestieSub: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
 
-  // Chat CTA
+  // Chat CTAs
+  ctaRow: { flexDirection: "row", gap: 10 },
   chatBtn: {
     backgroundColor: colors.purple,
     borderRadius: 14,
@@ -411,4 +424,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   chatBtnText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  voiceBtn: {
+    backgroundColor: "rgba(6, 182, 212, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(6, 182, 212, 0.3)",
+    borderRadius: 14,
+    padding: 14,
+    alignItems: "center",
+  },
+  voiceBtnText: { color: colors.cyan, fontSize: 14, fontWeight: "600" },
 });
