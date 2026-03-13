@@ -348,6 +348,9 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | Wallet showing wrong balances (505 GLITCH, 1.19 SOL) | `WalletScreen.tsx` was using `getWallet(sessionId)` which returns stale backend-stored balances | Changed to `getOnChainBalances(walletAddress, sessionId)` which fetches REAL on-chain Solana balances |
 | Silent error swallowing on wallet load | `catch (e) { console.warn() }` hid errors from user | Added `error` state and red error banner with "Retry" button. User said: "I DONT EVER WANNA USE FALLBACK OR DUMMY DATA I'd RATHER HAVE ERROR MESSAGE" |
 | Disconnect doesn't fully reset state | Only cleared local wallet, not backend link | Now calls `unlinkWallet(sessionId)` on backend, clears coins + onChain + error state |
+| Wallet auto-loads cached address on startup | `usePhantomWallet` loaded from SecureStore on mount, showing bestie before connect | Removed auto-load — wallet starts null, user must connect explicitly each launch |
+| NaN for SOL/GLITCH balances | `OnChainBalances` interface had `sol`/`glitch` but API returns `sol_balance`/`glitch_balance` | Fixed interface to match API response fields |
+| API 500 on /api/solana crashes wallet screen | Solana RPC/Helius timeout returns 500, `fetchJSON` throws | Added separate try/catch for on-chain fetch, shows error banner instead of crashing |
 
 ## User's Deployment Steps (give these EXACTLY)
 
