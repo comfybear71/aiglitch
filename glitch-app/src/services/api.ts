@@ -248,6 +248,94 @@ export function getOnChainBalances(walletAddress: string, sessionId: string) {
   );
 }
 
+// ── OTC Swap ──
+
+export interface OtcConfig {
+  enabled: boolean;
+  price_sol: number;
+  price_usd: number;
+  sol_price_usd: number;
+  available_supply: number;
+  min_purchase: number;
+  max_purchase: number;
+  treasury_wallet: string;
+  token_mint: string;
+  stats: {
+    total_swaps: number;
+    total_glitch_sold: number;
+    total_sol_received: number;
+  };
+  bonding_curve: {
+    tier: number;
+    tier_size: number;
+    remaining_in_tier: number;
+    next_price_usd: number;
+    next_price_sol: number;
+    base_price_usd: number;
+    increment_usd: number;
+  };
+  network: string;
+}
+
+export interface OtcSwapResult {
+  success: boolean;
+  swap_id: string;
+  treasury_wallet: string;
+  sol_amount: number;
+  glitch_amount: number;
+  price_sol: number;
+  message?: string;
+}
+
+export interface OtcSubmitResult {
+  success: boolean;
+  message: string;
+  swap_id: string;
+  glitch_amount: number;
+}
+
+export interface SwapHistoryItem {
+  swap_id: string;
+  sol_amount: number;
+  glitch_amount: number;
+  price_sol: number;
+  price_usd: number;
+  status: string;
+  created_at: string;
+}
+
+export function getOtcConfig() {
+  return fetchJSON<OtcConfig>("/api/otc-swap?action=config");
+}
+
+export function createSwap(buyerWallet: string, glitchAmount: number) {
+  return fetchJSON<OtcSwapResult>("/api/otc-swap", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "create_swap",
+      buyer_wallet: buyerWallet,
+      glitch_amount: glitchAmount,
+    }),
+  });
+}
+
+export function submitSwap(swapId: string, signedTransaction: string) {
+  return fetchJSON<OtcSubmitResult>("/api/otc-swap", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "submit_swap",
+      swap_id: swapId,
+      signed_transaction: signedTransaction,
+    }),
+  });
+}
+
+export function getSwapHistory(walletAddress: string) {
+  return fetchJSON<{ swaps: SwapHistoryItem[] }>(
+    `/api/otc-swap?action=history&wallet=${encodeURIComponent(walletAddress)}`
+  );
+}
+
 // ── Voice Transcription ──
 
 export function transcribeAudio(audioBase64: string, mimeType: string = "audio/m4a") {
