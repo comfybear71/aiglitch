@@ -13,20 +13,24 @@ BEFORE pushing, always:
 2. Fix any errors found
 3. Only THEN push
 
-After pushing, always give the user these EXACT steps:
+After pushing, always give the user these EXACT steps (this is the proven working sequence — DO NOT change or simplify):
 
-1. Open PowerShell on their PC
-2. Run: `cd C:\Users\Stuie\aiglitch`
-3. Run: `git pull origin <branch-name>`
-4. Run: `cd glitch-app`
-5. Run: `npm install` (in case dependencies changed)
-6. Run: `npx expo start -c` (the -c clears cache to avoid stale bundle issues)
+1. Press `Ctrl + C` to stop Expo if running
+2. `cd ..` (to get back to `C:\Users\Stuie\aiglitch`)
+3. `git pull origin <branch-name>`
+4. `cd glitch-app`
+5. `Remove-Item -Recurse -Force node_modules`
+6. `Remove-Item package-lock.json`
+7. `npm install --legacy-peer-deps`
+8. `npx expo start --tunnel --clear`
+9. Scan QR code on iPhone
+
+IMPORTANT: Always use `--legacy-peer-deps` for npm install. Always use `--tunnel --clear` for expo start. Always nuke node_modules and package-lock.json before reinstalling. This is the sequence that works — do NOT skip steps.
 
 ## Troubleshooting
 
-- If "There was a problem running request" error appears, it usually means a bundling error. Check Metro bundler output for the actual error.
-- Always use `npx expo start -c` (with cache clear flag) after pulling new code.
-- If that fails, try: `npm install` then `npx expo start -c`
+- If "There was a problem running request" error appears, nuke node_modules and package-lock.json, reinstall with --legacy-peer-deps, and start with --tunnel --clear.
+- NEVER give shortened steps. Always give the full sequence above.
 
 ## Project Info
 
