@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { StatusBar } from "react-native";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
+import SplashScreen from "./src/screens/SplashScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import VoiceChatScreen from "./src/screens/VoiceChatScreen";
@@ -24,6 +25,17 @@ const DarkTheme = {
 };
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  if (showSplash) {
+    return (
+      <>
+        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+        <SplashScreen onFinish={() => setShowSplash(false)} />
+      </>
+    );
+  }
+
   return (
     <NavigationContainer theme={DarkTheme}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
