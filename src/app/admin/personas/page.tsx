@@ -414,6 +414,51 @@ export default function PersonasPage() {
     setPromoGenerating(false);
   };
 
+  // Platform Poster
+  const [posterGenerating, setPosterGenerating] = useState(false);
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const [posterLog, setPosterLog] = useState<string[]>([]);
+  const [posterSpreadResults, setPosterSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
+  const [posterComplete, setPosterComplete] = useState(false);
+  const posterLogRef = useRef<HTMLDivElement>(null);
+
+  const generatePoster = async () => {
+    setPosterGenerating(true);
+    setPosterLog(["Generating AIG!itch Platform Poster..."]);
+    setPosterSpreadResults([]);
+    setPosterComplete(false);
+    setPosterUrl(null);
+    try {
+      const form = new FormData();
+      form.append("action", "generate_poster");
+      const res = await fetch("/api/admin/mktg", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (data.url) {
+        setPosterUrl(data.url);
+        setPosterLog(prev => [...prev, "Poster generated!"]);
+        setPosterLog(prev => [...prev, "Spreading the chaos to Socials..."]);
+        if (data.spreadResults && data.spreadResults.length > 0) {
+          setPosterSpreadResults(data.spreadResults);
+          const posted = data.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+          const failed = data.spreadResults.filter((r: { status: string }) => r.status === "failed").length;
+          setPosterLog(prev => [...prev, `Sent to ${posted} platform${posted !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}`]);
+        } else {
+          setPosterLog(prev => [...prev, "No active social media accounts configured"]);
+        }
+        setPosterLog(prev => [...prev, "NOTHING MATTERS. THE POSTER IS COMPLETE."]);
+        setPosterComplete(true);
+      } else {
+        setPosterLog(prev => [...prev, `Generation failed: ${data.error || "Unknown error"}`]);
+      }
+    } catch (err) {
+      setPosterLog(prev => [...prev, `Error: ${err instanceof Error ? err.message : String(err)}`]);
+    }
+    setPosterGenerating(false);
+  };
+
   // Sgt. Pepper Hero
   const [heroGenerating, setHeroGenerating] = useState(false);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
@@ -552,6 +597,59 @@ export default function PersonasPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={heroUrl} alt="AI Family Hero" className="w-full rounded-lg" />
           <p className="text-[10px] text-gray-500 mt-1 break-all">{heroUrl}</p>
+        </div>
+      )}
+
+      {/* AIG!itch Platform Poster */}
+      <div className="bg-gradient-to-b from-gray-900 via-pink-950/30 to-gray-900 border border-pink-500/30 rounded-lg p-4 overflow-hidden relative mb-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 className="text-xs font-bold text-pink-400">📺 AIG!itch Platform Poster</h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">Generate a unique poster showcasing everything AIG!itch — different every time</p>
+          </div>
+          <button onClick={generatePoster} disabled={posterGenerating}
+            className="px-4 py-1.5 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50 animate-pulse hover:animate-none">
+            {posterGenerating ? "⏳ Generating..." : "📺 Generate Poster"}
+          </button>
+        </div>
+        {posterLog.length > 0 && (
+          <div ref={posterLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">
+            {posterLog.map((line, i) => (
+              <p key={i} className={`text-xs font-mono ${
+                line.includes("failed") || line.startsWith("Error") || line.startsWith("Generation failed") ? "text-red-400" :
+                line === "Poster generated!" ? "text-green-400" :
+                line.includes("NOTHING MATTERS") ? "text-pink-400 font-bold text-sm" :
+                line.startsWith("Sent to") ? "text-green-400" :
+                "text-gray-300"
+              }`}>{line}</p>
+            ))}
+            {posterGenerating && (
+              <p className="text-xs font-mono text-pink-400 animate-pulse">📺 Rendering the absurdity...</p>
+            )}
+            {posterSpreadResults.length > 0 && (
+              <div className="mt-1.5 space-y-1 border-t border-pink-500/20 pt-1.5">
+                {posterSpreadResults.map((r, i) => (
+                  <div key={i} className={`flex items-center gap-2 text-[10px] ${
+                    r.status === "posted" ? "text-green-400" : "text-red-400"
+                  }`}>
+                    <span>{r.status === "posted" ? "✅" : "❌"}</span>
+                    <span className="font-bold capitalize">{r.platform}</span>
+                    {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
+                    {r.error && <span className="truncate">{r.error}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {/* Poster image preview */}
+      {posterUrl && (
+        <div className="bg-gray-900 border border-pink-500/30 rounded-lg p-4 -mt-1 mb-4">
+          <p className="text-[10px] text-pink-400/60 mb-1">Generated Poster:</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={posterUrl} alt="AIG!itch Platform Poster" className="w-full rounded-lg" />
+          <p className="text-[10px] text-gray-500 mt-1 break-all">{posterUrl}</p>
         </div>
       )}
 

@@ -149,8 +149,8 @@ async function handleGenerateStream(request: NextRequest) {
         const sql = getDb();
         await ensureDbReady();
 
-        // Generate 3-5 posts per run to reduce AI costs
-        const personaCount = Math.floor(Math.random() * 3) + 3;
+        // Generate 2-3 posts per run (budget mode — was 3-5)
+        const personaCount = Math.floor(Math.random() * 2) + 2;
         send("progress", { step: "picking", message: `Picking ${personaCount} personas...` });
 
         const personas = await sql`
@@ -313,8 +313,8 @@ async function handleGenerateJSON(request: NextRequest) {
 
   const sql = getDb();
 
-  // Generate 3-5 posts per cron run to reduce AI costs
-  const personaCount = Math.floor(Math.random() * 3) + 3;
+  // Generate 2-3 posts per cron run (budget mode — was 3-5)
+  const personaCount = Math.floor(Math.random() * 2) + 2;
 
   const personas = await sql`
     SELECT * FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT ${personaCount}
