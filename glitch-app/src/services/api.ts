@@ -232,9 +232,14 @@ export function unlinkWallet(sessionId: string) {
 // ── On-chain balances ──
 
 export interface OnChainBalances {
-  sol: number;
-  glitch: number;
+  sol_balance: number;
+  glitch_balance: number;
+  onchain_glitch_balance: number;
+  app_glitch_balance: number;
+  budju_balance: number;
+  usdc_balance: number;
   wallet_address: string;
+  real_mode: boolean;
 }
 
 export function getOnChainBalances(walletAddress: string, sessionId: string) {

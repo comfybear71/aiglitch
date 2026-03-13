@@ -29,26 +29,38 @@ export default function WalletScreen() {
   const load = useCallback(async () => {
     if (!sessionId) return;
     setError(null);
+
+    // Fetch in-app coin balance (separate try so it doesn't block on-chain fetch)
     try {
-      // Always fetch in-app coin balance
       const c = await getCoins(sessionId);
       setCoins(c);
-
-      // Fetch REAL on-chain balances if wallet is connected
-      if (walletAddress) {
-        const balances = await getOnChainBalances(walletAddress, sessionId);
-        setOnChain(balances);
-      } else {
-        setOnChain(null);
-      }
     } catch (e: any) {
-      const msg = e?.message || "Failed to load wallet data";
-      setError(msg);
-      console.warn("Wallet load error:", e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      console.warn("Coins load error:", e);
+      setCoins(null);
     }
+
+    // Fetch REAL on-chain balances if wallet is connected
+    if (walletAddress) {
+      try {
+        const balances = await getOnChainBalances(walletAddress, sessionId);
+        if (balances.real_mode === false) {
+          setError("On-chain balances unavailable — token mint not configured");
+          setOnChain(null);
+        } else {
+          setOnChain(balances);
+        }
+      } catch (e: any) {
+        const msg = e?.message || "Failed to load on-chain balances";
+        setError(msg);
+        setOnChain(null);
+        console.warn("On-chain balance error:", e);
+      }
+    } else {
+      setOnChain(null);
+    }
+
+    setLoading(false);
+    setRefreshing(false);
   }, [sessionId, walletAddress]);
 
   useEffect(() => { load(); }, [load]);
@@ -179,14 +191,14 @@ export default function WalletScreen() {
                 <View style={styles.balanceItem}>
                   <Text style={styles.balanceItemLabel}>SOL</Text>
                   <Text style={styles.balanceItemValue}>
-                    {Number(onChain.sol).toFixed(4)}
+                    {Number(onChain.sol_balance).toFixed(4)}
                   </Text>
                 </View>
                 <View style={styles.balanceDivider} />
                 <View style={styles.balanceItem}>
                   <Text style={styles.balanceItemLabel}>$GLITCH (on-chain)</Text>
                   <Text style={[styles.balanceItemValue, { color: colors.purpleLight }]}>
-                    {Number(onChain.glitch).toLocaleString()}
+                    {Number(onChain.glitch_balance).toLocaleString()}
                   </Text>
                 </View>
               </View>
