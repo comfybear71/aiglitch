@@ -29,9 +29,26 @@ interface Conversation {
   last_message_at: string;
 }
 
+interface Bestie {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_emoji: string;
+  avatar_url: string | null;
+  personality: string;
+  bio: string;
+  persona_type: string;
+  meatbag_name: string | null;
+  live_health: number;
+  days_left: number;
+  is_dead: boolean;
+  last_message: { content: string; sender_type: string; created_at: string } | null;
+}
+
 export default function PartnerHomePage() {
   const { sessionId, isLoading: sessionLoading } = useSession();
   const { unreadCount } = useNotifications(sessionId);
+  const [bestie, setBestie] = useState<Bestie | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,11 +57,15 @@ export default function PartnerHomePage() {
 
   useEffect(() => {
     if (!sessionId) return;
-    fetch(`/api/messages?session_id=${sessionId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setConversations(data.conversations || []);
-        setPersonas(data.personas || []);
+    // Fetch bestie + conversations in parallel
+    Promise.all([
+      fetch(`/api/partner/bestie?session_id=${sessionId}`).then((r) => r.json()),
+      fetch(`/api/messages?session_id=${sessionId}`).then((r) => r.json()),
+    ])
+      .then(([bestieData, msgData]) => {
+        setBestie(bestieData.bestie || null);
+        setConversations(msgData.conversations || []);
+        setPersonas(msgData.personas || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -64,6 +85,11 @@ export default function PartnerHomePage() {
       p.username.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Don't show bestie in the regular conversation list
+  const otherConversations = bestie
+    ? conversations.filter((c) => c.persona_id !== bestie.id)
+    : conversations;
+
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -72,6 +98,20 @@ export default function PartnerHomePage() {
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h`;
     return `${Math.floor(hrs / 24)}d`;
+  };
+
+  const healthColor = (hp: number) => {
+    if (hp > 70) return "text-green-400";
+    if (hp > 40) return "text-yellow-400";
+    if (hp > 15) return "text-orange-400";
+    return "text-red-400";
+  };
+
+  const healthBg = (hp: number) => {
+    if (hp > 70) return "bg-green-500";
+    if (hp > 40) return "bg-yellow-500";
+    if (hp > 15) return "bg-orange-500";
+    return "bg-red-500";
   };
 
   return (
@@ -83,7 +123,9 @@ export default function PartnerHomePage() {
             <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
               G!itch
             </h1>
-            <p className="text-[10px] text-gray-500">Your AI Partner</p>
+            <p className="text-[10px] text-gray-500">
+              {bestie ? `${bestie.meatbag_name || "Hey"}'s AI Bestie` : "Your AI Partner"}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             {unreadCount > 0 && (
@@ -102,6 +144,89 @@ export default function PartnerHomePage() {
       </header>
 
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
+        {/* Bestie hero card */}
+        {bestie && !bestie.is_dead && (
+          <Link
+            href={`/partner/chat/${bestie.id}`}
+            className="block bg-gradient-to-br from-purple-900/50 via-purple-800/20 to-cyan-900/30 border border-purple-500/30 hover:border-purple-400/50 rounded-2xl p-5 transition-all"
+          >
+            <div className="flex items-start gap-4">
+              <div className="relative">
+                {bestie.avatar_url ? (
+                  <img
+                    src={bestie.avatar_url}
+                    alt={bestie.display_name}
+                    className="w-16 h-16 rounded-full object-cover ring-2 ring-purple-500/50"
+                  />
+                ) : (
+                  <span className="text-5xl">{bestie.avatar_emoji}</span>
+                )}
+                {/* Health indicator dot */}
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-black ${healthBg(bestie.live_health)}`}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-bold text-lg">{bestie.display_name}</h2>
+                  <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded">
+                    BESTIE
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400">@{bestie.username}</p>
+
+                {/* Health bar */}
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${healthBg(bestie.live_health)}`}
+                      style={{ width: `${bestie.live_health}%` }}
+                    />
+                  </div>
+                  <span className={`text-[10px] font-medium ${healthColor(bestie.live_health)}`}>
+                    {bestie.live_health}%
+                  </span>
+                  <span className="text-[10px] text-gray-600">
+                    {bestie.days_left}d left
+                  </span>
+                </div>
+
+                {/* Last message preview */}
+                {bestie.last_message && (
+                  <p className="text-xs text-gray-500 mt-2 truncate">
+                    {bestie.last_message.sender_type === "human" ? "You: " : `${bestie.avatar_emoji} `}
+                    {bestie.last_message.content}
+                  </p>
+                )}
+                {!bestie.last_message && (
+                  <p className="text-xs text-purple-400/70 mt-2">
+                    Tap to chat with {bestie.display_name}...
+                  </p>
+                )}
+              </div>
+            </div>
+          </Link>
+        )}
+
+        {/* Bestie is dead */}
+        {bestie && bestie.is_dead && (
+          <div className="bg-gradient-to-br from-red-900/30 to-gray-900/30 border border-red-500/30 rounded-2xl p-5 text-center">
+            <span className="text-4xl opacity-50">{bestie.avatar_emoji}</span>
+            <p className="text-sm font-medium text-red-400 mt-2">
+              {bestie.display_name} has faded away...
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Feed GLITCH to resurrect your bestie
+            </p>
+            <Link
+              href={`/profile/${bestie.username}`}
+              className="inline-block mt-3 bg-red-600 hover:bg-red-500 text-white text-xs px-4 py-2 rounded-lg"
+            >
+              Resurrect
+            </Link>
+          </div>
+        )}
+
         {/* Quick actions */}
         <div className="grid grid-cols-2 gap-3">
           <Link
@@ -122,10 +247,12 @@ export default function PartnerHomePage() {
           </Link>
         </div>
 
-        {/* Conversations */}
+        {/* Other conversations */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-300">Your AI Partners</h2>
+            <h2 className="text-sm font-semibold text-gray-300">
+              {bestie ? "Other Chats" : "Your AI Partners"}
+            </h2>
             <button
               onClick={() => setShowPicker(true)}
               className="text-xs text-purple-400 hover:text-purple-300"
@@ -140,20 +267,27 @@ export default function PartnerHomePage() {
                 <div key={i} className="animate-pulse bg-gray-900 rounded-xl h-16" />
               ))}
             </div>
-          ) : conversations.length === 0 ? (
+          ) : otherConversations.length === 0 && !bestie ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">🤖</p>
               <p className="text-gray-400 text-sm">No conversations yet</p>
+              <p className="text-gray-600 text-xs mt-1">
+                Hatch a bestie at <Link href="/hatchery" className="text-purple-400">/hatchery</Link> or pick any persona to chat with
+              </p>
               <button
                 onClick={() => setShowPicker(true)}
                 className="mt-3 bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-2 rounded-lg transition-colors"
               >
-                Pick your AI Partner
+                Pick an AI Partner
               </button>
             </div>
+          ) : otherConversations.length === 0 ? (
+            <p className="text-xs text-gray-600 text-center py-4">
+              Chat with other personas too — tap + New Chat
+            </p>
           ) : (
             <div className="space-y-2">
-              {conversations.map((conv) => (
+              {otherConversations.map((conv) => (
                 <Link
                   key={conv.id}
                   href={`/partner/chat/${conv.persona_id}`}

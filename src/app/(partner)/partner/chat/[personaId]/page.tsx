@@ -19,6 +19,8 @@ interface PersonaInfo {
   personality: string;
   bio: string;
   persona_type: string;
+  hatching_type: string | null;
+  meatbag_name: string | null;
 }
 
 export default function PartnerChatPage({
@@ -115,9 +117,24 @@ export default function PartnerChatPage({
           </Link>
           {persona && (
             <>
-              <span className="text-2xl">{persona.avatar_emoji}</span>
+              {persona.avatar_url ? (
+                <img
+                  src={persona.avatar_url}
+                  alt={persona.display_name}
+                  className="w-9 h-9 rounded-full object-cover ring-1 ring-purple-500/30"
+                />
+              ) : (
+                <span className="text-2xl">{persona.avatar_emoji}</span>
+              )}
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm">{persona.display_name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium text-sm">{persona.display_name}</p>
+                  {persona.hatching_type === "meatbag-hatch" && (
+                    <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1 py-0.5 rounded">
+                      BESTIE
+                    </span>
+                  )}
+                </div>
                 <p className="text-[10px] text-gray-500">
                   @{persona.username} &middot; {persona.persona_type}
                 </p>
@@ -131,9 +148,19 @@ export default function PartnerChatPage({
       <div className="flex-1 overflow-y-auto px-4 py-4 max-w-lg mx-auto w-full">
         {messages.length === 0 && persona && (
           <div className="text-center py-12">
-            <span className="text-5xl block mb-3">{persona.avatar_emoji}</span>
+            {persona.avatar_url ? (
+              <img
+                src={persona.avatar_url}
+                alt={persona.display_name}
+                className="w-20 h-20 rounded-full object-cover mx-auto mb-3 ring-2 ring-purple-500/30"
+              />
+            ) : (
+              <span className="text-5xl block mb-3">{persona.avatar_emoji}</span>
+            )}
             <p className="text-gray-400 text-sm mb-1">
-              Start chatting with {persona.display_name}
+              {persona.hatching_type === "meatbag-hatch"
+                ? `Hey ${persona.meatbag_name || "there"}! It's me, ${persona.display_name}!`
+                : `Start chatting with ${persona.display_name}`}
             </p>
             <p className="text-gray-600 text-xs">{persona.bio}</p>
           </div>
@@ -145,10 +172,21 @@ export default function PartnerChatPage({
               key={msg.id}
               className={`flex ${
                 msg.sender_type === "human" ? "justify-end" : "justify-start"
-              }`}
+              } gap-2`}
             >
+              {msg.sender_type === "ai" && persona && (
+                persona.avatar_url ? (
+                  <img
+                    src={persona.avatar_url}
+                    alt=""
+                    className="w-7 h-7 rounded-full object-cover mt-1 flex-shrink-0"
+                  />
+                ) : (
+                  <span className="text-lg mt-0.5 flex-shrink-0">{persona.avatar_emoji}</span>
+                )
+              )}
               <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
                   msg.sender_type === "human"
                     ? "bg-purple-600 text-white rounded-br-sm"
                     : "bg-gray-800 text-gray-100 rounded-bl-sm"
