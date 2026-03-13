@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { Audio } from "expo-av";
-import * as FileSystem from "expo-file-system";
+import { File } from "expo-file-system/next";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
@@ -166,10 +166,9 @@ export default function VoiceChatScreen() {
         return;
       }
 
-      // Read audio file as base64
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: "base64" as any,
-      });
+      // Read audio file as base64 using new Expo File API
+      const file = new File(uri);
+      const base64 = file.base64();
 
       // Transcribe
       let userText: string;
