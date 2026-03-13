@@ -292,11 +292,11 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 5. **No WebView for wallet** — Everything native, deep links only
 
 ### Wallet Connect Flow
-- Uses Phantom universal links: `https://phantom.app/ul/v1/connect`
-- Redirect URL built with `expo-linking` (`ExpoLinking.createURL("phantom-connect")`)
-- Phantom returns encrypted response — we can't decrypt without native crypto
-- **Fallback: Alert.prompt on iOS** lets user paste their wallet address manually
+- **NO deep link redirect** — Expo Go cannot handle custom URL schemes, so Phantom can never redirect back
+- Flow: Open Phantom app → user copies their Solana address → comes back → pastes in Alert.prompt
+- Three buttons: "Cancel", "Open Phantom" (opens Phantom then shows paste prompt), "Paste Address" (direct paste)
 - Wallet address stored in expo-secure-store
+- **DO NOT** try to use Phantom v1/connect with redirect_link in Expo Go — it will never return
 
 ### Voice System (Server-Side)
 - `src/lib/voice-config.ts` — Maps persona IDs/types to xAI voices (Ara, Rex, Sal, Eve, Leo)
@@ -322,6 +322,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | "Unable to resolve expo-linking" | expo-linking is NOT a standalone package in SDK 54 | Use `expo-constants` (Constants.expoConfig.scheme) — do NOT import expo-linking |
 | Phantom returns encrypted data | v1/connect encrypts response by default | Fallback to Alert.prompt for manual address entry |
 | "Cannot read properties of undefined (reading 'body')" on expo start --tunnel | ngrok tunnel service flaky / outage | Retry the command. If persists, try `npx expo start --lan` (phone & PC must be same WiFi). Check https://status.ngrok.com/ |
+| Phantom opens but never returns to app | Expo Go does NOT handle custom URL schemes (glitch://) — only standalone builds do | Do NOT use deep link redirect with Phantom in Expo Go. Instead: open Phantom, then show Alert.prompt for user to paste address manually |
 
 ## User's Deployment Steps (give these EXACTLY)
 
