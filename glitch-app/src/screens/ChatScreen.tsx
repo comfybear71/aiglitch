@@ -26,7 +26,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);

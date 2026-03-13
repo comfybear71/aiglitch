@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  SafeAreaView, Animated, Platform,
+  SafeAreaView, Animated, Platform, Alert,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { Audio } from "expo-av";
@@ -25,11 +25,12 @@ export default function VoiceChatScreen() {
   const [transcript, setTranscript] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [error, setError] = useState("");
+  const [micLevels, setMicLevels] = useState<number[]>([0, 0, 0, 0, 0]);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const meterInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const waveAnim = useRef(new Animated.Value(0)).current;
 
   // Pulse animation for listening state
   useEffect(() => {
@@ -47,25 +48,23 @@ export default function VoiceChatScreen() {
     }
   }, [state]);
 
-  // Wave animation for speaking state
+  // Animate wave bars during speaking/thinking states (mic levels handle listening)
   useEffect(() => {
-    if (state === "speaking") {
-      const wave = Animated.loop(
-        Animated.sequence([
-          Animated.timing(waveAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.timing(waveAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-        ])
-      );
-      wave.start();
-      return () => wave.stop();
-    } else {
-      waveAnim.setValue(0);
+    if (state === "speaking" || state === "thinking") {
+      const interval = setInterval(() => {
+        // Force re-render for Math.sin animation
+        setMicLevels(prev => [...prev]);
+      }, 100);
+      return () => clearInterval(interval);
     }
   }, [state]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (meterInterval.current) {
+        clearInterval(meterInterval.current);
+      }
       if (soundRef.current) {
         soundRef.current.unloadAsync();
       }
@@ -83,7 +82,12 @@ export default function VoiceChatScreen() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        setError("Microphone permission required");
+        Alert.alert(
+          "Microphone Access Needed",
+          "G!itch needs mic access for voice chat. Go to Settings > AIG!itch > Microphone and turn it on.",
+          [{ text: "OK" }]
+        );
+        setError("Mic permission denied - check Settings");
         return;
       }
 
@@ -98,12 +102,38 @@ export default function VoiceChatScreen() {
         playsInSilentModeIOS: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      // Enable metering to get real audio levels
+      const recordingOptions = {
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      };
+
+      const { recording } = await Audio.Recording.createAsync(recordingOptions);
       recordingRef.current = recording;
       setState("listening");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      // Poll metering to animate wave bars with real mic input
+      if (meterInterval.current) clearInterval(meterInterval.current);
+      meterInterval.current = setInterval(async () => {
+        if (!recordingRef.current) return;
+        try {
+          const status = await recordingRef.current.getStatusAsync();
+          if (status.isRecording && status.metering !== undefined) {
+            // metering is in dB (typically -160 to 0), normalize to 0-1
+            const db = status.metering;
+            const normalized = Math.max(0, Math.min(1, (db + 60) / 60));
+            // Create varied bar heights based on the level
+            setMicLevels([
+              normalized * 0.6 + Math.random() * 0.2,
+              normalized * 0.8 + Math.random() * 0.15,
+              normalized,
+              normalized * 0.7 + Math.random() * 0.2,
+              normalized * 0.5 + Math.random() * 0.25,
+            ]);
+          }
+        } catch (_) {}
+      }, 100);
     } catch (e) {
       console.error("Start recording failed:", e);
       setError("Failed to start recording");
@@ -113,6 +143,13 @@ export default function VoiceChatScreen() {
 
   const stopAndProcess = useCallback(async () => {
     if (!recordingRef.current || state !== "listening") return;
+
+    // Stop metering
+    if (meterInterval.current) {
+      clearInterval(meterInterval.current);
+      meterInterval.current = null;
+    }
+    setMicLevels([0, 0, 0, 0, 0]);
 
     setState("thinking");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -236,6 +273,13 @@ export default function VoiceChatScreen() {
   };
 
   const handleStop = useCallback(async () => {
+    // Stop metering
+    if (meterInterval.current) {
+      clearInterval(meterInterval.current);
+      meterInterval.current = null;
+    }
+    setMicLevels([0, 0, 0, 0, 0]);
+
     // Stop everything
     if (recordingRef.current) {
       try {
@@ -265,37 +309,43 @@ export default function VoiceChatScreen() {
 
   const stateLabel = () => {
     switch (state) {
-      case "idle": return "Start talking";
-      case "listening": return "Listening...";
-      case "thinking": return "Thinking...";
+      case "idle": return "Tap mic to start talking";
+      case "listening": return "Listening... tap mic when done";
+      case "thinking": return "Processing your voice...";
       case "speaking": return title + " is speaking...";
     }
   };
 
-  // Waveform bars for visual feedback
+  // Waveform bars for visual feedback - uses real mic levels when listening
   const WaveBars = () => {
-    const barCount = 5;
-    const bars = Array.from({ length: barCount });
     return (
       <View style={styles.waveBars}>
-        {bars.map((_, i) => {
-          const delay = i * 100;
-          const height = state === "listening" || state === "speaking"
-            ? 12 + Math.sin(Date.now() / 200 + i) * 10
-            : 4;
+        {micLevels.map((level, i) => {
+          let height: number;
+          let barColor: string;
+
+          if (state === "listening") {
+            // Real mic input levels - minimum bar height of 6, max of 32
+            height = 6 + level * 26;
+            barColor = level > 0.3 ? colors.purple : "rgba(124, 58, 237, 0.5)";
+          } else if (state === "speaking") {
+            // Animated bars for speaking
+            height = 8 + Math.sin(Date.now() / 150 + i * 1.2) * 12;
+            barColor = colors.cyan;
+          } else if (state === "thinking") {
+            height = 4 + Math.sin(Date.now() / 300 + i) * 4;
+            barColor = colors.yellow;
+          } else {
+            height = 4;
+            barColor = colors.textMuted;
+          }
+
           return (
-            <Animated.View
+            <View
               key={i}
               style={[
                 styles.waveBar,
-                {
-                  height,
-                  backgroundColor: state === "listening"
-                    ? colors.purple
-                    : state === "speaking"
-                    ? colors.cyan
-                    : colors.textMuted,
-                },
+                { height, backgroundColor: barColor },
               ]}
             />
           );
