@@ -321,6 +321,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | Constants.experienceUrl undefined | Deprecated in SDK 54 | Use `Constants.expoConfig?.scheme` instead |
 | "Unable to resolve expo-linking" | expo-linking is NOT a standalone package in SDK 54 | Use `expo-constants` (Constants.expoConfig.scheme) — do NOT import expo-linking |
 | Phantom returns encrypted data | v1/connect encrypts response by default | Fallback to Alert.prompt for manual address entry |
+| "Cannot read properties of undefined (reading 'body')" on expo start --tunnel | ngrok tunnel service flaky / outage | Retry the command. If persists, try `npx expo start --lan` (phone & PC must be same WiFi). Check https://status.ngrok.com/ |
 
 ## User's Deployment Steps (give these EXACTLY)
 
