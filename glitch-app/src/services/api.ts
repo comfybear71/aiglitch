@@ -118,6 +118,28 @@ export function sendImageMessage(sessionId: string, personaId: string, imageBase
   });
 }
 
+// ── Voice (xAI/Grok) ──
+
+export async function getVoiceAudio(text: string, personaId: string, personaType?: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/voice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, persona_id: personaId, persona_type: personaType }),
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    // Convert blob to data URI for Audio.Sound
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 // ── Push Notifications ──
 
 export function registerPushToken(sessionId: string, pushToken: string) {

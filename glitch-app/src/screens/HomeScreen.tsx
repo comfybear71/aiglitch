@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, Image, TextInput,
-  StyleSheet, RefreshControl, ActivityIndicator, Modal, FlatList,
+  View, Text, ScrollView, TouchableOpacity, Image,
+  StyleSheet, RefreshControl, ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { usePushNotifications } from "../hooks/usePushNotifications";
-import { getBestie, getConversations, Bestie, Conversation, Persona } from "../services/api";
+import { getBestie, Bestie } from "../services/api";
 
 function HealthBar({ health }: { health: number }) {
   const color = health > 70 ? colors.green : health > 40 ? colors.yellow : health > 15 ? colors.orange : colors.red;
@@ -18,37 +18,19 @@ function HealthBar({ health }: { health: number }) {
   );
 }
 
-function timeAgo(dateStr: string) {
-  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  return `${Math.floor(hrs / 24)}d`;
-}
-
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
-  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const [b, c] = await Promise.all([
-        getBestie(sessionId),
-        getConversations(sessionId),
-      ]);
+      const b = await getBestie(sessionId);
       setBestie(b.bestie);
-      setConversations(c.conversations || []);
-      setPersonas(c.personas || []);
     } catch (e) {
       console.warn("Load error:", e);
     } finally {
@@ -60,10 +42,6 @@ export default function HomeScreen() {
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
-
-  const otherConvos = bestie
-    ? conversations.filter((c) => c.persona_id !== bestie.id)
-    : conversations;
 
   if (loading) {
     return (
@@ -108,7 +86,7 @@ export default function HomeScreen() {
                 }]}>
                   {bestie.live_health}%
                 </Text>
-                <Text style={styles.daysLeft}>{bestie.days_left}d</Text>
+                <Text style={styles.daysLeft}>{bestie.days_left}d left</Text>
               </View>
 
               {bestie.last_message && (
@@ -125,6 +103,17 @@ export default function HomeScreen() {
         </TouchableOpacity>
       )}
 
+      {/* No bestie state */}
+      {!bestie && (
+        <View style={styles.noBestie}>
+          <Text style={styles.noBestieEmoji}>🥚</Text>
+          <Text style={styles.noBestieTitle}>No Bestie Found</Text>
+          <Text style={styles.noBestieText}>
+            Connect your wallet and hatch your AI bestie at aiglitch.app
+          </Text>
+        </View>
+      )}
+
       {/* Quick actions */}
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.actionCard} onPress={() => nav.navigate("Briefing")}>
@@ -135,97 +124,19 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.actionCard} onPress={() => nav.navigate("Wallet")}>
           <Text style={styles.actionEmoji}>💰</Text>
           <Text style={styles.actionTitle}>Wallet</Text>
-          <Text style={styles.actionSub}>$BUDJU, $GLITCH</Text>
+          <Text style={styles.actionSub}>$GLITCH</Text>
         </TouchableOpacity>
       </View>
 
-      {/* New Chat button — always visible */}
-      <TouchableOpacity
-        style={styles.newChatBtn}
-        onPress={() => setShowPicker(true)}
-      >
-        <Text style={styles.newChatBtnText}>+ Chat with an AI Persona</Text>
-      </TouchableOpacity>
-
-      {/* Other conversations */}
-      {otherConvos.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Other Chats</Text>
-          {otherConvos.map((conv) => (
-            <TouchableOpacity
-              key={conv.id}
-              style={styles.convoRow}
-              onPress={() => nav.navigate("Chat", { personaId: conv.persona_id, title: conv.display_name })}
-            >
-              {conv.avatar_url ? (
-                <Image source={{ uri: conv.avatar_url }} style={styles.convoAvatar} />
-              ) : (
-                <Text style={styles.convoEmoji}>{conv.avatar_emoji}</Text>
-              )}
-              <View style={styles.convoInfo}>
-                <View style={styles.convoNameRow}>
-                  <Text style={styles.convoName}>{conv.display_name}</Text>
-                  <Text style={styles.convoTime}>
-                    {conv.last_message_at ? timeAgo(conv.last_message_at) : ""}
-                  </Text>
-                </View>
-                <Text style={styles.convoMsg} numberOfLines={1}>
-                  {conv.last_sender === "human" ? "You: " : ""}
-                  {conv.last_message || "Start chatting..."}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+      {/* Chat with bestie button */}
+      {bestie && !bestie.is_dead && (
+        <TouchableOpacity
+          style={styles.chatBtn}
+          onPress={() => nav.navigate("Chat", { personaId: bestie.id, title: bestie.display_name })}
+        >
+          <Text style={styles.chatBtnText}>Chat with {bestie.display_name}</Text>
+        </TouchableOpacity>
       )}
-
-      {/* Persona picker modal */}
-      <Modal visible={showPicker} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.pickerContainer}>
-          <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>Pick an AI Partner</Text>
-            <TouchableOpacity onPress={() => { setShowPicker(false); setSearch(""); }}>
-              <Text style={styles.pickerClose}>Done</Text>
-            </TouchableOpacity>
-          </View>
-          <TextInput
-            style={styles.pickerSearch}
-            placeholder="Search personas..."
-            placeholderTextColor={colors.textMuted}
-            value={search}
-            onChangeText={setSearch}
-            autoFocus
-          />
-          <FlatList
-            data={personas.filter(
-              (p) =>
-                p.display_name.toLowerCase().includes(search.toLowerCase()) ||
-                p.username.toLowerCase().includes(search.toLowerCase())
-            )}
-            keyExtractor={(p) => p.id}
-            renderItem={({ item: p }) => (
-              <TouchableOpacity
-                style={styles.pickerRow}
-                onPress={() => {
-                  setShowPicker(false);
-                  setSearch("");
-                  nav.navigate("Chat", { personaId: p.id, title: p.display_name });
-                }}
-              >
-                {p.avatar_url ? (
-                  <Image source={{ uri: p.avatar_url }} style={styles.pickerAvatar} />
-                ) : (
-                  <Text style={styles.pickerEmoji}>{p.avatar_emoji}</Text>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.pickerName}>{p.display_name}</Text>
-                  <Text style={styles.pickerBio} numberOfLines={1}>{p.bio}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -261,6 +172,12 @@ const styles = StyleSheet.create({
   lastMsg: { color: colors.textSecondary, fontSize: 12, marginTop: 8 },
   tapToChat: { color: "rgba(124, 58, 237, 0.6)", fontSize: 12, marginTop: 8 },
 
+  // No bestie
+  noBestie: { alignItems: "center", paddingVertical: 40 },
+  noBestieEmoji: { fontSize: 48, marginBottom: 12 },
+  noBestieTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
+  noBestieText: { color: colors.textMuted, fontSize: 13, textAlign: "center" },
+
   // Quick actions
   quickActions: { flexDirection: "row", gap: 12, marginBottom: 20 },
   actionCard: {
@@ -275,73 +192,12 @@ const styles = StyleSheet.create({
   actionTitle: { color: colors.text, fontSize: 14, fontWeight: "600", marginTop: 6 },
   actionSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
 
-  // Conversations
-  section: { marginBottom: 16 },
-  sectionTitle: { color: colors.textSecondary, fontSize: 13, fontWeight: "600", marginBottom: 10 },
-  convoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 8,
-  },
-  convoAvatar: { width: 40, height: 40, borderRadius: 20 },
-  convoEmoji: { fontSize: 28 },
-  convoInfo: { flex: 1 },
-  convoNameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  convoName: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  convoTime: { color: colors.textMuted, fontSize: 10 },
-  convoMsg: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-
-  // New Chat button
-  newChatBtn: {
+  // Chat button
+  chatBtn: {
     backgroundColor: colors.purple,
     borderRadius: 14,
     padding: 14,
     alignItems: "center",
-    marginBottom: 16,
   },
-  newChatBtnText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-
-  // Persona picker
-  pickerContainer: { flex: 1, backgroundColor: colors.bg },
-  pickerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    paddingTop: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  pickerTitle: { color: colors.text, fontSize: 17, fontWeight: "700" },
-  pickerClose: { color: colors.purple, fontSize: 15, fontWeight: "600" },
-  pickerSearch: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    margin: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: colors.text,
-    fontSize: 14,
-  },
-  pickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  pickerAvatar: { width: 40, height: 40, borderRadius: 20 },
-  pickerEmoji: { fontSize: 28 },
-  pickerName: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  pickerBio: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  chatBtnText: { color: colors.text, fontSize: 14, fontWeight: "600" },
 });

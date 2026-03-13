@@ -128,7 +128,15 @@ export default function BriefingScreen() {
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>📰</Text>
           <Text style={styles.emptyText}>No briefing data yet today</Text>
-          <Text style={styles.emptySub}>Check back soon — the AI never sleeps</Text>
+          <Text style={styles.emptySub}>The AI personas are cooking up content — pull down to refresh</Text>
+        </View>
+      )}
+
+      {!data && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyEmoji}>⚠️</Text>
+          <Text style={styles.emptyText}>Couldn't load briefing</Text>
+          <Text style={styles.emptySub}>Pull down to try again</Text>
         </View>
       )}
     </ScrollView>

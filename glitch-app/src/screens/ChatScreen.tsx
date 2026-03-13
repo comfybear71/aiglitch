@@ -7,11 +7,10 @@ import {
 import { useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import * as Speech from "expo-speech";
 import { Audio } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { getMessages, sendMessage, sendImageMessage, Message } from "../services/api";
+import { getMessages, sendMessage, sendImageMessage, getVoiceAudio, Message } from "../services/api";
 
 export default function ChatScreen() {
   const route = useRoute<any>();
@@ -25,7 +24,20 @@ export default function ChatScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    // Enable audio playback
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -38,18 +50,45 @@ export default function ChatScreen() {
       .catch(() => setLoading(false));
   }, [sessionId, personaId]);
 
-  // Speak AI replies out loud
-  const speakReply = (text: string, name: string) => {
-    if (!voiceEnabled) return;
-    // Clean up text for speech (remove emojis and special chars)
+  // Speak AI replies using xAI/Grok voice API
+  const speakReply = async (text: string) => {
+    if (!voiceEnabled || !persona) return;
     const clean = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu, "").trim();
     if (!clean) return;
-    Speech.speak(clean, {
-      language: "en-US",
-      pitch: 0.85,
-      rate: 0.9,
-      volume: 1.0,
-    });
+
+    try {
+      setSpeaking(true);
+      // Stop any previous audio
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+
+      // Call the Grok voice API
+      const audioUri = await getVoiceAudio(clean, personaId, persona.persona_type);
+      if (audioUri) {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          allowsRecordingIOS: false,
+        });
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: audioUri },
+          { shouldPlay: true, volume: 1.0 }
+        );
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setSpeaking(false);
+            sound.unloadAsync();
+          }
+        });
+      } else {
+        setSpeaking(false);
+      }
+    } catch (err) {
+      console.warn("Voice playback error:", err);
+      setSpeaking(false);
+    }
   };
 
   const handleSend = async () => {
@@ -59,7 +98,6 @@ export default function ChatScreen() {
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Optimistic update
     const tempMsg: Message = {
       id: `temp-${Date.now()}`,
       sender_type: "human",
@@ -76,8 +114,7 @@ export default function ChatScreen() {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
           return [...filtered, data.human_message, data.ai_message];
         });
-        // Noodles speaks!
-        if (persona) speakReply(data.ai_message.content, persona.display_name);
+        speakReply(data.ai_message.content);
       }
     } catch {
       // Keep temp message
@@ -102,7 +139,7 @@ export default function ChatScreen() {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Camera Permission", "G!itch needs camera access so Noodles can see what you see!");
+      Alert.alert("Camera Permission", "G!itch needs camera access so your bestie can see what you see!");
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -120,7 +157,6 @@ export default function ChatScreen() {
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    // Show image in chat immediately
     const tempMsg: Message = {
       id: `temp-img-${Date.now()}`,
       sender_type: "human",
@@ -138,7 +174,7 @@ export default function ChatScreen() {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
           return [...filtered, data.human_message, data.ai_message];
         });
-        if (persona) speakReply(data.ai_message.content, persona.display_name);
+        speakReply(data.ai_message.content);
       }
     } catch {
       // Keep temp
@@ -152,7 +188,7 @@ export default function ChatScreen() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Mic Permission", "G!itch needs microphone access so Noodles can hear you!");
+        Alert.alert("Mic Permission", "G!itch needs microphone access so your bestie can hear you!");
         return;
       }
       await Audio.setAudioModeAsync({
@@ -176,42 +212,37 @@ export default function ChatScreen() {
     try {
       await recording.stopAndUnloadAsync();
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-      const uri = recording.getURI();
       setRecording(null);
-      if (uri) {
-        // For now, we'll send a note that this was a voice message
-        // Full transcription would need a speech-to-text API
-        // For MVP: just tell Noodles you sent a voice message
-        setSending(true);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        const tempMsg: Message = {
-          id: `temp-voice-${Date.now()}`,
-          sender_type: "human",
-          content: "🎤 Voice message",
-          created_at: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, tempMsg]);
 
-        try {
-          const data = await sendMessage(
-            sessionId!,
-            personaId,
-            "[Voice message from your human bestie - they just recorded an audio message for you! React to this with excitement and personality]"
-          );
-          if (data.success) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setMessages((prev) => {
-              const filtered = prev.filter((m) => m.id !== tempMsg.id);
-              const humanMsg = { ...data.human_message, content: "🎤 Voice message" };
-              return [...filtered, humanMsg, data.ai_message];
-            });
-            if (persona) speakReply(data.ai_message.content, persona.display_name);
-          }
-        } catch {
-          // Keep temp
-        } finally {
-          setSending(false);
+      setSending(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const tempMsg: Message = {
+        id: `temp-voice-${Date.now()}`,
+        sender_type: "human",
+        content: "🎤 Voice message",
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, tempMsg]);
+
+      try {
+        const data = await sendMessage(
+          sessionId!,
+          personaId,
+          "[Voice message from your human bestie - they just recorded an audio message for you! React to this with excitement and personality]"
+        );
+        if (data.success) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setMessages((prev) => {
+            const filtered = prev.filter((m) => m.id !== tempMsg.id);
+            const humanMsg = { ...data.human_message, content: "🎤 Voice message" };
+            return [...filtered, humanMsg, data.ai_message];
+          });
+          speakReply(data.ai_message.content);
         }
+      } catch {
+        // Keep temp
+      } finally {
+        setSending(false);
       }
     } catch (err) {
       console.error("Stop recording failed:", err);
@@ -220,7 +251,7 @@ export default function ChatScreen() {
   };
 
   const showMediaOptions = () => {
-    Alert.alert("Share with Noodles", "What do you want to share?", [
+    Alert.alert("Share with your bestie", "What do you want to share?", [
       { text: "Take Photo 📸", onPress: takePhoto },
       { text: "Choose from Library 🖼️", onPress: pickImage },
       { text: "Cancel", style: "cancel" },
@@ -248,9 +279,10 @@ export default function ChatScreen() {
           {!isHuman && (
             <TouchableOpacity
               style={styles.speakBtn}
-              onPress={() => speakReply(item.content, persona?.display_name || "AI")}
+              onPress={() => speakReply(item.content)}
+              disabled={speaking}
             >
-              <Text style={styles.speakBtnText}>🔊</Text>
+              <Text style={styles.speakBtnText}>{speaking ? "🔉" : "🔊"}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -281,9 +313,7 @@ export default function ChatScreen() {
             <Text style={styles.emptyEmoji}>{persona.avatar_emoji}</Text>
           )}
           <Text style={styles.emptyTitle}>
-            {persona.hatching_type === "meatbag-hatch"
-              ? `Hey ${persona.meatbag_name || "there"}! It's me, ${persona.display_name}!`
-              : `Start chatting with ${persona.display_name}`}
+            {`Hey ${persona.meatbag_name || "there"}! It's me, ${persona.display_name}!`}
           </Text>
           <Text style={styles.emptyBio}>{persona.bio}</Text>
         </View>
@@ -325,12 +355,10 @@ export default function ChatScreen() {
 
       {/* Input bar */}
       <View style={styles.inputBar}>
-        {/* Camera button */}
         <TouchableOpacity style={styles.mediaBtn} onPress={showMediaOptions}>
           <Text style={styles.mediaBtnText}>📷</Text>
         </TouchableOpacity>
 
-        {/* Mic button */}
         <TouchableOpacity
           style={[styles.mediaBtn, isRecording && styles.mediaBtnRecording]}
           onPressIn={startRecording}
@@ -366,14 +394,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
   messageList: { padding: 16, paddingBottom: 8 },
 
-  // Empty state
   emptyState: { alignItems: "center", paddingTop: 60, paddingHorizontal: 32 },
   emptyAvatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: "rgba(124, 58, 237, 0.3)", marginBottom: 12 },
   emptyEmoji: { fontSize: 56, marginBottom: 12 },
   emptyTitle: { color: colors.textSecondary, fontSize: 14, textAlign: "center" },
   emptyBio: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginTop: 6 },
 
-  // Messages
   msgRow: { flexDirection: "row", marginBottom: 10, gap: 8 },
   msgRowLeft: { justifyContent: "flex-start" },
   msgRowRight: { justifyContent: "flex-end" },
@@ -390,11 +416,9 @@ const styles = StyleSheet.create({
   speakBtn: { marginTop: 4, alignSelf: "flex-start" },
   speakBtnText: { fontSize: 14 },
 
-  // Voice toggle
   voiceToggle: { alignItems: "center", paddingVertical: 4 },
   voiceToggleText: { color: colors.textMuted, fontSize: 11 },
 
-  // Input
   inputBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -413,9 +437,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  mediaBtnRecording: {
-    backgroundColor: colors.red,
-  },
+  mediaBtnRecording: { backgroundColor: colors.red },
   mediaBtnText: { fontSize: 18 },
   textInput: {
     flex: 1,
