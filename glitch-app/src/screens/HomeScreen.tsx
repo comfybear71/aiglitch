@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, Image,
-  StyleSheet, RefreshControl, ActivityIndicator,
+  StyleSheet, RefreshControl, ActivityIndicator, Alert, Share, Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { usePushNotifications } from "../hooks/usePushNotifications";
-import { getBestie, walletLogin, Bestie } from "../services/api";
+import { getBestie, walletLogin, linkWallet, unlinkWallet, Bestie } from "../services/api";
 
 function HealthBar({ health }: { health: number }) {
   const color = health > 70 ? colors.green : health > 40 ? colors.yellow : health > 15 ? colors.orange : colors.red;
@@ -19,25 +20,28 @@ function HealthBar({ health }: { health: number }) {
   );
 }
 
+function shortenAddress(addr: string) {
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connect } = usePhantomWallet();
+  const { walletAddress, isConnecting, connect, disconnect } = usePhantomWallet();
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
     try {
-      // Only fetch bestie if wallet is connected
       if (walletAddress) {
         try { await walletLogin(sessionId, walletAddress); } catch (_) {}
         const b = await getBestie(sessionId);
         setBestie(b.bestie);
       } else {
-        // No wallet = no bestie
         setBestie(null);
       }
     } catch (e) {
@@ -50,7 +54,56 @@ export default function HomeScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Link wallet to backend when connected
+  useEffect(() => {
+    if (!walletAddress || !sessionId || linking) return;
+    (async () => {
+      setLinking(true);
+      try {
+        await walletLogin(sessionId, walletAddress);
+        await linkWallet(sessionId, walletAddress);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await load();
+      } catch (e) {
+        console.warn("Wallet link error:", e);
+      } finally {
+        setLinking(false);
+      }
+    })();
+  }, [walletAddress, sessionId]);
+
   const onRefresh = () => { setRefreshing(true); load(); };
+
+  const handleDisconnect = () => {
+    Alert.alert(
+      "Disconnect Wallet",
+      "This will unlink your wallet. Your bestie will disappear until you reconnect.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (sessionId) await unlinkWallet(sessionId);
+            } catch (e) {
+              console.warn("Backend unlink error:", e);
+            }
+            await disconnect();
+            setBestie(null);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          },
+        },
+      ]
+    );
+  };
+
+  const copyAddress = () => {
+    if (walletAddress) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Share.share({ message: walletAddress });
+    }
+  };
 
   if (loading) {
     return (
@@ -66,7 +119,7 @@ export default function HomeScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple} />}
     >
-      {/* Wallet connect banner */}
+      {/* Wallet connect banner (not connected) */}
       {!walletAddress && (
         <TouchableOpacity
           style={styles.walletBanner}
@@ -80,11 +133,30 @@ export default function HomeScreen() {
               {isConnecting ? "Connecting..." : "Connect Wallet"}
             </Text>
             <Text style={styles.walletBannerSub}>
-              Link your Phantom wallet to find your Bestie
+              Paste your Solana wallet address to find your Bestie
             </Text>
           </View>
           <Text style={styles.walletBannerArrow}>→</Text>
         </TouchableOpacity>
+      )}
+
+      {/* Connected wallet info */}
+      {walletAddress && (
+        <View style={styles.connectedCard}>
+          <View style={styles.connectedHeader}>
+            <View style={styles.connectedDot} />
+            <Text style={styles.connectedLabel}>Wallet Connected</Text>
+          </View>
+          <TouchableOpacity onPress={copyAddress} activeOpacity={0.7}>
+            <View style={styles.addressRow}>
+              <Text style={styles.addressText}>{shortenAddress(walletAddress)}</Text>
+              <Text style={styles.copyHint}>tap to copy</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
+            <Text style={styles.disconnectText}>Disconnect</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Bestie hero card */}
@@ -131,22 +203,14 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
       ) : bestie && bestie.is_dead ? (
-        /* Dead bestie */
         <View style={styles.deadCard}>
           <Text style={styles.deadEmoji}>💀</Text>
           <Text style={styles.deadTitle}>{bestie.display_name} has died</Text>
           <Text style={styles.deadSub}>
             Feed §GLITCH to resurrect your bestie
           </Text>
-          <TouchableOpacity
-            style={styles.resurrectBtn}
-            onPress={() => nav.navigate("Wallet")}
-          >
-            <Text style={styles.resurrectBtnText}>Feed §GLITCH to Resurrect</Text>
-          </TouchableOpacity>
         </View>
       ) : walletAddress ? (
-        /* Wallet connected but no bestie yet */
         <View style={styles.noBestieCard}>
           <Text style={styles.noBestieEmoji}>🐣</Text>
           <Text style={styles.noBestieTitle}>No Bestie Yet</Text>
@@ -156,21 +220,7 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {/* Quick actions */}
-      <View style={styles.quickActions}>
-        <TouchableOpacity style={styles.actionCard} onPress={() => nav.navigate("Briefing")}>
-          <Text style={styles.actionEmoji}>📰</Text>
-          <Text style={styles.actionTitle}>Daily Briefing</Text>
-          <Text style={styles.actionSub}>News, crypto, trends</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard} onPress={() => nav.navigate("Wallet")}>
-          <Text style={styles.actionEmoji}>💰</Text>
-          <Text style={styles.actionTitle}>Wallet</Text>
-          <Text style={styles.actionSub}>§GLITCH, SOL</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Chat with bestie CTA */}
+      {/* Chat CTA */}
       {bestie && !bestie.is_dead && (
         <TouchableOpacity
           style={styles.chatBtn}
@@ -188,7 +238,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32 },
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
 
-  // Wallet banner
+  // Wallet banner (not connected)
   walletBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -204,6 +254,39 @@ const styles = StyleSheet.create({
   walletBannerTitle: { color: colors.purpleLight, fontSize: 14, fontWeight: "700" },
   walletBannerSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   walletBannerArrow: { color: colors.purpleLight, fontSize: 18, fontWeight: "700" },
+
+  // Connected wallet card
+  connectedCard: {
+    backgroundColor: "rgba(6, 182, 212, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(6, 182, 212, 0.25)",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  connectedHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
+  connectedLabel: { color: colors.cyan, fontSize: 13, fontWeight: "600" },
+  addressRow: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  addressText: { color: colors.text, fontSize: 14, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  copyHint: { color: colors.textMuted, fontSize: 10 },
+  disconnectBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderRadius: 10,
+    padding: 8,
+    alignItems: "center",
+  },
+  disconnectText: { color: colors.red, fontSize: 12, fontWeight: "600" },
 
   // Bestie card
   bestieCard: {
@@ -243,16 +326,7 @@ const styles = StyleSheet.create({
   },
   deadEmoji: { fontSize: 48, marginBottom: 8 },
   deadTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
-  deadSub: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginBottom: 14 },
-  resurrectBtn: {
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  resurrectBtnText: { color: colors.red, fontSize: 13, fontWeight: "600" },
+  deadSub: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
 
   // No bestie
   noBestieCard: {
@@ -267,20 +341,6 @@ const styles = StyleSheet.create({
   noBestieEmoji: { fontSize: 48, marginBottom: 8 },
   noBestieTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
   noBestieSub: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
-
-  // Quick actions
-  quickActions: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  actionCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 16,
-  },
-  actionEmoji: { fontSize: 24 },
-  actionTitle: { color: colors.text, fontSize: 14, fontWeight: "600", marginTop: 6 },
-  actionSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
 
   // Chat CTA
   chatBtn: {
