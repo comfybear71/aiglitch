@@ -218,11 +218,6 @@ export default function WalletScreen() {
           {/* Quick Actions */}
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionGrid}>
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>🍕</Text>
-              <Text style={styles.actionTitle}>Feed Bestie</Text>
-              <Text style={styles.actionSub}>Keep them alive</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionCard, { borderColor: "rgba(124, 58, 237, 0.3)" }]}
               onPress={() => {

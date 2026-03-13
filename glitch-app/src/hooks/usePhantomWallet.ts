@@ -17,10 +17,18 @@ export function usePhantomWallet(): PhantomWalletState {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Don't auto-load cached wallet — user wants fresh connect flow each launch
-  // Wallet only gets set when user explicitly connects via connect()
+  // Auto-load saved wallet from SecureStore so balances persist
   useEffect(() => {
-    setIsLoading(false);
+    (async () => {
+      try {
+        const saved = await SecureStore.getItemAsync(WALLET_KEY);
+        if (saved) setWalletAddress(saved);
+      } catch (e) {
+        console.warn("Failed to load saved wallet:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, []);
 
   const saveWallet = async (address: string) => {

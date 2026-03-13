@@ -9,7 +9,7 @@ import HomeScreen from "./src/screens/HomeScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import VoiceChatScreen from "./src/screens/VoiceChatScreen";
 import BuyGlitchScreen from "./src/screens/BuyGlitchScreen";
-import WalletScreen from "./src/screens/WalletScreen";
+// WalletScreen removed — not needed yet
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -121,19 +121,6 @@ export default function App() {
             headerShadowVisible: false,
             tabBarIcon: ({ focused }) => <TabIcon emoji="💰" focused={focused} />,
             tabBarLabel: "Buy",
-          }}
-        />
-        <Tab.Screen
-          name="Wallet"
-          component={WalletScreen}
-          options={{
-            headerShown: true,
-            headerTitle: "Wallet",
-            headerStyle: { backgroundColor: "#000000" },
-            headerTintColor: "#ffffff",
-            headerTitleStyle: { fontWeight: "700", fontSize: 18 },
-            headerShadowVisible: false,
-            tabBarIcon: ({ focused }) => <TabIcon emoji="👻" focused={focused} />,
           }}
         />
       </Tab.Navigator>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, ActivityIndicator, RefreshControl, Alert, Platform,
+  Linking,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
@@ -144,14 +145,39 @@ export default function BuyGlitchScreen() {
             try {
               const result = await createSwap(walletAddress, qty);
               if (result.success) {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert(
-                  "Swap Created!",
-                  `Send ${formatSOL(result.sol_amount)} SOL to the treasury wallet to complete your swap.\n\nSwap ID: ${result.swap_id}\n\nNote: In-app signing coming soon. For now, send SOL from your Phantom wallet.`,
-                );
+                // Build Solana Pay URL to open Phantom for real SOL transfer
+                const solPayUrl = `solana:${encodeURIComponent(result.treasury_wallet)}?amount=${result.sol_amount}&label=${encodeURIComponent("Buy $GLITCH")}&message=${encodeURIComponent(`Swap ${result.swap_id}: ${qty.toLocaleString()} $GLITCH`)}`;
+
+                const canOpen = await Linking.canOpenURL(solPayUrl);
+                if (canOpen) {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  await Linking.openURL(solPayUrl);
+                  Alert.alert(
+                    "Complete in Phantom",
+                    `Confirm the ${formatSOL(result.sol_amount)} SOL transfer in Phantom to receive ${qty.toLocaleString()} $GLITCH.\n\nSwap ID: ${result.swap_id}`,
+                  );
+                } else {
+                  // Fallback: try Phantom deep link directly
+                  const phantomUrl = `https://phantom.app/ul/transfer?recipient=${encodeURIComponent(result.treasury_wallet)}&amount=${result.sol_amount}&reference=${encodeURIComponent(result.swap_id)}`;
+                  const canOpenPhantom = await Linking.canOpenURL(phantomUrl);
+                  if (canOpenPhantom) {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    await Linking.openURL(phantomUrl);
+                    Alert.alert(
+                      "Complete in Phantom",
+                      `Confirm the ${formatSOL(result.sol_amount)} SOL transfer in Phantom.\n\nSwap ID: ${result.swap_id}`,
+                    );
+                  } else {
+                    // No wallet app found — show manual instructions
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                    Alert.alert(
+                      "Send SOL to Complete",
+                      `Send exactly ${formatSOL(result.sol_amount)} SOL to:\n\n${result.treasury_wallet}\n\nfrom your Phantom wallet to receive ${qty.toLocaleString()} $GLITCH.\n\nSwap ID: ${result.swap_id}`,
+                    );
+                  }
+                }
                 setSolInput("");
                 setGlitchOutput("");
-                // Refresh config to get updated totals
                 load();
               }
             } catch (e: any) {
