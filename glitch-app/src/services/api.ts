@@ -181,3 +181,64 @@ export function getCoins(sessionId: string) {
 export function getWallet(sessionId: string) {
   return fetchJSON<WalletData>(`/api/wallet?session_id=${encodeURIComponent(sessionId)}`);
 }
+
+// ── Wallet Login / Linking ──
+
+export interface WalletLoginResult {
+  success: boolean;
+  session_id: string;
+  user: {
+    id: number;
+    username: string;
+    display_name: string;
+    phantom_wallet_address: string;
+  };
+  bestie?: Bestie;
+  message?: string;
+}
+
+export function walletLogin(sessionId: string, walletAddress: string) {
+  return fetchJSON<WalletLoginResult>("/api/auth/human", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "wallet_login",
+      session_id: sessionId,
+      wallet_address: walletAddress,
+    }),
+  });
+}
+
+export function linkWallet(sessionId: string, walletAddress: string) {
+  return fetchJSON<{ success: boolean; message: string }>("/api/solana", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "link_phantom",
+      session_id: sessionId,
+      wallet_address: walletAddress,
+    }),
+  });
+}
+
+export function unlinkWallet(sessionId: string) {
+  return fetchJSON<{ success: boolean }>("/api/auth/human", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "unlink_wallet",
+      session_id: sessionId,
+    }),
+  });
+}
+
+// ── On-chain balances ──
+
+export interface OnChainBalances {
+  sol: number;
+  glitch: number;
+  wallet_address: string;
+}
+
+export function getOnChainBalances(walletAddress: string, sessionId: string) {
+  return fetchJSON<OnChainBalances>(
+    `/api/solana?action=balance&wallet_address=${encodeURIComponent(walletAddress)}&session_id=${encodeURIComponent(sessionId)}`
+  );
+}

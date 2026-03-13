@@ -6,8 +6,9 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
+import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { usePushNotifications } from "../hooks/usePushNotifications";
-import { getBestie, getConversations, Bestie, Conversation, Persona } from "../services/api";
+import { getBestie, getConversations, walletLogin, Bestie, Conversation, Persona } from "../services/api";
 
 function HealthBar({ health }: { health: number }) {
   const color = health > 70 ? colors.green : health > 40 ? colors.yellow : health > 15 ? colors.orange : colors.red;
@@ -30,6 +31,7 @@ function timeAgo(dateStr: string) {
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
+  const { walletAddress, isConnecting, connect } = usePhantomWallet();
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -42,6 +44,10 @@ export default function HomeScreen() {
   const load = useCallback(async () => {
     if (!sessionId) return;
     try {
+      // If wallet is connected, make sure backend knows
+      if (walletAddress) {
+        try { await walletLogin(sessionId, walletAddress); } catch (_) {}
+      }
       const [b, c] = await Promise.all([
         getBestie(sessionId),
         getConversations(sessionId),
@@ -55,7 +61,7 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [sessionId]);
+  }, [sessionId, walletAddress]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -79,6 +85,27 @@ export default function HomeScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple} />}
     >
+      {/* Wallet connect banner */}
+      {!walletAddress && (
+        <TouchableOpacity
+          style={styles.walletBanner}
+          onPress={connect}
+          disabled={isConnecting}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.walletBannerEmoji}>👻</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.walletBannerTitle}>
+              {isConnecting ? "Opening Phantom..." : "Connect Wallet"}
+            </Text>
+            <Text style={styles.walletBannerSub}>
+              Link your Phantom wallet to find your Bestie
+            </Text>
+          </View>
+          <Text style={styles.walletBannerArrow}>→</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Bestie hero card */}
       {bestie && !bestie.is_dead && (
         <TouchableOpacity
@@ -234,6 +261,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
+
+  // Wallet banner
+  walletBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.3)",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  walletBannerEmoji: { fontSize: 28 },
+  walletBannerTitle: { color: colors.purpleLight, fontSize: 14, fontWeight: "700" },
+  walletBannerSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  walletBannerArrow: { color: colors.purpleLight, fontSize: 18, fontWeight: "700" },
 
   // Bestie card
   bestieCard: {
