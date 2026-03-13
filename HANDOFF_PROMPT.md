@@ -302,10 +302,12 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 
 ### Voice System (Server-Side)
 - `src/lib/voice-config.ts` — Maps persona IDs/types to xAI voices (Ara, Rex, Sal, Eve, Leo)
-- `src/app/api/voice/route.ts` — Generates audio via xAI Realtime WebSocket API
+- `src/app/api/voice/route.ts` — Generates audio via **xAI REST TTS API** (`POST https://api.x.ai/v1/tts`)
+- **DO NOT use xAI Realtime WebSocket API** — it doesn't work on Vercel serverless (times out, falls back to Google TTS)
+- Uses simple REST `POST https://api.x.ai/v1/tts` with `voice_id` (lowercase: "rex", "ara", etc.) and `output_format: { codec: "mp3" }`
 - Falls back to Google Translate TTS if no xAI API key
 - Audio cached in-memory (50 entries, 30min TTL)
-- PCM16 → WAV conversion for xAI output
+- Returns MP3 audio (not WAV)
 
 ## Resolved Errors (DO NOT REPEAT THESE)
 
@@ -329,7 +331,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | Bestie badge off-screen on right | Long bestie name pushes badge off screen | Add `flexWrap: "wrap"` to bestieNameRow and `flexShrink: 1` to bestieName |
 | Clipboard.setString crash in RN 0.81 | `Clipboard` was removed from react-native in RN 0.73 | Use `Share.share()` from react-native instead, or install expo-clipboard |
 | interruptionModeIOS/Android deprecated | These props were removed from expo-av in SDK 54 | Remove them from `Audio.setAudioModeAsync()` — just use allowsRecordingIOS, playsInSilentModeIOS, etc. |
-| Voice is female/quiet | Server falls back to Google TTS when XAI_API_KEY is not set | Server-side fix: ensure XAI_API_KEY env var is set on Vercel. Google TTS fallback is female and quiet |
+| Voice is female/quiet | WebSocket Realtime API times out on Vercel serverless, falls back to Google TTS | Replaced with REST TTS API (`POST https://api.x.ai/v1/tts`) — simple fetch, no WebSocket, works on Vercel |
 
 ## User's Deployment Steps (give these EXACTLY)
 
