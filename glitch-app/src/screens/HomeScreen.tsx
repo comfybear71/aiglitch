@@ -77,7 +77,7 @@ export default function HomeScreen() {
           <Text style={styles.walletBannerEmoji}>👻</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.walletBannerTitle}>
-              {isConnecting ? "Opening Phantom..." : "Connect Wallet"}
+              {isConnecting ? "Connecting..." : "Connect Wallet"}
             </Text>
             <Text style={styles.walletBannerSub}>
               Link your Phantom wallet to find your Bestie

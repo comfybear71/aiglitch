@@ -246,7 +246,7 @@ export default function WalletScreen() {
             {isConnecting ? (
               <View style={styles.connectBtnInner}>
                 <ActivityIndicator color="#fff" size="small" />
-                <Text style={styles.connectBtnText}>Opening Phantom...</Text>
+                <Text style={styles.connectBtnText}>Connecting...</Text>
               </View>
             ) : (
               <Text style={styles.connectBtnText}>Connect Wallet</Text>

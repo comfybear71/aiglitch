@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Linking, Platform, Alert } from "react-native";
+import { Alert } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 const WALLET_KEY = "aiglitch-wallet";
@@ -60,58 +60,8 @@ export function usePhantomWallet(): PhantomWalletState {
 
   const connect = useCallback(async () => {
     setIsConnecting(true);
-
-    // Check if Phantom app is installed
-    let phantomInstalled = false;
-    try {
-      phantomInstalled = await Linking.canOpenURL("phantom://");
-    } catch {}
-
-    if (phantomInstalled) {
-      // Phantom IS installed — open it, then prompt for address paste
-      Alert.alert(
-        "Connect Wallet",
-        "We'll open Phantom so you can copy your wallet address. Then come back here and paste it.",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
-          {
-            text: "Open Phantom & Copy Address",
-            onPress: async () => {
-              try {
-                await Linking.openURL("phantom://");
-              } catch {}
-              // Show paste prompt after user returns
-              setTimeout(() => {
-                showManualEntry("Paste your Solana wallet address from Phantom:");
-              }, 2000);
-            },
-          },
-        ]
-      );
-    } else {
-      // Phantom NOT installed — offer manual entry or install
-      Alert.alert(
-        "Connect Wallet",
-        "Phantom wallet not detected. You can enter your address manually or install Phantom.",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
-          {
-            text: "Enter Address",
-            onPress: () => showManualEntry("Paste your Solana wallet address:"),
-          },
-          {
-            text: "Install Phantom",
-            onPress: () => {
-              const storeUrl = Platform.OS === "ios"
-                ? "https://apps.apple.com/app/phantom-solana-wallet/id1598432977"
-                : "https://play.google.com/store/apps/details?id=app.phantom";
-              Linking.openURL(storeUrl);
-              setIsConnecting(false);
-            },
-          },
-        ]
-      );
-    }
+    // Go straight to paste prompt — no Phantom open step
+    showManualEntry("Paste your Solana wallet address:");
   }, []);
 
   const disconnect = useCallback(async () => {
