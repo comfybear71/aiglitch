@@ -291,14 +291,27 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 4. **Audio plays through speaker** — NOT earpiece. Set `playThroughEarpieceAndroid: false`, `playsInSilentModeIOS: true`
 5. **No WebView for wallet** — Everything native, deep links only
 
-### Wallet Connect Flow
-- **NO deep link redirect** — Expo Go cannot handle custom URL schemes, so Phantom can never redirect back
-- **Use `phantom://` to open the Phantom APP** — NOT `https://phantom.app` which opens Safari
-- Flow: Open Phantom app (`phantom://`) → user copies their Solana address → comes back → pastes in Alert.prompt
+### Wallet Connect Flow (Current: Manual Paste)
+- **Current approach**: Open Phantom app (`phantom://`) → user copies their Solana address → comes back → pastes in Alert.prompt
+- This works but is clunky. **NO deep link redirect** — Expo Go cannot handle custom URL schemes.
 - Three buttons: "Cancel", "Open Phantom & Copy Address", or if Phantom not installed: "Enter Address" / "Install Phantom"
 - Wallet address stored in expo-secure-store
 - **DO NOT** try to use Phantom v1/connect with redirect_link in Expo Go — it will never return
 - **DO NOT** use `https://phantom.app` — that opens Safari, not the app
+
+### FUTURE: Phantom React Native SDK (REQUIRES DEV BUILD, NOT EXPO GO)
+- **`@phantom/react-native-sdk`** is the official, modern way to connect Phantom in React Native
+- Install: `npx expo install @phantom/react-native-sdk @solana/web3.js expo-web-browser expo-auth-session`
+- Provides `<PhantomProvider>` + `usePhantom()` hook with `connect()`, `disconnect()`, `publicKey`
+- **CRITICAL: Requires a development build (`npx expo run:ios`) — will NOT work in Expo Go**
+- Once user switches from Expo Go to dev builds, migrate wallet connect to use this SDK
+- Docs: https://docs.phantom.com/sdks/react-native-sdk
+
+### Wallet Balance Display
+- **In-app balance**: `getCoins(sessionId)` — §GLITCH earned in-app
+- **On-chain balance**: `getOnChainBalances(walletAddress, sessionId)` — REAL SOL + $GLITCH from Solana blockchain
+- **NEVER use `getWallet(sessionId)` for balance display** — it returns stale backend-stored values
+- **NEVER use fallback/dummy data** — show error message if API fails. User's exact words: "I DONT EVER WANNA USE FALLBACK OR DUMMY DATA I'd RATHER HAVE ERROR MESSAGE"
 
 ### Voice System (Server-Side)
 - `src/lib/voice-config.ts` — Maps persona IDs/types to xAI voices (Ara, Rex, Sal, Eve, Leo)
@@ -332,6 +345,9 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | Clipboard.setString crash in RN 0.81 | `Clipboard` was removed from react-native in RN 0.73 | Use `Share.share()` from react-native instead, or install expo-clipboard |
 | interruptionModeIOS/Android deprecated | These props were removed from expo-av in SDK 54 | Remove them from `Audio.setAudioModeAsync()` — just use allowsRecordingIOS, playsInSilentModeIOS, etc. |
 | Voice is female/quiet | WebSocket Realtime API times out on Vercel serverless, falls back to Google TTS | Replaced with REST TTS API (`POST https://api.x.ai/v1/tts`) — simple fetch, no WebSocket, works on Vercel |
+| Wallet showing wrong balances (505 GLITCH, 1.19 SOL) | `WalletScreen.tsx` was using `getWallet(sessionId)` which returns stale backend-stored balances | Changed to `getOnChainBalances(walletAddress, sessionId)` which fetches REAL on-chain Solana balances |
+| Silent error swallowing on wallet load | `catch (e) { console.warn() }` hid errors from user | Added `error` state and red error banner with "Retry" button. User said: "I DONT EVER WANNA USE FALLBACK OR DUMMY DATA I'd RATHER HAVE ERROR MESSAGE" |
+| Disconnect doesn't fully reset state | Only cleared local wallet, not backend link | Now calls `unlinkWallet(sessionId)` on backend, clears coins + onChain + error state |
 
 ## User's Deployment Steps (give these EXACTLY)
 
