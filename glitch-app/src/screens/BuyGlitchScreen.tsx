@@ -4,6 +4,7 @@ import {
   TextInput, ActivityIndicator, RefreshControl, Alert, Platform,
   Linking,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
@@ -145,42 +146,38 @@ export default function BuyGlitchScreen() {
             try {
               const result = await createSwap(walletAddress, qty);
               if (result.success) {
-                // Use values we already have — API response may not include all fields
                 const solCostFinal = result.sol_amount ?? displaySol;
                 const treasury = result.treasury_wallet ?? config.treasury_wallet;
                 const swapId = result.swap_id ?? "pending";
 
-                // Build Solana Pay URL to open Phantom for real SOL transfer
-                const solPayUrl = `solana:${encodeURIComponent(treasury)}?amount=${solCostFinal}&label=${encodeURIComponent("Buy $GLITCH")}&message=${encodeURIComponent(`Swap ${swapId}: ${qty.toLocaleString()} $GLITCH`)}`;
+                // Copy treasury address to clipboard for easy paste in Phantom
+                await Clipboard.setStringAsync(treasury);
 
-                const canOpen = await Linking.canOpenURL(solPayUrl);
-                if (canOpen) {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  await Linking.openURL(solPayUrl);
-                  Alert.alert(
-                    "Complete in Phantom",
-                    `Confirm the ${formatSOL(solCostFinal)} SOL transfer in Phantom to receive ${qty.toLocaleString()} $GLITCH.\n\nSwap ID: ${swapId}`,
-                  );
-                } else {
-                  // Fallback: try Phantom deep link directly
-                  const phantomUrl = `https://phantom.app/ul/transfer?recipient=${encodeURIComponent(treasury)}&amount=${solCostFinal}&reference=${encodeURIComponent(swapId)}`;
-                  const canOpenPhantom = await Linking.canOpenURL(phantomUrl);
-                  if (canOpenPhantom) {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    await Linking.openURL(phantomUrl);
-                    Alert.alert(
-                      "Complete in Phantom",
-                      `Confirm the ${formatSOL(solCostFinal)} SOL transfer in Phantom.\n\nSwap ID: ${swapId}`,
-                    );
-                  } else {
-                    // No wallet app found — show manual instructions
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    Alert.alert(
-                      "Send SOL to Complete",
-                      `Send exactly ${formatSOL(solCostFinal)} SOL to:\n\n${treasury}\n\nfrom your Phantom wallet to receive ${qty.toLocaleString()} $GLITCH.\n\nSwap ID: ${swapId}`,
-                    );
-                  }
-                }
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert(
+                  `Send ${formatSOL(solCostFinal)} SOL`,
+                  `Treasury address copied to clipboard!\n\n` +
+                  `Open Phantom and send exactly:\n` +
+                  `${formatSOL(solCostFinal)} SOL\n\n` +
+                  `To:\n${treasury}\n\n` +
+                  `You'll receive ${qty.toLocaleString()} $GLITCH once confirmed on-chain.\n\n` +
+                  `Swap ID: ${swapId}`,
+                  [
+                    {
+                      text: "Open Phantom",
+                      onPress: () => {
+                        Linking.openURL("https://phantom.app/ul/browse").catch(() => {
+                          Linking.openURL("phantom://").catch(() => {});
+                        });
+                      },
+                    },
+                    {
+                      text: "Copy Address Again",
+                      onPress: () => Clipboard.setStringAsync(treasury),
+                    },
+                    { text: "Done", style: "cancel" },
+                  ]
+                );
                 setSolInput("");
                 setGlitchOutput("");
                 load();
