@@ -318,7 +318,8 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | "rd /s /q" PowerShell error | User is on Windows PowerShell, not cmd | Use `Remove-Item -Recurse -Force` |
 | git pull merge conflicts | Local changes to package.json/package-lock.json | `git stash` → `git pull` → `git stash drop` |
 | "Couldn't load briefing" | No cron data exists yet | Not a bug — expected when no briefing data |
-| Constants.experienceUrl undefined | Deprecated in SDK 54 | Use `ExpoLinking.createURL()` instead |
+| Constants.experienceUrl undefined | Deprecated in SDK 54 | Use `Constants.expoConfig?.scheme` instead |
+| "Unable to resolve expo-linking" | expo-linking is NOT a standalone package in SDK 54 | Use `expo-constants` (Constants.expoConfig.scheme) — do NOT import expo-linking |
 | Phantom returns encrypted data | v1/connect encrypts response by default | Fallback to Alert.prompt for manual address entry |
 
 ## User's Deployment Steps (give these EXACTLY)
