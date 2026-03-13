@@ -31,12 +31,15 @@ export default function HomeScreen() {
   const load = useCallback(async () => {
     if (!sessionId) return;
     try {
-      // If wallet is connected, make sure backend knows
+      // Only fetch bestie if wallet is connected
       if (walletAddress) {
         try { await walletLogin(sessionId, walletAddress); } catch (_) {}
+        const b = await getBestie(sessionId);
+        setBestie(b.bestie);
+      } else {
+        // No wallet = no bestie
+        setBestie(null);
       }
-      const b = await getBestie(sessionId);
-      setBestie(b.bestie);
     } catch (e) {
       console.warn("Load error:", e);
     } finally {
