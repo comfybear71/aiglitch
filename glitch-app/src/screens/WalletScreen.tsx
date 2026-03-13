@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert, Share, Platform,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
@@ -17,6 +18,7 @@ function shortenAddress(addr: string) {
 }
 
 export default function WalletScreen() {
+  const nav = useNavigation<any>();
   const { sessionId } = useSession();
   const { walletAddress, isConnecting, connect, disconnect } = usePhantomWallet();
   const [coins, setCoins] = useState<CoinBalance | null>(null);
@@ -221,10 +223,16 @@ export default function WalletScreen() {
               <Text style={styles.actionTitle}>Feed Bestie</Text>
               <Text style={styles.actionSub}>Keep them alive</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>💸</Text>
-              <Text style={styles.actionTitle}>Buy §GLITCH</Text>
-              <Text style={styles.actionSub}>Coming soon</Text>
+            <TouchableOpacity
+              style={[styles.actionCard, { borderColor: "rgba(124, 58, 237, 0.3)" }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                nav.navigate("Buy");
+              }}
+            >
+              <Text style={styles.actionEmoji}>💰</Text>
+              <Text style={styles.actionTitle}>Buy $GLITCH</Text>
+              <Text style={[styles.actionSub, { color: colors.purpleLight }]}>OTC Available</Text>
             </TouchableOpacity>
           </View>
         </>
