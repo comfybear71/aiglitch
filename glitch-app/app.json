@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "G!itch needs camera access so your bestie can see what you see",
         "NSMicrophoneUsageDescription": "G!itch needs microphone access so your bestie can hear you",
-        "NSPhotoLibraryUsageDescription": "Share photos with your bestie"
+        "NSPhotoLibraryUsageDescription": "Share photos with your bestie",
+        "LSApplicationQueriesSchemes": ["phantom"]
       }
     },
     "android": {
