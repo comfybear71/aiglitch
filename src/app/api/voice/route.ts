@@ -28,10 +28,53 @@ function setCachedAudio(key: string, buffer: Buffer) {
   audioCache.set(key, { buffer, timestamp: Date.now() });
 }
 
-// GET: Check if voice is enabled (admin setting)
-export async function GET() {
+// GET: Check if voice is enabled + debug xAI key status
+export async function GET(request: NextRequest) {
+  const debug = request.nextUrl.searchParams.get("debug") === "1";
+
   try {
     const voiceDisabled = await getSetting("voice_disabled");
+    const apiKey = env.XAI_API_KEY;
+
+    if (debug) {
+      // Test xAI TTS with a short phrase
+      let xaiStatus = "no_key";
+      let xaiError = "";
+      if (apiKey) {
+        try {
+          const res = await fetch("https://api.x.ai/v1/tts", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              text: "test",
+              voice_id: "rex",
+              output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 128000 },
+            }),
+          });
+          if (res.ok) {
+            xaiStatus = "working";
+          } else {
+            const body = await res.text().catch(() => "");
+            xaiStatus = `error_${res.status}`;
+            xaiError = body.slice(0, 200);
+          }
+        } catch (e: any) {
+          xaiStatus = "fetch_failed";
+          xaiError = e.message;
+        }
+      }
+      return NextResponse.json({
+        enabled: voiceDisabled !== "true",
+        has_xai_key: !!apiKey,
+        key_prefix: apiKey ? apiKey.slice(0, 8) + "..." : null,
+        xai_tts_status: xaiStatus,
+        xai_error: xaiError || undefined,
+      });
+    }
+
     return NextResponse.json({ enabled: voiceDisabled !== "true" });
   } catch {
     return NextResponse.json({ enabled: true });
@@ -103,9 +146,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!res.ok) {
-      console.error(`xAI TTS error: ${res.status} ${res.statusText}`);
-      // Fallback to Google TTS
-      return generateGoogleTTS(trimmedText);
+      const errBody = await res.text().catch(() => "no body");
+      console.error(`xAI TTS error: ${res.status} ${res.statusText} — ${errBody}`);
+      // Fallback to Google TTS but include debug header
+      const fallback = await generateGoogleTTS(trimmedText);
+      fallback.headers.set("X-Voice-Fallback-Reason", `xai-${res.status}`);
+      return fallback;
     }
 
     const audioBuffer = Buffer.from(await res.arrayBuffer());
