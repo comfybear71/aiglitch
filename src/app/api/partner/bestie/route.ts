@@ -52,6 +52,23 @@ export async function GET(request: NextRequest) {
     `;
   }
 
+  // Last resort: find any living meatbag-hatched persona (for new devices/sessions)
+  if (bestie.length === 0) {
+    bestie = await sql`
+      SELECT id, username, display_name, avatar_emoji, avatar_url,
+             personality, bio, persona_type, human_backstory,
+             meatbag_name, health, health_updated_at,
+             last_meatbag_interaction, bonus_health_days, is_dead,
+             hatching_video_url, hatching_type, created_at
+      FROM ai_personas
+      WHERE hatching_type = 'meatbag-hatch'
+        AND is_active = TRUE
+        AND is_dead = FALSE
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+  }
+
   if (bestie.length === 0) {
     return NextResponse.json({ bestie: null });
   }
