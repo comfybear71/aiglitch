@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
             body: JSON.stringify({
               text: "test",
               voice_id: "rex",
+              language: "en",
               output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 128000 },
             }),
           });
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         text: trimmedText,
         voice_id: voiceId,
+        language: "en",
         output_format: {
           codec: "mp3",
           sample_rate: 24000,
