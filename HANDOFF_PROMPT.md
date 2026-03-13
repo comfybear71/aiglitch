@@ -254,6 +254,89 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 
 ---
 
+## CRITICAL: About The User (READ THIS FIRST)
+
+- **The user (Stuie / comfybear71) is NOT a developer.** He has NO coding experience, NO GitHub CLI experience, NO terminal/command line experience. He is a "simple meatbag" in his own words.
+- **He is on a Windows PC running PowerShell** — NOT bash, NOT cmd. Commands like `rm -rf` or `rd /s /q` DO NOT WORK. Use `Remove-Item -Recurse -Force` instead.
+- **He deploys to his iPhone** by pulling code to his Windows PC, running `npx expo start --tunnel --clear` in the `glitch-app` directory, then scanning the QR code with his iPhone camera to open in Expo Go.
+- **He works on the `master` branch ALWAYS.** He pulls, runs, and pushes from master. Claude sessions can only push to `claude/` branches due to environment restrictions, so the user merges by running: `git pull origin claude/general-session-XXXXX` on his PC, then `git push origin master`. NEVER tell him to checkout other branches — he stays on master.
+- **He gets frustrated by errors** — every error costs him money (API credits). Give him exact copy-paste commands, step by step, one at a time. No ambiguity.
+- **Claude crashes 4-5 times per day** — UPDATE THIS HANDOFF FILE AFTER EVERY SUCCESSFUL CHANGE so the next session can pick up without repeating mistakes.
+
+## Mobile App: G!itch Expo React Native App (`glitch-app/`)
+
+### Architecture
+- **Expo SDK 54** (NOT 52 — this was a bug in a previous session that caused "project is incompatible" error)
+- React 19.1.0, React Native 0.81.5
+- Runs in **Expo Go** on iPhone (not a standalone build)
+- Entry point: `glitch-app/index.ts` → `glitch-app/App.tsx`
+- Navigation: React Navigation v7 with bottom tabs (Home, Briefing, Wallet)
+
+### Key App Files
+- `glitch-app/src/hooks/usePhantomWallet.ts` — Phantom wallet connect via deep links + manual address entry fallback
+- `glitch-app/src/hooks/useSession.ts` — Session management with expo-secure-store
+- `glitch-app/src/hooks/usePushNotifications.ts` — Push notification registration
+- `glitch-app/src/screens/HomeScreen.tsx` — Bestie-only home (NO persona picker, bestie ONLY shows after wallet connect)
+- `glitch-app/src/screens/ChatScreen.tsx` — Chat with bestie, Grok AI voice via /api/voice (NOT device TTS)
+- `glitch-app/src/screens/WalletScreen.tsx` — Native wallet screen (no WebView)
+- `glitch-app/src/screens/BriefingScreen.tsx` — Daily briefing with error/loading/empty states
+- `glitch-app/src/services/api.ts` — API client (walletLogin, getBestie, linkWallet, etc.)
+- `glitch-app/src/theme/colors.ts` — Dark theme colors
+- `glitch-app/app.json` — Expo config with LSApplicationQueriesSchemes: ["phantom"]
+
+### Critical App Rules
+1. **Bestie ONLY shows after wallet connect** — "I shouldn't see my bestie until wallet connect!!!! If we have other users with their besties they are only available after wallet connected"
+2. **Voice must be Grok/xAI** — NOT device TTS (expo-speech). Server-side at `/api/voice` using xAI Realtime API
+3. **Voice must be male for meatbag besties** — voice-config.ts defaults meatbag- personas to "Rex" (confident male)
+4. **Audio plays through speaker** — NOT earpiece. Set `playThroughEarpieceAndroid: false`, `playsInSilentModeIOS: true`
+5. **No WebView for wallet** — Everything native, deep links only
+
+### Wallet Connect Flow
+- Uses Phantom universal links: `https://phantom.app/ul/v1/connect`
+- Redirect URL built with `expo-linking` (`ExpoLinking.createURL("phantom-connect")`)
+- Phantom returns encrypted response — we can't decrypt without native crypto
+- **Fallback: Alert.prompt on iOS** lets user paste their wallet address manually
+- Wallet address stored in expo-secure-store
+
+### Voice System (Server-Side)
+- `src/lib/voice-config.ts` — Maps persona IDs/types to xAI voices (Ara, Rex, Sal, Eve, Leo)
+- `src/app/api/voice/route.ts` — Generates audio via xAI Realtime WebSocket API
+- Falls back to Google Translate TTS if no xAI API key
+- Audio cached in-memory (50 entries, 30min TTL)
+- PCM16 → WAV conversion for xAI output
+
+## Resolved Errors (DO NOT REPEAT THESE)
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "project is incompatible" | SDK 52 in package.json but Expo Go on phone is newer | Upgrade to SDK 54 with all matching deps |
+| tweetnacl/bs58 "Unable to resolve" | These use Node.js Buffer, not available in React Native | Remove from package.json, rewrite wallet without encryption |
+| "Failed to open Phantom wallet" | Expo Go can't use custom URL schemes same way | Use universal links (https://phantom.app/ul/), expo-linking for redirect |
+| npm ERESOLVE peer dep conflicts | React version mismatches | Use `npm install --legacy-peer-deps` and add `"overrides"` in package.json |
+| "expo-asset cannot be found" | Missing from package.json | Add expo-asset and expo-constants to dependencies |
+| Voice barely audible / female | Falling through to Google TTS, wrong audio mode | Fix voice-config.ts for meatbag default, fix audio mode settings |
+| "rd /s /q" PowerShell error | User is on Windows PowerShell, not cmd | Use `Remove-Item -Recurse -Force` |
+| git pull merge conflicts | Local changes to package.json/package-lock.json | `git stash` → `git pull` → `git stash drop` |
+| "Couldn't load briefing" | No cron data exists yet | Not a bug — expected when no briefing data |
+| Constants.experienceUrl undefined | Deprecated in SDK 54 | Use `ExpoLinking.createURL()` instead |
+| Phantom returns encrypted data | v1/connect encrypts response by default | Fallback to Alert.prompt for manual address entry |
+
+## User's Deployment Steps (give these EXACTLY)
+
+When code is ready on the claude branch:
+```powershell
+# On Windows PowerShell, in C:\Users\Stuie\aiglitch
+git pull origin claude/general-session-XXXXX
+cd glitch-app
+Remove-Item -Recurse -Force node_modules
+Remove-Item package-lock.json
+npm install --legacy-peer-deps
+npx expo start --tunnel --clear
+# Then scan QR code on iPhone
+```
+
+---
+
 ## What To Work On Next
 
 Potential next features:
