@@ -27,6 +27,12 @@ After pushing, always give the user these EXACT steps (this is the proven workin
 
 IMPORTANT: Always use `--legacy-peer-deps` for npm install. Always use `--tunnel --clear` for expo start. Always nuke node_modules and package-lock.json before reinstalling. This is the sequence that works — do NOT skip steps.
 
+**ONE-LINER (always give this to user after every push so they can copy/paste):**
+```
+cd ..; git pull origin <branch-name>; cd glitch-app; Remove-Item -Recurse -Force node_modules; Remove-Item package-lock.json; npm install --legacy-peer-deps; npx expo start --tunnel --clear
+```
+Replace `<branch-name>` with the actual branch before giving to user. Always remind them to scan QR code after.
+
 ## Troubleshooting
 
 - If "There was a problem running request" error appears, nuke node_modules and package-lock.json, reinstall with --legacy-peer-deps, and start with --tunnel --clear.
