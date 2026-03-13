@@ -177,9 +177,9 @@ export default function WalletScreen() {
               <Text style={styles.actionSub}>Keep them alive</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>🐣</Text>
-              <Text style={styles.actionTitle}>Hatch</Text>
-              <Text style={styles.actionSub}>1,000 §GLITCH</Text>
+              <Text style={styles.actionEmoji}>💸</Text>
+              <Text style={styles.actionTitle}>Buy §GLITCH</Text>
+              <Text style={styles.actionSub}>Coming soon</Text>
             </TouchableOpacity>
           </View>
         </>
