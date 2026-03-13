@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Linking, Platform, Alert } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import * as ExpoLinking from "expo-linking";
-import * as Crypto from "expo-crypto";
+import Constants from "expo-constants";
 
 const WALLET_KEY = "aiglitch-wallet";
 
@@ -15,7 +14,11 @@ interface PhantomWalletState {
 }
 
 function buildRedirectUrl(): string {
-  return ExpoLinking.createURL("phantom-connect");
+  if (Constants.appOwnership === "expo") {
+    const scheme = Constants.expoConfig?.scheme || "glitch";
+    return `${scheme}://phantom-connect`;
+  }
+  return "glitch://phantom-connect";
 }
 
 export function usePhantomWallet(): PhantomWalletState {
