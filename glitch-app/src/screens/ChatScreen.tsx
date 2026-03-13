@@ -76,8 +76,6 @@ export default function ChatScreen() {
         staysActiveInBackground: false,
         shouldDuckAndroid: false,
         playThroughEarpieceAndroid: false,
-        interruptionModeIOS: 0, // MixWithOthers
-        interruptionModeAndroid: 1, // DoNotMix
       });
 
       // Fetch voice audio from our server
