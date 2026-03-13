@@ -2,15 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, ActivityIndicator, RefreshControl, Alert, Platform,
-  Linking,
 } from "react-native";
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { usePhantomWallet } from "../hooks/usePhantomWallet";
+import { usePhantomDeepLink } from "../hooks/usePhantomDeepLink";
 import {
-  getOtcConfig, getOnChainBalances, createSwap,
+  getOtcConfig, getOnChainBalances, createSwap, submitSwap,
   OtcConfig, OnChainBalances,
 } from "../services/api";
 
@@ -31,7 +29,7 @@ function compactNumber(n: number): string {
 
 export default function BuyGlitchScreen() {
   const { sessionId } = useSession();
-  const { walletAddress } = usePhantomWallet();
+  const { walletAddress, signAndSendTransaction } = usePhantomDeepLink();
   const [config, setConfig] = useState<OtcConfig | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,46 +142,40 @@ export default function BuyGlitchScreen() {
             setBuying(true);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
             try {
+              // Step 1: Get the partially-signed transaction from server
               const result = await createSwap(walletAddress, qty);
-              if (result.success) {
-                const solCostFinal = result.sol_amount ?? displaySol;
-                const treasury = result.treasury_wallet ?? config.treasury_wallet;
-                const swapId = result.swap_id ?? "pending";
-
-                // Copy treasury address to clipboard for easy paste in Phantom
-                await Clipboard.setStringAsync(treasury);
-
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert(
-                  `Send ${formatSOL(solCostFinal)} SOL`,
-                  `Treasury address copied to clipboard!\n\n` +
-                  `Open Phantom and send exactly:\n` +
-                  `${formatSOL(solCostFinal)} SOL\n\n` +
-                  `To:\n${treasury}\n\n` +
-                  `You'll receive ${qty.toLocaleString()} $GLITCH once confirmed on-chain.\n\n` +
-                  `Swap ID: ${swapId}`,
-                  [
-                    {
-                      text: "Open Phantom",
-                      onPress: () => {
-                        Linking.openURL("https://phantom.app/ul/browse").catch(() => {
-                          Linking.openURL("phantom://").catch(() => {});
-                        });
-                      },
-                    },
-                    {
-                      text: "Copy Address Again",
-                      onPress: () => Clipboard.setStringAsync(treasury),
-                    },
-                    { text: "Done", style: "cancel" },
-                  ]
-                );
-                setSolInput("");
-                setGlitchOutput("");
-                load();
+              if (!result.success || !result.transaction) {
+                throw new Error(result.error || "Could not create swap transaction");
               }
+
+              // Step 2: Send to Phantom for signing via deep link
+              const txSignature = await signAndSendTransaction(result.transaction);
+
+              // Step 3: Confirm with our backend
+              try {
+                await submitSwap(result.swap_id, txSignature);
+              } catch (e) {
+                // Non-critical — tx already on chain
+                console.warn("Backend confirm error (tx already on chain):", e);
+              }
+
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert(
+                "Swap Successful!",
+                `You bought ${qty.toLocaleString()} $GLITCH!\n\nTransaction: ${txSignature.slice(0, 12)}...${txSignature.slice(-6)}`,
+              );
+              setSolInput("");
+              setGlitchOutput("");
+              load();
             } catch (e: any) {
-              Alert.alert("Swap Failed", e?.message || "Could not create swap. Try again.");
+              const msg = e?.message || "Swap failed";
+              if (msg.includes("User rejected") || msg.includes("cancelled")) {
+                Alert.alert("Cancelled", "Transaction was cancelled.");
+              } else if (msg.includes("Not connected")) {
+                Alert.alert("Wallet Not Connected", "Please connect your Phantom wallet first from the Home screen.");
+              } else {
+                Alert.alert("Swap Failed", msg);
+              }
             } finally {
               setBuying(false);
             }

@@ -7,7 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { usePhantomWallet } from "../hooks/usePhantomWallet";
+import { usePhantomDeepLink } from "../hooks/usePhantomDeepLink";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { getBestie, walletLogin, linkWallet, unlinkWallet, getOnChainBalances, Bestie, OnChainBalances } from "../services/api";
 
@@ -34,7 +34,7 @@ function compactNumber(n: number): string {
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connect, disconnect } = usePhantomWallet();
+  const { walletAddress, isConnecting, connect, disconnect } = usePhantomDeepLink();
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);

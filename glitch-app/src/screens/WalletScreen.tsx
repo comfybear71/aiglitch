@@ -7,7 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { usePhantomWallet } from "../hooks/usePhantomWallet";
+import { usePhantomDeepLink } from "../hooks/usePhantomDeepLink";
 import {
   getCoins, getOnChainBalances, walletLogin, linkWallet, unlinkWallet,
   CoinBalance, OnChainBalances,
@@ -20,7 +20,7 @@ function shortenAddress(addr: string) {
 export default function WalletScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connect, disconnect } = usePhantomWallet();
+  const { walletAddress, isConnecting, connect, disconnect } = usePhantomDeepLink();
   const [coins, setCoins] = useState<CoinBalance | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);

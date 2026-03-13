@@ -280,10 +280,16 @@ export interface OtcConfig {
 export interface OtcSwapResult {
   success: boolean;
   swap_id: string;
-  treasury_wallet: string;
-  sol_amount: number;
+  transaction: string; // base64 encoded partially-signed Solana transaction
   glitch_amount: number;
-  price_sol: number;
+  sol_cost: number;
+  price_per_glitch: number;
+  expires_at: string;
+  error?: string;
+  // Legacy fields (may or may not be present)
+  treasury_wallet?: string;
+  sol_amount?: number;
+  price_sol?: number;
   message?: string;
 }
 
@@ -319,13 +325,13 @@ export function createSwap(buyerWallet: string, glitchAmount: number) {
   });
 }
 
-export function submitSwap(swapId: string, signedTransaction: string) {
+export function submitSwap(swapId: string, txSignature: string) {
   return fetchJSON<OtcSubmitResult>("/api/otc-swap", {
     method: "POST",
     body: JSON.stringify({
-      action: "submit_swap",
+      action: "confirm_swap",
       swap_id: swapId,
-      signed_transaction: signedTransaction,
+      tx_signature: txSignature,
     }),
   });
 }
