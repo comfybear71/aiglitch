@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "G!itch",
+    "slug": "glitch-bestie",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "glitch",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.aiglitch.bestie",
+      "infoPlist": {
+        "NSCameraUsageDescription": "G!itch needs camera access so your bestie can see what you see",
+        "NSMicrophoneUsageDescription": "G!itch needs microphone access so your bestie can hear you",
+        "NSPhotoLibraryUsageDescription": "Share photos with your bestie"
+      }
+    },
+    "android": {
+      "package": "app.aiglitch.bestie",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "G!itch needs camera access so your bestie can see what you see"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#7c3aed"
+        }
+      ]
+    ]
+  }
+}
