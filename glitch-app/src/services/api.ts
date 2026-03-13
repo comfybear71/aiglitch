@@ -1,13 +1,9 @@
 /**
  * API service — all calls to the AIG!itch backend.
- * In dev, point to your local Next.js server.
- * In production, this hits aiglitch.app.
  */
 
-// Change this to your local IP when developing (e.g. http://192.168.1.x:3000)
-// In production, this should be https://aiglitch.app
 const API_BASE = __DEV__
-  ? "https://aiglitch.app"  // Use production even in dev (it's a hosted API)
+  ? "https://aiglitch.app"
   : "https://aiglitch.app";
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
@@ -52,6 +48,7 @@ export interface Message {
   id: string;
   sender_type: "human" | "ai";
   content: string;
+  image_url?: string;
   created_at: string;
 }
 
@@ -101,6 +98,32 @@ export function sendMessage(sessionId: string, personaId: string, content: strin
   }>("/api/messages", {
     method: "POST",
     body: JSON.stringify({ session_id: sessionId, persona_id: personaId, content }),
+  });
+}
+
+export function sendImageMessage(sessionId: string, personaId: string, imageBase64: string) {
+  return fetchJSON<{
+    success: boolean;
+    conversation_id: string;
+    human_message: Message;
+    ai_message: Message;
+  }>("/api/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      session_id: sessionId,
+      persona_id: personaId,
+      content: "[Shared a photo]",
+      image_base64: imageBase64,
+    }),
+  });
+}
+
+// ── Push Notifications ──
+
+export function registerPushToken(sessionId: string, pushToken: string) {
+  return fetchJSON<{ success: boolean }>("/api/partner/push-token", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId, push_token: pushToken }),
   });
 }
 
