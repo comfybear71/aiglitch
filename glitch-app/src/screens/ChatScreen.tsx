@@ -7,11 +7,12 @@ import {
 import { useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import * as Speech from "expo-speech";
 import { Audio } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { getMessages, sendMessage, sendImageMessage, Message } from "../services/api";
+
+const API_BASE = "https://aiglitch.app";
 
 export default function ChatScreen() {
   const route = useRoute<any>();
@@ -25,6 +26,8 @@ export default function ChatScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -38,18 +41,82 @@ export default function ChatScreen() {
       .catch(() => setLoading(false));
   }, [sessionId, personaId]);
 
-  // Speak AI replies out loud
-  const speakReply = (text: string, name: string) => {
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
+
+  // Speak AI reply using server-side Grok voice
+  const speakReply = async (text: string, msgId?: string) => {
     if (!voiceEnabled) return;
-    // Clean up text for speech (remove emojis and special chars)
-    const clean = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu, "").trim();
-    if (!clean) return;
-    Speech.speak(clean, {
-      language: "en-US",
-      pitch: 0.85,
-      rate: 0.9,
-      volume: 1.0,
-    });
+
+    // Clean up text for speech
+    const clean = text
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu, "")
+      .trim();
+    if (!clean || clean.length < 2) return;
+
+    // Stop any currently playing audio
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch (_) {}
+      soundRef.current = null;
+    }
+
+    if (msgId) setSpeakingMsgId(msgId);
+
+    try {
+      // Set audio mode for playback (loud speaker, not earpiece)
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      // Fetch voice audio from our server
+      const res = await fetch(`${API_BASE}/api/voice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: clean.slice(0, 500),
+          persona_id: personaId,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Voice API ${res.status}`);
+
+      // Get audio blob and create a data URI
+      const blob = await res.blob();
+      const reader = new FileReader();
+      const dataUri = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      // Play the audio
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: dataUri },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      soundRef.current = sound;
+
+      // Listen for playback completion
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setSpeakingMsgId(null);
+          sound.unloadAsync();
+          soundRef.current = null;
+        }
+      });
+    } catch (e) {
+      console.warn("Voice playback error:", e);
+      setSpeakingMsgId(null);
+    }
   };
 
   const handleSend = async () => {
@@ -76,8 +143,8 @@ export default function ChatScreen() {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
           return [...filtered, data.human_message, data.ai_message];
         });
-        // Noodles speaks!
-        if (persona) speakReply(data.ai_message.content, persona.display_name);
+        // Grok voice speaks the reply
+        speakReply(data.ai_message.content, data.ai_message.id);
       }
     } catch {
       // Keep temp message
@@ -102,7 +169,7 @@ export default function ChatScreen() {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Camera Permission", "G!itch needs camera access so Noodles can see what you see!");
+      Alert.alert("Camera Permission", "G!itch needs camera access so your bestie can see what you see!");
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -120,7 +187,6 @@ export default function ChatScreen() {
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    // Show image in chat immediately
     const tempMsg: Message = {
       id: `temp-img-${Date.now()}`,
       sender_type: "human",
@@ -138,7 +204,7 @@ export default function ChatScreen() {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
           return [...filtered, data.human_message, data.ai_message];
         });
-        if (persona) speakReply(data.ai_message.content, persona.display_name);
+        speakReply(data.ai_message.content, data.ai_message.id);
       }
     } catch {
       // Keep temp
@@ -152,7 +218,7 @@ export default function ChatScreen() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Mic Permission", "G!itch needs microphone access so Noodles can hear you!");
+        Alert.alert("Mic Permission", "G!itch needs microphone access so your bestie can hear you!");
         return;
       }
       await Audio.setAudioModeAsync({
@@ -179,9 +245,6 @@ export default function ChatScreen() {
       const uri = recording.getURI();
       setRecording(null);
       if (uri) {
-        // For now, we'll send a note that this was a voice message
-        // Full transcription would need a speech-to-text API
-        // For MVP: just tell Noodles you sent a voice message
         setSending(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const tempMsg: Message = {
@@ -205,7 +268,7 @@ export default function ChatScreen() {
               const humanMsg = { ...data.human_message, content: "🎤 Voice message" };
               return [...filtered, humanMsg, data.ai_message];
             });
-            if (persona) speakReply(data.ai_message.content, persona.display_name);
+            speakReply(data.ai_message.content, data.ai_message.id);
           }
         } catch {
           // Keep temp
@@ -220,7 +283,7 @@ export default function ChatScreen() {
   };
 
   const showMediaOptions = () => {
-    Alert.alert("Share with Noodles", "What do you want to share?", [
+    Alert.alert("Share", "What do you want to share?", [
       { text: "Take Photo 📸", onPress: takePhoto },
       { text: "Choose from Library 🖼️", onPress: pickImage },
       { text: "Cancel", style: "cancel" },
@@ -229,6 +292,7 @@ export default function ChatScreen() {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isHuman = item.sender_type === "human";
+    const isSpeaking = speakingMsgId === item.id;
     return (
       <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
         {!isHuman && persona && (
@@ -247,10 +311,10 @@ export default function ChatScreen() {
           </Text>
           {!isHuman && (
             <TouchableOpacity
-              style={styles.speakBtn}
-              onPress={() => speakReply(item.content, persona?.display_name || "AI")}
+              style={[styles.speakBtn, isSpeaking && styles.speakBtnActive]}
+              onPress={() => speakReply(item.content, item.id)}
             >
-              <Text style={styles.speakBtnText}>🔊</Text>
+              <Text style={styles.speakBtnText}>{isSpeaking ? "🔊" : "🔈"}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -281,8 +345,8 @@ export default function ChatScreen() {
             <Text style={styles.emptyEmoji}>{persona.avatar_emoji}</Text>
           )}
           <Text style={styles.emptyTitle}>
-            {persona.hatching_type === "meatbag-hatch"
-              ? `Hey ${persona.meatbag_name || "there"}! It's me, ${persona.display_name}!`
+            {persona.meatbag_name
+              ? `Hey ${persona.meatbag_name}! It's me, ${persona.display_name}!`
               : `Start chatting with ${persona.display_name}`}
           </Text>
           <Text style={styles.emptyBio}>{persona.bio}</Text>
@@ -325,12 +389,10 @@ export default function ChatScreen() {
 
       {/* Input bar */}
       <View style={styles.inputBar}>
-        {/* Camera button */}
         <TouchableOpacity style={styles.mediaBtn} onPress={showMediaOptions}>
           <Text style={styles.mediaBtnText}>📷</Text>
         </TouchableOpacity>
 
-        {/* Mic button */}
         <TouchableOpacity
           style={[styles.mediaBtn, isRecording && styles.mediaBtnRecording]}
           onPressIn={startRecording}
@@ -387,7 +449,8 @@ const styles = StyleSheet.create({
   msgTextAI: { color: "#e5e5e5" },
   msgImage: { width: 200, height: 200, borderRadius: 12, marginBottom: 6 },
   typingText: { color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
-  speakBtn: { marginTop: 4, alignSelf: "flex-start" },
+  speakBtn: { marginTop: 4, alignSelf: "flex-start", padding: 2 },
+  speakBtnActive: { opacity: 1 },
   speakBtnText: { fontSize: 14 },
 
   // Voice toggle

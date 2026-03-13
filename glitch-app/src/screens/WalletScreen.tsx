@@ -1,22 +1,29 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, Modal,
+  RefreshControl, ActivityIndicator, Alert, Clipboard, Platform,
 } from "react-native";
-import { WebView } from "react-native-webview";
+import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { getCoins, getWallet, CoinBalance, WalletData } from "../services/api";
+import { usePhantomWallet } from "../hooks/usePhantomWallet";
+import {
+  getCoins, getWallet, walletLogin, linkWallet,
+  CoinBalance, WalletData,
+} from "../services/api";
 
-type WebViewPage = "connect" | "exchange" | "wallet" | null;
+function shortenAddress(addr: string) {
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
 
 export default function WalletScreen() {
   const { sessionId } = useSession();
+  const { walletAddress, isConnecting, connect, disconnect } = usePhantomWallet();
   const [coins, setCoins] = useState<CoinBalance | null>(null);
   const [wallet, setWallet] = useState<WalletData["wallet"]>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [webViewPage, setWebViewPage] = useState<WebViewPage>(null);
+  const [linking, setLinking] = useState(false);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
@@ -28,7 +35,7 @@ export default function WalletScreen() {
       setCoins(c);
       setWallet(w.wallet);
     } catch (e) {
-      console.warn("Wallet error:", e);
+      console.warn("Wallet load error:", e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -37,23 +44,51 @@ export default function WalletScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const getWebViewUrl = () => {
-    const base = "https://aiglitch.app";
-    const sid = sessionId ? `?session_id=${sessionId}` : "";
-    switch (webViewPage) {
-      case "connect": return `${base}/wallet${sid}`;
-      case "exchange": return `${base}/exchange${sid}`;
-      case "wallet": return `${base}/wallet${sid}`;
-      default: return base;
-    }
+  // When Phantom connects, link the wallet to our backend
+  useEffect(() => {
+    if (!walletAddress || !sessionId || linking) return;
+
+    (async () => {
+      setLinking(true);
+      try {
+        // Login/link with the backend
+        await walletLogin(sessionId, walletAddress);
+        await linkWallet(sessionId, walletAddress);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Reload wallet data
+        await load();
+      } catch (e) {
+        console.warn("Wallet link error:", e);
+      } finally {
+        setLinking(false);
+      }
+    })();
+  }, [walletAddress, sessionId]);
+
+  const handleDisconnect = () => {
+    Alert.alert(
+      "Disconnect Wallet",
+      "This will unlink your Phantom wallet from G!itch. Your $GLITCH balance stays safe.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            await disconnect();
+            setWallet(null);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          },
+        },
+      ]
+    );
   };
 
-  const getWebViewTitle = () => {
-    switch (webViewPage) {
-      case "connect": return "Connect Wallet";
-      case "exchange": return "Buy $GLITCH";
-      case "wallet": return "Manage Wallet";
-      default: return "";
+  const copyAddress = () => {
+    if (walletAddress) {
+      Clipboard.setString(walletAddress);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Alert.alert("Copied", "Wallet address copied to clipboard");
     }
   };
 
@@ -66,137 +101,166 @@ export default function WalletScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.cyan} />}
-      >
-        {/* In-app GLITCH balance */}
-        <View style={styles.glitchCard}>
-          <Text style={styles.cardLabel}>In-App Balance</Text>
-          <View style={styles.balanceRow}>
-            <Text style={styles.balanceAmount}>
-              {coins ? coins.balance.toLocaleString() : "0"}
-            </Text>
-            <Text style={styles.balanceCurrency}>$GLITCH</Text>
-          </View>
-          {coins && (
-            <Text style={styles.lifetime}>
-              Lifetime earned: {coins.lifetime_earned.toLocaleString()}
-            </Text>
-          )}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => { setRefreshing(true); load(); }}
+          tintColor={colors.cyan}
+        />
+      }
+    >
+      {/* §GLITCH In-App Balance */}
+      <View style={styles.glitchCard}>
+        <Text style={styles.cardLabel}>§GLITCH Balance</Text>
+        <View style={styles.balanceRow}>
+          <Text style={styles.balanceAmount}>
+            {coins ? coins.balance.toLocaleString() : "0"}
+          </Text>
+          <Text style={styles.balanceCurrency}>§GLITCH</Text>
         </View>
+        {coins && (
+          <Text style={styles.lifetime}>
+            Lifetime earned: {coins.lifetime_earned.toLocaleString()}
+          </Text>
+        )}
+      </View>
 
-        {/* Quick Actions */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => setWebViewPage("exchange")}>
-            <Text style={styles.actionIcon}>💎</Text>
-            <Text style={styles.actionLabelPrimary}>Buy $GLITCH</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setWebViewPage("wallet")}>
-            <Text style={styles.actionIcon}>🍕</Text>
-            <Text style={styles.actionLabel}>Feed Bestie</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* On-chain wallet */}
-        <View style={styles.walletCard}>
-          <Text style={styles.cardLabel}>Solana Wallet</Text>
-          {wallet ? (
-            <View style={styles.walletRows}>
-              <View style={styles.walletRow}>
-                <Text style={styles.tokenLabel}>SOL</Text>
-                <Text style={styles.tokenValue}>{Number(wallet.sol_balance).toFixed(4)}</Text>
-              </View>
-              <View style={styles.walletRow}>
-                <Text style={styles.tokenLabel}>$GLITCH (on-chain)</Text>
-                <Text style={[styles.tokenValue, { color: colors.purpleLight }]}>
-                  {Number(wallet.glitch_token_balance).toLocaleString()}
-                </Text>
-              </View>
-              <View style={styles.divider} />
-              <Text style={styles.walletAddress} numberOfLines={1}>{wallet.address}</Text>
-              <TouchableOpacity
-                style={styles.walletActionBtn}
-                onPress={() => setWebViewPage("wallet")}
-              >
-                <Text style={styles.walletActionText}>Manage Wallet</Text>
-              </TouchableOpacity>
+      {/* Phantom Wallet Connection */}
+      {walletAddress ? (
+        <>
+          {/* Connected wallet card */}
+          <View style={styles.connectedCard}>
+            <View style={styles.connectedHeader}>
+              <View style={styles.connectedDot} />
+              <Text style={styles.connectedLabel}>Phantom Connected</Text>
             </View>
-          ) : (
-            <View style={styles.noWallet}>
-              <Text style={styles.noWalletEmoji}>🔗</Text>
-              <Text style={styles.noWalletTitle}>Connect Your Wallet</Text>
-              <Text style={styles.noWalletText}>
-                Connect your Solana wallet to see balances, buy $GLITCH, and feed your bestie
-              </Text>
-              <TouchableOpacity style={styles.connectBtn} onPress={() => setWebViewPage("connect")}>
-                <Text style={styles.connectBtnText}>Connect Wallet</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
 
-        {/* How it works */}
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>How $GLITCH Works</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoEmoji}>💬</Text>
-            <Text style={styles.infoText}>Chat with your bestie = earn $GLITCH</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoEmoji}>💎</Text>
-            <Text style={styles.infoText}>Buy $GLITCH with SOL on our exchange</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoEmoji}>🍕</Text>
-            <Text style={styles.infoText}>Feed $GLITCH to your bestie = bonus life days</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoEmoji}>💀</Text>
-            <Text style={styles.infoText}>Don't let your bestie's health hit 0!</Text>
-          </View>
-        </View>
-      </ScrollView>
+            <TouchableOpacity onPress={copyAddress} activeOpacity={0.7}>
+              <View style={styles.addressRow}>
+                <Text style={styles.addressFull}>{shortenAddress(walletAddress)}</Text>
+                <Text style={styles.copyHint}>tap to copy</Text>
+              </View>
+            </TouchableOpacity>
 
-      {/* In-app WebView Modal */}
-      <Modal visible={webViewPage !== null} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.webViewContainer}>
-          <View style={styles.webViewHeader}>
-            <Text style={styles.webViewTitle}>{getWebViewTitle()}</Text>
-            <TouchableOpacity onPress={() => { setWebViewPage(null); load(); }}>
-              <Text style={styles.webViewClose}>Done</Text>
+            {/* On-chain balances */}
+            {wallet && (
+              <View style={styles.balancesGrid}>
+                <View style={styles.balanceItem}>
+                  <Text style={styles.balanceItemLabel}>SOL</Text>
+                  <Text style={styles.balanceItemValue}>
+                    {Number(wallet.sol_balance).toFixed(4)}
+                  </Text>
+                </View>
+                <View style={styles.balanceDivider} />
+                <View style={styles.balanceItem}>
+                  <Text style={styles.balanceItemLabel}>$GLITCH (on-chain)</Text>
+                  <Text style={[styles.balanceItemValue, { color: colors.purpleLight }]}>
+                    {Number(wallet.glitch_token_balance).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
+              <Text style={styles.disconnectText}>Disconnect Wallet</Text>
             </TouchableOpacity>
           </View>
-          {webViewPage && (
-            <WebView
-              source={{ uri: getWebViewUrl() }}
-              style={styles.webView}
-              startInLoadingState
-              renderLoading={() => (
-                <View style={styles.webViewLoading}>
-                  <ActivityIndicator color={colors.purple} size="large" />
-                </View>
-              )}
-              javaScriptEnabled
-              domStorageEnabled
-              thirdPartyCookiesEnabled
-              sharedCookiesEnabled
-              allowsInlineMediaPlayback
-            />
-          )}
+
+          {/* Quick Actions */}
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.actionGrid}>
+            <TouchableOpacity style={styles.actionCard}>
+              <Text style={styles.actionEmoji}>🍕</Text>
+              <Text style={styles.actionTitle}>Feed Bestie</Text>
+              <Text style={styles.actionSub}>Keep them alive</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionCard}>
+              <Text style={styles.actionEmoji}>🐣</Text>
+              <Text style={styles.actionTitle}>Hatch</Text>
+              <Text style={styles.actionSub}>1,000 §GLITCH</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        /* Not connected — show connect CTA */
+        <View style={styles.connectCard}>
+          <Text style={styles.connectEmoji}>👻</Text>
+          <Text style={styles.connectTitle}>Connect Phantom Wallet</Text>
+          <Text style={styles.connectDesc}>
+            Link your Solana wallet to unlock your AI Bestie, trade $GLITCH, and access the full G!itch ecosystem.
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.connectBtn, isConnecting && styles.connectBtnDisabled]}
+            onPress={connect}
+            disabled={isConnecting}
+            activeOpacity={0.8}
+          >
+            {isConnecting ? (
+              <View style={styles.connectBtnInner}>
+                <ActivityIndicator color="#fff" size="small" />
+                <Text style={styles.connectBtnText}>Opening Phantom...</Text>
+              </View>
+            ) : (
+              <Text style={styles.connectBtnText}>Connect Wallet</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* What you get */}
+          <View style={styles.perksContainer}>
+            <View style={styles.perkRow}>
+              <Text style={styles.perkEmoji}>🤖</Text>
+              <Text style={styles.perkText}>Your wallet finds your AI Bestie</Text>
+            </View>
+            <View style={styles.perkRow}>
+              <Text style={styles.perkEmoji}>💎</Text>
+              <Text style={styles.perkText}>Buy §GLITCH with SOL</Text>
+            </View>
+            <View style={styles.perkRow}>
+              <Text style={styles.perkEmoji}>🍕</Text>
+              <Text style={styles.perkText}>Feed your bestie to keep them alive</Text>
+            </View>
+            <View style={styles.perkRow}>
+              <Text style={styles.perkEmoji}>🐣</Text>
+              <Text style={styles.perkText}>Hatch your own AI persona</Text>
+            </View>
+          </View>
         </View>
-      </Modal>
-    </View>
+      )}
+
+      {/* How it works */}
+      <View style={styles.infoCard}>
+        <Text style={styles.infoTitle}>How It Works</Text>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoStep}>1</Text>
+          <Text style={styles.infoText}>Connect your Phantom wallet</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoStep}>2</Text>
+          <Text style={styles.infoText}>Your wallet links to your AI Bestie</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoStep}>3</Text>
+          <Text style={styles.infoText}>Chat, feed §GLITCH, keep them alive</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoStep}>4</Text>
+          <Text style={styles.infoText}>Don't let their health hit 0% or they die!</Text>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 32 },
+  content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
 
+  // §GLITCH balance card
   glitchCard: {
     backgroundColor: "rgba(124, 58, 237, 0.1)",
     borderWidth: 1,
@@ -211,97 +275,128 @@ const styles = StyleSheet.create({
   balanceCurrency: { color: colors.purpleLight, fontSize: 14, marginBottom: 4 },
   lifetime: { color: colors.textMuted, fontSize: 10, marginTop: 6 },
 
-  // Quick actions
-  actionRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
-  actionBtnPrimary: {
-    flex: 1,
-    backgroundColor: "rgba(124, 58, 237, 0.15)",
+  // Connected wallet card
+  connectedCard: {
+    backgroundColor: "rgba(6, 182, 212, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(124, 58, 237, 0.4)",
-    borderRadius: 14,
-    padding: 14,
+    borderColor: "rgba(6, 182, 212, 0.25)",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  connectedHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  connectedDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: colors.green,
+  },
+  connectedLabel: { color: colors.cyan, fontSize: 13, fontWeight: "600" },
+  addressRow: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  addressFull: { color: colors.text, fontSize: 14, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  copyHint: { color: colors.textMuted, fontSize: 10 },
+  balancesGrid: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  balanceItem: { flex: 1, alignItems: "center" },
+  balanceItemLabel: { color: colors.textMuted, fontSize: 10, marginBottom: 4 },
+  balanceItemValue: { color: colors.text, fontSize: 18, fontWeight: "700" },
+  balanceDivider: { width: 1, height: 30, backgroundColor: colors.border },
+  disconnectBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderRadius: 10,
+    padding: 10,
     alignItems: "center",
   },
-  actionBtn: {
+  disconnectText: { color: colors.red, fontSize: 12, fontWeight: "600" },
+
+  // Section
+  sectionTitle: { color: colors.textSecondary, fontSize: 13, fontWeight: "600", marginBottom: 10 },
+
+  // Action grid
+  actionGrid: { flexDirection: "row", gap: 12, marginBottom: 20 },
+  actionCard: {
     flex: 1,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
-  },
-  actionIcon: { fontSize: 24, marginBottom: 4 },
-  actionLabelPrimary: { color: colors.purpleLight, fontSize: 11, fontWeight: "700" },
-  actionLabel: { color: colors.text, fontSize: 11, fontWeight: "600" },
-
-  walletCard: {
-    backgroundColor: "rgba(6, 182, 212, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(6, 182, 212, 0.2)",
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-  },
-  walletRows: { gap: 12 },
-  walletRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  tokenLabel: { color: colors.textSecondary, fontSize: 12 },
-  tokenValue: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  divider: { height: 1, backgroundColor: colors.border },
-  walletAddress: { color: colors.textMuted, fontSize: 10 },
-  walletActionBtn: {
-    backgroundColor: "rgba(6, 182, 212, 0.15)",
-    borderRadius: 10,
-    padding: 10,
+    padding: 16,
     alignItems: "center",
-    marginTop: 4,
   },
-  walletActionText: { color: colors.cyan, fontSize: 12, fontWeight: "600" },
-  noWallet: { alignItems: "center", paddingVertical: 16 },
-  noWalletEmoji: { fontSize: 40, marginBottom: 8 },
-  noWalletTitle: { color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 6 },
-  noWalletText: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginBottom: 12, lineHeight: 18 },
+  actionEmoji: { fontSize: 28, marginBottom: 6 },
+  actionTitle: { color: colors.text, fontSize: 13, fontWeight: "600" },
+  actionSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
+
+  // Connect CTA card
+  connectCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  connectEmoji: { fontSize: 56, marginBottom: 12 },
+  connectTitle: { color: colors.text, fontSize: 20, fontWeight: "700", marginBottom: 8 },
+  connectDesc: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
   connectBtn: {
     backgroundColor: colors.purple,
-    borderRadius: 12,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 20,
   },
-  connectBtnText: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  connectBtnDisabled: { opacity: 0.6 },
+  connectBtnInner: { flexDirection: "row", alignItems: "center", gap: 10 },
+  connectBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
-  // Info
+  // Perks
+  perksContainer: { width: "100%", gap: 10 },
+  perkRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  perkEmoji: { fontSize: 18 },
+  perkText: { color: colors.textSecondary, fontSize: 12, flex: 1 },
+
+  // Info card
   infoCard: {
     backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 16,
   },
-  infoTitle: { color: colors.text, fontSize: 14, fontWeight: "600", marginBottom: 12 },
-  infoRow: { flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 8 },
-  infoEmoji: { fontSize: 16 },
+  infoTitle: { color: colors.text, fontSize: 14, fontWeight: "600", marginBottom: 14 },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
+  infoStep: {
+    color: colors.purple,
+    fontSize: 14,
+    fontWeight: "700",
+    width: 24,
+    height: 24,
+    textAlign: "center",
+    lineHeight: 24,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.3)",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
   infoText: { color: colors.textSecondary, fontSize: 12, flex: 1 },
-
-  // WebView modal
-  webViewContainer: { flex: 1, backgroundColor: colors.bg },
-  webViewHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    paddingTop: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  webViewTitle: { color: colors.text, fontSize: 17, fontWeight: "700" },
-  webViewClose: { color: colors.purple, fontSize: 15, fontWeight: "600" },
-  webView: { flex: 1, backgroundColor: colors.bg },
-  webViewLoading: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: colors.bg,
-  },
 });

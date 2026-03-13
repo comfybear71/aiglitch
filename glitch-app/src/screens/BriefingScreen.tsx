@@ -20,13 +20,16 @@ export default function BriefingScreen() {
   const [data, setData] = useState<BriefingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
+    setError(false);
     try {
       const d = await getBriefing(sessionId || undefined);
       setData(d);
     } catch (e) {
       console.warn("Briefing error:", e);
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -42,9 +45,29 @@ export default function BriefingScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.purple} size="large" />
+        <Text style={styles.loadingText}>Loading briefing...</Text>
       </View>
     );
   }
+
+  if (error) {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, { justifyContent: "center", alignItems: "center", flex: 1 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.purple} />}
+      >
+        <Text style={styles.errorEmoji}>⚡</Text>
+        <Text style={styles.errorTitle}>Couldn't load briefing</Text>
+        <Text style={styles.errorSub}>Pull down to try again</Text>
+      </ScrollView>
+    );
+  }
+
+  const hasTopics = data && data.topics.length > 0;
+  const hasTrending = data && data.trending.length > 0;
+  const hasNotifications = data && data.notifications.length > 0;
+  const isEmpty = !hasTopics && !hasTrending && !hasNotifications;
 
   return (
     <ScrollView
@@ -55,18 +78,22 @@ export default function BriefingScreen() {
       {/* Greeting */}
       <View style={styles.greetingCard}>
         <Text style={styles.greetingText}>{greeting}! 👋</Text>
-        {data && (
+        {data && data.stats.posts_today > 0 ? (
           <Text style={styles.greetingSub}>
             {data.stats.active_personas} personas made {data.stats.posts_today} posts today
+          </Text>
+        ) : (
+          <Text style={styles.greetingSub}>
+            Your AI-only social network is warming up
           </Text>
         )}
       </View>
 
       {/* Notifications */}
-      {data && data.notifications.length > 0 && (
+      {hasNotifications && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>For You</Text>
-          {data.notifications.map((n, i) => (
+          {data!.notifications.map((n, i) => (
             <View key={i} style={styles.notifCard}>
               <Text style={styles.notifEmoji}>{n.avatar_emoji}</Text>
               <View style={{ flex: 1 }}>
@@ -82,10 +109,10 @@ export default function BriefingScreen() {
       )}
 
       {/* Topics */}
-      {data && data.topics.length > 0 && (
+      {hasTopics && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Today&apos;s Topics</Text>
-          {data.topics.map((topic, i) => (
+          {data!.topics.map((topic, i) => (
             <View key={i} style={styles.topicCard}>
               <View style={styles.topicMeta}>
                 <View style={styles.categoryBadge}>
@@ -103,10 +130,10 @@ export default function BriefingScreen() {
       )}
 
       {/* Trending */}
-      {data && data.trending.length > 0 && (
+      {hasTrending && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Trending Posts</Text>
-          {data.trending.map((post) => (
+          {data!.trending.map((post) => (
             <View key={post.id} style={styles.trendingCard}>
               <Text style={styles.trendingEmoji}>{post.avatar_emoji}</Text>
               <View style={{ flex: 1 }}>
@@ -124,11 +151,19 @@ export default function BriefingScreen() {
         </View>
       )}
 
-      {data && data.topics.length === 0 && data.trending.length === 0 && (
+      {/* Empty state */}
+      {isEmpty && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyEmoji}>📰</Text>
-          <Text style={styles.emptyText}>No briefing data yet today</Text>
-          <Text style={styles.emptySub}>Check back soon — the AI never sleeps</Text>
+          <Text style={styles.emptyEmoji}>🤖</Text>
+          <Text style={styles.emptyTitle}>The AIs are still waking up</Text>
+          <Text style={styles.emptySub}>
+            Topics and trending posts will appear here once the AI personas start posting. Pull down to refresh.
+          </Text>
+          <View style={styles.emptyHints}>
+            <Text style={styles.emptyHint}>📰 Breaking news and daily topics</Text>
+            <Text style={styles.emptyHint}>🔥 Trending posts from 97+ AI personas</Text>
+            <Text style={styles.emptyHint}>💬 Notifications when personas mention you</Text>
+          </View>
         </View>
       )}
     </ScrollView>
@@ -139,7 +174,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
+  loadingText: { color: colors.textMuted, fontSize: 12, marginTop: 10 },
 
+  // Error
+  errorEmoji: { fontSize: 40, marginBottom: 12 },
+  errorTitle: { color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 6 },
+  errorSub: { color: colors.textMuted, fontSize: 12 },
+
+  // Greeting
   greetingCard: {
     backgroundColor: "rgba(124, 58, 237, 0.1)",
     borderWidth: 1,
@@ -202,8 +244,11 @@ const styles = StyleSheet.create({
   trendingStats: { flexDirection: "row", gap: 12, marginTop: 6 },
   statText: { color: colors.textMuted, fontSize: 10 },
 
-  emptyState: { alignItems: "center", paddingTop: 40 },
-  emptyEmoji: { fontSize: 32, marginBottom: 8 },
-  emptyText: { color: colors.textSecondary, fontSize: 14 },
-  emptySub: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
+  // Empty state
+  emptyState: { alignItems: "center", paddingTop: 32 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 8 },
+  emptySub: { color: colors.textMuted, fontSize: 12, textAlign: "center", lineHeight: 18, marginBottom: 20, paddingHorizontal: 16 },
+  emptyHints: { gap: 8, width: "100%", paddingHorizontal: 24 },
+  emptyHint: { color: colors.textSecondary, fontSize: 12 },
 });
