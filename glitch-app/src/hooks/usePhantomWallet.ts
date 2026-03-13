@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Linking, Platform, Alert } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import Constants from "expo-constants";
+import * as ExpoLinking from "expo-linking";
+import * as Crypto from "expo-crypto";
 
 const WALLET_KEY = "aiglitch-wallet";
 
@@ -13,22 +14,8 @@ interface PhantomWalletState {
   disconnect: () => Promise<void>;
 }
 
-/**
- * Build the redirect URL that works in both Expo Go and standalone builds.
- * In Expo Go: exp://192.168.x.x:8081/--/phantom-connect
- * In standalone: glitch://phantom-connect
- */
 function buildRedirectUrl(): string {
-  // In Expo Go, use the Expo scheme
-  const scheme = Constants.appOwnership === "expo" ? "exp" : "glitch";
-  if (scheme === "exp") {
-    // Expo Go uses the dev server URL
-    const devUrl = Constants.experienceUrl || Constants.linkingUri || "";
-    // Strip trailing slash and add our path
-    const base = devUrl.replace(/\/$/, "");
-    return `${base}/--/phantom-connect`;
-  }
-  return `glitch://phantom-connect`;
+  return ExpoLinking.createURL("phantom-connect");
 }
 
 export function usePhantomWallet(): PhantomWalletState {
@@ -48,17 +35,14 @@ export function usePhantomWallet(): PhantomWalletState {
   // Listen for Phantom deep link callback
   useEffect(() => {
     const handleUrl = async ({ url }: { url: string }) => {
-      // Check if this is a phantom-connect callback
       if (!url.includes("phantom-connect")) return;
 
       try {
-        // Parse the URL to get query params
-        // Handle both glitch:// and exp:// schemes
+        // Parse query params from the callback URL
         let params: URLSearchParams;
         try {
           params = new URL(url).searchParams;
         } catch {
-          // If URL parsing fails, try manual extraction
           const queryString = url.split("?")[1] || "";
           params = new URLSearchParams(queryString);
         }
@@ -72,32 +56,28 @@ export function usePhantomWallet(): PhantomWalletState {
           return;
         }
 
-        // Phantom returns the public key directly for non-encrypted connects
-        const publicKey = params.get("phantom_encryption_public_key");
-
-        // For the v1/connect endpoint, Phantom returns the wallet address
-        // in the encrypted data, OR as a direct parameter depending on version
-        // Try to get it from various possible locations
+        // Phantom v1/connect returns phantom_encryption_public_key, data, nonce
+        // Without shared secret decryption, we can't read the encrypted data.
+        // But some Phantom versions also return public_key directly.
         let address = params.get("public_key");
 
         if (!address) {
-          // Some versions return it differently
-          // Check if we got data/nonce (encrypted response) — but we skip encryption
-          // and just prompt user to enter manually or use alternative approach
-
-          // Actually for Phantom universal links without encryption,
-          // the public key comes back as a query parameter
-          address = params.get("phantom_encryption_public_key");
+          // Phantom returned encrypted data - we need the user to paste manually
+          // Show the manual entry prompt
+          showManualEntry("Phantom connected but we need your address. Copy it from Phantom and paste here:");
+          return;
         }
 
-        if (address && address.length >= 32 && address.length <= 44) {
+        if (address.length >= 32 && address.length <= 44) {
           await SecureStore.setItemAsync(WALLET_KEY, address);
           setWalletAddress(address);
           Alert.alert("Connected!", `Wallet ${address.slice(0, 6)}...${address.slice(-4)} linked`);
+        } else {
+          showManualEntry("Could not read wallet address. Please paste it manually:");
         }
       } catch (e) {
         console.warn("Phantom callback error:", e);
-        Alert.alert("Error", "Failed to process wallet connection");
+        showManualEntry("Connection error. Please paste your wallet address:");
       } finally {
         setIsConnecting(false);
       }
@@ -105,13 +85,41 @@ export function usePhantomWallet(): PhantomWalletState {
 
     const sub = Linking.addEventListener("url", handleUrl);
 
-    // Handle deep link that launched the app
     Linking.getInitialURL().then((url) => {
       if (url) handleUrl({ url });
     });
 
     return () => sub.remove();
   }, []);
+
+  const showManualEntry = (message: string) => {
+    if (Alert.prompt) {
+      Alert.prompt(
+        "Enter Wallet Address",
+        message,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
+          {
+            text: "Connect",
+            onPress: async (address?: string) => {
+              if (address && address.length >= 32 && address.length <= 44) {
+                await SecureStore.setItemAsync(WALLET_KEY, address);
+                setWalletAddress(address);
+                Alert.alert("Connected!", `Wallet ${address.slice(0, 6)}...${address.slice(-4)} linked`);
+              } else {
+                Alert.alert("Invalid", "That doesn't look like a valid Solana address");
+              }
+              setIsConnecting(false);
+            },
+          },
+        ],
+        "plain-text"
+      );
+    } else {
+      Alert.alert("Enter Address", "Please go to Settings > Wallet to enter your address manually.");
+      setIsConnecting(false);
+    }
+  };
 
   const connect = useCallback(async () => {
     setIsConnecting(true);
@@ -127,18 +135,21 @@ export function usePhantomWallet(): PhantomWalletState {
 
       const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
 
-      // Try to open Phantom
-      const canOpen = await Linking.canOpenURL("https://phantom.app/ul/v1/connect");
+      const canOpen = await Linking.canOpenURL("https://phantom.app");
 
       if (canOpen) {
         await Linking.openURL(connectUrl);
       } else {
-        // Phantom not installed
+        // Phantom not installed - offer manual entry or install
         Alert.alert(
-          "Phantom Wallet Required",
-          "Install Phantom wallet to connect your Solana wallet.",
+          "Connect Wallet",
+          "You can install Phantom or enter your wallet address manually.",
           [
             { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
+            {
+              text: "Enter Manually",
+              onPress: () => showManualEntry("Paste your Solana wallet address:"),
+            },
             {
               text: "Install Phantom",
               onPress: () => {
@@ -154,33 +165,7 @@ export function usePhantomWallet(): PhantomWalletState {
       }
     } catch (e) {
       console.warn("Phantom connect error:", e);
-
-      // Fallback: let user paste wallet address manually
-      Alert.prompt
-        ? Alert.prompt(
-            "Enter Wallet Address",
-            "Paste your Solana wallet address to connect manually:",
-            [
-              { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
-              {
-                text: "Connect",
-                onPress: async (address?: string) => {
-                  if (address && address.length >= 32 && address.length <= 44) {
-                    await SecureStore.setItemAsync(WALLET_KEY, address);
-                    setWalletAddress(address);
-                  } else {
-                    Alert.alert("Invalid", "That doesn't look like a valid Solana address");
-                  }
-                  setIsConnecting(false);
-                },
-              },
-            ],
-            "plain-text"
-          )
-        : (() => {
-            Alert.alert("Error", "Could not open Phantom. Please try again.");
-            setIsConnecting(false);
-          })();
+      showManualEntry("Could not open Phantom. Paste your wallet address:");
     }
   }, []);
 
