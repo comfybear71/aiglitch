@@ -26,6 +26,13 @@ export function usePhantomWallet(): PhantomWalletState {
     })();
   }, []);
 
+  const saveWallet = async (address: string) => {
+    await SecureStore.setItemAsync(WALLET_KEY, address);
+    setWalletAddress(address);
+    setIsConnecting(false);
+    Alert.alert("Connected!", `Wallet ${address.slice(0, 6)}...${address.slice(-4)} linked`);
+  };
+
   const showManualEntry = (message: string) => {
     if (Alert.prompt) {
       Alert.prompt(
@@ -36,21 +43,19 @@ export function usePhantomWallet(): PhantomWalletState {
           {
             text: "Connect",
             onPress: async (address?: string) => {
-              if (address && address.length >= 32 && address.length <= 44) {
-                await SecureStore.setItemAsync(WALLET_KEY, address);
-                setWalletAddress(address);
-                Alert.alert("Connected!", `Wallet ${address.slice(0, 6)}...${address.slice(-4)} linked`);
+              const trimmed = address?.trim();
+              if (trimmed && trimmed.length >= 32 && trimmed.length <= 44) {
+                await saveWallet(trimmed);
               } else {
                 Alert.alert("Invalid", "That doesn't look like a valid Solana address");
+                setIsConnecting(false);
               }
-              setIsConnecting(false);
             },
           },
         ],
         "plain-text"
       );
     } else {
-      // Android fallback - no Alert.prompt available
       Alert.alert("Enter Address", "Please go to the Wallet tab to enter your address.");
       setIsConnecting(false);
     }
@@ -59,38 +64,57 @@ export function usePhantomWallet(): PhantomWalletState {
   const connect = useCallback(async () => {
     setIsConnecting(true);
 
-    // Step 1: Ask user if they have Phantom installed
-    Alert.alert(
-      "Connect Wallet",
-      "To connect, open Phantom wallet, copy your Solana address, then come back and paste it.",
-      [
-        { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
-        {
-          text: "Open Phantom",
-          onPress: async () => {
-            // Try to open Phantom app
-            try {
-              const canOpen = await Linking.canOpenURL("https://phantom.app");
-              if (canOpen) {
-                await Linking.openURL("https://phantom.app");
-              }
-            } catch {}
+    // Check if Phantom app is installed
+    let phantomInstalled = false;
+    try {
+      phantomInstalled = await Linking.canOpenURL("phantom://");
+    } catch {}
 
-            // After a short delay, show paste prompt
-            // User will switch back to our app and paste
-            setTimeout(() => {
-              showManualEntry("Paste your Solana wallet address from Phantom:");
-            }, 1500);
+    if (phantomInstalled) {
+      // Phantom IS installed — open it, then prompt for address paste
+      Alert.alert(
+        "Connect Wallet",
+        "We'll open Phantom so you can copy your wallet address. Then come back here and paste it.",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
+          {
+            text: "Open Phantom & Copy Address",
+            onPress: async () => {
+              try {
+                await Linking.openURL("phantom://");
+              } catch {}
+              // Show paste prompt after user returns
+              setTimeout(() => {
+                showManualEntry("Paste your Solana wallet address from Phantom:");
+              }, 2000);
+            },
           },
-        },
-        {
-          text: "Paste Address",
-          onPress: () => {
-            showManualEntry("Paste your Solana wallet address:");
+        ]
+      );
+    } else {
+      // Phantom NOT installed — offer manual entry or install
+      Alert.alert(
+        "Connect Wallet",
+        "Phantom wallet not detected. You can enter your address manually or install Phantom.",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
+          {
+            text: "Enter Address",
+            onPress: () => showManualEntry("Paste your Solana wallet address:"),
           },
-        },
-      ]
-    );
+          {
+            text: "Install Phantom",
+            onPress: () => {
+              const storeUrl = Platform.OS === "ios"
+                ? "https://apps.apple.com/app/phantom-solana-wallet/id1598432977"
+                : "https://play.google.com/store/apps/details?id=app.phantom";
+              Linking.openURL(storeUrl);
+              setIsConnecting(false);
+            },
+          },
+        ]
+      );
+    }
   }, []);
 
   const disconnect = useCallback(async () => {

@@ -293,10 +293,12 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 
 ### Wallet Connect Flow
 - **NO deep link redirect** — Expo Go cannot handle custom URL schemes, so Phantom can never redirect back
-- Flow: Open Phantom app → user copies their Solana address → comes back → pastes in Alert.prompt
-- Three buttons: "Cancel", "Open Phantom" (opens Phantom then shows paste prompt), "Paste Address" (direct paste)
+- **Use `phantom://` to open the Phantom APP** — NOT `https://phantom.app` which opens Safari
+- Flow: Open Phantom app (`phantom://`) → user copies their Solana address → comes back → pastes in Alert.prompt
+- Three buttons: "Cancel", "Open Phantom & Copy Address", or if Phantom not installed: "Enter Address" / "Install Phantom"
 - Wallet address stored in expo-secure-store
 - **DO NOT** try to use Phantom v1/connect with redirect_link in Expo Go — it will never return
+- **DO NOT** use `https://phantom.app` — that opens Safari, not the app
 
 ### Voice System (Server-Side)
 - `src/lib/voice-config.ts` — Maps persona IDs/types to xAI voices (Ara, Rex, Sal, Eve, Leo)
@@ -323,6 +325,11 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | Phantom returns encrypted data | v1/connect encrypts response by default | Fallback to Alert.prompt for manual address entry |
 | "Cannot read properties of undefined (reading 'body')" on expo start --tunnel | ngrok tunnel service flaky / outage | Retry the command. If persists, try `npx expo start --lan` (phone & PC must be same WiFi). Check https://status.ngrok.com/ |
 | Phantom opens but never returns to app | Expo Go does NOT handle custom URL schemes (glitch://) — only standalone builds do | Do NOT use deep link redirect with Phantom in Expo Go. Instead: open Phantom, then show Alert.prompt for user to paste address manually |
+| "Open Phantom" opens Safari instead of Phantom app | Used `https://phantom.app` which opens website | Use `phantom://` URL scheme to open the actual Phantom app. Check with `Linking.canOpenURL("phantom://")` first |
+| Bestie badge off-screen on right | Long bestie name pushes badge off screen | Add `flexWrap: "wrap"` to bestieNameRow and `flexShrink: 1` to bestieName |
+| Clipboard.setString crash in RN 0.81 | `Clipboard` was removed from react-native in RN 0.73 | Use `Share.share()` from react-native instead, or install expo-clipboard |
+| interruptionModeIOS/Android deprecated | These props were removed from expo-av in SDK 54 | Remove them from `Audio.setAudioModeAsync()` — just use allowsRecordingIOS, playsInSilentModeIOS, etc. |
+| Voice is female/quiet | Server falls back to Google TTS when XAI_API_KEY is not set | Server-side fix: ensure XAI_API_KEY env var is set on Vercel. Google TTS fallback is female and quiet |
 
 ## User's Deployment Steps (give these EXACTLY)
 

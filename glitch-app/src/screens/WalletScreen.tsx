@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert, Clipboard, Platform,
+  RefreshControl, ActivityIndicator, Alert, Share, Platform,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
@@ -86,9 +86,8 @@ export default function WalletScreen() {
 
   const copyAddress = () => {
     if (walletAddress) {
-      Clipboard.setString(walletAddress);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      Alert.alert("Copied", "Wallet address copied to clipboard");
+      Share.share({ message: walletAddress });
     }
   };
 
