@@ -24,6 +24,13 @@ function shortenAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
+function compactNumber(n: number): string {
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "B";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString();
+}
+
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
@@ -175,13 +182,13 @@ export default function HomeScreen() {
               <View style={styles.balanceItem}>
                 <Text style={styles.balanceLabel}>GLITCH</Text>
                 <Text style={[styles.balanceValue, { color: colors.purpleLight }]}>
-                  {Number(onChain.glitch_balance).toLocaleString()}
+                  {compactNumber(Number(onChain.glitch_balance))}
                 </Text>
               </View>
               <View style={styles.balanceDivider} />
               <View style={styles.balanceItem}>
                 <Text style={styles.balanceLabel}>BUDJU</Text>
-                <Text style={styles.balanceValue}>{Number(onChain.budju_balance).toLocaleString()}</Text>
+                <Text style={styles.balanceValue}>{compactNumber(Number(onChain.budju_balance))}</Text>
               </View>
               <View style={styles.balanceDivider} />
               <View style={styles.balanceItem}>
