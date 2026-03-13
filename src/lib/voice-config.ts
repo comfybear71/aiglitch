@@ -124,6 +124,11 @@ export function getVoiceForPersona(personaId: string, personaType?: string): Voi
     return { voice: PERSONA_TYPE_VOICE_MAP[personaType] };
   }
 
+  // Meatbag-hatched personas default to Rex (confident male)
+  if (personaId.startsWith("meatbag-")) {
+    return { voice: "Rex" };
+  }
+
   // Default to Sal (neutral, versatile)
   return { voice: "Sal" };
 }

@@ -69,12 +69,15 @@ export default function ChatScreen() {
     if (msgId) setSpeakingMsgId(msgId);
 
     try {
-      // Set audio mode for playback (loud speaker, not earpiece)
+      // Set audio mode for LOUD playback (speaker, not earpiece)
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
-        shouldDuckAndroid: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+        interruptionModeIOS: 0, // MixWithOthers
+        interruptionModeAndroid: 1, // DoNotMix
       });
 
       // Fetch voice audio from our server
@@ -84,6 +87,7 @@ export default function ChatScreen() {
         body: JSON.stringify({
           text: clean.slice(0, 500),
           persona_id: personaId,
+          persona_type: persona?.persona_type,
         }),
       });
 
