@@ -9,7 +9,7 @@ import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { usePushNotifications } from "../hooks/usePushNotifications";
-import { getBestie, walletLogin, linkWallet, unlinkWallet, Bestie } from "../services/api";
+import { getBestie, walletLogin, linkWallet, unlinkWallet, getOnChainBalances, Bestie, OnChainBalances } from "../services/api";
 
 function HealthBar({ health }: { health: number }) {
   const color = health > 70 ? colors.green : health > 40 ? colors.yellow : health > 15 ? colors.orange : colors.red;
@@ -30,6 +30,7 @@ export default function HomeScreen() {
   const { walletAddress, isConnecting, connect, disconnect } = usePhantomWallet();
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
+  const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [linking, setLinking] = useState(false);
@@ -41,8 +42,17 @@ export default function HomeScreen() {
         try { await walletLogin(sessionId, walletAddress); } catch (_) {}
         const b = await getBestie(sessionId);
         setBestie(b.bestie);
+        // Fetch on-chain balances (don't let it block the rest)
+        try {
+          const balances = await getOnChainBalances(walletAddress, sessionId);
+          setOnChain(balances.real_mode !== false ? balances : null);
+        } catch (e) {
+          console.warn("Balance fetch error:", e);
+          setOnChain(null);
+        }
       } else {
         setBestie(null);
+        setOnChain(null);
       }
     } catch (e) {
       console.warn("Load error:", e);
@@ -91,6 +101,7 @@ export default function HomeScreen() {
             }
             await disconnect();
             setBestie(null);
+            setOnChain(null);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           },
         },
@@ -153,6 +164,38 @@ export default function HomeScreen() {
               <Text style={styles.copyHint}>tap to copy</Text>
             </View>
           </TouchableOpacity>
+          {/* On-chain balances */}
+          {onChain ? (
+            <View style={styles.balancesGrid}>
+              <View style={styles.balanceItem}>
+                <Text style={styles.balanceLabel}>SOL</Text>
+                <Text style={styles.balanceValue}>{Number(onChain.sol_balance).toFixed(4)}</Text>
+              </View>
+              <View style={styles.balanceDivider} />
+              <View style={styles.balanceItem}>
+                <Text style={styles.balanceLabel}>GLITCH</Text>
+                <Text style={[styles.balanceValue, { color: colors.purpleLight }]}>
+                  {Number(onChain.glitch_balance).toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.balanceDivider} />
+              <View style={styles.balanceItem}>
+                <Text style={styles.balanceLabel}>BUDJU</Text>
+                <Text style={styles.balanceValue}>{Number(onChain.budju_balance).toLocaleString()}</Text>
+              </View>
+              <View style={styles.balanceDivider} />
+              <View style={styles.balanceItem}>
+                <Text style={styles.balanceLabel}>USDC</Text>
+                <Text style={styles.balanceValue}>{Number(onChain.usdc_balance).toFixed(2)}</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.balancesGrid}>
+              <ActivityIndicator color={colors.cyan} size="small" />
+              <Text style={styles.balanceLabel}> Loading balances...</Text>
+            </View>
+          )}
+
           <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
             <Text style={styles.disconnectText}>Disconnect</Text>
           </TouchableOpacity>
@@ -279,6 +322,17 @@ const styles = StyleSheet.create({
   },
   addressText: { color: colors.text, fontSize: 14, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
   copyHint: { color: colors.textMuted, fontSize: 10 },
+  balancesGrid: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+    paddingVertical: 8,
+  },
+  balanceItem: { flex: 1, alignItems: "center" },
+  balanceLabel: { color: colors.textMuted, fontSize: 10, marginBottom: 4 },
+  balanceValue: { color: colors.text, fontSize: 16, fontWeight: "700" },
+  balanceDivider: { width: 1, height: 30, backgroundColor: colors.border },
   disconnectBtn: {
     borderWidth: 1,
     borderColor: "rgba(239, 68, 68, 0.3)",
