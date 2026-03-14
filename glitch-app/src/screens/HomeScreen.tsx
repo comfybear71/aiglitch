@@ -64,6 +64,8 @@ export default function HomeScreen() {
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const [reactions, setReactions] = useState<Record<string, string>>({});
@@ -100,17 +102,39 @@ export default function HomeScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load chat when bestie is ready
+  // Load chat when bestie is ready (most recent 50 messages)
   useEffect(() => {
     if (!sessionId || !bestie) return;
     setChatLoading(true);
     getMessages(sessionId, bestie.id)
       .then((data) => {
         setMessages(data.messages || []);
+        setHasMore(!!data.has_more);
         setChatLoading(false);
       })
       .catch(() => setChatLoading(false));
   }, [sessionId, bestie?.id]);
+
+  // Load older messages when scrolling to top
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlder || !hasMore || !sessionId || !bestie || messages.length === 0) return;
+    setLoadingOlder(true);
+    try {
+      const oldest = messages[0];
+      const res = await fetch(
+        `${API_BASE}/api/messages?session_id=${encodeURIComponent(sessionId)}&persona_id=${encodeURIComponent(bestie.id)}&before=${encodeURIComponent(oldest.created_at)}&limit=50`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const olderMsgs: Message[] = data.messages || [];
+        if (olderMsgs.length > 0) {
+          setMessages((prev) => [...olderMsgs, ...prev]);
+        }
+        setHasMore(!!data.has_more);
+      }
+    } catch (_) { /* ignore */ }
+    setLoadingOlder(false);
+  }, [loadingOlder, hasMore, sessionId, bestie?.id, messages]);
 
   // Keep messageCountRef in sync
   useEffect(() => { messageCountRef.current = messages.length; }, [messages.length]);
@@ -649,7 +673,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Chat messages */}
+      {/* Chat messages — inverted list (newest at bottom, scroll up for older) */}
       {chatLoading ? (
         <View style={styles.chatLoading}>
           <ActivityIndicator color={colors.purple} />
@@ -657,15 +681,15 @@ export default function HomeScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={[...messages].reverse()}
           keyExtractor={(m) => m.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          inverted={false}
-          onContentSizeChange={() => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100)}
-          onLayout={() => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 200)}
+          inverted={true}
+          onEndReached={loadOlderMessages}
+          onEndReachedThreshold={0.3}
           ListEmptyComponent={
-            <View style={styles.emptyChat}>
+            <View style={[styles.emptyChat, { transform: [{ scaleY: -1 }] }]}>
               {bestie.avatar_url ? (
                 <Image source={{ uri: bestie.avatar_url }} style={styles.emptyAvatar} />
               ) : (
@@ -680,7 +704,7 @@ export default function HomeScreen() {
               <Text style={styles.emptyHint}>Ask me anything — weather, crypto, news, games, jokes, or just chat!</Text>
             </View>
           }
-          ListFooterComponent={
+          ListHeaderComponent={
             sending ? (
               <View style={[styles.msgRow, styles.msgRowLeft]}>
                 {bestie.avatar_url ? (
@@ -692,6 +716,18 @@ export default function HomeScreen() {
                   <Text style={styles.typingText}>typing...</Text>
                 </View>
               </View>
+            ) : null
+          }
+          ListFooterComponent={
+            loadingOlder ? (
+              <View style={styles.loadingOlder}>
+                <ActivityIndicator color={colors.purple} size="small" />
+                <Text style={styles.loadingOlderText}>Loading older messages...</Text>
+              </View>
+            ) : hasMore ? (
+              <TouchableOpacity style={styles.loadingOlder} onPress={loadOlderMessages}>
+                <Text style={styles.loadingOlderText}>Load older messages</Text>
+              </TouchableOpacity>
             ) : null
           }
         />
@@ -889,6 +925,8 @@ const styles = StyleSheet.create({
   reactionBubbleRight: { alignSelf: "flex-end" },
   reactionBubbleText: { fontSize: 16 },
   tapToStop: { color: "rgba(255,255,255,0.4)", fontSize: 10, textAlign: "center", marginTop: -4, marginBottom: 2 },
+  loadingOlder: { alignItems: "center", paddingVertical: 12, gap: 4 },
+  loadingOlderText: { color: colors.textMuted, fontSize: 11 },
 
   // Media button
   mediaBtn: {

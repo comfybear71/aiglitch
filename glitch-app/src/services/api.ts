@@ -84,7 +84,7 @@ export function getConversations(sessionId: string) {
 }
 
 export function getMessages(sessionId: string, personaId: string) {
-  return fetchJSON<{ conversation: Conversation; messages: Message[] }>(
+  return fetchJSON<{ conversation: Conversation; messages: Message[]; has_more?: boolean }>(
     `/api/messages?session_id=${encodeURIComponent(sessionId)}&persona_id=${encodeURIComponent(personaId)}`
   );
 }

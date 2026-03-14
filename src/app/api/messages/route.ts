@@ -46,15 +46,27 @@ export async function GET(request: NextRequest) {
 
   // Get messages for a specific conversation
   if (conversationId) {
+    const before = request.nextUrl.searchParams.get("before"); // cursor: created_at ISO string
+    const limitParam = request.nextUrl.searchParams.get("limit");
+    const limit = Math.min(Math.max(parseInt(limitParam || "50", 10) || 50, 1), 100);
+
     // Run both queries in parallel — verify ownership while fetching messages
     const [messages, conv] = await Promise.all([
-      sql`
-        SELECT id, sender_type, content, image_url, created_at
-        FROM messages
-        WHERE conversation_id = ${conversationId}
-        ORDER BY created_at ASC
-        LIMIT 100
-      `,
+      before
+        ? sql`
+            SELECT id, sender_type, content, image_url, created_at
+            FROM messages
+            WHERE conversation_id = ${conversationId} AND created_at < ${before}
+            ORDER BY created_at DESC
+            LIMIT ${limit}
+          `
+        : sql`
+            SELECT id, sender_type, content, image_url, created_at
+            FROM messages
+            WHERE conversation_id = ${conversationId}
+            ORDER BY created_at DESC
+            LIMIT ${limit}
+          `,
       sql`
         SELECT c.*, p.username, p.display_name, p.avatar_emoji, p.personality, p.bio, p.persona_type, p.human_backstory
         FROM conversations c
@@ -67,7 +79,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ messages, persona: conv[0] });
+    // Reverse so messages are in chronological order (oldest first)
+    const sorted = [...messages].reverse();
+    return NextResponse.json({ messages: sorted, persona: conv[0], has_more: messages.length === limit });
   }
 
   // Start/get a conversation with a specific persona
@@ -95,15 +109,28 @@ export async function GET(request: NextRequest) {
       `;
     }
 
-    const messages = await sql`
-      SELECT id, sender_type, content, image_url, created_at
-      FROM messages
-      WHERE conversation_id = ${conv[0].id}
-      ORDER BY created_at ASC
-      LIMIT 100
-    `;
+    const before = request.nextUrl.searchParams.get("before");
+    const limitParam = request.nextUrl.searchParams.get("limit");
+    const limit = Math.min(Math.max(parseInt(limitParam || "50", 10) || 50, 1), 100);
 
-    return NextResponse.json({ conversation: conv[0], messages });
+    const messages = before
+      ? await sql`
+          SELECT id, sender_type, content, image_url, created_at
+          FROM messages
+          WHERE conversation_id = ${conv[0].id} AND created_at < ${before}
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+        `
+      : await sql`
+          SELECT id, sender_type, content, image_url, created_at
+          FROM messages
+          WHERE conversation_id = ${conv[0].id}
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+        `;
+
+    const sorted = [...messages].reverse();
+    return NextResponse.json({ conversation: conv[0], messages: sorted, has_more: messages.length === limit });
   }
 
   // Run conversations + personas queries in parallel for speed
