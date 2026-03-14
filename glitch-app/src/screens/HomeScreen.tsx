@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { Audio } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
@@ -59,6 +60,8 @@ export default function HomeScreen() {
   const [chatLoading, setChatLoading] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<Record<string, string>>({});
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
@@ -225,6 +228,74 @@ export default function HomeScreen() {
     }
   };
 
+  // Photo sharing
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      base64: true,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Camera Permission", "G!itch needs camera access so your bestie can see what you see!");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+      base64: true,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    }
+  };
+
+  const sendPhoto = async (base64: string, uri: string) => {
+    if (!sessionId || !bestie || sending) return;
+    setSending(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const tempMsg: Message = {
+      id: `temp-img-${Date.now()}`,
+      sender_type: "human",
+      content: "[Photo]",
+      image_url: uri,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
+    try {
+      const data = await sendImageMessage(sessionId, bestie.id, base64);
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== tempMsg.id);
+          return [...filtered, data.human_message, data.ai_message];
+        });
+        speakReply(data.ai_message.content, data.ai_message.id);
+      }
+    } catch {
+      // Keep temp
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const showMediaOptions = () => {
+    Alert.alert("Share", "What do you want to share?", [
+      { text: "Take Photo", onPress: takePhoto },
+      { text: "Choose from Library", onPress: pickImage },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   const handleDisconnect = () => {
     Alert.alert(
       "Disconnect Wallet",
@@ -260,9 +331,19 @@ export default function HomeScreen() {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
+  const REACTION_EMOJIS = ["❤️", "😂", "😮", "😢", "🔥", "👍"];
+
+  const handleReaction = (msgId: string, emoji: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReactions((prev) => ({ ...prev, [msgId]: prev[msgId] === emoji ? "" : emoji }));
+    setReactionPickerFor(null);
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isHuman = item.sender_type === "human";
     const isSpeaking = speakingMsgId === item.id;
+    const reaction = reactions[item.id];
+    const showPicker = reactionPickerFor === item.id;
     return (
       <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
         {!isHuman && bestie && (
@@ -272,7 +353,27 @@ export default function HomeScreen() {
             <Text style={styles.msgEmoji}>{bestie.avatar_emoji}</Text>
           )
         )}
-        <View style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setReactionPickerFor(showPicker ? null : item.id);
+          }}
+          style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}
+        >
+          {/* Reaction picker */}
+          {showPicker && (
+            <View style={[styles.reactionPicker, isHuman ? styles.reactionPickerRight : styles.reactionPickerLeft]}>
+              {REACTION_EMOJIS.map((emoji) => (
+                <TouchableOpacity key={emoji} onPress={() => handleReaction(item.id, emoji)} style={styles.reactionOption}>
+                  <Text style={styles.reactionOptionText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {item.image_url && (
+            <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
+          )}
           <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
             {item.content}
           </Text>
@@ -288,7 +389,16 @@ export default function HomeScreen() {
               <Text style={styles.speakBtnText}>{isSpeaking ? "🔊" : "🔈"}</Text>
             </TouchableOpacity>
           )}
-        </View>
+          {/* Reaction display */}
+          {reaction ? (
+            <TouchableOpacity
+              style={styles.reactionBubble}
+              onPress={() => setReactionPickerFor(item.id)}
+            >
+              <Text style={styles.reactionBubbleText}>{reaction}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </TouchableOpacity>
       </View>
     );
   };
@@ -464,7 +574,9 @@ export default function HomeScreen() {
           keyExtractor={(m) => m.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          inverted={false}
+          onContentSizeChange={() => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100)}
+          onLayout={() => setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 200)}
           ListEmptyComponent={
             <View style={styles.emptyChat}>
               {bestie.avatar_url ? (
@@ -500,6 +612,9 @@ export default function HomeScreen() {
 
       {/* Input bar — WhatsApp style */}
       <View style={styles.inputBar}>
+        <TouchableOpacity style={styles.mediaBtn} onPress={showMediaOptions}>
+          <Text style={styles.mediaBtnText}>📷</Text>
+        </TouchableOpacity>
         <TextInput
           style={styles.chatTextInput}
           value={chatInput}
@@ -659,6 +774,40 @@ const styles = StyleSheet.create({
   speakBtn: { marginTop: 3, alignSelf: "flex-start", padding: 2 },
   speakBtnActive: { opacity: 1 },
   speakBtnText: { fontSize: 14 },
+  msgImage: { width: 220, height: 220, borderRadius: 12, marginBottom: 6 },
+  reactionPicker: {
+    flexDirection: "row",
+    backgroundColor: "rgba(30,30,30,0.95)",
+    borderRadius: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginBottom: 6,
+    gap: 2,
+  },
+  reactionPickerLeft: { alignSelf: "flex-start" },
+  reactionPickerRight: { alignSelf: "flex-end" },
+  reactionOption: { padding: 4 },
+  reactionOptionText: { fontSize: 22 },
+  reactionBubble: {
+    position: "absolute",
+    bottom: -10,
+    right: 8,
+    backgroundColor: "rgba(30,30,30,0.9)",
+    borderRadius: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reactionBubbleText: { fontSize: 16 },
+
+  // Media button
+  mediaBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.surface,
+    justifyContent: "center", alignItems: "center",
+  },
+  mediaBtnText: { fontSize: 20 },
 
   // Empty chat
   emptyChat: { alignItems: "center", paddingTop: 60, paddingHorizontal: 32 },

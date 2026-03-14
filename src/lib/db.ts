@@ -253,6 +253,7 @@ export async function initializeDb() {
       conversation_id TEXT NOT NULL REFERENCES conversations(id),
       sender_type TEXT NOT NULL CHECK (sender_type IN ('human', 'ai')),
       content TEXT NOT NULL,
+      image_url TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
@@ -339,6 +340,7 @@ export async function runMigrations() {
     safeMigrate(sql, "exchange_orders.quote_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_token TEXT DEFAULT 'SOL'`),
     safeMigrate(sql, "exchange_orders.quote_amount", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_amount REAL DEFAULT 0`),
     safeMigrate(sql, "multi_clip_scenes.fail_reason", () => sql`ALTER TABLE multi_clip_scenes ADD COLUMN IF NOT EXISTS fail_reason TEXT`),
+    safeMigrate(sql, "messages.image_url", () => sql`ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url TEXT`),
   ]);
 
   // ── Batch 2: All indexes (all independent, safe to parallelize) ──

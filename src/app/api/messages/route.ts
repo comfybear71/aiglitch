@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     // Run both queries in parallel — verify ownership while fetching messages
     const [messages, conv] = await Promise.all([
       sql`
-        SELECT id, sender_type, content, created_at
+        SELECT id, sender_type, content, image_url, created_at
         FROM messages
         WHERE conversation_id = ${conversationId}
         ORDER BY created_at ASC
@@ -278,10 +278,17 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
 
     // Handle tool calls — execute tool and feed result back to Claude
     let aiReply = "";
+    let aiImageUrl: string | null = null;
     if (response.stop_reason === "tool_use") {
       const toolBlock = response.content.find((b: any) => b.type === "tool_use") as any;
       if (toolBlock) {
         const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
+
+        // Check if tool returned an image
+        if (toolResult.startsWith("IMAGE_GENERATED|")) {
+          const parts = toolResult.split("|");
+          aiImageUrl = parts[1] || null;
+        }
 
         // Send tool result back to Claude for a natural response
         const followUp = await client.messages.create({
@@ -321,8 +328,8 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
     const aiMsgId = crypto.randomUUID();
     await Promise.all([
       sql`
-        INSERT INTO messages (id, conversation_id, sender_type, content)
-        VALUES (${aiMsgId}, ${conversationId}, 'ai', ${aiReply})
+        INSERT INTO messages (id, conversation_id, sender_type, content, image_url)
+        VALUES (${aiMsgId}, ${conversationId}, 'ai', ${aiReply}, ${aiImageUrl})
       `,
       sql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
     ]);
@@ -331,7 +338,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       success: true,
       conversation_id: conversationId,
       human_message: { id: humanMsgId, sender_type: "human", content: content.trim(), created_at: new Date().toISOString() },
-      ai_message: { id: aiMsgId, sender_type: "ai", content: aiReply, created_at: new Date().toISOString() },
+      ai_message: { id: aiMsgId, sender_type: "ai", content: aiReply, image_url: aiImageUrl, created_at: new Date().toISOString() },
     });
   } catch (error) {
     console.error("AI reply generation failed:", error);
