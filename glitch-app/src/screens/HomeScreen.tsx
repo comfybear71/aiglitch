@@ -71,6 +71,11 @@ export default function HomeScreen() {
   const [reactions, setReactions] = useState<Record<string, string>>({});
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [suggestTitle, setSuggestTitle] = useState("");
+  const [suggestDesc, setSuggestDesc] = useState("");
+  const [suggestCategory, setSuggestCategory] = useState("feature-request");
+  const [suggestSending, setSuggestSending] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -421,6 +426,37 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setReactions((prev) => ({ ...prev, [msgId]: prev[msgId] === emoji ? "" : emoji }));
     setReactionPickerFor(null);
+  };
+
+  // Submit feature suggestion
+  const submitSuggestion = async () => {
+    if (!suggestTitle.trim() || suggestSending) return;
+    setSuggestSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/suggest-feature`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: suggestTitle.trim(),
+          description: suggestDesc.trim(),
+          category: suggestCategory,
+          session_id: sessionId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Submitted!", data.message);
+        setSuggestTitle("");
+        setSuggestDesc("");
+        setShowSuggest(false);
+      } else {
+        Alert.alert("Error", data.error || "Something went wrong");
+      }
+    } catch {
+      Alert.alert("Error", "Couldn't submit suggestion. Try again later.");
+    }
+    setSuggestSending(false);
   };
 
   // Stop voice playback
@@ -815,6 +851,85 @@ export default function HomeScreen() {
               <Text style={styles.featuresItem}>🎙 Siri Shortcuts — summon your bestie hands-free</Text>
               <Text style={styles.featuresItem}>🔔 Push notification reminders & alerts</Text>
 
+              <TouchableOpacity
+                style={styles.suggestBtn}
+                onPress={() => { setShowFeatures(false); setTimeout(() => setShowSuggest(true), 300); }}
+              >
+                <Text style={styles.suggestBtnText}>💡 Suggest a Feature</Text>
+                <Text style={styles.suggestBtnSub}>Got an idea? Tell us what you want!</Text>
+              </TouchableOpacity>
+
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Suggest a Feature Modal */}
+      <Modal visible={showSuggest} animationType="slide" transparent>
+        <View style={styles.featuresOverlay}>
+          <View style={styles.featuresModal}>
+            <View style={styles.featuresHeader}>
+              <Text style={styles.featuresTitle}>Suggest a Feature</Text>
+              <TouchableOpacity onPress={() => setShowSuggest(false)}>
+                <Text style={styles.featuresClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.featuresList} keyboardShouldPersistTaps="handled">
+              <Text style={styles.suggestLabel}>What's your idea?</Text>
+              <TextInput
+                style={styles.suggestInput}
+                value={suggestTitle}
+                onChangeText={setSuggestTitle}
+                placeholder="e.g. Add a bestie outfit customizer"
+                placeholderTextColor={colors.textMuted}
+                maxLength={100}
+              />
+
+              <Text style={styles.suggestLabel}>Tell us more (optional)</Text>
+              <TextInput
+                style={[styles.suggestInput, { height: 100, textAlignVertical: "top" }]}
+                value={suggestDesc}
+                onChangeText={setSuggestDesc}
+                placeholder="Describe your idea in detail..."
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={2000}
+              />
+
+              <Text style={styles.suggestLabel}>Category</Text>
+              <View style={styles.suggestCategories}>
+                {[
+                  { key: "feature-request", label: "New Feature" },
+                  { key: "improvement", label: "Improvement" },
+                  { key: "bug-report", label: "Bug Report" },
+                  { key: "design", label: "Design/UI" },
+                ].map((cat) => (
+                  <TouchableOpacity
+                    key={cat.key}
+                    style={[styles.suggestCatBtn, suggestCategory === cat.key && styles.suggestCatBtnActive]}
+                    onPress={() => setSuggestCategory(cat.key)}
+                  >
+                    <Text style={[styles.suggestCatText, suggestCategory === cat.key && styles.suggestCatTextActive]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.suggestSubmitBtn, (!suggestTitle.trim() || suggestSending) && { opacity: 0.5 }]}
+                onPress={submitSuggestion}
+                disabled={!suggestTitle.trim() || suggestSending}
+              >
+                <Text style={styles.suggestSubmitText}>
+                  {suggestSending ? "Submitting..." : "Submit Suggestion"}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.suggestNote}>
+                Your suggestion goes straight to the dev team. We read every single one!
+              </Text>
               <View style={{ height: 30 }} />
             </ScrollView>
           </View>
@@ -1014,6 +1129,54 @@ const styles = StyleSheet.create({
   featuresList: { paddingHorizontal: 20, paddingTop: 16 },
   featuresCat: { color: colors.purpleLight, fontSize: 14, fontWeight: "700", marginTop: 16, marginBottom: 8 },
   featuresItem: { color: colors.textSecondary, fontSize: 13, lineHeight: 22, marginBottom: 2 },
+
+  // Suggest a Feature
+  suggestBtn: {
+    marginTop: 24,
+    backgroundColor: "rgba(124, 58, 237, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.4)",
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+  },
+  suggestBtnText: { color: colors.purpleLight, fontSize: 16, fontWeight: "700" },
+  suggestBtnSub: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
+  suggestLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: "600", marginTop: 16, marginBottom: 6 },
+  suggestInput: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.text,
+    fontSize: 14,
+  },
+  suggestCategories: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  suggestCatBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  suggestCatBtnActive: {
+    borderColor: "rgba(124, 58, 237, 0.6)",
+    backgroundColor: "rgba(124, 58, 237, 0.15)",
+  },
+  suggestCatText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
+  suggestCatTextActive: { color: colors.purpleLight },
+  suggestSubmitBtn: {
+    marginTop: 24,
+    backgroundColor: colors.purple,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  suggestSubmitText: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  suggestNote: { color: colors.textMuted, fontSize: 11, textAlign: "center", marginTop: 12 },
 
   // Media button
   mediaBtn: {
