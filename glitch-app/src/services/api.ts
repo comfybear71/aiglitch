@@ -95,6 +95,7 @@ export function sendMessage(sessionId: string, personaId: string, content: strin
     conversation_id: string;
     human_message: Message;
     ai_message: Message;
+    background_task?: boolean;
   }>("/api/messages", {
     method: "POST",
     body: JSON.stringify({ session_id: sessionId, persona_id: personaId, content }),
@@ -107,6 +108,7 @@ export function sendImageMessage(sessionId: string, personaId: string, imageBase
     conversation_id: string;
     human_message: Message;
     ai_message: Message;
+    background_task?: boolean;
   }>("/api/messages", {
     method: "POST",
     body: JSON.stringify({

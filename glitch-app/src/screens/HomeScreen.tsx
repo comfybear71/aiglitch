@@ -64,6 +64,8 @@ export default function HomeScreen() {
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messageCountRef = useRef(0); // track count for polling comparison
 
   const load = useCallback(async () => {
     if (!sessionId) return;
@@ -104,12 +106,41 @@ export default function HomeScreen() {
       .catch(() => setChatLoading(false));
   }, [sessionId, bestie?.id]);
 
-  // Cleanup sound on unmount
+  // Keep messageCountRef in sync
+  useEffect(() => { messageCountRef.current = messages.length; }, [messages.length]);
+
+  // Poll for new messages (background tasks like image gen, content gen)
+  const startPolling = useCallback(() => {
+    if (pollTimerRef.current || !sessionId || !bestie) return;
+    let pollCount = 0;
+    pollTimerRef.current = setInterval(async () => {
+      pollCount++;
+      if (pollCount > 20) { // stop after ~60s (20 * 3s)
+        if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+        return;
+      }
+      try {
+        const data = await getMessages(sessionId!, bestie!.id);
+        const newMsgs = data.messages || [];
+        if (newMsgs.length > messageCountRef.current) {
+          // New messages arrived from background task!
+          setMessages(newMsgs);
+          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+          // Auto-speak the latest AI message
+          const latest = newMsgs[newMsgs.length - 1];
+          if (latest?.sender_type === "ai") {
+            speakReply(latest.content, latest.id);
+          }
+        }
+      } catch (_) { /* ignore poll errors */ }
+    }, 3000);
+  }, [sessionId, bestie?.id]);
+
+  // Cleanup sound + polling on unmount
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
+      if (soundRef.current) { soundRef.current.unloadAsync(); }
+      if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
     };
   }, []);
 
@@ -220,6 +251,10 @@ export default function HomeScreen() {
           return [...filtered, data.human_message, data.ai_message];
         });
         speakReply(data.ai_message.content, data.ai_message.id);
+        // If a background task is running (image gen, content gen etc), poll for the result
+        if (data.background_task) {
+          startPolling();
+        }
       }
     } catch {
       // Keep temp message
@@ -277,9 +312,14 @@ export default function HomeScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setMessages((prev) => {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
-          return [...filtered, data.human_message, data.ai_message];
+          // Use blob URL from server if available, fall back to local URI
+          const humanMsg = { ...data.human_message, image_url: data.human_message.image_url || uri };
+          return [...filtered, humanMsg, data.ai_message];
         });
         speakReply(data.ai_message.content, data.ai_message.id);
+        if (data.background_task) {
+          startPolling();
+        }
       }
     } catch {
       // Keep temp

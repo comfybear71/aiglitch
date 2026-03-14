@@ -1,10 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { personas as personasRepo } from "@/lib/repositories";
 import Anthropic from "@anthropic-ai/sdk";
 import { BESTIE_TOOLS, executeTool, recallMemories } from "@/lib/bestie-tools";
 import { put } from "@vercel/blob";
+
+// Tools that take a long time — run in background so user can keep chatting
+const SLOW_TOOLS = new Set([
+  "generate_image", "generate_content", "trigger_generation", "hatch_persona",
+]);
 
 const client = new Anthropic();
 
@@ -79,7 +84,7 @@ export async function GET(request: NextRequest) {
     }
 
     const messages = await sql`
-      SELECT id, sender_type, content, created_at
+      SELECT id, sender_type, content, image_url, created_at
       FROM messages
       WHERE conversation_id = ${conv[0].id}
       ORDER BY created_at ASC
@@ -325,19 +330,94 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       const toolBlock = response.content.find((b: any) => b.type === "tool_use") as any;
       if (!toolBlock) break;
 
+      // ── SLOW TOOL? Run in background, return immediately ──
+      if (SLOW_TOOLS.has(toolBlock.name)) {
+        const immediateReplies: Record<string, string> = {
+          generate_image: "ooh let me cook up that image for you 🎨 gimme a sec, I'll send it when it's ready!",
+          generate_content: "triggering the content machine 🚀 I'll let you know when it's done! keep chatting with me",
+          trigger_generation: "kicking off the generation cycle ⚡ this takes a moment — talk to me while we wait!",
+          hatch_persona: "hatching a new persona 🐣🥚 this is exciting! I'll show you when they're born!",
+        };
+        const immediateReply = immediateReplies[toolBlock.name] || "on it! working in the background... keep chatting! ⚡";
+        const immediateMsgId = crypto.randomUUID();
+
+        await Promise.all([
+          sql`INSERT INTO messages (id, conversation_id, sender_type, content)
+              VALUES (${immediateMsgId}, ${conversationId}, 'ai', ${immediateReply})`,
+          sql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
+        ]);
+
+        // Schedule background work — runs AFTER the response is sent to the user
+        const bgMsgHistory = [...msgHistory]; // snapshot
+        const bgResponseContent = response.content; // snapshot
+        after(async () => {
+          try {
+            const bgSql = getDb();
+            const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
+
+            // Check for generated images
+            let bgImageUrl: string | null = null;
+            if (toolResult.startsWith("IMAGE_GENERATED|")) {
+              bgImageUrl = toolResult.split("|")[1] || null;
+            }
+            if (!bgImageUrl) {
+              const mediaMatch = toolResult.match(/MEDIA\|(image|meme)\|(\S+)/);
+              if (mediaMatch) bgImageUrl = mediaMatch[2];
+            }
+
+            // Get Claude to format the result naturally
+            bgMsgHistory.push({ role: "assistant", content: bgResponseContent });
+            bgMsgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
+
+            const bgClient = new Anthropic();
+            const followUp = await bgClient.messages.create({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 500,
+              system: systemPrompt,
+              messages: bgMsgHistory,
+            });
+
+            const bgReply = followUp.content
+              .filter((b: any) => b.type === "text")
+              .map((b: any) => b.text)
+              .join("").trim()
+              .replace(/^["']|["']$/g, "")
+              .slice(0, 500) || "done! check it out 👆";
+
+            const bgMsgId = crypto.randomUUID();
+            await Promise.all([
+              bgSql`INSERT INTO messages (id, conversation_id, sender_type, content, image_url)
+                    VALUES (${bgMsgId}, ${conversationId}, 'ai', ${bgReply}, ${bgImageUrl})`,
+              bgSql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
+            ]);
+          } catch (e) {
+            console.error("Background tool failed:", e);
+            const bgSql = getDb();
+            const errMsgId = crypto.randomUUID();
+            await bgSql`INSERT INTO messages (id, conversation_id, sender_type, content)
+                        VALUES (${errMsgId}, ${conversationId}, 'ai', ${"ugh that didn't work 😵 try asking me again?"})`;
+          }
+        });
+
+        return NextResponse.json({
+          success: true,
+          conversation_id: conversationId,
+          human_message: { id: humanMsgId, sender_type: "human", content: humanContent, image_url: humanImageUrl, created_at: new Date().toISOString() },
+          ai_message: { id: immediateMsgId, sender_type: "ai", content: immediateReply, created_at: new Date().toISOString() },
+          background_task: true, // tells frontend to poll for the result
+        });
+      }
+
+      // ── FAST TOOL — execute inline as before ──
       const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
 
       // Check if tool returned an image (generated or from posts)
       if (!aiImageUrl && toolResult.startsWith("IMAGE_GENERATED|")) {
-        const parts = toolResult.split("|");
-        aiImageUrl = parts[1] || null;
+        aiImageUrl = toolResult.split("|")[1] || null;
       }
-      // Extract first media image from shared posts
       if (!aiImageUrl) {
         const mediaMatch = toolResult.match(/MEDIA\|(image|meme)\|(\S+)/);
-        if (mediaMatch) {
-          aiImageUrl = mediaMatch[2];
-        }
+        if (mediaMatch) aiImageUrl = mediaMatch[2];
       }
 
       // Add assistant response + tool result to history, then get next response
