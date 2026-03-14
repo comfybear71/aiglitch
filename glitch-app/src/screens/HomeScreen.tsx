@@ -7,7 +7,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { Audio } from "expo-av";
+import { Audio, Video, ResizeMode } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { usePhantomWallet } from "../hooks/usePhantomWallet";
@@ -32,6 +32,12 @@ function HealthBar({ health }: { health: number }) {
 
 function shortenAddress(addr: string) {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function isVideoUrl(url?: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes(".mp4") || lower.includes(".mov") || lower.includes(".webm") || lower.includes(".m3u8") || lower.includes("video");
 }
 
 function compactNumber(n: number): string {
@@ -411,9 +417,18 @@ export default function HomeScreen() {
               ))}
             </View>
           )}
-          {item.image_url && (
+          {item.image_url && isVideoUrl(item.image_url) ? (
+            <Video
+              source={{ uri: item.image_url }}
+              style={styles.msgVideo}
+              resizeMode={ResizeMode.CONTAIN}
+              useNativeControls
+              shouldPlay={false}
+              isLooping={false}
+            />
+          ) : item.image_url ? (
             <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
-          )}
+          ) : null}
           <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
             {item.content}
           </Text>
@@ -815,6 +830,7 @@ const styles = StyleSheet.create({
   speakBtnActive: { opacity: 1 },
   speakBtnText: { fontSize: 14 },
   msgImage: { width: 220, height: 220, borderRadius: 12, marginBottom: 6 },
+  msgVideo: { width: 240, height: 320, borderRadius: 12, marginBottom: 6, backgroundColor: "#000" },
   reactionPicker: {
     flexDirection: "row",
     backgroundColor: "rgba(30,30,30,0.95)",

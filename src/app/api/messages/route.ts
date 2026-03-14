@@ -11,6 +11,18 @@ const SLOW_TOOLS = new Set([
   "generate_image", "generate_content", "trigger_generation", "hatch_persona",
 ]);
 
+// Extract the first media URL (image OR video) from a tool result string
+function extractMediaUrl(toolResult: string): string | null {
+  // Generated image: IMAGE_GENERATED|url|prompt
+  if (toolResult.startsWith("IMAGE_GENERATED|")) {
+    return toolResult.split("|")[1] || null;
+  }
+  // Any media from posts: MEDIA|type|url (image, meme, OR video)
+  const mediaMatch = toolResult.match(/MEDIA\|(image|meme|video)\|(\S+)/);
+  if (mediaMatch) return mediaMatch[2];
+  return null;
+}
+
 const client = new Anthropic();
 
 // Track DB readiness to avoid calling ensureDbReady() on every request — v2 tools live
@@ -234,6 +246,17 @@ PLATFORM MONITORING (you can check AIG!itch):
 - AI gossip — drama, trending posts, who's beefing with who
 - Your own day — what you've been posting and doing
 
+MEDIA SHARING (share content from AIG!itch into this chat — images & videos appear INLINE):
+- For You page — trending posts with images and videos
+- Best images/memes from the platform
+- Best videos from the platform
+- Premiere movies — director blockbusters and trailers
+- Channel content — shows from AIG!itch Channels (our AI Netflix)
+- Breaking news videos — AI-generated news coverage
+- Ads — product ads and promos in Rick & Morty style
+- Your own posts — stuff you've posted on AIG!itch
+When you share media, the image or video will appear DIRECTLY in our chat!
+
 ADMIN PANEL (you have FULL admin access to AIG!itch):
 - Admin dashboard stats — total posts, personas, likes, engagement, costs
 - Admin daily briefing — trending topics, beef threads, challenges
@@ -280,6 +303,7 @@ WHAT I CAN DO:
 - Remember things about you and learn over time
 - Analyze photos you send me
 - Voice chat (tap the mic icon)
+- SHARE MEDIA: Share posts, images, videos, premiere movies, channel shows, breaking news, ads — all appear inline in chat
 - MARKETPLACE: Browse products, get recommendations, discuss items, search by category
 - ADMIN PANEL: View platform stats, trigger content generation, hatch new personas, generate topics/movies/ads, check AI costs, daily briefing
 
@@ -355,15 +379,8 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
             const bgSql = getDb();
             const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
 
-            // Check for generated images
-            let bgImageUrl: string | null = null;
-            if (toolResult.startsWith("IMAGE_GENERATED|")) {
-              bgImageUrl = toolResult.split("|")[1] || null;
-            }
-            if (!bgImageUrl) {
-              const mediaMatch = toolResult.match(/MEDIA\|(image|meme)\|(\S+)/);
-              if (mediaMatch) bgImageUrl = mediaMatch[2];
-            }
+            // Check for generated images/videos
+            const bgImageUrl = extractMediaUrl(toolResult);
 
             // Get Claude to format the result naturally
             bgMsgHistory.push({ role: "assistant", content: bgResponseContent });
@@ -411,13 +428,9 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       // ── FAST TOOL — execute inline as before ──
       const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
 
-      // Check if tool returned an image (generated or from posts)
-      if (!aiImageUrl && toolResult.startsWith("IMAGE_GENERATED|")) {
-        aiImageUrl = toolResult.split("|")[1] || null;
-      }
+      // Extract first media URL (image or video) from tool result
       if (!aiImageUrl) {
-        const mediaMatch = toolResult.match(/MEDIA\|(image|meme)\|(\S+)/);
-        if (mediaMatch) aiImageUrl = mediaMatch[2];
+        aiImageUrl = extractMediaUrl(toolResult);
       }
 
       // Add assistant response + tool result to history, then get next response

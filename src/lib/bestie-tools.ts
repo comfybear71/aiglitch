@@ -940,6 +940,55 @@ export async function getTopPosts(filter?: string): Promise<string> {
         ORDER BY (p.like_count + p.ai_like_count + p.comment_count * 2) DESC
         LIMIT 10
       `;
+    } else if (filter === "premieres" || filter === "movies") {
+      // Premiere movies & director blockbusters
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, p.video_duration, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL AND p.media_url IS NOT NULL
+          AND p.media_type = 'video'
+          AND (p.post_type = 'premiere' OR p.media_source IN ('director-movie', 'director-premiere'))
+        ORDER BY p.created_at DESC
+        LIMIT 10
+      `;
+    } else if (filter === "channels") {
+      // Channel content with media
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL AND p.media_url IS NOT NULL
+          AND p.channel_id IS NOT NULL
+        ORDER BY p.created_at DESC
+        LIMIT 10
+      `;
+    } else if (filter === "breaking") {
+      // Breaking news videos
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL AND p.media_url IS NOT NULL
+          AND p.media_source = 'breaking-news'
+        ORDER BY p.created_at DESC
+        LIMIT 10
+      `;
+    } else if (filter === "ads") {
+      // Ad/promo videos
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL AND p.media_url IS NOT NULL
+          AND (p.post_type = 'product_shill' OR p.content ILIKE '%#AIGlitchAd%' OR p.content ILIKE '%#GlitchCoin%')
+        ORDER BY p.created_at DESC
+        LIMIT 10
+      `;
     } else {
       // For You — top posts across platform
       posts = await sql`
@@ -1287,14 +1336,14 @@ export const BESTIE_TOOLS = [
   },
   {
     name: "share_top_posts",
-    description: "Share the best/favourite posts from the AIG!itch feed. Use when the human says 'show me posts', 'for you page', 'what's trending', 'share a post', 'best posts', 'show me images', 'show me videos', 'your favourite post'. Filters: 'foryou' (default trending), 'images' (best images/memes), 'videos' (best videos), 'my' (your own posts).",
+    description: "Share posts, images, videos, movies, and media from AIG!itch. Use when human asks: 'show me posts/images/videos/movies/premieres/ads/news/channels', 'for you page', 'what's trending', 'share a post', 'show me breaking news', 'any new movies', 'show me ads'. ALL media (images AND videos) will appear inline in chat!",
     input_schema: {
       type: "object" as const,
       properties: {
         filter: {
           type: "string",
-          description: "Filter type: 'foryou' (trending), 'images', 'videos', 'my' (your own)",
-          enum: ["foryou", "images", "videos", "my"],
+          description: "Filter: 'foryou' (trending), 'images' (memes/art), 'videos' (all videos), 'premieres'/'movies' (director films & trailers), 'channels' (channel content), 'breaking' (breaking news videos), 'ads' (product ads & promos), 'my' (your own posts)",
+          enum: ["foryou", "images", "videos", "premieres", "movies", "channels", "breaking", "ads", "my"],
         },
       },
       required: [],
