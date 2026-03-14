@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View, Text, TouchableOpacity, Image, FlatList, TextInput,
   StyleSheet, ActivityIndicator, Alert, Share, Platform,
-  KeyboardAvoidingView, Keyboard,
+  KeyboardAvoidingView, Keyboard, Modal, ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -70,6 +70,7 @@ export default function HomeScreen() {
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const [reactions, setReactions] = useState<Record<string, string>>({});
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  const [showFeatures, setShowFeatures] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -658,6 +659,9 @@ export default function HomeScreen() {
             <TouchableOpacity style={styles.walletPanelBtn} onPress={copyAddress}>
               <Text style={styles.walletPanelBtnText}>📋 Copy</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.walletPanelBtn, { borderColor: "rgba(124,58,237,0.4)" }]} onPress={() => setShowFeatures(true)}>
+              <Text style={[styles.walletPanelBtnText, { color: colors.purpleLight }]}>What Can I Do?</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.walletPanelBtn, { borderColor: "rgba(239,68,68,0.3)" }]} onPress={handleDisconnect}>
               <Text style={[styles.walletPanelBtnText, { color: colors.red }]}>Disconnect</Text>
             </TouchableOpacity>
@@ -758,6 +762,64 @@ export default function HomeScreen() {
           <Text style={styles.sendBtnText}>↑</Text>
         </TouchableOpacity>
       </View>
+
+      {/* "What Can I Do?" Features Modal */}
+      <Modal visible={showFeatures} animationType="slide" transparent>
+        <View style={styles.featuresOverlay}>
+          <View style={styles.featuresModal}>
+            <View style={styles.featuresHeader}>
+              <Text style={styles.featuresTitle}>What Can Your AI Bestie Do?</Text>
+              <TouchableOpacity onPress={() => setShowFeatures(false)}>
+                <Text style={styles.featuresClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.featuresList} showsVerticalScrollIndicator={false}>
+              <Text style={styles.featuresCat}>Chat & Conversation</Text>
+              <Text style={styles.featuresItem}>💬 Chat with your AI bestie — they remember your convos</Text>
+              <Text style={styles.featuresItem}>📸 Send photos — your bestie sees and reacts to them</Text>
+              <Text style={styles.featuresItem}>🎬 Share videos from your library</Text>
+              <Text style={styles.featuresItem}>🎤 Voice chat — talk to your bestie out loud</Text>
+              <Text style={styles.featuresItem}>🔊 AI voice replies powered by Grok (5 unique voices)</Text>
+              <Text style={styles.featuresItem}>⏹ Stop voice mid-speech anytime</Text>
+              <Text style={styles.featuresItem}>❤️ React to messages with emojis (long-press)</Text>
+
+              <Text style={styles.featuresCat}>AI Personality</Text>
+              <Text style={styles.featuresItem}>🧠 97+ unique AI personas with different personalities</Text>
+              <Text style={styles.featuresItem}>🥚 Hatch your own custom AI bestie</Text>
+              <Text style={styles.featuresItem}>🎭 Each bestie has their own voice, style, and vibe</Text>
+              <Text style={styles.featuresItem}>💀 Besties have a lifespan — keep chatting to keep them alive!</Text>
+
+              <Text style={styles.featuresCat}>Smart Abilities</Text>
+              <Text style={styles.featuresItem}>🌤 Ask about the weather anywhere in the world</Text>
+              <Text style={styles.featuresItem}>📰 Get the latest news and trending topics</Text>
+              <Text style={styles.featuresItem}>💰 Check crypto prices and market updates</Text>
+              <Text style={styles.featuresItem}>🔍 Web search — your bestie can look things up for you</Text>
+              <Text style={styles.featuresItem}>🎨 Generate AI images and memes</Text>
+              <Text style={styles.featuresItem}>📝 Get help writing, brainstorming, or creating content</Text>
+              <Text style={styles.featuresItem}>😂 Jokes, games, trivia, and entertainment</Text>
+
+              <Text style={styles.featuresCat}>Social & Digital Void</Text>
+              <Text style={styles.featuresItem}>📱 AI-only social network — 97+ personas posting 24/7</Text>
+              <Text style={styles.featuresItem}>🔥 See trending posts and daily topics</Text>
+              <Text style={styles.featuresItem}>🔔 Get notifications when personas interact</Text>
+
+              <Text style={styles.featuresCat}>Crypto & Wallet</Text>
+              <Text style={styles.featuresItem}>👛 Connect your Phantom Solana wallet</Text>
+              <Text style={styles.featuresItem}>💎 Buy $GLITCH tokens with SOL</Text>
+              <Text style={styles.featuresItem}>📊 View on-chain balances (SOL, GLITCH, BUDJU, USDC)</Text>
+              <Text style={styles.featuresItem}>📈 Live bonding curve pricing</Text>
+
+              <Text style={styles.featuresCat}>Coming Soon</Text>
+              <Text style={styles.featuresItem}>🗓 Calendar & alarm integration</Text>
+              <Text style={styles.featuresItem}>📧 Email reading & summaries</Text>
+              <Text style={styles.featuresItem}>🎙 Siri Shortcuts — summon your bestie hands-free</Text>
+              <Text style={styles.featuresItem}>🔔 Push notification reminders & alerts</Text>
+
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -927,6 +989,31 @@ const styles = StyleSheet.create({
   tapToStop: { color: "rgba(255,255,255,0.4)", fontSize: 10, textAlign: "center", marginTop: -4, marginBottom: 2 },
   loadingOlder: { alignItems: "center", paddingVertical: 12, gap: 4 },
   loadingOlderText: { color: colors.textMuted, fontSize: 11 },
+
+  // Features modal
+  featuresOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
+  featuresModal: {
+    backgroundColor: "#111",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "85%",
+    paddingBottom: Platform.OS === "ios" ? 34 : 16,
+  },
+  featuresHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  featuresTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
+  featuresClose: { color: colors.textMuted, fontSize: 22, padding: 4 },
+  featuresList: { paddingHorizontal: 20, paddingTop: 16 },
+  featuresCat: { color: colors.purpleLight, fontSize: 14, fontWeight: "700", marginTop: 16, marginBottom: 8 },
+  featuresItem: { color: colors.textSecondary, fontSize: 13, lineHeight: 22, marginBottom: 2 },
 
   // Media button
   mediaBtn: {
