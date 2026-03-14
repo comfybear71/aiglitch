@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert, Share, Platform,
+  TextInput, Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -20,7 +21,10 @@ function shortenAddress(addr: string) {
 export default function WalletScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connect, disconnect } = usePhantomDeepLink();
+  const { walletAddress, isConnecting, connectWithAddress, disconnect } = usePhantomDeepLink();
+  const [showPasteInput, setShowPasteInput] = useState(false);
+  const [pasteValue, setPasteValue] = useState("");
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [coins, setCoins] = useState<CoinBalance | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
@@ -240,21 +244,62 @@ export default function WalletScreen() {
             Link your Solana wallet to unlock your AI Bestie, trade $GLITCH, and access the full G!itch ecosystem.
           </Text>
 
-          <TouchableOpacity
-            style={[styles.connectBtn, isConnecting && styles.connectBtnDisabled]}
-            onPress={connect}
-            disabled={isConnecting}
-            activeOpacity={0.8}
-          >
-            {isConnecting ? (
-              <View style={styles.connectBtnInner}>
-                <ActivityIndicator color="#fff" size="small" />
-                <Text style={styles.connectBtnText}>Connecting...</Text>
-              </View>
-            ) : (
+          {!showPasteInput ? (
+            <TouchableOpacity
+              style={styles.connectBtn}
+              onPress={() => { setShowPasteInput(true); setConnectError(null); }}
+              activeOpacity={0.8}
+            >
               <Text style={styles.connectBtnText}>Connect Wallet</Text>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.pasteContainer}>
+              <Text style={styles.pasteLabel}>
+                Paste your Solana wallet address from Phantom:
+              </Text>
+              <TextInput
+                style={styles.pasteInput}
+                placeholder="e.g. 7xKX..."
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                value={pasteValue}
+                onChangeText={(t) => { setPasteValue(t); setConnectError(null); }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+              />
+              {connectError && (
+                <Text style={styles.pasteError}>{connectError}</Text>
+              )}
+              <View style={styles.pasteButtons}>
+                <TouchableOpacity
+                  style={styles.pasteCancelBtn}
+                  onPress={() => { setShowPasteInput(false); setPasteValue(""); setConnectError(null); }}
+                >
+                  <Text style={styles.pasteCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.pasteConnectBtn, isConnecting && { opacity: 0.6 }]}
+                  disabled={isConnecting}
+                  onPress={async () => {
+                    Keyboard.dismiss();
+                    try {
+                      await connectWithAddress(pasteValue);
+                      setShowPasteInput(false);
+                      setPasteValue("");
+                    } catch (e: any) {
+                      setConnectError(e?.message || "Invalid address");
+                    }
+                  }}
+                >
+                  {isConnecting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.pasteConnectText}>Connect</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* What you get */}
           <View style={styles.perksContainer}>
@@ -429,9 +474,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  connectBtnDisabled: { opacity: 0.6 },
-  connectBtnInner: { flexDirection: "row", alignItems: "center", gap: 10 },
   connectBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
+  // Paste address input
+  pasteContainer: { width: "100%", marginBottom: 20 },
+  pasteLabel: { color: colors.textSecondary, fontSize: 13, marginBottom: 10, textAlign: "center" },
+  pasteInput: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.text,
+    fontSize: 14,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    marginBottom: 10,
+  },
+  pasteError: { color: colors.red, fontSize: 12, marginBottom: 8, textAlign: "center" },
+  pasteButtons: { flexDirection: "row", gap: 10 },
+  pasteCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+  },
+  pasteCancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: "600" },
+  pasteConnectBtn: {
+    flex: 1,
+    backgroundColor: colors.purple,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+  },
+  pasteConnectText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 
   // Perks
   perksContainer: { width: "100%", gap: 10 },

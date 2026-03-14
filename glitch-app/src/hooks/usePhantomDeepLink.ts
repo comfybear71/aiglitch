@@ -40,7 +40,7 @@ interface PhantomDeepLinkState {
   walletAddress: string | null;
   isConnecting: boolean;
   isLoading: boolean;
-  connect: () => Promise<void>;
+  connectWithAddress: (address: string) => Promise<void>;
   disconnect: () => Promise<void>;
   signAndSendTransaction: (base64Transaction: string) => Promise<string>;
   signTransaction: (base64Transaction: string) => Promise<string>;
@@ -273,49 +273,18 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     }
   };
 
-  // Manual wallet entry fallback (paste address)
-  const showManualEntry = useCallback((message: string) => {
-    if (Alert.prompt) {
-      Alert.prompt(
-        "Connect Wallet",
-        message,
-        [
-          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
-          {
-            text: "Connect",
-            onPress: async (address?: string) => {
-              const trimmed = address?.trim();
-              if (trimmed && trimmed.length >= 32 && trimmed.length <= 44) {
-                await SecureStore.setItemAsync(KEYS.WALLET, trimmed);
-                setWalletAddress(trimmed);
-                setIsConnecting(false);
-                Alert.alert("Connected!", `Wallet ${trimmed.slice(0, 6)}...${trimmed.slice(-4)} linked`);
-              } else {
-                setIsConnecting(false);
-                Alert.alert("Invalid", "That doesn't look like a valid Solana address");
-              }
-            },
-          },
-        ],
-        "plain-text"
-      );
-    } else {
+  // Direct address connection — no Alerts, no popups, just save and go
+  const connectWithAddress = useCallback(async (address: string) => {
+    const trimmed = address.trim();
+    if (trimmed.length >= 32 && trimmed.length <= 44) {
+      setIsConnecting(true);
+      await SecureStore.setItemAsync(KEYS.WALLET, trimmed);
+      setWalletAddress(trimmed);
       setIsConnecting(false);
-      Alert.alert("Manual Entry", "Alert.prompt not available on this platform");
+    } else {
+      throw new Error("Invalid Solana address");
     }
   }, []);
-
-  const connect = useCallback(async () => {
-    setIsConnecting(true);
-
-    // In Expo Go, Phantom deep links can't redirect back reliably
-    // (custom URL scheme "glitch://" only works in standalone builds).
-    // So we go straight to paste-address which always works.
-    // Once a standalone build is made, deep link flow can be re-enabled.
-    showManualEntry(
-      "Open Phantom app → copy your wallet address → paste it here:"
-    );
-  }, [showManualEntry]);
 
   const disconnect = useCallback(async () => {
     setWalletAddress(null);
@@ -438,5 +407,5 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     return signPromise;
   }, []);
 
-  return { walletAddress, isConnecting, isLoading, connect, disconnect, signAndSendTransaction, signTransaction };
+  return { walletAddress, isConnecting, isLoading, connectWithAddress, disconnect, signAndSendTransaction, signTransaction };
 }
