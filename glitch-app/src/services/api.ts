@@ -336,6 +336,22 @@ export function submitSwap(swapId: string, txSignature: string) {
   });
 }
 
+/**
+ * Submit a signed transaction to the server for on-chain submission.
+ * This matches the web app's proven flow: client signs → server submits → server confirms.
+ * The server handles sendRawTransaction + confirmTransaction on-chain.
+ */
+export function submitSignedSwap(swapId: string, signedTransactionBase64: string) {
+  return fetchJSON<OtcSubmitResult & { tx_signature?: string }>("/api/otc-swap", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "submit_swap",
+      swap_id: swapId,
+      signed_transaction: signedTransactionBase64,
+    }),
+  });
+}
+
 export function getSwapHistory(walletAddress: string) {
   return fetchJSON<{ swaps: SwapHistoryItem[] }>(
     `/api/otc-swap?action=history&wallet=${encodeURIComponent(walletAddress)}`

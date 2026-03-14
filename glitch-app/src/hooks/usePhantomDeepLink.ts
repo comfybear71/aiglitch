@@ -16,6 +16,7 @@ import bs58 from "bs58";
 
 const PHANTOM_CONNECT_URL = "https://phantom.app/ul/v1/connect";
 const PHANTOM_SIGN_AND_SEND_URL = "https://phantom.app/ul/v1/signAndSendTransaction";
+const PHANTOM_SIGN_TX_URL = "https://phantom.app/ul/v1/signTransaction";
 const APP_URL = "https://aiglitch.app";
 const REDIRECT_BASE = "glitch://phantom";
 const CLUSTER = "mainnet-beta";
@@ -37,11 +38,16 @@ interface PhantomDeepLinkState {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   signAndSendTransaction: (base64Transaction: string) => Promise<string>;
+  signTransaction: (base64Transaction: string) => Promise<string>;
 }
 
 // Pending promise for signAndSendTransaction callback
 let pendingSignResolve: ((sig: string) => void) | null = null;
 let pendingSignReject: ((err: Error) => void) | null = null;
+
+// Pending promise for signTransaction callback (sign only, returns signed tx)
+let pendingSignTxResolve: ((signedTx: string) => void) | null = null;
+let pendingSignTxReject: ((err: Error) => void) | null = null;
 
 export function usePhantomDeepLink(): PhantomDeepLinkState {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -93,6 +99,8 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
 
         if (path === "phantom/onConnect" || url.includes("onConnect")) {
           handleConnectResponse(url);
+        } else if (path === "phantom/onSignTransaction" || url.includes("onSignTransaction")) {
+          handleSignTransactionResponse(url);
         } else if (path === "phantom/onSignAndSendTransaction" || url.includes("onSignAndSendTransaction")) {
           handleSignAndSendResponse(url);
         } else if (url.includes("errorCode")) {
@@ -105,6 +113,11 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
             pendingSignReject(new Error(errorMessage));
             pendingSignReject = null;
             pendingSignResolve = null;
+          }
+          if (pendingSignTxReject) {
+            pendingSignTxReject(new Error(errorMessage));
+            pendingSignTxReject = null;
+            pendingSignTxResolve = null;
           }
         }
       } catch (e) {
@@ -216,6 +229,46 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     }
   };
 
+  const handleSignTransactionResponse = async (url: string) => {
+    try {
+      const params = new URL(url).searchParams;
+      const nonce = params.get("nonce");
+      const data = params.get("data");
+
+      if (!nonce || !data || !sharedSecretRef.current) {
+        throw new Error("Missing signTransaction response params");
+      }
+
+      const decrypted = nacl.box.open.after(
+        bs58.decode(data),
+        bs58.decode(nonce),
+        sharedSecretRef.current,
+      );
+
+      if (!decrypted) throw new Error("Failed to decrypt Phantom response");
+
+      const payload = JSON.parse(new TextDecoder().decode(decrypted));
+      // Phantom returns { transaction: "<base58-encoded signed tx>" }
+      const signedTxBase58 = payload.transaction;
+
+      if (pendingSignTxResolve) {
+        // Convert from base58 to base64 for server submission
+        const signedTxBytes = bs58.decode(signedTxBase58);
+        const signedTxBase64 = Buffer.from(signedTxBytes).toString("base64");
+        pendingSignTxResolve(signedTxBase64);
+        pendingSignTxResolve = null;
+        pendingSignTxReject = null;
+      }
+    } catch (e: any) {
+      console.error("SignTransaction response error:", e);
+      if (pendingSignTxReject) {
+        pendingSignTxReject(new Error(e?.message || "Failed to process Phantom response"));
+        pendingSignTxReject = null;
+        pendingSignTxResolve = null;
+      }
+    }
+  };
+
   const connect = useCallback(async () => {
     setIsConnecting(true);
 
@@ -321,5 +374,56 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     return signPromise;
   }, []);
 
-  return { walletAddress, isConnecting, isLoading, connect, disconnect, signAndSendTransaction };
+  /**
+   * Sign a transaction via Phantom deep link (sign only — does NOT submit).
+   * Returns the signed transaction as a base64 string for server-side submission.
+   * This matches the web app flow: client signs → server submits → server confirms on-chain.
+   */
+  const signTransaction = useCallback(async (base64Transaction: string): Promise<string> => {
+    if (!sharedSecretRef.current || !sessionRef.current || !dappKeypairRef.current) {
+      throw new Error("Not connected to Phantom. Please connect your wallet first.");
+    }
+
+    // Encrypt the payload
+    const payload = JSON.stringify({
+      transaction: base64Transaction,
+      session: sessionRef.current,
+    });
+
+    const nonce = nacl.randomBytes(24);
+    const encrypted = nacl.box.after(
+      new TextEncoder().encode(payload),
+      nonce,
+      sharedSecretRef.current,
+    );
+
+    const params = new URLSearchParams({
+      dapp_encryption_public_key: bs58.encode(Buffer.from(dappKeypairRef.current.publicKey)),
+      nonce: bs58.encode(Buffer.from(nonce)),
+      redirect_link: `${REDIRECT_BASE}/onSignTransaction`,
+      payload: bs58.encode(Buffer.from(encrypted)),
+    });
+
+    const url = `${PHANTOM_SIGN_TX_URL}?${params.toString()}`;
+
+    // Create a promise that resolves when Phantom responds via deep link
+    const signPromise = new Promise<string>((resolve, reject) => {
+      pendingSignTxResolve = resolve;
+      pendingSignTxReject = reject;
+
+      // Timeout after 2 minutes
+      setTimeout(() => {
+        if (pendingSignTxReject) {
+          pendingSignTxReject(new Error("Transaction signing timed out"));
+          pendingSignTxReject = null;
+          pendingSignTxResolve = null;
+        }
+      }, 120000);
+    });
+
+    await Linking.openURL(url);
+    return signPromise;
+  }, []);
+
+  return { walletAddress, isConnecting, isLoading, connect, disconnect, signAndSendTransaction, signTransaction };
 }
