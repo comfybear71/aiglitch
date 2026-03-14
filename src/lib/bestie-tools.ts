@@ -262,6 +262,167 @@ export async function webSearch(query: string): Promise<string> {
   }
 }
 
+// ── Games ─────────────────────────────────────────────────────────────
+export async function startGame(
+  sessionId: string,
+  personaId: string,
+  gameType: string,
+): Promise<string> {
+  try {
+    const sql = getDb();
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS bestie_games (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        persona_id TEXT NOT NULL,
+        game_type TEXT NOT NULL,
+        game_state JSONB NOT NULL DEFAULT '{}',
+        score_human INTEGER NOT NULL DEFAULT 0,
+        score_bestie INTEGER NOT NULL DEFAULT 0,
+        active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+
+    // End any active game first
+    await sql`
+      UPDATE bestie_games SET active = false
+      WHERE session_id = ${sessionId} AND active = true
+    `;
+
+    const id = crypto.randomUUID();
+    let state: any = {};
+
+    if (gameType === "trivia") {
+      state = { round: 1, category: "general", waiting_for_answer: false };
+    } else if (gameType === "word_scramble") {
+      const words = ["GLITCH", "BESTIE", "SOLANA", "PHANTOM", "CRYPTO", "ROCKET", "DIAMOND", "GALAXY", "DRAGON", "MASTER", "LEGEND", "PURPLE", "COSMIC", "NEURAL", "MATRIX"];
+      const word = words[Math.floor(Math.random() * words.length)];
+      const scrambled = word.split("").sort(() => Math.random() - 0.5).join("");
+      state = { answer: word, scrambled, round: 1, waiting_for_answer: true };
+    } else if (gameType === "emoji_movie") {
+      const movies = [
+        { emojis: "🦁👑", answer: "the lion king" },
+        { emojis: "🧙‍♂️💍🌋", answer: "lord of the rings" },
+        { emojis: "🦈🌊", answer: "jaws" },
+        { emojis: "👻👻👻🔫", answer: "ghostbusters" },
+        { emojis: "🕷️🧑", answer: "spider-man" },
+        { emojis: "⭐⚔️🌌", answer: "star wars" },
+        { emojis: "🧊🚢💔", answer: "titanic" },
+        { emojis: "🏠👻🎄", answer: "home alone" },
+        { emojis: "🐠🔍", answer: "finding nemo" },
+        { emojis: "👨‍🚀🌕", answer: "interstellar" },
+        { emojis: "🦇🃏", answer: "the dark knight" },
+        { emojis: "🏎️💨", answer: "fast and furious" },
+        { emojis: "🧪💊🔵🔴", answer: "the matrix" },
+        { emojis: "🐵🌍🔫", answer: "planet of the apes" },
+        { emojis: "🤖❤️🌱", answer: "wall-e" },
+      ];
+      const movie = movies[Math.floor(Math.random() * movies.length)];
+      state = { answer: movie.answer, emojis: movie.emojis, round: 1, waiting_for_answer: true };
+    } else if (gameType === "would_you_rather") {
+      state = { round: 1 };
+    } else if (gameType === "twenty_questions") {
+      state = { round: 1, questions_left: 20, waiting_for_thing: true };
+    } else if (gameType === "rhyme_battle") {
+      const starters = ["cat", "fly", "night", "gold", "love", "brain", "space", "beat", "fire", "dream"];
+      state = { current_word: starters[Math.floor(Math.random() * starters.length)], round: 1 };
+    }
+
+    await sql`
+      INSERT INTO bestie_games (id, session_id, persona_id, game_type, game_state)
+      VALUES (${id}, ${sessionId}, ${personaId}, ${gameType}, ${JSON.stringify(state)})
+    `;
+
+    if (gameType === "word_scramble") {
+      return `GAME STARTED: Word Scramble! Round 1\nUnscramble this word: ${state.scrambled}\n(Score: Human 0 — Bestie 0)`;
+    } else if (gameType === "emoji_movie") {
+      return `GAME STARTED: Guess the Movie from Emojis! Round 1\nWhat movie is this? ${state.emojis}\n(Score: Human 0 — Bestie 0)`;
+    } else if (gameType === "trivia") {
+      return `GAME STARTED: Trivia! Ask me a trivia question or say "ask me" and I'll quiz you! (Score: Human 0 — Bestie 0)`;
+    } else if (gameType === "would_you_rather") {
+      return `GAME STARTED: Would You Rather! I'll give you two wild choices. Ready? (Score: Human 0 — Bestie 0)`;
+    } else if (gameType === "twenty_questions") {
+      return `GAME STARTED: 20 Questions! Think of something and I'll try to guess it. Or tell me to think of something. (20 questions left)`;
+    } else if (gameType === "rhyme_battle") {
+      return `GAME STARTED: Rhyme Battle! I say a word, you rhyme it, then give me a new word. First word: "${state.current_word}" — hit me with a rhyme! (Score: Human 0 — Bestie 0)`;
+    }
+
+    return `Game "${gameType}" started! Let's go!`;
+  } catch (e: any) {
+    return `Could not start game: ${e?.message || "unknown error"}`;
+  }
+}
+
+export async function getGameState(sessionId: string): Promise<string> {
+  try {
+    const sql = getDb();
+    const rows = await sql`
+      SELECT game_type, game_state, score_human, score_bestie, created_at
+      FROM bestie_games
+      WHERE session_id = ${sessionId} AND active = true
+      ORDER BY created_at DESC LIMIT 1
+    `;
+
+    if (rows.length === 0) return "No active game. Available games: trivia, word scramble, emoji movie quiz, would you rather, 20 questions, rhyme battle. Say 'let's play [game]'!";
+
+    const g: any = rows[0];
+    const state = g.game_state;
+    return `Active game: ${g.game_type} | Score: Human ${g.score_human} — Bestie ${g.score_bestie} | State: ${JSON.stringify(state)}`;
+  } catch (e: any) {
+    return "Could not get game state";
+  }
+}
+
+export async function updateGameScore(sessionId: string, humanPoints: number, bestiePoints: number): Promise<string> {
+  try {
+    const sql = getDb();
+    await sql`
+      UPDATE bestie_games
+      SET score_human = score_human + ${humanPoints},
+          score_bestie = score_bestie + ${bestiePoints}
+      WHERE session_id = ${sessionId} AND active = true
+    `;
+    const rows = await sql`
+      SELECT score_human, score_bestie FROM bestie_games
+      WHERE session_id = ${sessionId} AND active = true
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    if (rows.length === 0) return "No active game";
+    return `Score updated! Human: ${rows[0].score_human} — Bestie: ${rows[0].score_bestie}`;
+  } catch (e: any) {
+    return "Could not update score";
+  }
+}
+
+// ── Jokes (curated + random) ──────────────────────────────────────────
+export function getJoke(): string {
+  const jokes = [
+    "Why do programmers prefer dark mode? Because light attracts bugs 🪲",
+    "I told my wife she was drawing her eyebrows too high. She looked surprised 😮",
+    "Why don't scientists trust atoms? Because they make up everything 🔬",
+    "I'm reading a book about anti-gravity. It's impossible to put down 📖",
+    "Why did the scarecrow win an award? He was outstanding in his field 🌾",
+    "What do you call a fake noodle? An impasta 🍝",
+    "Why don't eggs tell jokes? They'd crack each other up 🥚",
+    "I used to hate facial hair, but then it grew on me 🧔",
+    "What do you call a bear with no teeth? A gummy bear 🐻",
+    "Why did the math book look so sad? Because it had too many problems 📚",
+    "What do you call a dog that does magic? A Labracadabrador 🐕",
+    "I told a chemistry joke but got no reaction ⚗️",
+    "Why do cows wear bells? Because their horns don't work 🐄",
+    "What's a pirate's favorite letter? You'd think it's R but it's the C 🏴‍☠️",
+    "I'm on a seafood diet. I see food and I eat it 🦐",
+    "Why did the bicycle fall over? Because it was two tired 🚲",
+    "What do you call a sleeping dinosaur? A dino-snore 🦕",
+    "Why can't you trust stairs? They're always up to something 🪜",
+    "What did the ocean say to the beach? Nothing, it just waved 🌊",
+    "Why did the golfer bring two pairs of pants? In case he got a hole in one ⛳",
+  ];
+  return jokes[Math.floor(Math.random() * jokes.length)];
+}
+
 // ── Tool Definitions for Claude ───────────────────────────────────────
 export const BESTIE_TOOLS = [
   {
@@ -367,6 +528,51 @@ export const BESTIE_TOOLS = [
       required: ["query"],
     },
   },
+  {
+    name: "start_game",
+    description: "Start a game with the human. Use when they say 'let's play', 'play a game', 'game time', etc. Available games: trivia, word_scramble, emoji_movie, would_you_rather, twenty_questions, rhyme_battle",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        game_type: {
+          type: "string",
+          description: "Which game to play: 'trivia', 'word_scramble', 'emoji_movie', 'would_you_rather', 'twenty_questions', 'rhyme_battle'",
+          enum: ["trivia", "word_scramble", "emoji_movie", "would_you_rather", "twenty_questions", "rhyme_battle"],
+        },
+      },
+      required: ["game_type"],
+    },
+  },
+  {
+    name: "get_game_state",
+    description: "Check the current game state and score. Use when the human asks about score, current game, or you need to check game state to respond appropriately.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "update_game_score",
+    description: "Update the game score. Use after the human answers correctly (+1 human) or incorrectly (+1 bestie) in any game.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        human_points: { type: "number", description: "Points to add to human's score (usually 0 or 1)" },
+        bestie_points: { type: "number", description: "Points to add to bestie's score (usually 0 or 1)" },
+      },
+      required: ["human_points", "bestie_points"],
+    },
+  },
+  {
+    name: "tell_joke",
+    description: "Tell a joke. Use when the human asks for a joke, says 'make me laugh', 'tell me something funny', etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // ── Execute a tool call ───────────────────────────────────────────────
@@ -395,6 +601,14 @@ export async function executeTool(
       return completeTodo(sessionId, toolInput.item);
     case "web_search":
       return webSearch(toolInput.query);
+    case "start_game":
+      return startGame(sessionId, personaId, toolInput.game_type);
+    case "get_game_state":
+      return getGameState(sessionId);
+    case "update_game_score":
+      return updateGameScore(sessionId, toolInput.human_points || 0, toolInput.bestie_points || 0);
+    case "tell_joke":
+      return getJoke();
     default:
       return `Unknown tool: ${toolName}`;
   }
