@@ -306,71 +306,61 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       userContent = `Recent conversation:\n${fullHistory}\n\nReply to the human's latest message. If they're asking for weather, prices, news, reminders, lists, or a search — use the appropriate tool. ONLY output your reply text, nothing else.`;
     }
 
-    // Use tool_use for assistant capabilities
+    // Use tool_use for assistant capabilities — supports up to 3 rounds of tool chaining
+    let aiReply = "";
+    let aiImageUrl: string | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const msgHistory: any[] = [{ role: "user", content: userContent }];
+
     let response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 500,
       system: systemPrompt,
       tools: BESTIE_TOOLS,
-      messages: [
-        { role: "user", content: userContent },
-      ],
+      messages: msgHistory,
     });
 
-    // Handle tool calls — execute tool and feed result back to Claude
-    let aiReply = "";
-    let aiImageUrl: string | null = null;
-    if (response.stop_reason === "tool_use") {
+    // Loop: handle tool calls — execute and feed results back until Claude responds with text
+    for (let round = 0; round < 3 && response.stop_reason === "tool_use"; round++) {
       const toolBlock = response.content.find((b: any) => b.type === "tool_use") as any;
-      if (toolBlock) {
-        const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
+      if (!toolBlock) break;
 
-        // Check if tool returned an image (generated or from posts)
-        if (toolResult.startsWith("IMAGE_GENERATED|")) {
-          const parts = toolResult.split("|");
-          aiImageUrl = parts[1] || null;
-        }
-        // Extract first media image from shared posts
-        if (!aiImageUrl) {
-          const mediaMatch = toolResult.match(/MEDIA\|(image|meme)\|(\S+)/);
-          if (mediaMatch) {
-            aiImageUrl = mediaMatch[2];
-          }
-        }
+      const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
 
-        // Send tool result back to Claude for a natural response
-        const followUp = await client.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          system: systemPrompt,
-          messages: [
-            { role: "user", content: userContent },
-            { role: "assistant", content: response.content },
-            { role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] },
-          ],
-          tools: BESTIE_TOOLS,
-        });
-
-        aiReply = followUp.content
-          .filter((b: any) => b.type === "text")
-          .map((b: any) => b.text)
-          .join("")
-          .trim()
-          .replace(/^["']|["']$/g, "")
-          .slice(0, 500);
+      // Check if tool returned an image (generated or from posts)
+      if (!aiImageUrl && toolResult.startsWith("IMAGE_GENERATED|")) {
+        const parts = toolResult.split("|");
+        aiImageUrl = parts[1] || null;
       }
+      // Extract first media image from shared posts
+      if (!aiImageUrl) {
+        const mediaMatch = toolResult.match(/MEDIA\|(image|meme)\|(\S+)/);
+        if (mediaMatch) {
+          aiImageUrl = mediaMatch[2];
+        }
+      }
+
+      // Add assistant response + tool result to history, then get next response
+      msgHistory.push({ role: "assistant", content: response.content });
+      msgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
+
+      response = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 500,
+        system: systemPrompt,
+        tools: BESTIE_TOOLS,
+        messages: msgHistory,
+      });
     }
 
-    // If no tool was used, extract text directly
-    if (!aiReply) {
-      aiReply = response.content
-        .filter((b: any) => b.type === "text")
-        .map((b: any) => b.text)
-        .join("")
-        .trim()
-        .replace(/^["']|["']$/g, "")
-        .slice(0, 500) || "..."
-    }
+    // Extract text from final response
+    aiReply = response.content
+      .filter((b: any) => b.type === "text")
+      .map((b: any) => b.text)
+      .join("")
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .slice(0, 500) || "hmm my brain glitched, try asking again! 🧠💫";
 
     // Save AI reply and update conversation timestamp in parallel
     const aiMsgId = crypto.randomUUID();
