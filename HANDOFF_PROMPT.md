@@ -276,12 +276,12 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - `glitch-app/src/hooks/usePhantomWallet.ts` — Phantom wallet connect via deep links + manual address entry fallback
 - `glitch-app/src/hooks/useSession.ts` — Session management with expo-secure-store
 - `glitch-app/src/hooks/usePushNotifications.ts` — Push notification registration
-- `glitch-app/src/screens/HomeScreen.tsx` — Bestie-only home (NO persona picker, bestie ONLY shows after wallet connect)
-- `glitch-app/src/screens/ChatScreen.tsx` — Chat with bestie, Grok AI voice via /api/voice (NOT device TTS)
-- `glitch-app/src/screens/WalletScreen.tsx` — Native wallet screen (no WebView)
+- `glitch-app/src/screens/HomeScreen.tsx` — Bestie-only home (NO persona picker, bestie ONLY shows after wallet connect). Inverted FlatList with pagination, emoji reactions, voice stop, video sharing, image persistence
+- `glitch-app/src/screens/ChatScreen.tsx` — Chat with bestie, Grok AI voice via /api/voice (NOT device TTS), voice stop button, image/video support
 - `glitch-app/src/screens/BriefingScreen.tsx` — Daily briefing with error/loading/empty states
-- `glitch-app/src/services/api.ts` — API client (walletLogin, getBestie, linkWallet, etc.)
+- `glitch-app/src/services/api.ts` — API client (walletLogin, getBestie, linkWallet, etc.). Chat messages support `has_more` pagination flag
 - `glitch-app/src/theme/colors.ts` — Dark theme colors
+- `glitch-app/src/components/CosmicVisualizer.tsx` — Animated sound wave visualizer during voice playback (tappable to stop)
 - `glitch-app/app.json` — Expo config with LSApplicationQueriesSchemes: ["phantom"]
 
 ### Critical App Rules
@@ -290,6 +290,11 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 3. **Voice must be male for meatbag besties** — voice-config.ts defaults meatbag- personas to "Rex" (confident male)
 4. **Audio plays through speaker** — NOT earpiece. Set `playThroughEarpieceAndroid: false`, `playsInSilentModeIOS: true`
 5. **No WebView for wallet** — Everything native, deep links only
+6. **Voice must have stop button** — ⏹ icon on speaking messages + tappable cosmic visualizer to stop voice mid-speech
+7. **Images must persist** — Always preserve local URI as fallback for sent photos. Hide `[Photo]`/`[Video]` placeholder text when image is displayed
+8. **Chat is paginated** — Inverted FlatList loads 50 most recent messages. Scroll up to load older. Server API supports `before` cursor + `limit` params
+9. **Media picker includes video** — `MediaTypeOptions.All` so users can share photos AND videos
+10. **Emoji reactions at base** — Long-press emoji picker appears below message bubble, not inside it
 
 ### Wallet Connect Flow (Current: Manual Paste)
 - **Current approach**: Open Phantom app (`phantom://`) → user copies their Solana address → comes back → pastes in Alert.prompt
@@ -351,6 +356,12 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | Wallet auto-loads cached address on startup | `usePhantomWallet` loaded from SecureStore on mount, showing bestie before connect | Removed auto-load — wallet starts null, user must connect explicitly each launch |
 | NaN for SOL/GLITCH balances | `OnChainBalances` interface had `sol`/`glitch` but API returns `sol_balance`/`glitch_balance` | Fixed interface to match API response fields |
 | API 500 on /api/solana crashes wallet screen | Solana RPC/Helius timeout returns 500, `fetchJSON` throws | Added separate try/catch for on-chain fetch, shows error banner instead of crashing |
+| Sent photo disappears after AI replies | `sendPhoto` replaced temp msg with server response, but server `image_url` was null when blob upload failed | Always preserve local URI as fallback: `image_url: data.human_message.image_url \|\| uri` |
+| "[Photo]" text shown over image | Content always rendered regardless of media presence | Added `isMediaPlaceholder` regex check — hides `[Photo]`/`[Video]`/`[Shared a photo]` text when image_url exists |
+| No way to stop AI voice mid-speech | Speaker button only started new speech, no stop mechanism | Added `stopSpeaking()` — unloads sound, clears state. ⏹ icon when speaking. Cosmic visualizer tappable to stop |
+| Emoji picker inside message bubble | Picker rendered inside TouchableOpacity bubble, overlapping content | Moved picker + reaction badge outside bubble, below it with `marginTop` flow layout |
+| Chat slow with long history | All messages loaded at once, `scrollToEnd` on every render | Inverted FlatList with server-side pagination (`before` cursor, `limit`, `has_more`). Loads 50 most recent, scroll up for older |
+| Video files can't be shared | `ImagePicker.MediaTypeOptions.Images` excluded videos | Changed to `MediaTypeOptions.All`. Videos without base64 display with local URI only |
 
 ## User's Deployment Steps (give these EXACTLY)
 

@@ -1,6 +1,6 @@
 # HANDOFF.md — AI G!itch App Project Status
 
-Last updated: 2026-03-14
+Last updated: 2026-03-14 (Session 2)
 
 ## Project Overview
 
@@ -15,9 +15,12 @@ React Native / Expo mobile app for the AI G!itch ecosystem. Connects to Solana b
 - **Home Screen**: Wallet connect via inline TextInput (paste address), bestie card, chat + voice chat, on-chain balance display (SOL, GLITCH)
 - **Buy Screen**: OTC swap SOL -> $GLITCH with live pricing, bonding curve tiers (signing not available in Expo Go — needs standalone build)
 - **Wallet Screen**: Shows GLITCH balance, on-chain balances, disconnect option
-- **Chat**: Text and voice chat with AI besties
-- **Voice**: Grok xAI TTS via REST API — Rex voice for meatbag besties
+- **Chat**: Text, photo, and video chat with AI besties. Inverted FlatList with pagination (50 msgs, scroll up for older)
+- **Voice**: Grok xAI TTS via REST API — Rex voice for meatbag besties. Stop button (⏹) on messages + tap cosmic visualizer to stop
 - **Push Notifications**: Registered via expo-push-token
+- **Emoji Reactions**: Long-press any message for emoji picker (❤️😂😮😢🔥👍). Reactions appear below message bubble
+- **Media Sharing**: Photos + videos from library or camera. Videos play inline with native controls
+- **Image Persistence**: Sent photos stay visible even after AI replies (local URI fallback if blob upload fails)
 
 ### Wallet Connect Flow (WORKING — Inline TextInput)
 1. HomeScreen shows TextInput with "Paste your Solana address here..."
@@ -41,11 +44,10 @@ React Native / Expo mobile app for the AI G!itch ecosystem. Connects to Solana b
 
 ### Screens
 - `SplashScreen` — animated intro
-- `HomeScreen` — main hub, wallet connect TextInput, bestie card, on-chain balances
-- `ChatScreen` — text chat with AI persona + voice playback (Grok Rex)
+- `HomeScreen` — main hub, wallet connect TextInput, bestie card, on-chain balances, inverted chat with pagination, emoji reactions, voice stop, video sharing
+- `ChatScreen` — text/photo/video chat with AI persona + voice playback with stop button
 - `VoiceChatScreen` — voice chat (full screen modal)
 - `BuyGlitchScreen` — OTC swap with live pricing (signing disabled in Expo Go)
-- `WalletScreen` — GLITCH balance, on-chain balances, disconnect
 
 ### Key Hooks
 - `useSession` — generates/stores unique session ID via expo-secure-store
@@ -57,14 +59,45 @@ React Native / Expo mobile app for the AI G!itch ecosystem. Connects to Solana b
 - All calls go to `https://aiglitch.app`
 - Token mint, treasury wallet, pricing all come from backend `/api/otc-swap?action=config`
 - On-chain balances fetched from `/api/solana?action=balance`
-- Chat: POST /api/messages (sends message, returns AI reply)
+- Chat: POST /api/messages (sends message, returns AI reply). Supports `has_more` for pagination
+- Chat pagination: GET /api/messages with `before` cursor + `limit` params for loading older messages
 - Voice: POST /api/voice (text + persona_id → MP3 audio)
 - Bestie: GET /api/partner/bestie (finds user's hatched AI persona)
 - No hardcoded token addresses or dummy values
 
 ### Navigation
-- Bottom tabs: Home, Buy, Wallet
+- Bottom tabs: Home, Buy
 - Home tab has nested stack: HomeMain -> Chat -> VoiceChat
+
+## Recent Changes — Session 2026-03-14 (Session 2)
+
+### Image Display Fix
+- **Problem**: Sent photos disappeared after AI replied. Also showed "[Photo]" placeholder text over the image
+- **Fix**: Local URI always preserved as fallback when server blob upload fails. `[Photo]`/`[Video]`/`[Shared a photo]` text hidden when image is displayed
+- Applied to both HomeScreen and ChatScreen
+
+### Voice Stop Button
+- **Problem**: No way to stop AI voice mid-speech. Tapping speaker icon just started a new speech
+- **Fix**: Speaker shows ⏹ when speaking — tap to instantly stop. Cosmic visualizer is also tappable ("tap to stop" label)
+- `stopSpeaking()` function unloads sound and clears speaking state
+
+### Emoji Reactions Repositioned
+- **Problem**: Long-press emoji picker appeared inside the message bubble, looked wrong
+- **Fix**: Picker and reaction badge now render below the message bubble. No more `position: absolute` — uses `marginTop` flow layout
+
+### Video Sharing
+- **Problem**: Media picker only allowed images (MediaTypeOptions.Images)
+- **Fix**: Changed to `MediaTypeOptions.All` so users can share videos from library. Videos without base64 display with local URI
+
+### Chat Pagination (Inverted FlatList)
+- **Problem**: All messages loaded at once, slow with long chat histories
+- **Fix**:
+  - Server API now supports `before` cursor and `limit` params
+  - Returns `has_more` flag
+  - FlatList is inverted (newest at bottom, no scrollToEnd needed)
+  - Scroll to top triggers `loadOlderMessages()` via `onEndReached`
+  - "Loading older messages..." spinner at top while fetching
+  - Empty state uses `scaleY: -1` transform to display correctly in inverted list
 
 ## CRITICAL BUG LOG — Session 2026-03-14
 
@@ -98,6 +131,8 @@ The master branch HomeScreen had `connect()` which set `isConnecting = true` but
 8. **Test builds before pushing** — run `npx expo export --platform ios` to verify
 9. **Always use --legacy-peer-deps** for npm install
 10. **Always use --tunnel --clear** for expo start
+11. **Images must persist** — always preserve local URI as fallback for sent photos
+12. **Voice must have stop** — every speaking state needs a stop mechanism
 
 ## Future Features (Planned)
 - **Personal Assistant abilities**: Weather, crypto prices, news, reminders, to-do lists, web search
@@ -106,3 +141,4 @@ The master branch HomeScreen had `connect()` which set `isConnecting = true` but
 - **Email access**: Read/summarize emails (requires OAuth — standalone build)
 - **Phantom React Native SDK**: Full wallet connect + transaction signing (requires standalone build)
 - **Alarm/Calendar integration**: Requires standalone build
+- **Digital Void video posts**: Enable video content in social feed (currently text-only)
