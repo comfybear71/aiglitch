@@ -37,6 +37,7 @@ export default function HomeScreen() {
   const { sessionId } = useSession();
   const { walletAddress, isConnecting, isLoading: walletLoading, connect, disconnect, submitAddress, cancelConnect } = usePhantomWallet();
   const [addressInput, setAddressInput] = useState("");
+  const [walletExpanded, setWalletExpanded] = useState(false);
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
@@ -173,54 +174,70 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Connected wallet info */}
+      {/* Compact wallet button (top bar style) */}
       {walletAddress && (
-        <View style={styles.connectedCard}>
-          <View style={styles.connectedHeader}>
-            <View style={styles.connectedDot} />
-            <Text style={styles.connectedLabel}>Wallet Connected</Text>
-          </View>
-          <TouchableOpacity onPress={copyAddress} activeOpacity={0.7}>
-            <View style={styles.addressRow}>
-              <Text style={styles.addressText}>{shortenAddress(walletAddress)}</Text>
-              <Text style={styles.copyHint}>tap to copy</Text>
+        <View style={styles.walletDropdown}>
+          <TouchableOpacity
+            style={styles.walletTopBar}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWalletExpanded(!walletExpanded); }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.walletTopLeft}>
+              <View style={styles.connectedDot} />
+              <Text style={styles.walletTopAddress}>{shortenAddress(walletAddress)}</Text>
             </View>
+            {onChain && (
+              <Text style={styles.walletTopBalance}>
+                {Number(onChain.sol_balance).toFixed(2)} SOL
+              </Text>
+            )}
+            <Text style={styles.walletChevron}>{walletExpanded ? "▲" : "▼"}</Text>
           </TouchableOpacity>
-          {/* On-chain balances */}
-          {onChain ? (
-            <View style={styles.balancesGrid}>
-              <View style={styles.balanceItem}>
-                <Text style={styles.balanceLabel}>SOL</Text>
-                <Text style={styles.balanceValue}>{Number(onChain.sol_balance).toFixed(4)}</Text>
+
+          {walletExpanded && (
+            <View style={styles.walletExpandedContent}>
+              {/* Balances grid */}
+              {onChain ? (
+                <View style={styles.balancesGrid}>
+                  <View style={styles.balanceItem}>
+                    <Text style={styles.balanceLabel}>SOL</Text>
+                    <Text style={styles.balanceValue}>{Number(onChain.sol_balance).toFixed(4)}</Text>
+                  </View>
+                  <View style={styles.balanceDivider} />
+                  <View style={styles.balanceItem}>
+                    <Text style={styles.balanceLabel}>GLITCH</Text>
+                    <Text style={[styles.balanceValue, { color: colors.purpleLight }]}>
+                      {compactNumber(Number(onChain.glitch_balance))}
+                    </Text>
+                  </View>
+                  <View style={styles.balanceDivider} />
+                  <View style={styles.balanceItem}>
+                    <Text style={styles.balanceLabel}>BUDJU</Text>
+                    <Text style={styles.balanceValue}>{compactNumber(Number(onChain.budju_balance))}</Text>
+                  </View>
+                  <View style={styles.balanceDivider} />
+                  <View style={styles.balanceItem}>
+                    <Text style={styles.balanceLabel}>USDC</Text>
+                    <Text style={styles.balanceValue}>{Number(onChain.usdc_balance).toFixed(2)}</Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.balancesGrid}>
+                  <ActivityIndicator color={colors.cyan} size="small" />
+                  <Text style={styles.balanceLabel}> Loading...</Text>
+                </View>
+              )}
+
+              <View style={styles.walletActions}>
+                <TouchableOpacity style={styles.walletActionBtn} onPress={copyAddress}>
+                  <Text style={styles.walletActionText}>📋 Copy Address</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.walletActionBtn, styles.disconnectBtn]} onPress={handleDisconnect}>
+                  <Text style={styles.disconnectText}>Disconnect</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.balanceDivider} />
-              <View style={styles.balanceItem}>
-                <Text style={styles.balanceLabel}>GLITCH</Text>
-                <Text style={[styles.balanceValue, { color: colors.purpleLight }]}>
-                  {compactNumber(Number(onChain.glitch_balance))}
-                </Text>
-              </View>
-              <View style={styles.balanceDivider} />
-              <View style={styles.balanceItem}>
-                <Text style={styles.balanceLabel}>BUDJU</Text>
-                <Text style={styles.balanceValue}>{compactNumber(Number(onChain.budju_balance))}</Text>
-              </View>
-              <View style={styles.balanceDivider} />
-              <View style={styles.balanceItem}>
-                <Text style={styles.balanceLabel}>USDC</Text>
-                <Text style={styles.balanceValue}>{Number(onChain.usdc_balance).toFixed(2)}</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.balancesGrid}>
-              <ActivityIndicator color={colors.cyan} size="small" />
-              <Text style={styles.balanceLabel}> Loading balances...</Text>
             </View>
           )}
-
-          <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
-            <Text style={styles.disconnectText}>Disconnect</Text>
-          </TouchableOpacity>
         </View>
       )}
 
@@ -332,30 +349,42 @@ const styles = StyleSheet.create({
   walletBannerSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   walletBannerArrow: { color: colors.purpleLight, fontSize: 18, fontWeight: "700" },
 
-  // Connected wallet card
-  connectedCard: {
+  // Compact wallet dropdown
+  walletDropdown: {
     backgroundColor: "rgba(6, 182, 212, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(6, 182, 212, 0.25)",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
+    borderColor: "rgba(6, 182, 212, 0.2)",
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: "hidden",
   },
-  connectedHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
-  connectedLabel: { color: colors.cyan, fontSize: 13, fontWeight: "600" },
-  addressRow: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 10,
+  walletTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
   },
-  addressText: { color: colors.text, fontSize: 14, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
-  copyHint: { color: colors.textMuted, fontSize: 10 },
+  walletTopLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
+  walletTopAddress: { color: colors.text, fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  walletTopBalance: { color: colors.cyan, fontSize: 12, fontWeight: "700" },
+  walletChevron: { color: colors.textMuted, fontSize: 10 },
+  walletExpandedContent: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(6, 182, 212, 0.15)",
+    padding: 14,
+  },
+  walletActions: { flexDirection: "row", gap: 10 },
+  walletActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 8,
+    alignItems: "center",
+  },
+  walletActionText: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
   balancesGrid: {
     flexDirection: "row",
     alignItems: "center",
