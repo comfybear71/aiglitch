@@ -151,7 +151,7 @@ export default function HomeScreen() {
               {isConnecting ? "Connecting..." : "Connect Wallet"}
             </Text>
             <Text style={styles.walletBannerSub}>
-              Paste your Solana wallet address to find your Bestie
+              Link your Solana wallet to find your Bestie
             </Text>
           </View>
           <Text style={styles.walletBannerArrow}>→</Text>

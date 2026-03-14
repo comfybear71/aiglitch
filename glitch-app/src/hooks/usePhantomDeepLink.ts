@@ -273,63 +273,100 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     }
   };
 
+  // Manual wallet entry fallback (paste address)
+  const showManualEntry = useCallback((message: string) => {
+    if (Alert.prompt) {
+      Alert.prompt(
+        "Connect Wallet",
+        message,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
+          {
+            text: "Connect",
+            onPress: async (address?: string) => {
+              const trimmed = address?.trim();
+              if (trimmed && trimmed.length >= 32 && trimmed.length <= 44) {
+                await SecureStore.setItemAsync(KEYS.WALLET, trimmed);
+                setWalletAddress(trimmed);
+                setIsConnecting(false);
+                Alert.alert("Connected!", `Wallet ${trimmed.slice(0, 6)}...${trimmed.slice(-4)} linked`);
+              } else {
+                setIsConnecting(false);
+                Alert.alert("Invalid", "That doesn't look like a valid Solana address");
+              }
+            },
+          },
+        ],
+        "plain-text"
+      );
+    } else {
+      setIsConnecting(false);
+      Alert.alert("Manual Entry", "Alert.prompt not available on this platform");
+    }
+  }, []);
+
   const connect = useCallback(async () => {
     setIsConnecting(true);
 
-    // Generate a new keypair for this dApp session
-    const keypair = nacl.box.keyPair();
-    dappKeypairRef.current = keypair;
+    // Offer choice: Phantom deep link or manual paste
+    Alert.alert(
+      "Connect Wallet",
+      "How would you like to connect?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => setIsConnecting(false),
+        },
+        {
+          text: "Paste Address",
+          onPress: () => showManualEntry("Paste your Solana wallet address:"),
+        },
+        {
+          text: "Open Phantom",
+          onPress: async () => {
+            // Generate a new keypair for this dApp session
+            const keypair = nacl.box.keyPair();
+            dappKeypairRef.current = keypair;
 
-    const params = new URLSearchParams({
-      app_url: APP_URL,
-      dapp_encryption_public_key: bs58.encode(Buffer.from(keypair.publicKey)),
-      redirect_link: buildRedirectUrl("onConnect"),
-      cluster: CLUSTER,
-    });
+            const params = new URLSearchParams({
+              app_url: APP_URL,
+              dapp_encryption_public_key: bs58.encode(Buffer.from(keypair.publicKey)),
+              redirect_link: buildRedirectUrl("onConnect"),
+              cluster: CLUSTER,
+            });
 
-    const url = `${PHANTOM_CONNECT_URL}?${params.toString()}`;
+            const url = `${PHANTOM_CONNECT_URL}?${params.toString()}`;
 
-    try {
-      const canOpen = await Linking.canOpenURL("phantom://");
-      if (!canOpen) {
-        setIsConnecting(false);
-        Alert.alert(
-          "Phantom Not Found",
-          "Please install Phantom wallet from the App Store to connect.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Get Phantom",
-              onPress: () => Linking.openURL(
-                Platform.OS === "ios"
-                  ? "https://apps.apple.com/app/phantom-crypto-wallet/id1598432977"
-                  : "https://play.google.com/store/apps/details?id=app.phantom"
-              ),
-            },
-          ],
-        );
-        return;
-      }
+            try {
+              const canOpen = await Linking.canOpenURL("phantom://");
+              if (!canOpen) {
+                // Phantom not installed — fall back to manual entry
+                showManualEntry("Phantom not found. Paste your Solana wallet address:");
+                return;
+              }
 
-      // Auto-reset connecting state after 30s if Phantom doesn't respond
-      setTimeout(() => {
-        setIsConnecting((current) => {
-          if (current) {
-            Alert.alert(
-              "Connection Timed Out",
-              "Phantom didn't respond. Please try again.",
-            );
-          }
-          return false;
-        });
-      }, 30000);
+              // Auto-reset after 15s and offer manual entry
+              setTimeout(() => {
+                setIsConnecting((current) => {
+                  if (current) {
+                    showManualEntry(
+                      "Phantom didn't respond.\nPaste your Solana wallet address instead:"
+                    );
+                  }
+                  return current; // showManualEntry will set it to false
+                });
+              }, 15000);
 
-      await Linking.openURL(url);
-    } catch (e: any) {
-      setIsConnecting(false);
-      Alert.alert("Connection Error", e?.message || "Could not open Phantom");
-    }
-  }, []);
+              await Linking.openURL(url);
+            } catch (e: any) {
+              showManualEntry("Could not open Phantom. Paste your wallet address:");
+            }
+          },
+        },
+      ]
+    );
+  }, [showManualEntry]);
 
   const disconnect = useCallback(async () => {
     setWalletAddress(null);
