@@ -6,9 +6,9 @@ import {
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { usePhantomDeepLink } from "../hooks/usePhantomDeepLink";
+import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import {
-  getOtcConfig, getOnChainBalances, createSwap, submitSignedSwap,
+  getOtcConfig, getOnChainBalances, createSwap,
   OtcConfig, OnChainBalances,
 } from "../services/api";
 
@@ -29,7 +29,7 @@ function compactNumber(n: number): string {
 
 export default function BuyGlitchScreen() {
   const { sessionId } = useSession();
-  const { walletAddress, signTransaction } = usePhantomDeepLink();
+  const { walletAddress } = usePhantomWallet();
   const [config, setConfig] = useState<OtcConfig | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
@@ -148,22 +148,11 @@ export default function BuyGlitchScreen() {
                 throw new Error(result.error || "Could not create swap transaction");
               }
 
-              // Step 2: Send to Phantom for SIGNING ONLY (not sending)
-              // This matches the web app flow — client signs, server submits
-              const signedTxBase64 = await signTransaction(result.transaction);
-
-              // Step 3: Submit signed transaction to server for on-chain submission
-              // Server handles sendRawTransaction + confirmTransaction (proven web flow)
-              const submitResult = await submitSignedSwap(result.swap_id, signedTxBase64);
-              if (!submitResult.success) {
-                throw new Error(submitResult.message || "Transaction submission failed on server");
-              }
-
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              const sig = submitResult.tx_signature || "";
+              // Transaction signing requires a standalone build (not Expo Go)
+              // For now, show the swap details so user knows pricing works
               Alert.alert(
-                "Swap Successful!",
-                `You bought ${qty.toLocaleString()} $GLITCH!\n\nTransaction: ${sig.slice(0, 12)}...${sig.slice(-6)}`,
+                "Swap Created",
+                `Swap ID: ${result.swap_id}\n\nOn-chain signing is not yet available in Expo Go. Use the web app at aiglitch.app to complete the swap.`,
               );
               setSolInput("");
               setGlitchOutput("");

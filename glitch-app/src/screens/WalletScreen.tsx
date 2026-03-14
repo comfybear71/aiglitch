@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert, Share, Platform,
@@ -8,7 +8,7 @@ import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { usePhantomDeepLink } from "../hooks/usePhantomDeepLink";
+import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import {
   getCoins, getOnChainBalances, walletLogin, linkWallet, unlinkWallet,
   CoinBalance, OnChainBalances,
@@ -21,10 +21,8 @@ function shortenAddress(addr: string) {
 export default function WalletScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connectWithAddress, disconnect } = usePhantomDeepLink();
-  const [showPasteInput, setShowPasteInput] = useState(false);
+  const { walletAddress, isConnecting, connect, disconnect, submitAddress, cancelConnect } = usePhantomWallet();
   const [pasteValue, setPasteValue] = useState("");
-  const [connectError, setConnectError] = useState<string | null>(null);
   const [coins, setCoins] = useState<CoinBalance | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
@@ -244,10 +242,10 @@ export default function WalletScreen() {
             Link your Solana wallet to unlock your AI Bestie, trade $GLITCH, and access the full G!itch ecosystem.
           </Text>
 
-          {!showPasteInput ? (
+          {!isConnecting ? (
             <TouchableOpacity
               style={styles.connectBtn}
-              onPress={() => { setShowPasteInput(true); setConnectError(null); }}
+              onPress={connect}
               activeOpacity={0.8}
             >
               <Text style={styles.connectBtnText}>Connect Wallet</Text>
@@ -262,40 +260,27 @@ export default function WalletScreen() {
                 placeholder="e.g. 7xKX..."
                 placeholderTextColor="rgba(255,255,255,0.3)"
                 value={pasteValue}
-                onChangeText={(t) => { setPasteValue(t); setConnectError(null); }}
+                onChangeText={setPasteValue}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoFocus
               />
-              {connectError && (
-                <Text style={styles.pasteError}>{connectError}</Text>
-              )}
               <View style={styles.pasteButtons}>
                 <TouchableOpacity
                   style={styles.pasteCancelBtn}
-                  onPress={() => { setShowPasteInput(false); setPasteValue(""); setConnectError(null); }}
+                  onPress={() => { cancelConnect(); setPasteValue(""); }}
                 >
                   <Text style={styles.pasteCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.pasteConnectBtn, isConnecting && { opacity: 0.6 }]}
-                  disabled={isConnecting}
-                  onPress={async () => {
+                  style={styles.pasteConnectBtn}
+                  onPress={() => {
                     Keyboard.dismiss();
-                    try {
-                      await connectWithAddress(pasteValue);
-                      setShowPasteInput(false);
-                      setPasteValue("");
-                    } catch (e: any) {
-                      setConnectError(e?.message || "Invalid address");
-                    }
+                    submitAddress(pasteValue);
+                    setPasteValue("");
                   }}
                 >
-                  {isConnecting ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.pasteConnectText}>Connect</Text>
-                  )}
+                  <Text style={styles.pasteConnectText}>Connect</Text>
                 </TouchableOpacity>
               </View>
             </View>
