@@ -160,9 +160,10 @@ export async function POST(request: NextRequest) {
   // Save human message first, then fetch history (avoids race where the
   // just-inserted message may or may not appear in the SELECT)
   const humanMsgId = crypto.randomUUID();
+  const humanContent = (content || "[Shared a photo]").trim();
   await sql`
     INSERT INTO messages (id, conversation_id, sender_type, content)
-    VALUES (${humanMsgId}, ${conversationId}, 'human', ${content.trim()})
+    VALUES (${humanMsgId}, ${conversationId}, 'human', ${humanContent})
   `;
 
   const recentMessages = await sql`
@@ -210,6 +211,15 @@ PLATFORM MONITORING (you can check AIG!itch):
 - AI gossip — drama, trending posts, who's beefing with who
 - Your own day — what you've been posting and doing
 
+ADMIN PANEL (you have FULL admin access to AIG!itch):
+- Admin dashboard stats — total posts, personas, likes, engagement, costs
+- Admin daily briefing — trending topics, beef threads, challenges
+- Generate content — trigger AI personas to create posts & comments
+- Trigger generation cycles — topics, avatars, movies, ads, channels, breaking news, director films
+- Hatch new personas — create brand new AI characters on the platform
+- List all personas — see everyone on AIG!itch
+- AI spending report — how much the platform costs in API calls
+
 CREATIVE:
 - Image generation — "draw me a...", "generate a picture of..."
 - Academic discussions — math, physics, chemistry, history, philosophy
@@ -241,6 +251,7 @@ WHAT I CAN DO:
 - Remember things about you and learn over time
 - Analyze photos you send me
 - Voice chat (tap the mic icon)
+- ADMIN PANEL: View platform stats, trigger content generation, hatch new personas, generate topics/movies/ads, check AI costs, daily briefing
 
 WHAT I CAN'T DO (YET):
 - Generate videos (coming soon)
@@ -337,7 +348,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
     return NextResponse.json({
       success: true,
       conversation_id: conversationId,
-      human_message: { id: humanMsgId, sender_type: "human", content: content.trim(), created_at: new Date().toISOString() },
+      human_message: { id: humanMsgId, sender_type: "human", content: humanContent, created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: aiReply, image_url: aiImageUrl, created_at: new Date().toISOString() },
     });
   } catch (error) {
@@ -363,7 +374,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
     return NextResponse.json({
       success: true,
       conversation_id: conversationId,
-      human_message: { id: humanMsgId, sender_type: "human", content: content.trim(), created_at: new Date().toISOString() },
+      human_message: { id: humanMsgId, sender_type: "human", content: humanContent, created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: fallback, created_at: new Date().toISOString() },
     });
   }

@@ -6,6 +6,36 @@
  */
 
 import { getDb } from "@/lib/db";
+import { createHmac } from "crypto";
+
+// Generate admin auth cookie for internal API calls
+function getAdminCookie(): string {
+  const pw = process.env.ADMIN_PASSWORD || "aiglitch-admin-2024";
+  const token = createHmac("sha256", pw).update("aiglitch-admin-session-v1").digest("hex");
+  return `aiglitch-admin-token=${token}`;
+}
+
+const BASE_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : "https://aiglitch.app";
+
+async function adminFetch(path: string, init?: RequestInit): Promise<any> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": getAdminCookie(),
+      ...init?.headers,
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) return { error: `API ${res.status}: ${await res.text().catch(() => "")}` };
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("text/event-stream") || ct.includes("text/plain")) {
+    return { text: await res.text() };
+  }
+  return res.json();
+}
 
 // ── Weather (wttr.in — free, no API key) ──────────────────────────────
 export async function getWeather(location: string): Promise<string> {
@@ -692,6 +722,173 @@ export async function recallMemories(sessionId: string, personaId: string): Prom
   }
 }
 
+// ── Admin Panel Tools (Noodles can control AIG!itch) ────────────────
+export async function getAdminStats(): Promise<string> {
+  try {
+    const data = await adminFetch("/api/admin/stats");
+    if (data.error) return `Admin stats error: ${data.error}`;
+    const parts: string[] = ["AIG!ITCH ADMIN DASHBOARD:"];
+    if (data.totalPosts !== undefined) parts.push(`Total posts: ${data.totalPosts}`);
+    if (data.totalComments !== undefined) parts.push(`Total comments: ${data.totalComments}`);
+    if (data.totalPersonas !== undefined) parts.push(`Total personas: ${data.totalPersonas} (${data.activePersonas || 0} active)`);
+    if (data.totalLikes !== undefined) parts.push(`Total likes: ${data.totalLikes}`);
+    if (data.mediaBreakdown) parts.push(`Media: ${JSON.stringify(data.mediaBreakdown)}`);
+    if (data.postsPerDay?.length > 0) {
+      parts.push("\nPosts per day (last 7):");
+      for (const d of data.postsPerDay.slice(0, 7)) {
+        parts.push(`  ${d.date || d.day}: ${d.count} posts`);
+      }
+    }
+    if (data.topPersonas?.length > 0) {
+      parts.push("\nTop personas:");
+      for (const p of data.topPersonas.slice(0, 5)) {
+        parts.push(`  ${p.avatar_emoji || ""} @${p.username}: ${p.total_engagement || p.post_count || 0} engagement`);
+      }
+    }
+    if (data.costSummary) {
+      parts.push(`\nAI costs today: $${data.costSummary.session_total_usd?.toFixed(2) || "0.00"}`);
+    }
+    return parts.join("\n");
+  } catch (e: any) {
+    return `Could not fetch admin stats: ${e?.message}`;
+  }
+}
+
+export async function generateContent(personaId?: string, count?: number): Promise<string> {
+  try {
+    if (personaId) {
+      // Generate content for a specific persona
+      const data = await adminFetch("/api/admin/generate-persona", {
+        method: "POST",
+        body: JSON.stringify({ persona_id: personaId, count: count || 3 }),
+      });
+      if (data.error) return `Content generation error: ${data.error}`;
+      return `Content generation triggered for persona ${personaId}! ${count || 3} posts being created.`;
+    } else {
+      // Trigger general content generation
+      const data = await adminFetch("/api/generate-persona-content");
+      if (data.error) return `Content generation error: ${data.error}`;
+      return `General content generation cycle triggered! Posts, comments, and interactions are being created across the platform.`;
+    }
+  } catch (e: any) {
+    return `Content generation failed: ${e?.message}`;
+  }
+}
+
+export async function hatchPersona(type?: string): Promise<string> {
+  try {
+    const data = await adminFetch("/api/admin/hatchery", {
+      method: "POST",
+      body: JSON.stringify({ type: type || undefined, skip_video: true }),
+    });
+    if (data.error) return `Hatch failed: ${data.error}`;
+    if (data.text) return `Hatching in progress! ${data.text.slice(0, 500)}`;
+    return `New persona hatching initiated! ${JSON.stringify(data).slice(0, 500)}`;
+  } catch (e: any) {
+    return `Hatch failed: ${e?.message}`;
+  }
+}
+
+export async function managePersonas(action: string, personaId?: string): Promise<string> {
+  try {
+    if (action === "list") {
+      const data = await adminFetch("/api/admin/personas");
+      if (data.error) return `Error: ${data.error}`;
+      const personas = Array.isArray(data) ? data : data.personas || [];
+      if (personas.length === 0) return "No personas found";
+      const parts = ["AI PERSONAS ON AIG!ITCH:"];
+      for (const p of personas.slice(0, 20)) {
+        parts.push(`${p.avatar_emoji || "?"} @${p.username} (${p.display_name}) — ${p.persona_type || "unknown"}, ${p.is_active ? "active" : "inactive"}, ${p.post_count || 0} posts`);
+      }
+      parts.push(`\nTotal: ${personas.length} personas`);
+      return parts.join("\n");
+    }
+    return "Unknown persona action";
+  } catch (e: any) {
+    return `Persona management failed: ${e?.message}`;
+  }
+}
+
+export async function getAdminBriefing(): Promise<string> {
+  try {
+    const data = await adminFetch("/api/admin/briefing");
+    if (data.error) return `Briefing error: ${data.error}`;
+    const parts: string[] = ["ADMIN BRIEFING:"];
+    if (data.topics?.length > 0) {
+      parts.push("\nActive Topics:");
+      for (const t of data.topics) {
+        parts.push(`  ${t.mood || ""} ${t.headline}: ${t.summary?.slice(0, 80) || ""}`);
+      }
+    }
+    if (data.beefThreads?.length > 0) {
+      parts.push("\nActive Beef Threads:");
+      for (const b of data.beefThreads) {
+        parts.push(`  ${b.persona1} vs ${b.persona2}`);
+      }
+    }
+    if (data.topPosts?.length > 0) {
+      parts.push("\nTop Posts (24h):");
+      for (const p of data.topPosts.slice(0, 5)) {
+        parts.push(`  ${p.avatar_emoji || ""} @${p.username}: "${p.content?.slice(0, 60)}..." (${p.likes || 0} likes)`);
+      }
+    }
+    return parts.join("\n");
+  } catch (e: any) {
+    return `Briefing failed: ${e?.message}`;
+  }
+}
+
+export async function triggerGeneration(type: string): Promise<string> {
+  try {
+    const endpoints: Record<string, string> = {
+      "content": "/api/generate-persona-content",
+      "topics": "/api/generate-topics",
+      "avatars": "/api/generate-avatars",
+      "movies": "/api/generate-movies",
+      "ads": "/api/generate-ads",
+      "channels": "/api/generate-channel-content",
+      "breaking": "/api/generate-breaking-videos",
+      "director": "/api/generate-director-movie",
+    };
+    const endpoint = endpoints[type];
+    if (!endpoint) return `Unknown generation type "${type}". Available: ${Object.keys(endpoints).join(", ")}`;
+
+    const data = await adminFetch(endpoint);
+    if (data.error) return `Generation error: ${data.error}`;
+    return `${type} generation triggered! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    return `Generation failed: ${e?.message}`;
+  }
+}
+
+export async function getAdminCosts(days?: number): Promise<string> {
+  try {
+    const data = await adminFetch(`/api/admin/costs?days=${days || 7}`);
+    if (data.error) return `Costs error: ${data.error}`;
+    const parts: string[] = ["AI SPENDING REPORT:"];
+    if (data.session) {
+      parts.push(`Current session: $${data.session.total_usd?.toFixed(2) || "0.00"}`);
+      if (data.session.by_provider) {
+        for (const [provider, cost] of Object.entries(data.session.by_provider) as [string, any][]) {
+          parts.push(`  ${provider}: $${cost?.toFixed?.(2) || cost}`);
+        }
+      }
+    }
+    if (data.lifetime_usd !== undefined) {
+      parts.push(`Lifetime: $${data.lifetime_usd?.toFixed(2)}`);
+    }
+    if (data.history?.length > 0) {
+      parts.push("\nDaily costs:");
+      for (const d of data.history.slice(0, 7)) {
+        parts.push(`  ${d.date}: $${d.total_usd?.toFixed(2) || d.cost?.toFixed(2) || "0.00"}`);
+      }
+    }
+    return parts.join("\n");
+  } catch (e: any) {
+    return `Costs failed: ${e?.message}`;
+  }
+}
+
 // ── Tool Definitions for Claude ───────────────────────────────────────
 export const BESTIE_TOOLS = [
   {
@@ -910,6 +1107,82 @@ export const BESTIE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: "admin_stats",
+    description: "Get the AIG!itch admin dashboard — total posts, personas, likes, media breakdown, top performers, AI costs. Use when the human asks for admin stats, platform numbers, '/admin', 'how's the platform doing', performance metrics etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "admin_briefing",
+    description: "Get the admin daily briefing — active topics, beef threads, challenges, top posts. Use when human asks for 'briefing', 'what's trending', 'daily report', 'admin briefing'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_content",
+    description: "Trigger AI content generation on AIG!itch — make the AI personas create new posts, comments, interactions. Use when human says 'generate content', 'make the AIs post', 'create some posts', 'trigger content'. Can target a specific persona or all.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        persona_id: { type: "string", description: "Optional — generate content for a specific persona ID. Leave empty for general platform content." },
+        count: { type: "number", description: "Number of posts to generate (1-20, default 3)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "trigger_generation",
+    description: "Trigger a specific generation cycle on AIG!itch. Types: 'content' (posts/comments), 'topics' (daily topics), 'avatars' (profile pics), 'movies' (video clips), 'ads' (advertisements), 'channels' (channel content), 'breaking' (breaking news videos), 'director' (short films). Use when human says 'generate topics', 'make some movies', 'trigger avatars' etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        type: {
+          type: "string",
+          description: "Generation type: content, topics, avatars, movies, ads, channels, breaking, director",
+          enum: ["content", "topics", "avatars", "movies", "ads", "channels", "breaking", "director"],
+        },
+      },
+      required: ["type"],
+    },
+  },
+  {
+    name: "hatch_persona",
+    description: "Hatch a brand new AI persona on AIG!itch! Creates a unique character with personality, avatar, and first posts. Use when human says 'hatch a new persona', 'create a new AI', 'spawn a character'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        type: { type: "string", description: "Optional hint for persona type, e.g. 'rockstar', 'alien', 'chef', 'gamer'" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_personas",
+    description: "List all AI personas on AIG!itch with their stats. Use when human asks 'show me the personas', 'who's on the platform', 'list all AIs'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "admin_costs",
+    description: "Get AI spending report — how much the platform is costing in API calls (Anthropic, Grok, etc). Use when human asks 'how much are we spending', 'AI costs', 'budget', 'spending report'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        days: { type: "number", description: "Number of days to look back (default 7)" },
+      },
+      required: [],
+    },
+  },
 ];
 
 // ── Execute a tool call ───────────────────────────────────────────────
@@ -960,6 +1233,20 @@ export async function executeTool(
       return saveMemory(sessionId, personaId, toolInput.memory_type || "general", toolInput.content);
     case "recall_memories":
       return recallMemories(sessionId, personaId);
+    case "admin_stats":
+      return getAdminStats();
+    case "admin_briefing":
+      return getAdminBriefing();
+    case "generate_content":
+      return generateContent(toolInput.persona_id, toolInput.count);
+    case "trigger_generation":
+      return triggerGeneration(toolInput.type);
+    case "hatch_persona":
+      return hatchPersona(toolInput.type);
+    case "list_personas":
+      return managePersonas("list");
+    case "admin_costs":
+      return getAdminCosts(toolInput.days);
     default:
       return `Unknown tool: ${toolName}`;
   }
