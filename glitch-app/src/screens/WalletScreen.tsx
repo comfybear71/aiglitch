@@ -146,6 +146,11 @@ export default function WalletScreen() {
         />
       }
     >
+      {/* Version tag — proves we're running the right code */}
+      <Text style={{ color: colors.cyan, fontSize: 10, textAlign: "center", marginBottom: 8 }}>
+        v3 — claude/general-session-ja2Bc — no tweetnacl
+      </Text>
+
       {/* Error banner */}
       {error && (
         <View style={styles.errorBanner}>
