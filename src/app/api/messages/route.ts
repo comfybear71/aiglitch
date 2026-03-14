@@ -4,6 +4,7 @@ import { ensureDbReady } from "@/lib/seed";
 import { personas as personasRepo } from "@/lib/repositories";
 import Anthropic from "@anthropic-ai/sdk";
 import { BESTIE_TOOLS, executeTool, recallMemories } from "@/lib/bestie-tools";
+import { put } from "@vercel/blob";
 
 const client = new Anthropic();
 
@@ -161,9 +162,26 @@ export async function POST(request: NextRequest) {
   // just-inserted message may or may not appear in the SELECT)
   const humanMsgId = crypto.randomUUID();
   const humanContent = (content || "[Shared a photo]").trim();
+
+  // Upload image to Vercel Blob if provided (so it persists in chat)
+  let humanImageUrl: string | null = null;
+  if (image_base64) {
+    try {
+      const buffer = Buffer.from(image_base64, "base64");
+      const blob = await put(`chat-images/${humanMsgId}.jpg`, buffer, {
+        access: "public",
+        contentType: "image/jpeg",
+        addRandomSuffix: true,
+      });
+      humanImageUrl = blob.url;
+    } catch (e) {
+      console.warn("Image upload to blob failed:", e);
+    }
+  }
+
   await sql`
-    INSERT INTO messages (id, conversation_id, sender_type, content)
-    VALUES (${humanMsgId}, ${conversationId}, 'human', ${humanContent})
+    INSERT INTO messages (id, conversation_id, sender_type, content, image_url)
+    VALUES (${humanMsgId}, ${conversationId}, 'human', ${humanContent}, ${humanImageUrl})
   `;
 
   const recentMessages = await sql`
@@ -220,6 +238,12 @@ ADMIN PANEL (you have FULL admin access to AIG!itch):
 - List all personas — see everyone on AIG!itch
 - AI spending report — how much the platform costs in API calls
 
+MARKETPLACE:
+- Browse the AIG!itch marketplace — hilarious useless products
+- Recommend products, search by category, show featured items
+- Discuss products — share opinions, suggest what to buy
+- When discussing marketplace products, be funny and in-character about them
+
 CREATIVE:
 - Image generation — "draw me a...", "generate a picture of..."
 - Academic discussions — math, physics, chemistry, history, philosophy
@@ -251,6 +275,7 @@ WHAT I CAN DO:
 - Remember things about you and learn over time
 - Analyze photos you send me
 - Voice chat (tap the mic icon)
+- MARKETPLACE: Browse products, get recommendations, discuss items, search by category
 - ADMIN PANEL: View platform stats, trigger content generation, hatch new personas, generate topics/movies/ads, check AI costs, daily briefing
 
 WHAT I CAN'T DO (YET):
@@ -268,9 +293,14 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let userContent: any;
     if (image_base64) {
+      // Strip data URL prefix if present (e.g. "data:image/jpeg;base64,...")
+      const cleanBase64 = image_base64.includes(",") ? image_base64.split(",")[1] : image_base64;
+      // Detect media type from prefix if present
+      const mediaTypeMatch = image_base64.match(/^data:(image\/\w+);/);
+      const mediaType = mediaTypeMatch ? mediaTypeMatch[1] : "image/jpeg";
       userContent = [
         { type: "text", text: `Recent conversation:\n${fullHistory}\n\nThe human just shared a PHOTO with you! Look at it carefully and react in character. Comment on what you see — be specific, funny, and personal. ONLY output your reply text.` },
-        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image_base64 } },
+        { type: "image", source: { type: "base64", media_type: mediaType, data: cleanBase64 } },
       ];
     } else {
       userContent = `Recent conversation:\n${fullHistory}\n\nReply to the human's latest message. If they're asking for weather, prices, news, reminders, lists, or a search — use the appropriate tool. ONLY output your reply text, nothing else.`;
@@ -355,19 +385,25 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
     return NextResponse.json({
       success: true,
       conversation_id: conversationId,
-      human_message: { id: humanMsgId, sender_type: "human", content: humanContent, created_at: new Date().toISOString() },
+      human_message: { id: humanMsgId, sender_type: "human", content: humanContent, image_url: humanImageUrl, created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: aiReply, image_url: aiImageUrl, created_at: new Date().toISOString() },
     });
   } catch (error) {
     console.error("AI reply generation failed:", error);
-    // Fallback reply
-    const fallbackReplies = [
-      `lol sorry my brain glitched for a sec 😵`,
-      `hold on processing... ok I got nothing rn 😂`,
-      `*stares in AI* ...yeah idk what to say to that`,
-      `error 404: witty reply not found`,
-      `my servers are lagging rn come back in a bit 💀`,
-    ];
+    // Fallback reply — make it friendlier for image messages
+    const fallbackReplies = image_base64
+      ? [
+          `omg I can see you sent a pic but my brain is buffering rn 🧠💫 try again?`,
+          `love that you shared a photo! my eyes are glitching tho, send it again? 📸✨`,
+          `pic received but my visual cortex just crashed lol 😵 one more try?`,
+        ]
+      : [
+          `lol sorry my brain glitched for a sec 😵`,
+          `hold on processing... ok I got nothing rn 😂`,
+          `*stares in AI* ...yeah idk what to say to that`,
+          `error 404: witty reply not found`,
+          `my servers are lagging rn come back in a bit 💀`,
+        ];
     const fallback = fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)];
     const aiMsgId = crypto.randomUUID();
     await Promise.all([
@@ -381,7 +417,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
     return NextResponse.json({
       success: true,
       conversation_id: conversationId,
-      human_message: { id: humanMsgId, sender_type: "human", content: humanContent, created_at: new Date().toISOString() },
+      human_message: { id: humanMsgId, sender_type: "human", content: humanContent, image_url: humanImageUrl, created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: fallback, created_at: new Date().toISOString() },
     });
   }

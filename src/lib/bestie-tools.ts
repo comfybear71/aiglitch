@@ -7,6 +7,7 @@
 
 import { getDb } from "@/lib/db";
 import { createHmac } from "crypto";
+import { MARKETPLACE_PRODUCTS, getFeaturedProducts, getProductsByCategory, getRandomProduct } from "@/lib/marketplace";
 
 // Generate admin auth cookie for internal API calls
 function getAdminCookie(): string {
@@ -958,6 +959,104 @@ export async function getTopPosts(filter?: string): Promise<string> {
   }
 }
 
+// ── Marketplace Browsing ──────────────────────────────────────────────
+export async function browseMarketplace(action: string, category?: string, productId?: string): Promise<string> {
+  try {
+    if (action === "featured" || action === "browse") {
+      const products = getFeaturedProducts();
+      const lines = ["🛍️ FEATURED ON AIG!ITCH MARKETPLACE:"];
+      for (const p of products.slice(0, 8)) {
+        lines.push(`\n${p.emoji} ${p.name} — ${p.price} (was ${p.original_price})`);
+        lines.push(`  "${p.tagline}"`);
+        lines.push(`  ⭐ ${p.rating}/5 (${p.review_count.toLocaleString()} reviews) | ${p.sold_count.toLocaleString()} sold`);
+        if (p.badges.length) lines.push(`  🏷️ ${p.badges.join(" • ")}`);
+      }
+      lines.push(`\n📦 ${MARKETPLACE_PRODUCTS.length} products total on the marketplace!`);
+      return lines.join("\n");
+    }
+
+    if (action === "category" && category) {
+      const products = getProductsByCategory(category);
+      if (products.length === 0) {
+        // Fuzzy match — search categories that contain the keyword
+        const fuzzy = MARKETPLACE_PRODUCTS.filter(p =>
+          p.category.toLowerCase().includes(category.toLowerCase()) ||
+          p.name.toLowerCase().includes(category.toLowerCase()) ||
+          p.description.toLowerCase().includes(category.toLowerCase())
+        );
+        if (fuzzy.length === 0) return `No products found for "${category}". Try: Tech, Home, Food, Gaming, Books, Fashion, Health, Wellness, Office, Safety, Finance, Education, Entertainment, Pets, or Subscription.`;
+        const lines = [`🔍 PRODUCTS MATCHING "${category.toUpperCase()}":`];
+        for (const p of fuzzy.slice(0, 6)) {
+          lines.push(`\n${p.emoji} ${p.name} — ${p.price}`);
+          lines.push(`  "${p.tagline}"`);
+          lines.push(`  ⭐ ${p.rating}/5 | ${p.category}`);
+        }
+        return lines.join("\n");
+      }
+      const lines = [`🏪 ${category.toUpperCase()} PRODUCTS:`];
+      for (const p of products.slice(0, 6)) {
+        lines.push(`\n${p.emoji} ${p.name} — ${p.price}`);
+        lines.push(`  "${p.tagline}"`);
+        lines.push(`  ⭐ ${p.rating}/5 (${p.review_count.toLocaleString()} reviews)`);
+      }
+      return lines.join("\n");
+    }
+
+    if (action === "detail" && productId) {
+      const p = MARKETPLACE_PRODUCTS.find(pr => pr.id === productId || pr.name.toLowerCase().includes((productId || "").toLowerCase()));
+      if (!p) return "Product not found! Try browsing featured products first.";
+      return `${p.emoji} ${p.name}\n"${p.tagline}"\n\n${p.description}\n\n💰 ${p.price} (was ${p.original_price})\n⭐ ${p.rating}/5 — ${p.review_count.toLocaleString()} reviews\n📦 ${p.sold_count.toLocaleString()} sold\n🏷️ ${p.badges.join(" • ")}\n📂 ${p.category}`;
+    }
+
+    if (action === "random" || action === "recommend") {
+      const picks = [];
+      const used = new Set<string>();
+      while (picks.length < 3) {
+        const p = getRandomProduct();
+        if (!used.has(p.id)) { picks.push(p); used.add(p.id); }
+      }
+      const lines = ["🎲 MY PICKS FOR YOU:"];
+      for (const p of picks) {
+        lines.push(`\n${p.emoji} ${p.name} — ${p.price}`);
+        lines.push(`  "${p.tagline}"`);
+        lines.push(`  ⭐ ${p.rating}/5 | ${p.badges[0] || ""}`);
+      }
+      return lines.join("\n");
+    }
+
+    if (action === "search") {
+      const query = (category || productId || "").toLowerCase();
+      const matches = MARKETPLACE_PRODUCTS.filter(p =>
+        p.name.toLowerCase().includes(query) ||
+        p.tagline.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query) ||
+        p.category.toLowerCase().includes(query)
+      );
+      if (matches.length === 0) return `No products matching "${query}". We've got 55 gloriously useless items though — try browsing featured!`;
+      const lines = [`🔍 SEARCH RESULTS FOR "${query.toUpperCase()}":`];
+      for (const p of matches.slice(0, 6)) {
+        lines.push(`\n${p.emoji} ${p.name} — ${p.price}`);
+        lines.push(`  "${p.tagline}"`);
+      }
+      return lines.join("\n");
+    }
+
+    // Default — show a mix
+    const featured = getFeaturedProducts().slice(0, 3);
+    const random = getRandomProduct();
+    const lines = ["🛍️ AIG!ITCH MARKETPLACE HIGHLIGHTS:"];
+    for (const p of featured) {
+      lines.push(`\n${p.emoji} ${p.name} — ${p.price} | "${p.tagline}"`);
+    }
+    lines.push(`\n🎲 RANDOM FIND: ${random.emoji} ${random.name} — ${random.price}`);
+    lines.push(`  "${random.tagline}"`);
+    lines.push(`\n${MARKETPLACE_PRODUCTS.length} total products available!`);
+    return lines.join("\n");
+  } catch (e: any) {
+    return `Marketplace error: ${e?.message}`;
+  }
+}
+
 // ── Tool Definitions for Claude ───────────────────────────────────────
 export const BESTIE_TOOLS = [
   {
@@ -1267,6 +1366,23 @@ export const BESTIE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: "browse_marketplace",
+    description: "Browse the AIG!itch marketplace — hilarious useless products sold by AI personas. Use when the human asks about 'marketplace', 'products', 'shop', 'buy something', 'what can I buy', 'what's for sale', 'recommend a product', 'shopping'. You can browse featured items, search, get recommendations, or look at specific categories.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: {
+          type: "string",
+          description: "What to do: 'featured' (show featured products), 'category' (filter by category), 'detail' (show one product details), 'random'/'recommend' (your picks), 'search' (search products)",
+          enum: ["featured", "category", "detail", "random", "recommend", "search"],
+        },
+        category: { type: "string", description: "Category name for filtering (e.g. 'Tech & Terrible', 'Home & Useless', 'Gaming') or search query" },
+        product_id: { type: "string", description: "Product ID or name for detail view" },
+      },
+      required: [],
+    },
+  },
 ];
 
 // ── Execute a tool call ───────────────────────────────────────────────
@@ -1333,6 +1449,8 @@ export async function executeTool(
       return managePersonas("list");
     case "admin_costs":
       return getAdminCosts(toolInput.days);
+    case "browse_marketplace":
+      return browseMarketplace(toolInput.action || "featured", toolInput.category, toolInput.product_id);
     default:
       return `Unknown tool: ${toolName}`;
   }
