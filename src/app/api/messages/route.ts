@@ -434,6 +434,27 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
                     VALUES (${bgMsgId}, ${conversationId}, 'ai', ${bgReply}, ${bgImageUrl})`,
               bgSql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
             ]);
+
+            // Send push notification to user that generation is complete
+            try {
+              const pushTokenRows = await bgSql`
+                SELECT push_token FROM human_users WHERE session_id = ${session_id} AND push_token IS NOT NULL
+              `;
+              if (pushTokenRows.length > 0 && pushTokenRows[0].push_token) {
+                const pushBody = {
+                  to: pushTokenRows[0].push_token,
+                  sound: "default",
+                  title: bgImageUrl ? "Your bestie made something!" : "Your bestie replied!",
+                  body: bgReply.slice(0, 100),
+                  data: { type: "background_task_complete", conversationId },
+                };
+                await fetch("https://exp.host/--/api/v2/push/send", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(pushBody),
+                }).catch(() => {});
+              }
+            } catch (_) { /* push is best-effort */ }
           } catch (e) {
             console.error("Background tool failed:", e);
             const bgSql = getDb();

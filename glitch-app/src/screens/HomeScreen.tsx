@@ -65,6 +65,7 @@ export default function HomeScreen() {
   const [sending, setSending] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [generating, setGenerating] = useState<string | null>(null); // active generation type
   const [hasMore, setHasMore] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
@@ -146,13 +147,15 @@ export default function HomeScreen() {
   useEffect(() => { messageCountRef.current = messages.length; }, [messages.length]);
 
   // Poll for new messages (background tasks like image gen, content gen)
-  const startPolling = useCallback(() => {
+  const startPolling = useCallback((genType?: string) => {
     if (pollTimerRef.current || !sessionId || !bestie) return;
+    if (genType) setGenerating(genType);
     let pollCount = 0;
     pollTimerRef.current = setInterval(async () => {
       pollCount++;
-      if (pollCount > 20) { // stop after ~60s (20 * 3s)
+      if (pollCount > 40) { // stop after ~2min (40 * 3s)
         if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+        setGenerating(null);
         return;
       }
       try {
@@ -161,7 +164,9 @@ export default function HomeScreen() {
         if (newMsgs.length > messageCountRef.current) {
           // New messages arrived from background task!
           setMessages(newMsgs);
+          setGenerating(null);
           if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           // Auto-speak the latest AI message
           const latest = newMsgs[newMsgs.length - 1];
           if (latest?.sender_type === "ai") {
@@ -289,7 +294,14 @@ export default function HomeScreen() {
         speakReply(data.ai_message.content, data.ai_message.id);
         // If a background task is running (image gen, content gen etc), poll for the result
         if (data.background_task) {
-          startPolling();
+          // Detect generation type from the immediate reply
+          const reply = (data.ai_message.content || "").toLowerCase();
+          const genType = reply.includes("image") || reply.includes("cook up") ? "image"
+            : reply.includes("video") || reply.includes("movie") ? "video"
+            : reply.includes("hatch") ? "hatching"
+            : reply.includes("content") ? "content"
+            : "generating";
+          startPolling(genType);
         }
       }
     } catch {
@@ -367,7 +379,7 @@ export default function HomeScreen() {
         });
         speakReply(data.ai_message.content, data.ai_message.id);
         if (data.background_task) {
-          startPolling();
+          startPolling("image");
         }
       }
     } catch {
@@ -745,7 +757,29 @@ export default function HomeScreen() {
             </View>
           }
           ListHeaderComponent={
-            sending ? (
+            generating ? (
+              <View style={styles.generatingRow}>
+                <View style={styles.generatingCard}>
+                  <ActivityIndicator color={colors.purpleLight} size="small" />
+                  <View style={styles.generatingInfo}>
+                    <Text style={styles.generatingTitle}>
+                      {generating === "image" ? "Generating image..." :
+                       generating === "video" ? "Creating video..." :
+                       generating === "hatching" ? "Hatching persona..." :
+                       generating === "content" ? "Creating content..." :
+                       "Working on it..."}
+                    </Text>
+                    <Text style={styles.generatingSubtext}>
+                      {generating === "image" ? "Your bestie is cooking up something visual" :
+                       generating === "video" ? "This may take a minute — videos take time!" :
+                       generating === "hatching" ? "A new AI persona is being born..." :
+                       generating === "content" ? "Generating posts for the Digital Void" :
+                       "Background task running..."}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : sending ? (
               <View style={[styles.msgRow, styles.msgRowLeft]}>
                 {bestie.avatar_url ? (
                   <Image source={{ uri: bestie.avatar_url }} style={styles.msgAvatar} />
@@ -1104,6 +1138,23 @@ const styles = StyleSheet.create({
   tapToStop: { color: "rgba(255,255,255,0.4)", fontSize: 10, textAlign: "center", marginTop: -4, marginBottom: 2 },
   loadingOlder: { alignItems: "center", paddingVertical: 12, gap: 4 },
   loadingOlderText: { color: colors.textMuted, fontSize: 11 },
+
+  // Generation monitor
+  generatingRow: { paddingHorizontal: 8, paddingVertical: 6 },
+  generatingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "rgba(124, 58, 237, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.3)",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  generatingInfo: { flex: 1 },
+  generatingTitle: { color: colors.purpleLight, fontSize: 13, fontWeight: "700" },
+  generatingSubtext: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
 
   // Features modal
   featuresOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
