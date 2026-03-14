@@ -7,7 +7,7 @@ import { BESTIE_TOOLS, executeTool, recallMemories } from "@/lib/bestie-tools";
 
 const client = new Anthropic();
 
-// Track DB readiness to avoid calling ensureDbReady() on every request
+// Track DB readiness to avoid calling ensureDbReady() on every request — v2 tools live
 let dbReady = false;
 async function ensureDb() {
   if (!dbReady) { await ensureDbReady(); dbReady = true; }
