@@ -269,16 +269,22 @@ export default function HomeScreen() {
     }
   };
 
-  // Photo sharing
+  // Photo/video sharing
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 0.7,
       base64: true,
       allowsEditing: true,
     });
-    if (!result.canceled && result.assets[0]?.base64) {
-      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      if (asset.base64) {
+        sendPhoto(asset.base64, asset.uri);
+      } else if (asset.uri) {
+        // Videos may not have base64 — share as local URI display only
+        sendPhoto("", asset.uri);
+      }
     }
   };
 
@@ -303,14 +309,21 @@ export default function HomeScreen() {
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
+    const isVideo = isVideoUrl(uri);
     const tempMsg: Message = {
       id: `temp-img-${Date.now()}`,
       sender_type: "human",
-      content: "[Photo]",
+      content: isVideo ? "[Video]" : "[Photo]",
       image_url: uri,
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempMsg]);
+
+    // If no base64 (e.g. video without base64), just keep the temp message
+    if (!base64) {
+      setSending(false);
+      return;
+    }
 
     try {
       const data = await sendImageMessage(sessionId, bestie.id, base64);
@@ -318,7 +331,7 @@ export default function HomeScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setMessages((prev) => {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
-          // Use blob URL from server if available, fall back to local URI
+          // ALWAYS preserve the local URI as fallback — server blob may fail
           const humanMsg = { ...data.human_message, image_url: data.human_message.image_url || uri };
           return [...filtered, humanMsg, data.ai_message];
         });
@@ -328,7 +341,7 @@ export default function HomeScreen() {
         }
       }
     } catch {
-      // Keep temp
+      // Keep temp message with local URI so image stays visible
     } finally {
       setSending(false);
     }
@@ -337,7 +350,7 @@ export default function HomeScreen() {
   const showMediaOptions = () => {
     Alert.alert("Share", "What do you want to share?", [
       { text: "Take Photo", onPress: takePhoto },
-      { text: "Choose from Library", onPress: pickImage },
+      { text: "Photo or Video from Library", onPress: pickImage },
       { text: "Cancel", style: "cancel" },
     ]);
   };
@@ -385,11 +398,23 @@ export default function HomeScreen() {
     setReactionPickerFor(null);
   };
 
+  // Stop voice playback
+  const stopSpeaking = async () => {
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch (_) {}
+      soundRef.current = null;
+    }
+    setSpeakingMsgId(null);
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isHuman = item.sender_type === "human";
     const isSpeaking = speakingMsgId === item.id;
     const reaction = reactions[item.id];
     const showPicker = reactionPickerFor === item.id;
+    const hasMedia = !!item.image_url;
+    // Hide placeholder text like "[Photo]" or "[Video]" when media is displayed
+    const isMediaPlaceholder = hasMedia && /^\[(Photo|Video|Shared a photo)\]$/i.test(item.content.trim());
     return (
       <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
         {!isHuman && bestie && (
@@ -399,15 +424,46 @@ export default function HomeScreen() {
             <Text style={styles.msgEmoji}>{bestie.avatar_emoji}</Text>
           )
         )}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onLongPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setReactionPickerFor(showPicker ? null : item.id);
-          }}
-          style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}
-        >
-          {/* Reaction picker */}
+        <View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onLongPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setReactionPickerFor(showPicker ? null : item.id);
+            }}
+            style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}
+          >
+            {item.image_url && isVideoUrl(item.image_url) ? (
+              <Video
+                source={{ uri: item.image_url }}
+                style={styles.msgVideo}
+                resizeMode={ResizeMode.CONTAIN}
+                useNativeControls
+                shouldPlay={false}
+                isLooping={false}
+              />
+            ) : item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
+            ) : null}
+            {!isMediaPlaceholder && (
+              <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
+                {item.content}
+              </Text>
+            )}
+            <View style={styles.msgMeta}>
+              <Text style={styles.msgTime}>{formatTime(item.created_at)}</Text>
+              {isHuman && <Text style={styles.msgCheck}>✓✓</Text>}
+            </View>
+            {!isHuman && (
+              <TouchableOpacity
+                style={[styles.speakBtn, isSpeaking && styles.speakBtnActive]}
+                onPress={() => isSpeaking ? stopSpeaking() : speakReply(item.content, item.id)}
+              >
+                <Text style={styles.speakBtnText}>{isSpeaking ? "⏹" : "🔈"}</Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+          {/* Reaction picker — below the bubble */}
           {showPicker && (
             <View style={[styles.reactionPicker, isHuman ? styles.reactionPickerRight : styles.reactionPickerLeft]}>
               {REACTION_EMOJIS.map((emoji) => (
@@ -417,43 +473,16 @@ export default function HomeScreen() {
               ))}
             </View>
           )}
-          {item.image_url && isVideoUrl(item.image_url) ? (
-            <Video
-              source={{ uri: item.image_url }}
-              style={styles.msgVideo}
-              resizeMode={ResizeMode.CONTAIN}
-              useNativeControls
-              shouldPlay={false}
-              isLooping={false}
-            />
-          ) : item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
-          ) : null}
-          <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
-            {item.content}
-          </Text>
-          <View style={styles.msgMeta}>
-            <Text style={styles.msgTime}>{formatTime(item.created_at)}</Text>
-            {isHuman && <Text style={styles.msgCheck}>✓✓</Text>}
-          </View>
-          {!isHuman && (
-            <TouchableOpacity
-              style={[styles.speakBtn, isSpeaking && styles.speakBtnActive]}
-              onPress={() => speakReply(item.content, item.id)}
-            >
-              <Text style={styles.speakBtnText}>{isSpeaking ? "🔊" : "🔈"}</Text>
-            </TouchableOpacity>
-          )}
-          {/* Reaction display */}
+          {/* Reaction display — below the bubble */}
           {reaction ? (
             <TouchableOpacity
-              style={styles.reactionBubble}
+              style={[styles.reactionBubble, isHuman ? styles.reactionBubbleRight : styles.reactionBubbleLeft]}
               onPress={() => setReactionPickerFor(item.id)}
             >
               <Text style={styles.reactionBubbleText}>{reaction}</Text>
             </TouchableOpacity>
           ) : null}
-        </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -612,9 +641,12 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Cosmic visualizer — shows when speaking */}
+      {/* Cosmic visualizer — shows when speaking, tap to stop */}
       {speakingMsgId && (
-        <CosmicVisualizer active={!!speakingMsgId} height={50} />
+        <TouchableOpacity onPress={stopSpeaking} activeOpacity={0.7}>
+          <CosmicVisualizer active={!!speakingMsgId} height={50} />
+          <Text style={styles.tapToStop}>tap to stop</Text>
+        </TouchableOpacity>
       )}
 
       {/* Chat messages */}
@@ -837,7 +869,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 6,
     paddingVertical: 4,
-    marginBottom: 6,
+    marginTop: 4,
     gap: 2,
   },
   reactionPickerLeft: { alignSelf: "flex-start" },
@@ -845,17 +877,18 @@ const styles = StyleSheet.create({
   reactionOption: { padding: 4 },
   reactionOptionText: { fontSize: 22 },
   reactionBubble: {
-    position: "absolute",
-    bottom: -10,
-    right: 8,
+    marginTop: 2,
     backgroundColor: "rgba(30,30,30,0.9)",
     borderRadius: 12,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderWidth: 1,
     borderColor: colors.border,
   },
+  reactionBubbleLeft: { alignSelf: "flex-start" },
+  reactionBubbleRight: { alignSelf: "flex-end" },
   reactionBubbleText: { fontSize: 16 },
+  tapToStop: { color: "rgba(255,255,255,0.4)", fontSize: 10, textAlign: "center", marginTop: -4, marginBottom: 2 },
 
   // Media button
   mediaBtn: {

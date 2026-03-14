@@ -159,13 +159,18 @@ export default function ChatScreen() {
   // ── Camera / Photo Picker ──
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 0.7,
       base64: true,
       allowsEditing: true,
     });
-    if (!result.canceled && result.assets[0]?.base64) {
-      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      if (asset.base64) {
+        sendPhoto(asset.base64, asset.uri);
+      } else if (asset.uri) {
+        sendPhoto("", asset.uri);
+      }
     }
   };
 
@@ -199,18 +204,24 @@ export default function ChatScreen() {
     };
     setMessages((prev) => [...prev, tempMsg]);
 
+    if (!base64) {
+      setSending(false);
+      return;
+    }
+
     try {
       const data = await sendImageMessage(sessionId, personaId, base64);
       if (data.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setMessages((prev) => {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
-          return [...filtered, data.human_message, data.ai_message];
+          const humanMsg = { ...data.human_message, image_url: data.human_message.image_url || uri };
+          return [...filtered, humanMsg, data.ai_message];
         });
         speakReply(data.ai_message.content, data.ai_message.id);
       }
     } catch {
-      // Keep temp
+      // Keep temp message with local URI so image stays visible
     } finally {
       setSending(false);
     }
@@ -285,10 +296,19 @@ export default function ChatScreen() {
     }
   };
 
+  // Stop voice playback
+  const stopSpeaking = async () => {
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch (_) {}
+      soundRef.current = null;
+    }
+    setSpeakingMsgId(null);
+  };
+
   const showMediaOptions = () => {
     Alert.alert("Share", "What do you want to share?", [
       { text: "Take Photo 📸", onPress: takePhoto },
-      { text: "Choose from Library 🖼️", onPress: pickImage },
+      { text: "Photo or Video from Library 🎬", onPress: pickImage },
       { text: "Cancel", style: "cancel" },
     ]);
   };
@@ -296,6 +316,8 @@ export default function ChatScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isHuman = item.sender_type === "human";
     const isSpeaking = speakingMsgId === item.id;
+    const hasMedia = !!item.image_url;
+    const isMediaPlaceholder = hasMedia && /^\[(Photo|Video|Shared a photo)\]$/i.test(item.content.trim());
     return (
       <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
         {!isHuman && persona && (
@@ -309,15 +331,17 @@ export default function ChatScreen() {
           {item.image_url && (
             <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
           )}
-          <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
-            {item.content}
-          </Text>
+          {!isMediaPlaceholder && (
+            <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
+              {item.content}
+            </Text>
+          )}
           {!isHuman && (
             <TouchableOpacity
               style={[styles.speakBtn, isSpeaking && styles.speakBtnActive]}
-              onPress={() => speakReply(item.content, item.id)}
+              onPress={() => isSpeaking ? stopSpeaking() : speakReply(item.content, item.id)}
             >
-              <Text style={styles.speakBtnText}>{isSpeaking ? "🔊" : "🔈"}</Text>
+              <Text style={styles.speakBtnText}>{isSpeaking ? "⏹" : "🔈"}</Text>
             </TouchableOpacity>
           )}
         </View>
