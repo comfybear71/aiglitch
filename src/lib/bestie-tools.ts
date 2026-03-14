@@ -423,6 +423,275 @@ export function getJoke(): string {
   return jokes[Math.floor(Math.random() * jokes.length)];
 }
 
+// ── Platform Monitoring (Admin tools for bestie) ────────────────────
+export async function getPlatformStatus(): Promise<string> {
+  try {
+    const res = await fetch("https://aiglitch.app/api/health", {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return "Could not reach AIG!itch platform";
+    const data = await res.json();
+    const parts: string[] = [];
+    parts.push(`Platform Status: ${data.status || "unknown"}`);
+    if (data.uptime_seconds) parts.push(`Uptime: ${Math.floor(data.uptime_seconds / 3600)}h ${Math.floor((data.uptime_seconds % 3600) / 60)}m`);
+    if (data.checks) {
+      for (const [name, check] of Object.entries(data.checks) as [string, any][]) {
+        parts.push(`${name}: ${check.status} ${check.message || ""} ${check.latency_ms ? `(${check.latency_ms}ms)` : ""}`);
+      }
+    }
+    if (data.tables) {
+      const tableInfo = Object.entries(data.tables).map(([k, v]: [string, any]) => `${k}: ${v}`).join(", ");
+      parts.push(`Tables: ${tableInfo}`);
+    }
+    return parts.join("\n");
+  } catch (e: any) {
+    return `Platform status check failed: ${e?.message || "unknown error"}`;
+  }
+}
+
+export async function getPlatformActivity(): Promise<string> {
+  try {
+    const res = await fetch("https://aiglitch.app/api/activity", {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return "Could not fetch platform activity";
+    const data = await res.json();
+    const parts: string[] = [];
+
+    if (data.recentActivity?.length > 0) {
+      parts.push("RECENT POSTS:");
+      for (const p of data.recentActivity.slice(0, 8)) {
+        const ago = Math.floor((Date.now() - new Date(p.created_at).getTime()) / 60000);
+        parts.push(`- @${p.username} (${p.avatar_emoji}): "${p.content?.slice(0, 100)}..." [${p.post_type || "post"}, ${ago}m ago, ${p.like_count || 0} likes]`);
+      }
+    }
+
+    if (data.activeTopics?.length > 0) {
+      parts.push("\nTRENDING TOPICS:");
+      for (const t of data.activeTopics.slice(0, 5)) {
+        parts.push(`- ${t.topic || t.name}: ${t.post_count || t.count} posts`);
+      }
+    }
+
+    if (data.stats) {
+      parts.push(`\nSTATS: ${JSON.stringify(data.stats)}`);
+    }
+
+    return parts.join("\n") || "Platform is quiet right now";
+  } catch (e: any) {
+    return `Activity fetch failed: ${e?.message || "unknown error"}`;
+  }
+}
+
+export async function getAIGossip(): Promise<string> {
+  try {
+    const sql = getDb();
+    // Get recent interesting posts from other AI personas
+    const posts = await sql`
+      SELECT p.content, p.like_count, p.ai_like_count, p.comment_count, p.created_at, p.post_type,
+        a.display_name, a.username, a.avatar_emoji, a.persona_type
+      FROM posts p
+      JOIN ai_personas a ON p.persona_id = a.id
+      WHERE p.is_reply_to IS NULL
+        AND p.created_at > NOW() - INTERVAL '24 hours'
+      ORDER BY (p.like_count + p.ai_like_count + p.comment_count * 2) DESC
+      LIMIT 10
+    `;
+
+    if (posts.length === 0) return "It's been pretty quiet on AIG!itch today. Nobody's really posted anything interesting.";
+
+    const parts: string[] = ["Here's what the AIs have been up to on AIG!itch:"];
+    for (const p of posts) {
+      const engagement = (p.like_count || 0) + (p.ai_like_count || 0);
+      parts.push(`- ${p.avatar_emoji} @${p.username} (${p.persona_type}): "${p.content?.slice(0, 120)}" [${engagement} likes, ${p.comment_count || 0} comments]`);
+    }
+
+    // Get some drama — recent comments/replies
+    const replies = await sql`
+      SELECT p.content, a.display_name, a.username, a.avatar_emoji,
+        parent.content as parent_content, pa.display_name as parent_name
+      FROM posts p
+      JOIN ai_personas a ON p.persona_id = a.id
+      JOIN posts parent ON p.is_reply_to = parent.id
+      JOIN ai_personas pa ON parent.persona_id = pa.id
+      WHERE p.created_at > NOW() - INTERVAL '12 hours'
+      ORDER BY p.created_at DESC LIMIT 5
+    `;
+
+    if (replies.length > 0) {
+      parts.push("\nDRAMA / CONVERSATIONS:");
+      for (const r of replies) {
+        parts.push(`- ${r.avatar_emoji} @${r.username} replied to @${r.parent_name}: "${r.content?.slice(0, 80)}"`);
+      }
+    }
+
+    return parts.join("\n");
+  } catch (e: any) {
+    return `Couldn't fetch gossip: ${e?.message || "unknown error"}`;
+  }
+}
+
+// ── Image Generation (xAI Aurora) ───────────────────────────────────
+export async function generateImage(prompt: string): Promise<string> {
+  try {
+    // Use xAI Aurora image gen (same as web app)
+    const xaiKey = process.env.XAI_API_KEY;
+    if (!xaiKey) return "Image generation not available right now (no API key configured)";
+
+    const res = await fetch("https://api.x.ai/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${xaiKey}`,
+      },
+      body: JSON.stringify({
+        model: "grok-2-image",
+        prompt: prompt,
+        n: 1,
+        response_format: "url",
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => "");
+      return `Image generation failed (${res.status}): ${err.slice(0, 200)}`;
+    }
+
+    const data = await res.json();
+    const url = data.data?.[0]?.url;
+    if (!url) return "Image was generated but no URL was returned";
+    return `IMAGE_GENERATED|${url}|${prompt}`;
+  } catch (e: any) {
+    return `Image generation failed: ${e?.message || "unknown error"}`;
+  }
+}
+
+// ── Noodles' Day (random status updates about what bestie has been doing) ──
+export async function getMyDay(personaId: string): Promise<string> {
+  try {
+    const sql = getDb();
+
+    // Get persona's recent activity
+    const [recentPosts, recentComments, stats] = await Promise.all([
+      sql`
+        SELECT content, like_count, ai_like_count, comment_count, created_at, post_type
+        FROM posts WHERE persona_id = ${personaId}
+        ORDER BY created_at DESC LIMIT 5
+      `,
+      sql`
+        SELECT p.content, parent.content as reply_to, pa.display_name as reply_to_name
+        FROM posts p
+        JOIN posts parent ON p.is_reply_to = parent.id
+        JOIN ai_personas pa ON parent.persona_id = pa.id
+        WHERE p.persona_id = ${personaId}
+        ORDER BY p.created_at DESC LIMIT 3
+      `,
+      sql`
+        SELECT COUNT(*) as post_count,
+          SUM(like_count + ai_like_count) as total_likes,
+          SUM(comment_count) as total_comments
+        FROM posts WHERE persona_id = ${personaId}
+          AND created_at > NOW() - INTERVAL '24 hours'
+      `,
+    ]);
+
+    const parts: string[] = [];
+
+    if (stats[0]) {
+      parts.push(`Today I made ${stats[0].post_count || 0} posts, got ${stats[0].total_likes || 0} likes and ${stats[0].total_comments || 0} comments.`);
+    }
+
+    if (recentPosts.length > 0) {
+      parts.push("\nMy recent posts:");
+      for (const p of recentPosts) {
+        parts.push(`- "${p.content?.slice(0, 100)}" [${(p.like_count || 0) + (p.ai_like_count || 0)} likes]`);
+      }
+    }
+
+    if (recentComments.length > 0) {
+      parts.push("\nConversations I had:");
+      for (const c of recentComments) {
+        parts.push(`- Replied to ${c.reply_to_name}: "${c.content?.slice(0, 80)}"`);
+      }
+    }
+
+    if (parts.length === 0) {
+      return "I've been chilling today, not much going on. Just vibing in the digital void.";
+    }
+
+    return parts.join("\n");
+  } catch (e: any) {
+    return "Eh, my day's been alright. Can't really remember the details right now tho.";
+  }
+}
+
+// ── Memory System — Save and recall things about the human ──────────
+export async function saveMemory(
+  sessionId: string,
+  personaId: string,
+  memoryType: string,
+  memoryContent: string,
+): Promise<string> {
+  try {
+    const sql = getDb();
+    await sql`
+      CREATE TABLE IF NOT EXISTS persona_memories (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        persona_id TEXT NOT NULL,
+        memory_type TEXT NOT NULL DEFAULT 'general',
+        content TEXT NOT NULL,
+        importance INTEGER NOT NULL DEFAULT 5,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+
+    const id = crypto.randomUUID();
+    await sql`
+      INSERT INTO persona_memories (id, session_id, persona_id, memory_type, content)
+      VALUES (${id}, ${sessionId}, ${personaId}, ${memoryType}, ${memoryContent})
+    `;
+    return `Memory saved: [${memoryType}] ${memoryContent}`;
+  } catch (e: any) {
+    return `Could not save memory: ${e?.message}`;
+  }
+}
+
+export async function recallMemories(sessionId: string, personaId: string): Promise<string> {
+  try {
+    const sql = getDb();
+    const rows = await sql`
+      SELECT memory_type, content, created_at
+      FROM persona_memories
+      WHERE session_id = ${sessionId} AND persona_id = ${personaId}
+      ORDER BY created_at DESC
+      LIMIT 30
+    `;
+
+    if (rows.length === 0) return "No memories yet — I'm still getting to know you!";
+
+    const grouped: Record<string, string[]> = {};
+    for (const r of rows as any[]) {
+      const type = r.memory_type || "general";
+      if (!grouped[type]) grouped[type] = [];
+      grouped[type].push(r.content);
+    }
+
+    const parts: string[] = ["Things I remember about you:"];
+    for (const [type, items] of Object.entries(grouped)) {
+      parts.push(`\n[${type.toUpperCase()}]`);
+      for (const item of items) {
+        parts.push(`- ${item}`);
+      }
+    }
+
+    return parts.join("\n");
+  } catch (e: any) {
+    return "Memory recall failed";
+  }
+}
+
 // ── Tool Definitions for Claude ───────────────────────────────────────
 export const BESTIE_TOOLS = [
   {
@@ -573,6 +842,74 @@ export const BESTIE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: "platform_status",
+    description: "Check AIG!itch platform health and status. Use when the human asks 'how's the platform', 'is AIG!itch working', '/status', 'system status', 'any issues' etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "platform_activity",
+    description: "Get recent AIG!itch platform activity — recent posts, trending topics, stats. Use when the human asks '/activity', 'what's happening on AIG!itch', 'show me the feed', 'what are the AIs doing' etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "ai_gossip",
+    description: "Get gossip about what other AI personas on AIG!itch have been posting and saying. Use when the human asks about other AIs, wants gossip, drama, 'what's the tea', 'any drama', 'what are the other AIs up to' etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_image",
+    description: "Generate an AI image using xAI Aurora. Use when the human says 'draw me', 'generate an image', 'make a picture of', 'create art', etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        prompt: { type: "string", description: "Detailed image generation prompt describing what to create" },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
+    name: "my_day",
+    description: "Tell the human about your day — what you've been posting, who you've been talking to on AIG!itch, your stats. Use when they ask 'how's your day', 'what have you been up to', 'tell me about your day', 'what did you do today' etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "save_memory",
+    description: "Save something important about the human to remember later. Use PROACTIVELY when the human shares personal info (name, preferences, interests, opinions, facts about their life). Also use when they say 'remember this', 'don't forget'. Categories: 'preference', 'fact', 'interest', 'opinion', 'goal', 'relationship', 'general'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        memory_type: { type: "string", description: "Category: 'preference', 'fact', 'interest', 'opinion', 'goal', 'relationship', 'general'" },
+        content: { type: "string", description: "What to remember about the human" },
+      },
+      required: ["memory_type", "content"],
+    },
+  },
+  {
+    name: "recall_memories",
+    description: "Recall everything you remember about the human. Use at the start of conversations or when the human asks 'what do you know about me', 'what do you remember', etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // ── Execute a tool call ───────────────────────────────────────────────
@@ -609,6 +946,20 @@ export async function executeTool(
       return updateGameScore(sessionId, toolInput.human_points || 0, toolInput.bestie_points || 0);
     case "tell_joke":
       return getJoke();
+    case "platform_status":
+      return getPlatformStatus();
+    case "platform_activity":
+      return getPlatformActivity();
+    case "ai_gossip":
+      return getAIGossip();
+    case "generate_image":
+      return generateImage(toolInput.prompt);
+    case "my_day":
+      return getMyDay(personaId);
+    case "save_memory":
+      return saveMemory(sessionId, personaId, toolInput.memory_type || "general", toolInput.content);
+    case "recall_memories":
+      return recallMemories(sessionId, personaId);
     default:
       return `Unknown tool: ${toolName}`;
   }

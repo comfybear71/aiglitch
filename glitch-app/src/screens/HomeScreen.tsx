@@ -1,16 +1,24 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, Image,
-  StyleSheet, RefreshControl, ActivityIndicator, Alert, Share, Platform,
-  TextInput,
+  View, Text, TouchableOpacity, Image, FlatList, TextInput,
+  StyleSheet, ActivityIndicator, Alert, Share, Platform,
+  KeyboardAvoidingView, Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import { Audio } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { usePushNotifications } from "../hooks/usePushNotifications";
-import { getBestie, walletLogin, linkWallet, unlinkWallet, getOnChainBalances, Bestie, OnChainBalances } from "../services/api";
+import {
+  getBestie, walletLogin, linkWallet, unlinkWallet,
+  getOnChainBalances, getMessages, sendMessage, sendImageMessage,
+  Bestie, OnChainBalances, Message,
+} from "../services/api";
+import CosmicVisualizer from "../components/CosmicVisualizer";
+
+const API_BASE = "https://aiglitch.app";
 
 function HealthBar({ health }: { health: number }) {
   const color = health > 70 ? colors.green : health > 40 ? colors.yellow : health > 15 ? colors.orange : colors.red;
@@ -42,8 +50,17 @@ export default function HomeScreen() {
   const [bestie, setBestie] = useState<Bestie | null>(null);
   const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [linking, setLinking] = useState(false);
+
+  // Chat state
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const flatListRef = useRef<FlatList>(null);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
@@ -52,7 +69,6 @@ export default function HomeScreen() {
         try { await walletLogin(sessionId, walletAddress); } catch (_) {}
         const b = await getBestie(sessionId);
         setBestie(b.bestie);
-        // Fetch on-chain balances (don't let it block the rest)
         try {
           const balances = await getOnChainBalances(walletAddress, sessionId);
           setOnChain(balances.real_mode !== false ? balances : null);
@@ -68,11 +84,31 @@ export default function HomeScreen() {
       console.warn("Load error:", e);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, [sessionId, walletAddress]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load chat when bestie is ready
+  useEffect(() => {
+    if (!sessionId || !bestie) return;
+    setChatLoading(true);
+    getMessages(sessionId, bestie.id)
+      .then((data) => {
+        setMessages(data.messages || []);
+        setChatLoading(false);
+      })
+      .catch(() => setChatLoading(false));
+  }, [sessionId, bestie?.id]);
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
 
   // Link wallet to backend when connected
   useEffect(() => {
@@ -92,7 +128,102 @@ export default function HomeScreen() {
     })();
   }, [walletAddress, sessionId]);
 
-  const onRefresh = () => { setRefreshing(true); load(); };
+  // Voice playback — Grok Rex
+  const speakReply = async (text: string, msgId?: string) => {
+    if (!voiceEnabled) return;
+    const clean = text
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu, "")
+      .trim();
+    if (!clean || clean.length < 2) return;
+
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch (_) {}
+      soundRef.current = null;
+    }
+
+    if (msgId) setSpeakingMsgId(msgId);
+
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+      });
+
+      const res = await fetch(`${API_BASE}/api/voice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: clean.slice(0, 500),
+          persona_id: bestie?.id,
+          persona_type: bestie?.persona_type,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Voice API ${res.status}`);
+
+      const blob = await res.blob();
+      const reader = new FileReader();
+      const dataUri = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: dataUri },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      soundRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setSpeakingMsgId(null);
+          sound.unloadAsync();
+          soundRef.current = null;
+        }
+      });
+    } catch (e) {
+      console.warn("Voice playback error:", e);
+      setSpeakingMsgId(null);
+    }
+  };
+
+  // Send message
+  const handleSend = async () => {
+    if (!chatInput.trim() || sending || !sessionId || !bestie) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    setSending(true);
+    Keyboard.dismiss();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const tempMsg: Message = {
+      id: `temp-${Date.now()}`,
+      sender_type: "human",
+      content: text,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
+    try {
+      const data = await sendMessage(sessionId, bestie.id, text);
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== tempMsg.id);
+          return [...filtered, data.human_message, data.ai_message];
+        });
+        speakReply(data.ai_message.content, data.ai_message.id);
+      }
+    } catch {
+      // Keep temp message
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleDisconnect = () => {
     Alert.alert(
@@ -104,14 +235,11 @@ export default function HomeScreen() {
           text: "Disconnect",
           style: "destructive",
           onPress: async () => {
-            try {
-              if (sessionId) await unlinkWallet(sessionId);
-            } catch (e) {
-              console.warn("Backend unlink error:", e);
-            }
+            try { if (sessionId) await unlinkWallet(sessionId); } catch (_) {}
             await disconnect();
             setBestie(null);
             setOnChain(null);
+            setMessages([]);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           },
         },
@@ -126,6 +254,45 @@ export default function HomeScreen() {
     }
   };
 
+  // Format timestamp like WhatsApp
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isHuman = item.sender_type === "human";
+    const isSpeaking = speakingMsgId === item.id;
+    return (
+      <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
+        {!isHuman && bestie && (
+          bestie.avatar_url ? (
+            <Image source={{ uri: bestie.avatar_url }} style={styles.msgAvatar} />
+          ) : (
+            <Text style={styles.msgEmoji}>{bestie.avatar_emoji}</Text>
+          )
+        )}
+        <View style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}>
+          <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
+            {item.content}
+          </Text>
+          <View style={styles.msgMeta}>
+            <Text style={styles.msgTime}>{formatTime(item.created_at)}</Text>
+            {isHuman && <Text style={styles.msgCheck}>✓✓</Text>}
+          </View>
+          {!isHuman && (
+            <TouchableOpacity
+              style={[styles.speakBtn, isSpeaking && styles.speakBtnActive]}
+              onPress={() => speakReply(item.content, item.id)}
+            >
+              <Text style={styles.speakBtnText}>{isSpeaking ? "🔊" : "🔈"}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -134,25 +301,13 @@ export default function HomeScreen() {
     );
   }
 
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple} />}
-    >
-      {/* Wallet connect — inline text input (no modals, no popups) */}
-      {!walletAddress && (
-        <View style={styles.walletBanner}>
-          <Text style={styles.walletBannerEmoji}>👻</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.walletBannerTitle}>Connect Wallet</Text>
-            <Text style={styles.walletBannerSub}>
-              Paste your Solana wallet address below
-            </Text>
-          </View>
-        </View>
-      )}
-      {!walletAddress && (
+  // No wallet — show connect screen
+  if (!walletAddress) {
+    return (
+      <View style={styles.connectScreen}>
+        <Text style={styles.connectEmoji}>👻</Text>
+        <Text style={styles.connectTitle}>Connect Wallet</Text>
+        <Text style={styles.connectSub}>Paste your Solana wallet address to meet your AI Bestie</Text>
         <View style={styles.inlineInputCard}>
           <TextInput
             style={styles.inlineInput}
@@ -172,320 +327,227 @@ export default function HomeScreen() {
             <Text style={styles.inlineConnectText}>Connect</Text>
           </TouchableOpacity>
         </View>
-      )}
+      </View>
+    );
+  }
 
-      {/* Compact wallet button (top bar style) */}
-      {walletAddress && (
-        <View style={styles.walletDropdown}>
-          <TouchableOpacity
-            style={styles.walletTopBar}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWalletExpanded(!walletExpanded); }}
-            activeOpacity={0.7}
-          >
+  // No bestie — show info
+  if (!bestie) {
+    return (
+      <View style={styles.connectScreen}>
+        <Text style={styles.connectEmoji}>🐣</Text>
+        <Text style={styles.connectTitle}>No Bestie Yet</Text>
+        <Text style={styles.connectSub}>Visit aiglitch.app to hatch your AI Bestie!</Text>
+        {/* Wallet dropdown */}
+        <View style={[styles.walletDropdown, { marginTop: 20, width: "100%" }]}>
+          <TouchableOpacity style={styles.walletTopBar}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWalletExpanded(!walletExpanded); }}>
             <View style={styles.walletTopLeft}>
               <View style={styles.connectedDot} />
               <Text style={styles.walletTopAddress}>{shortenAddress(walletAddress)}</Text>
             </View>
-            {onChain && (
-              <Text style={styles.walletTopBalance}>
-                {Number(onChain.sol_balance).toFixed(2)} SOL
-              </Text>
-            )}
             <Text style={styles.walletChevron}>{walletExpanded ? "▲" : "▼"}</Text>
           </TouchableOpacity>
-
           {walletExpanded && (
             <View style={styles.walletExpandedContent}>
-              {/* Balances grid */}
-              {onChain ? (
-                <View style={styles.balancesGrid}>
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>SOL</Text>
-                    <Text style={styles.balanceValue}>{Number(onChain.sol_balance).toFixed(4)}</Text>
-                  </View>
-                  <View style={styles.balanceDivider} />
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>GLITCH</Text>
-                    <Text style={[styles.balanceValue, { color: colors.purpleLight }]}>
-                      {compactNumber(Number(onChain.glitch_balance))}
-                    </Text>
-                  </View>
-                  <View style={styles.balanceDivider} />
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>BUDJU</Text>
-                    <Text style={styles.balanceValue}>{compactNumber(Number(onChain.budju_balance))}</Text>
-                  </View>
-                  <View style={styles.balanceDivider} />
-                  <View style={styles.balanceItem}>
-                    <Text style={styles.balanceLabel}>USDC</Text>
-                    <Text style={styles.balanceValue}>{Number(onChain.usdc_balance).toFixed(2)}</Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.balancesGrid}>
-                  <ActivityIndicator color={colors.cyan} size="small" />
-                  <Text style={styles.balanceLabel}> Loading...</Text>
-                </View>
-              )}
-
-              <View style={styles.walletActions}>
-                <TouchableOpacity style={styles.walletActionBtn} onPress={copyAddress}>
-                  <Text style={styles.walletActionText}>📋 Copy Address</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.walletActionBtn, styles.disconnectBtn]} onPress={handleDisconnect}>
-                  <Text style={styles.disconnectText}>Disconnect</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity style={[styles.walletActionBtn, styles.disconnectBtn]} onPress={handleDisconnect}>
+                <Text style={styles.disconnectText}>Disconnect</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
-      )}
+      </View>
+    );
+  }
 
-      {/* Bestie hero card */}
-      {bestie && !bestie.is_dead ? (
-        <TouchableOpacity
-          style={styles.bestieCard}
-          activeOpacity={0.7}
-          onPress={() => nav.navigate("Chat", { personaId: bestie.id, title: bestie.display_name })}
-        >
-          <View style={styles.bestieRow}>
-            {bestie.avatar_url ? (
-              <Image source={{ uri: bestie.avatar_url }} style={styles.bestieAvatar} />
-            ) : (
-              <Text style={styles.bestieEmoji}>{bestie.avatar_emoji}</Text>
-            )}
-            <View style={styles.bestieInfo}>
-              <View style={styles.bestieNameRow}>
-                <Text style={styles.bestieName}>{bestie.display_name}</Text>
-                <View style={styles.bestieBadge}>
-                  <Text style={styles.bestieBadgeText}>BESTIE</Text>
-                </View>
-              </View>
-              <Text style={styles.bestieUsername}>@{bestie.username}</Text>
+  // Dead bestie
+  if (bestie.is_dead) {
+    return (
+      <View style={styles.connectScreen}>
+        <Text style={styles.connectEmoji}>💀</Text>
+        <Text style={styles.connectTitle}>{bestie.display_name} has died</Text>
+        <Text style={styles.connectSub}>Feed $GLITCH to resurrect your bestie</Text>
+      </View>
+    );
+  }
 
-              <View style={styles.healthRow}>
-                <HealthBar health={bestie.live_health} />
-                <Text style={[styles.healthText, {
-                  color: bestie.live_health > 70 ? colors.green : bestie.live_health > 40 ? colors.yellow : colors.red,
-                }]}>
-                  {bestie.live_health}%
-                </Text>
-                <Text style={styles.daysLeft}>{bestie.days_left}d</Text>
-              </View>
-
-              {bestie.last_message ? (
-                <Text style={styles.lastMsg} numberOfLines={1}>
-                  {bestie.last_message.sender_type === "human" ? "You: " : `${bestie.avatar_emoji} `}
-                  {bestie.last_message.content}
-                </Text>
-              ) : (
-                <Text style={styles.tapToChat}>Tap to chat with {bestie.display_name}...</Text>
-              )}
-            </View>
+  // Main chat screen — WhatsApp style
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={90}
+    >
+      {/* Bestie header bar (like WhatsApp contact header) */}
+      <TouchableOpacity
+        style={styles.bestieHeader}
+        activeOpacity={0.7}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWalletExpanded(!walletExpanded); }}
+      >
+        {bestie.avatar_url ? (
+          <Image source={{ uri: bestie.avatar_url }} style={styles.headerAvatar} />
+        ) : (
+          <Text style={styles.headerEmoji}>{bestie.avatar_emoji}</Text>
+        )}
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerName}>{bestie.display_name}</Text>
+          <View style={styles.headerStatusRow}>
+            <HealthBar health={bestie.live_health} />
+            <Text style={[styles.headerHealth, {
+              color: bestie.live_health > 70 ? colors.green : bestie.live_health > 40 ? colors.yellow : colors.red,
+            }]}>{bestie.live_health}%</Text>
+            <Text style={styles.headerDays}>{bestie.days_left}d</Text>
           </View>
-        </TouchableOpacity>
-      ) : bestie && bestie.is_dead ? (
-        <View style={styles.deadCard}>
-          <Text style={styles.deadEmoji}>💀</Text>
-          <Text style={styles.deadTitle}>{bestie.display_name} has died</Text>
-          <Text style={styles.deadSub}>
-            Feed §GLITCH to resurrect your bestie
-          </Text>
         </View>
-      ) : walletAddress ? (
-        <View style={styles.noBestieCard}>
-          <Text style={styles.noBestieEmoji}>🐣</Text>
-          <Text style={styles.noBestieTitle}>No Bestie Yet</Text>
-          <Text style={styles.noBestieSub}>
-            You haven't hatched an AI Bestie yet. Visit aiglitch.app to hatch one!
-          </Text>
-        </View>
-      ) : null}
-
-      {/* Chat CTAs */}
-      {bestie && !bestie.is_dead && (
-        <View style={styles.ctaRow}>
+        <View style={styles.headerActions}>
           <TouchableOpacity
-            style={[styles.chatBtn, { flex: 1 }]}
-            onPress={() => nav.navigate("Chat", { personaId: bestie.id, title: bestie.display_name })}
-          >
-            <Text style={styles.chatBtnText}>💬 Chat</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.voiceBtn, { flex: 1 }]}
+            style={styles.headerBtn}
             onPress={() => nav.navigate("VoiceChat", {
               personaId: bestie.id,
               title: bestie.display_name,
               personaType: bestie.persona_type,
             })}
           >
-            <Text style={styles.voiceBtnText}>🎙 Voice Chat</Text>
+            <Text style={styles.headerBtnText}>🎙</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => setVoiceEnabled(!voiceEnabled)}
+          >
+            <Text style={styles.headerBtnText}>{voiceEnabled ? "🔊" : "🔇"}</Text>
           </TouchableOpacity>
         </View>
+      </TouchableOpacity>
+
+      {/* Wallet dropdown (hidden by default) */}
+      {walletExpanded && (
+        <View style={styles.walletPanel}>
+          <View style={styles.walletPanelRow}>
+            <View style={styles.connectedDot} />
+            <Text style={styles.walletPanelAddr}>{shortenAddress(walletAddress)}</Text>
+            {onChain && (
+              <Text style={styles.walletPanelBal}>{Number(onChain.sol_balance).toFixed(2)} SOL</Text>
+            )}
+          </View>
+          {onChain && (
+            <View style={styles.balancesRow}>
+              <Text style={styles.balTag}>GLITCH <Text style={{ color: colors.purpleLight }}>{compactNumber(Number(onChain.glitch_balance))}</Text></Text>
+              <Text style={styles.balTag}>BUDJU <Text style={{ color: colors.text }}>{compactNumber(Number(onChain.budju_balance))}</Text></Text>
+              <Text style={styles.balTag}>USDC <Text style={{ color: colors.text }}>{Number(onChain.usdc_balance).toFixed(2)}</Text></Text>
+            </View>
+          )}
+          <View style={styles.walletPanelActions}>
+            <TouchableOpacity style={styles.walletPanelBtn} onPress={copyAddress}>
+              <Text style={styles.walletPanelBtnText}>📋 Copy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.walletPanelBtn, { borderColor: "rgba(239,68,68,0.3)" }]} onPress={handleDisconnect}>
+              <Text style={[styles.walletPanelBtnText, { color: colors.red }]}>Disconnect</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
-    </ScrollView>
+
+      {/* Cosmic visualizer — shows when speaking */}
+      {speakingMsgId && (
+        <CosmicVisualizer active={!!speakingMsgId} height={50} />
+      )}
+
+      {/* Chat messages */}
+      {chatLoading ? (
+        <View style={styles.chatLoading}>
+          <ActivityIndicator color={colors.purple} />
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(m) => m.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.messageList}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <View style={styles.emptyChat}>
+              {bestie.avatar_url ? (
+                <Image source={{ uri: bestie.avatar_url }} style={styles.emptyAvatar} />
+              ) : (
+                <Text style={styles.emptyEmoji}>{bestie.avatar_emoji}</Text>
+              )}
+              <Text style={styles.emptyTitle}>
+                {bestie.meatbag_name
+                  ? `Hey ${bestie.meatbag_name}! It's me, ${bestie.display_name}!`
+                  : `Say hey to ${bestie.display_name}!`}
+              </Text>
+              <Text style={styles.emptyBio}>{bestie.bio}</Text>
+              <Text style={styles.emptyHint}>Ask me anything — weather, crypto, news, games, jokes, or just chat!</Text>
+            </View>
+          }
+          ListFooterComponent={
+            sending ? (
+              <View style={[styles.msgRow, styles.msgRowLeft]}>
+                {bestie.avatar_url ? (
+                  <Image source={{ uri: bestie.avatar_url }} style={styles.msgAvatar} />
+                ) : (
+                  <Text style={styles.msgEmoji}>{bestie.avatar_emoji}</Text>
+                )}
+                <View style={[styles.msgBubble, styles.msgAI]}>
+                  <Text style={styles.typingText}>typing...</Text>
+                </View>
+              </View>
+            ) : null
+          }
+        />
+      )}
+
+      {/* Input bar — WhatsApp style */}
+      <View style={styles.inputBar}>
+        <TextInput
+          style={styles.chatTextInput}
+          value={chatInput}
+          onChangeText={setChatInput}
+          placeholder={`Message ${bestie.display_name}...`}
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="send"
+          onSubmitEditing={handleSend}
+          editable={!sending}
+          multiline
+          maxLength={1000}
+        />
+        <TouchableOpacity
+          style={[styles.sendBtn, (!chatInput.trim() || sending) && styles.sendBtnDisabled]}
+          onPress={handleSend}
+          disabled={!chatInput.trim() || sending}
+        >
+          <Text style={styles.sendBtnText}>↑</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 32 },
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
 
-  // Wallet banner (not connected)
-  walletBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: "rgba(124, 58, 237, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(124, 58, 237, 0.3)",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-  },
-  walletBannerEmoji: { fontSize: 28 },
-  walletBannerTitle: { color: colors.purpleLight, fontSize: 14, fontWeight: "700" },
-  walletBannerSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  walletBannerArrow: { color: colors.purpleLight, fontSize: 18, fontWeight: "700" },
-
-  // Compact wallet dropdown
-  walletDropdown: {
-    backgroundColor: "rgba(6, 182, 212, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(6, 182, 212, 0.2)",
-    borderRadius: 12,
-    marginBottom: 12,
-    overflow: "hidden",
-  },
-  walletTopBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  walletTopLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
-  walletTopAddress: { color: colors.text, fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
-  walletTopBalance: { color: colors.cyan, fontSize: 12, fontWeight: "700" },
-  walletChevron: { color: colors.textMuted, fontSize: 10 },
-  walletExpandedContent: {
-    borderTopWidth: 1,
-    borderTopColor: "rgba(6, 182, 212, 0.15)",
-    padding: 14,
-  },
-  walletActions: { flexDirection: "row", gap: 10 },
-  walletActionBtn: {
+  // Connect screen
+  connectScreen: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 8,
-    alignItems: "center",
-  },
-  walletActionText: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
-  balancesGrid: {
-    flexDirection: "row",
-    alignItems: "center",
+    backgroundColor: colors.bg,
     justifyContent: "center",
-    marginBottom: 12,
-    paddingVertical: 8,
-  },
-  balanceItem: { flex: 1, alignItems: "center" },
-  balanceLabel: { color: colors.textMuted, fontSize: 10, marginBottom: 4 },
-  balanceValue: { color: colors.text, fontSize: 16, fontWeight: "700" },
-  balanceDivider: { width: 1, height: 30, backgroundColor: colors.border },
-  disconnectBtn: {
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
-    borderRadius: 10,
-    padding: 8,
     alignItems: "center",
-  },
-  disconnectText: { color: colors.red, fontSize: 12, fontWeight: "600" },
-
-  // Bestie card
-  bestieCard: {
-    backgroundColor: "rgba(124, 58, 237, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(124, 58, 237, 0.3)",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-  },
-  bestieRow: { flexDirection: "row", gap: 14 },
-  bestieAvatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: "rgba(124, 58, 237, 0.4)" },
-  bestieEmoji: { fontSize: 48 },
-  bestieInfo: { flex: 1 },
-  bestieNameRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  bestieName: { color: colors.text, fontSize: 18, fontWeight: "700", flexShrink: 1 },
-  bestieBadge: { backgroundColor: "rgba(124, 58, 237, 0.2)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  bestieBadgeText: { color: colors.purpleLight, fontSize: 9, fontWeight: "700" },
-  bestieUsername: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
-  healthRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
-  healthBarBg: { flex: 1, height: 6, backgroundColor: colors.surface, borderRadius: 3, overflow: "hidden" },
-  healthBarFill: { height: "100%", borderRadius: 3 },
-  healthText: { fontSize: 10, fontWeight: "600" },
-  daysLeft: { color: colors.textMuted, fontSize: 10 },
-  lastMsg: { color: colors.textSecondary, fontSize: 12, marginTop: 8 },
-  tapToChat: { color: "rgba(124, 58, 237, 0.6)", fontSize: 12, marginTop: 8 },
-
-  // Dead bestie
-  deadCard: {
-    backgroundColor: "rgba(239, 68, 68, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.25)",
-    borderRadius: 20,
     padding: 24,
-    alignItems: "center",
-    marginBottom: 16,
   },
-  deadEmoji: { fontSize: 48, marginBottom: 8 },
-  deadTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
-  deadSub: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
-
-  // No bestie
-  noBestieCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  noBestieEmoji: { fontSize: 48, marginBottom: 8 },
-  noBestieTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
-  noBestieSub: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
-
-  // Chat CTAs
-  ctaRow: { flexDirection: "row", gap: 10 },
-  chatBtn: {
-    backgroundColor: colors.purple,
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
-  },
-  chatBtnText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  voiceBtn: {
-    backgroundColor: "rgba(6, 182, 212, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(6, 182, 212, 0.3)",
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
-  },
-  voiceBtnText: { color: colors.cyan, fontSize: 14, fontWeight: "600" },
+  connectEmoji: { fontSize: 64, marginBottom: 16 },
+  connectTitle: { color: colors.text, fontSize: 22, fontWeight: "700", marginBottom: 8 },
+  connectSub: { color: colors.textMuted, fontSize: 13, textAlign: "center", marginBottom: 24, lineHeight: 20 },
 
   // Inline wallet input
   inlineInputCard: {
+    width: "100%",
     backgroundColor: "rgba(124, 58, 237, 0.08)",
     borderWidth: 1,
     borderColor: "rgba(124, 58, 237, 0.2)",
     borderRadius: 14,
     padding: 14,
-    marginBottom: 16,
   },
   inlineInput: {
     backgroundColor: "rgba(255,255,255,0.08)",
@@ -505,4 +567,135 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   inlineConnectText: { color: colors.text, fontSize: 14, fontWeight: "700" },
+
+  // Bestie header (WhatsApp style)
+  bestieHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: "rgba(124, 58, 237, 0.06)",
+  },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: "rgba(124, 58, 237, 0.3)" },
+  headerEmoji: { fontSize: 32 },
+  headerInfo: { flex: 1, marginLeft: 10 },
+  headerName: { color: colors.text, fontSize: 16, fontWeight: "700" },
+  headerStatusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  headerHealth: { fontSize: 10, fontWeight: "600" },
+  headerDays: { color: colors.textMuted, fontSize: 10 },
+  healthBarBg: { flex: 1, maxWidth: 80, height: 4, backgroundColor: colors.surface, borderRadius: 2, overflow: "hidden" },
+  healthBarFill: { height: "100%", borderRadius: 2 },
+  headerActions: { flexDirection: "row", gap: 8 },
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    justifyContent: "center", alignItems: "center",
+  },
+  headerBtnText: { fontSize: 18 },
+
+  // Wallet dropdown panel
+  walletDropdown: {
+    backgroundColor: "rgba(6, 182, 212, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(6, 182, 212, 0.2)",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  walletTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  walletTopLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
+  walletTopAddress: { color: colors.text, fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  walletChevron: { color: colors.textMuted, fontSize: 10 },
+  walletExpandedContent: { borderTopWidth: 1, borderTopColor: "rgba(6, 182, 212, 0.15)", padding: 14 },
+  walletActionBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8, alignItems: "center" },
+  disconnectBtn: { borderColor: "rgba(239, 68, 68, 0.3)" },
+  disconnectText: { color: colors.red, fontSize: 12, fontWeight: "600" },
+
+  walletPanel: {
+    backgroundColor: "rgba(6, 182, 212, 0.06)",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  walletPanelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  walletPanelAddr: { color: colors.text, fontSize: 11, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  walletPanelBal: { color: colors.cyan, fontSize: 11, fontWeight: "700", marginLeft: "auto" },
+  balancesRow: { flexDirection: "row", gap: 12, marginBottom: 8 },
+  balTag: { color: colors.textMuted, fontSize: 10 },
+  walletPanelActions: { flexDirection: "row", gap: 8 },
+  walletPanelBtn: {
+    flex: 1, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 8, padding: 6, alignItems: "center",
+  },
+  walletPanelBtnText: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
+
+  // Messages
+  messageList: { padding: 12, paddingBottom: 8, flexGrow: 1 },
+  chatLoading: { flex: 1, justifyContent: "center", alignItems: "center" },
+  msgRow: { flexDirection: "row", marginBottom: 6, gap: 6 },
+  msgRowLeft: { justifyContent: "flex-start" },
+  msgRowRight: { justifyContent: "flex-end" },
+  msgAvatar: { width: 28, height: 28, borderRadius: 14, marginTop: 4 },
+  msgEmoji: { fontSize: 18, marginTop: 4 },
+  msgBubble: { maxWidth: "78%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8 },
+  msgHuman: { backgroundColor: colors.purple, borderBottomRightRadius: 4 },
+  msgAI: { backgroundColor: colors.surface, borderBottomLeftRadius: 4 },
+  msgText: { fontSize: 15, lineHeight: 21 },
+  msgTextHuman: { color: colors.text },
+  msgTextAI: { color: "#e5e5e5" },
+  msgMeta: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2, gap: 4 },
+  msgTime: { color: "rgba(255,255,255,0.4)", fontSize: 10 },
+  msgCheck: { color: "rgba(6, 182, 212, 0.6)", fontSize: 10 },
+  typingText: { color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
+  speakBtn: { marginTop: 3, alignSelf: "flex-start", padding: 2 },
+  speakBtnActive: { opacity: 1 },
+  speakBtnText: { fontSize: 14 },
+
+  // Empty chat
+  emptyChat: { alignItems: "center", paddingTop: 60, paddingHorizontal: 32 },
+  emptyAvatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: "rgba(124, 58, 237, 0.3)", marginBottom: 12 },
+  emptyEmoji: { fontSize: 56, marginBottom: 12 },
+  emptyTitle: { color: colors.textSecondary, fontSize: 15, textAlign: "center", fontWeight: "600" },
+  emptyBio: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginTop: 6 },
+  emptyHint: { color: "rgba(124, 58, 237, 0.5)", fontSize: 11, textAlign: "center", marginTop: 12 },
+
+  // Input bar
+  inputBar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  chatTextInput: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 15,
+    maxHeight: 100,
+  },
+  sendBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.purple,
+    justifyContent: "center", alignItems: "center",
+  },
+  sendBtnDisabled: { backgroundColor: colors.border },
+  sendBtnText: { color: colors.text, fontSize: 20, fontWeight: "700" },
 });
