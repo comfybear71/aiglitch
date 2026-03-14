@@ -8,7 +8,6 @@ interface PhantomWalletState {
   walletAddress: string | null;
   isConnecting: boolean;
   isLoading: boolean;
-  showModal: boolean;
   connect: () => void;
   disconnect: () => Promise<void>;
   submitAddress: (address: string) => Promise<void>;
@@ -19,7 +18,6 @@ export function usePhantomWallet(): PhantomWalletState {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
 
   // Auto-load saved wallet from SecureStore so balances persist
   useEffect(() => {
@@ -37,11 +35,9 @@ export function usePhantomWallet(): PhantomWalletState {
 
   const connect = useCallback(() => {
     setIsConnecting(true);
-    setShowModal(true);
   }, []);
 
   const cancelConnect = useCallback(() => {
-    setShowModal(false);
     setIsConnecting(false);
   }, []);
 
@@ -50,7 +46,6 @@ export function usePhantomWallet(): PhantomWalletState {
     if (trimmed.length >= 32 && trimmed.length <= 44) {
       await SecureStore.setItemAsync(WALLET_KEY, trimmed);
       setWalletAddress(trimmed);
-      setShowModal(false);
       setIsConnecting(false);
       Alert.alert("Connected!", `Wallet ${trimmed.slice(0, 6)}...${trimmed.slice(-4)} linked`);
     } else {
@@ -63,5 +58,5 @@ export function usePhantomWallet(): PhantomWalletState {
     setWalletAddress(null);
   }, []);
 
-  return { walletAddress, isConnecting, isLoading, showModal, connect, disconnect, submitAddress, cancelConnect };
+  return { walletAddress, isConnecting, isLoading, connect, disconnect, submitAddress, cancelConnect };
 }

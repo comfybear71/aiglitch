@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, Image,
   StyleSheet, RefreshControl, ActivityIndicator, Alert, Share, Platform,
-  Modal, TextInput, KeyboardAvoidingView,
+  TextInput,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -35,7 +35,7 @@ function compactNumber(n: number): string {
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connect, disconnect, showModal, submitAddress, cancelConnect } = usePhantomWallet();
+  const { walletAddress, isConnecting, isLoading: walletLoading, connect, disconnect, submitAddress, cancelConnect } = usePhantomWallet();
   const [addressInput, setAddressInput] = useState("");
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
@@ -139,25 +139,38 @@ export default function HomeScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple} />}
     >
-      {/* Wallet connect banner (not connected) */}
+      {/* Wallet connect — inline text input (no modals, no popups) */}
       {!walletAddress && (
-        <TouchableOpacity
-          style={styles.walletBanner}
-          onPress={connect}
-          disabled={isConnecting}
-          activeOpacity={0.8}
-        >
+        <View style={styles.walletBanner}>
           <Text style={styles.walletBannerEmoji}>👻</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.walletBannerTitle}>
-              {isConnecting ? "Connecting..." : "Connect Wallet"}
-            </Text>
+            <Text style={styles.walletBannerTitle}>Connect Wallet</Text>
             <Text style={styles.walletBannerSub}>
-              Link your Solana wallet to find your Bestie
+              Paste your Solana wallet address below
             </Text>
           </View>
-          <Text style={styles.walletBannerArrow}>→</Text>
-        </TouchableOpacity>
+        </View>
+      )}
+      {!walletAddress && (
+        <View style={styles.inlineInputCard}>
+          <TextInput
+            style={styles.inlineInput}
+            placeholder="Paste your Solana address here..."
+            placeholderTextColor={colors.textMuted}
+            value={addressInput}
+            onChangeText={setAddressInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            selectionColor={colors.purple}
+          />
+          <TouchableOpacity
+            style={[styles.inlineConnectBtn, !addressInput.trim() && { opacity: 0.4 }]}
+            disabled={!addressInput.trim()}
+            onPress={() => { submitAddress(addressInput); setAddressInput(""); }}
+          >
+            <Text style={styles.inlineConnectText}>Connect</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Connected wallet info */}
@@ -293,41 +306,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       )}
-      {/* Wallet address entry modal */}
-      <Modal visible={showModal} transparent animationType="fade">
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Connect Wallet</Text>
-            <Text style={styles.modalSub}>Paste your Solana wallet address</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. 7xKX..."
-              placeholderTextColor={colors.textMuted}
-              value={addressInput}
-              onChangeText={setAddressInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-              selectionColor={colors.purple}
-            />
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => { setAddressInput(""); cancelConnect(); }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalConnectBtn, !addressInput.trim() && { opacity: 0.4 }]}
-                disabled={!addressInput.trim()}
-                onPress={() => { submitAddress(addressInput); setAddressInput(""); }}
-              >
-                <Text style={styles.modalConnectText}>Connect</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </ScrollView>
   );
 }
@@ -471,52 +449,31 @@ const styles = StyleSheet.create({
   },
   voiceBtnText: { color: colors.cyan, fontSize: 14, fontWeight: "600" },
 
-  // Wallet entry modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: colors.surface,
+  // Inline wallet input
+  inlineInputCard: {
+    backgroundColor: "rgba(124, 58, 237, 0.08)",
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    padding: 24,
-    width: "100%",
-    maxWidth: 400,
+    borderColor: "rgba(124, 58, 237, 0.2)",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
   },
-  modalTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 4 },
-  modalSub: { color: colors.textMuted, fontSize: 13, marginBottom: 16 },
-  modalInput: {
+  inlineInput: {
     backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 14,
     color: colors.text,
     fontSize: 14,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  modalBtnRow: { flexDirection: "row", gap: 10 },
-  modalCancelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-  },
-  modalCancelText: { color: colors.textMuted, fontSize: 14, fontWeight: "600" },
-  modalConnectBtn: {
-    flex: 1,
+  inlineConnectBtn: {
     backgroundColor: colors.purple,
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 14,
     alignItems: "center",
   },
-  modalConnectText: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  inlineConnectText: { color: colors.text, fontSize: 14, fontWeight: "700" },
 });
