@@ -23,6 +23,7 @@
     "expo-file-system": "~19.0.0",
     "expo-haptics": "~15.0.0",
     "expo-image-picker": "~17.0.0",
+    "expo-linking": "~8.0.11",
     "expo-notifications": "~0.32.0",
     "expo-secure-store": "~15.0.0",
     "expo-speech": "~14.0.0",

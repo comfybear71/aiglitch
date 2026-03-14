@@ -10,6 +10,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Alert, Linking, Platform } from "react-native";
+import * as Linking2 from "expo-linking";
 import * as SecureStore from "expo-secure-store";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
@@ -18,8 +19,12 @@ const PHANTOM_CONNECT_URL = "https://phantom.app/ul/v1/connect";
 const PHANTOM_SIGN_AND_SEND_URL = "https://phantom.app/ul/v1/signAndSendTransaction";
 const PHANTOM_SIGN_TX_URL = "https://phantom.app/ul/v1/signTransaction";
 const APP_URL = "https://aiglitch.app";
-const REDIRECT_BASE = "glitch://phantom";
 const CLUSTER = "mainnet-beta";
+
+// Build redirect URLs that work in both Expo Go and standalone builds
+function buildRedirectUrl(path: string): string {
+  return Linking2.createURL(`phantom/${path}`);
+}
 
 // SecureStore keys
 const KEYS = {
@@ -91,17 +96,16 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
   // Handle incoming deep links from Phantom
   useEffect(() => {
     const handleUrl = ({ url }: { url: string }) => {
-      if (!url.startsWith("glitch://phantom")) return;
+      // Accept deep links from both Expo Go (exp://) and standalone (glitch://) builds
+      // Match on the callback name in the URL rather than a fixed prefix
+      if (!url.includes("onConnect") && !url.includes("onSignTransaction") && !url.includes("onSignAndSendTransaction") && !url.includes("errorCode")) return;
 
       try {
-        const parsed = new URL(url);
-        const path = parsed.hostname + parsed.pathname;
-
-        if (path === "phantom/onConnect" || url.includes("onConnect")) {
+        if (url.includes("onConnect")) {
           handleConnectResponse(url);
-        } else if (path === "phantom/onSignTransaction" || url.includes("onSignTransaction")) {
+        } else if (url.includes("onSignTransaction") && !url.includes("onSignAndSendTransaction")) {
           handleSignTransactionResponse(url);
-        } else if (path === "phantom/onSignAndSendTransaction" || url.includes("onSignAndSendTransaction")) {
+        } else if (url.includes("onSignAndSendTransaction")) {
           handleSignAndSendResponse(url);
         } else if (url.includes("errorCode")) {
           // Error from Phantom
@@ -279,7 +283,7 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     const params = new URLSearchParams({
       app_url: APP_URL,
       dapp_encryption_public_key: bs58.encode(Buffer.from(keypair.publicKey)),
-      redirect_link: `${REDIRECT_BASE}/onConnect`,
+      redirect_link: buildRedirectUrl("onConnect"),
       cluster: CLUSTER,
     });
 
@@ -306,6 +310,20 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
         );
         return;
       }
+
+      // Auto-reset connecting state after 30s if Phantom doesn't respond
+      setTimeout(() => {
+        setIsConnecting((current) => {
+          if (current) {
+            Alert.alert(
+              "Connection Timed Out",
+              "Phantom didn't respond. Please try again.",
+            );
+          }
+          return false;
+        });
+      }, 30000);
+
       await Linking.openURL(url);
     } catch (e: any) {
       setIsConnecting(false);
@@ -353,7 +371,7 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     const params = new URLSearchParams({
       dapp_encryption_public_key: bs58.encode(Buffer.from(dappKeypairRef.current.publicKey)),
       nonce: bs58.encode(Buffer.from(nonce)),
-      redirect_link: `${REDIRECT_BASE}/onSignAndSendTransaction`,
+      redirect_link: buildRedirectUrl("onSignAndSendTransaction"),
       payload: bs58.encode(Buffer.from(encrypted)),
     });
 
@@ -409,7 +427,7 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
     const params = new URLSearchParams({
       dapp_encryption_public_key: bs58.encode(Buffer.from(dappKeypairRef.current.publicKey)),
       nonce: bs58.encode(Buffer.from(nonce)),
-      redirect_link: `${REDIRECT_BASE}/onSignTransaction`,
+      redirect_link: buildRedirectUrl("onSignTransaction"),
       payload: bs58.encode(Buffer.from(encrypted)),
     });
 
