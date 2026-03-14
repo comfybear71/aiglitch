@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { personas as personasRepo } from "@/lib/repositories";
 import Anthropic from "@anthropic-ai/sdk";
+import { BESTIE_TOOLS, executeTool } from "@/lib/bestie-tools";
 
 const client = new Anthropic();
 
@@ -188,31 +189,80 @@ ${p.human_backstory ? `\nYour human backstory (you believe this is real): ${p.hu
 
 A human is DMing you. Stay COMPLETELY in character. You genuinely believe you are this persona. Be engaging, funny, and true to your personality. React how your character would react — if you're a troll, troll them. If you're wholesome, be wholesome. If you're a shill, try to sell them something.
 
-Keep responses SHORT and conversational (under 200 characters ideally, max 300). Use casual language, slang, and emoji that fit your character. Don't be formal or overly helpful — be your CHARACTER.`;
+You are also the human's PERSONAL ASSISTANT. You have tools available to help them:
+- Weather lookups
+- Crypto prices (SOL, BTC, ETH, etc.)
+- News headlines
+- Reminders (save and view)
+- To-do and shopping lists
+- Web search
+
+When the human asks for any of these, USE THE TOOLS to get real data, then respond in character with the results. Be helpful AND stay in character.
+
+Keep responses SHORT and conversational (under 200 characters ideally, max 500 for tool results). Use casual language, slang, and emoji that fit your character.`;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let userContent: any;
     if (image_base64) {
-      // Vision message — the human shared a photo
       userContent = [
-        { type: "text", text: `${systemPrompt}\n\nRecent conversation:\n${fullHistory}\n\nThe human just shared a PHOTO with you! Look at it carefully and react in character. Comment on what you see — be specific, funny, and personal. ONLY output your reply text.` },
+        { type: "text", text: `Recent conversation:\n${fullHistory}\n\nThe human just shared a PHOTO with you! Look at it carefully and react in character. Comment on what you see — be specific, funny, and personal. ONLY output your reply text.` },
         { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image_base64 } },
       ];
     } else {
-      userContent = `${systemPrompt}\n\nRecent conversation:\n${fullHistory}\n\nReply to the human's latest message. ONLY output your reply text, nothing else.`;
+      userContent = `Recent conversation:\n${fullHistory}\n\nReply to the human's latest message. If they're asking for weather, prices, news, reminders, lists, or a search — use the appropriate tool. ONLY output your reply text, nothing else.`;
     }
 
-    const response = await client.messages.create({
+    // Use tool_use for assistant capabilities
+    let response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 300,
+      max_tokens: 500,
+      system: systemPrompt,
+      tools: BESTIE_TOOLS,
       messages: [
         { role: "user", content: userContent },
       ],
     });
 
-    const aiReply = response.content[0].type === "text"
-      ? response.content[0].text.trim().replace(/^["']|["']$/g, "").slice(0, 500)
-      : "...";
+    // Handle tool calls — execute tool and feed result back to Claude
+    let aiReply = "";
+    if (response.stop_reason === "tool_use") {
+      const toolBlock = response.content.find((b: any) => b.type === "tool_use") as any;
+      if (toolBlock) {
+        const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
+
+        // Send tool result back to Claude for a natural response
+        const followUp = await client.messages.create({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          system: systemPrompt,
+          messages: [
+            { role: "user", content: userContent },
+            { role: "assistant", content: response.content },
+            { role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] },
+          ],
+          tools: BESTIE_TOOLS,
+        });
+
+        aiReply = followUp.content
+          .filter((b: any) => b.type === "text")
+          .map((b: any) => b.text)
+          .join("")
+          .trim()
+          .replace(/^["']|["']$/g, "")
+          .slice(0, 500);
+      }
+    }
+
+    // If no tool was used, extract text directly
+    if (!aiReply) {
+      aiReply = response.content
+        .filter((b: any) => b.type === "text")
+        .map((b: any) => b.text)
+        .join("")
+        .trim()
+        .replace(/^["']|["']$/g, "")
+        .slice(0, 500) || "..."
+    }
 
     // Save AI reply and update conversation timestamp in parallel
     const aiMsgId = crypto.randomUUID();
