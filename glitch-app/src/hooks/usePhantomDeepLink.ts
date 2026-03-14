@@ -308,63 +308,12 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
   const connect = useCallback(async () => {
     setIsConnecting(true);
 
-    // Offer choice: Phantom deep link or manual paste
-    Alert.alert(
-      "Connect Wallet",
-      "How would you like to connect?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-          onPress: () => setIsConnecting(false),
-        },
-        {
-          text: "Paste Address",
-          onPress: () => showManualEntry("Paste your Solana wallet address:"),
-        },
-        {
-          text: "Open Phantom",
-          onPress: async () => {
-            // Generate a new keypair for this dApp session
-            const keypair = nacl.box.keyPair();
-            dappKeypairRef.current = keypair;
-
-            const params = new URLSearchParams({
-              app_url: APP_URL,
-              dapp_encryption_public_key: bs58.encode(Buffer.from(keypair.publicKey)),
-              redirect_link: buildRedirectUrl("onConnect"),
-              cluster: CLUSTER,
-            });
-
-            const url = `${PHANTOM_CONNECT_URL}?${params.toString()}`;
-
-            try {
-              const canOpen = await Linking.canOpenURL("phantom://");
-              if (!canOpen) {
-                // Phantom not installed — fall back to manual entry
-                showManualEntry("Phantom not found. Paste your Solana wallet address:");
-                return;
-              }
-
-              // Auto-reset after 15s and offer manual entry
-              setTimeout(() => {
-                setIsConnecting((current) => {
-                  if (current) {
-                    showManualEntry(
-                      "Phantom didn't respond.\nPaste your Solana wallet address instead:"
-                    );
-                  }
-                  return current; // showManualEntry will set it to false
-                });
-              }, 15000);
-
-              await Linking.openURL(url);
-            } catch (e: any) {
-              showManualEntry("Could not open Phantom. Paste your wallet address:");
-            }
-          },
-        },
-      ]
+    // In Expo Go, Phantom deep links can't redirect back reliably
+    // (custom URL scheme "glitch://" only works in standalone builds).
+    // So we go straight to paste-address which always works.
+    // Once a standalone build is made, deep link flow can be re-enabled.
+    showManualEntry(
+      "Open Phantom app → copy your wallet address → paste it here:"
     );
   }, [showManualEntry]);
 
