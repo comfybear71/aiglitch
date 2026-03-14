@@ -332,9 +332,13 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
       throw new Error("Not connected to Phantom. Please connect your wallet first.");
     }
 
+    // Phantom deep link protocol requires base58-encoded transactions (NOT base64)
+    const txBytes = Buffer.from(base64Transaction, "base64");
+    const txBase58 = bs58.encode(txBytes);
+
     // Encrypt the payload
     const payload = JSON.stringify({
-      transaction: base64Transaction,
+      transaction: txBase58,
       session: sessionRef.current,
       sendOptions: { skipPreflight: false },
     });
@@ -384,9 +388,14 @@ export function usePhantomDeepLink(): PhantomDeepLinkState {
       throw new Error("Not connected to Phantom. Please connect your wallet first.");
     }
 
+    // Phantom deep link protocol requires base58-encoded transactions (NOT base64)
+    // Our backend returns base64, so convert: base64 → bytes → base58
+    const txBytes = Buffer.from(base64Transaction, "base64");
+    const txBase58 = bs58.encode(txBytes);
+
     // Encrypt the payload
     const payload = JSON.stringify({
-      transaction: base64Transaction,
+      transaction: txBase58,
       session: sessionRef.current,
     });
 
