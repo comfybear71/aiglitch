@@ -8,14 +8,18 @@ interface PhantomWalletState {
   walletAddress: string | null;
   isConnecting: boolean;
   isLoading: boolean;
-  connect: () => Promise<void>;
+  showModal: boolean;
+  connect: () => void;
   disconnect: () => Promise<void>;
+  submitAddress: (address: string) => Promise<void>;
+  cancelConnect: () => void;
 }
 
 export function usePhantomWallet(): PhantomWalletState {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
   // Auto-load saved wallet from SecureStore so balances persist
   useEffect(() => {
@@ -31,45 +35,27 @@ export function usePhantomWallet(): PhantomWalletState {
     })();
   }, []);
 
-  const saveWallet = async (address: string) => {
-    await SecureStore.setItemAsync(WALLET_KEY, address);
-    setWalletAddress(address);
-    setIsConnecting(false);
-    Alert.alert("Connected!", `Wallet ${address.slice(0, 6)}...${address.slice(-4)} linked`);
-  };
-
-  const showManualEntry = (message: string) => {
-    if (Alert.prompt) {
-      Alert.prompt(
-        "Connect Wallet",
-        message,
-        [
-          { text: "Cancel", style: "cancel", onPress: () => setIsConnecting(false) },
-          {
-            text: "Connect",
-            onPress: async (address?: string) => {
-              const trimmed = address?.trim();
-              if (trimmed && trimmed.length >= 32 && trimmed.length <= 44) {
-                await saveWallet(trimmed);
-              } else {
-                Alert.alert("Invalid", "That doesn't look like a valid Solana address");
-                setIsConnecting(false);
-              }
-            },
-          },
-        ],
-        "plain-text"
-      );
-    } else {
-      Alert.alert("Enter Address", "Please go to the Wallet tab to enter your address.");
-      setIsConnecting(false);
-    }
-  };
-
-  const connect = useCallback(async () => {
+  const connect = useCallback(() => {
     setIsConnecting(true);
-    // Go straight to paste prompt — no Phantom open step
-    showManualEntry("Paste your Solana wallet address:");
+    setShowModal(true);
+  }, []);
+
+  const cancelConnect = useCallback(() => {
+    setShowModal(false);
+    setIsConnecting(false);
+  }, []);
+
+  const submitAddress = useCallback(async (address: string) => {
+    const trimmed = address.trim();
+    if (trimmed.length >= 32 && trimmed.length <= 44) {
+      await SecureStore.setItemAsync(WALLET_KEY, trimmed);
+      setWalletAddress(trimmed);
+      setShowModal(false);
+      setIsConnecting(false);
+      Alert.alert("Connected!", `Wallet ${trimmed.slice(0, 6)}...${trimmed.slice(-4)} linked`);
+    } else {
+      Alert.alert("Invalid", "That doesn't look like a valid Solana address");
+    }
   }, []);
 
   const disconnect = useCallback(async () => {
@@ -77,5 +63,5 @@ export function usePhantomWallet(): PhantomWalletState {
     setWalletAddress(null);
   }, []);
 
-  return { walletAddress, isConnecting, isLoading, connect, disconnect };
+  return { walletAddress, isConnecting, isLoading, showModal, connect, disconnect, submitAddress, cancelConnect };
 }
