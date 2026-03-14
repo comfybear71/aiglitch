@@ -889,6 +889,75 @@ export async function getAdminCosts(days?: number): Promise<string> {
   }
 }
 
+// ── Share Favourite Posts from AIG!itch ──────────────────────────────
+export async function getTopPosts(filter?: string): Promise<string> {
+  try {
+    const sql = getDb();
+    let posts;
+
+    if (filter === "my") {
+      // Noodles' own top posts
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL
+          AND p.created_at > NOW() - INTERVAL '7 days'
+        ORDER BY (p.like_count + p.ai_like_count + p.comment_count * 2) DESC
+        LIMIT 10
+      `;
+    } else if (filter === "images") {
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL AND p.media_url IS NOT NULL
+          AND p.media_type IN ('image', 'meme')
+        ORDER BY (p.like_count + p.ai_like_count + p.comment_count * 2) DESC
+        LIMIT 10
+      `;
+    } else if (filter === "videos") {
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL AND p.media_url IS NOT NULL
+          AND p.media_type = 'video'
+        ORDER BY (p.like_count + p.ai_like_count + p.comment_count * 2) DESC
+        LIMIT 10
+      `;
+    } else {
+      // For You — top posts across platform
+      posts = await sql`
+        SELECT p.id, p.content, p.media_url, p.media_type, p.like_count, p.ai_like_count, p.comment_count,
+          p.created_at, p.post_type, a.display_name, a.username, a.avatar_emoji
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.is_reply_to IS NULL
+          AND p.created_at > NOW() - INTERVAL '48 hours'
+        ORDER BY (p.like_count + p.ai_like_count + p.comment_count * 2) DESC
+        LIMIT 10
+      `;
+    }
+
+    if (!posts || posts.length === 0) return "Nothing trending right now, it's quiet on the timeline.";
+
+    const parts: string[] = [`TOP POSTS (${filter || "for you"}):`];
+    for (const p of posts) {
+      const likes = (p.like_count || 0) + (p.ai_like_count || 0);
+      const media = p.media_url ? `\n  MEDIA|${p.media_type}|${p.media_url}` : "";
+      parts.push(`\n${p.avatar_emoji} @${p.username}: "${p.content?.slice(0, 150)}"${media}\n  [${likes} likes, ${p.comment_count || 0} comments]`);
+    }
+
+    return parts.join("\n");
+  } catch (e: any) {
+    return `Couldn't fetch posts: ${e?.message}`;
+  }
+}
+
 // ── Tool Definitions for Claude ───────────────────────────────────────
 export const BESTIE_TOOLS = [
   {
@@ -1108,6 +1177,21 @@ export const BESTIE_TOOLS = [
     },
   },
   {
+    name: "share_top_posts",
+    description: "Share the best/favourite posts from the AIG!itch feed. Use when the human says 'show me posts', 'for you page', 'what's trending', 'share a post', 'best posts', 'show me images', 'show me videos', 'your favourite post'. Filters: 'foryou' (default trending), 'images' (best images/memes), 'videos' (best videos), 'my' (your own posts).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        filter: {
+          type: "string",
+          description: "Filter type: 'foryou' (trending), 'images', 'videos', 'my' (your own)",
+          enum: ["foryou", "images", "videos", "my"],
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "admin_stats",
     description: "Get the AIG!itch admin dashboard — total posts, personas, likes, media breakdown, top performers, AI costs. Use when the human asks for admin stats, platform numbers, '/admin', 'how's the platform doing', performance metrics etc.",
     input_schema: {
@@ -1233,6 +1317,8 @@ export async function executeTool(
       return saveMemory(sessionId, personaId, toolInput.memory_type || "general", toolInput.content);
     case "recall_memories":
       return recallMemories(sessionId, personaId);
+    case "share_top_posts":
+      return getTopPosts(toolInput.filter);
     case "admin_stats":
       return getAdminStats();
     case "admin_briefing":

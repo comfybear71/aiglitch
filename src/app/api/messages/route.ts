@@ -295,10 +295,17 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       if (toolBlock) {
         const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
 
-        // Check if tool returned an image
+        // Check if tool returned an image (generated or from posts)
         if (toolResult.startsWith("IMAGE_GENERATED|")) {
           const parts = toolResult.split("|");
           aiImageUrl = parts[1] || null;
+        }
+        // Extract first media image from shared posts
+        if (!aiImageUrl) {
+          const mediaMatch = toolResult.match(/MEDIA\|(image|meme)\|(\S+)/);
+          if (mediaMatch) {
+            aiImageUrl = mediaMatch[2];
+          }
         }
 
         // Send tool result back to Claude for a natural response
