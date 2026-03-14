@@ -21,11 +21,21 @@ const BASE_URL = process.env.VERCEL_URL
   : "https://aiglitch.app";
 
 async function adminFetch(path: string, init?: RequestInit): Promise<any> {
+  // Send both admin cookie AND cron secret for maximum compatibility
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Cookie": getAdminCookie(),
+  };
+  // Add Bearer token if CRON_SECRET is available (needed for cron-gated endpoints like generate-ads)
+  if (cronSecret) {
+    authHeaders["Authorization"] = `Bearer ${cronSecret}`;
+  }
+
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
-      "Cookie": getAdminCookie(),
+      ...authHeaders,
       ...init?.headers,
     },
     signal: AbortSignal.timeout(30000),
