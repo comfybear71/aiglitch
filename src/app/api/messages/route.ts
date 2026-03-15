@@ -6,6 +6,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { BESTIE_TOOLS, executeTool, recallMemories } from "@/lib/bestie-tools";
 import { put } from "@vercel/blob";
 
+// Allow up to 120s for background tasks (image gen + blob upload + Claude follow-up)
+export const maxDuration = 120;
+
 // Tools that take a long time — run in background so user can keep chatting
 const SLOW_TOOLS = new Set([
   "generate_image", "generate_content", "trigger_generation", "hatch_persona",
@@ -21,6 +24,25 @@ function extractMediaUrl(toolResult: string): string | null {
   const mediaMatch = toolResult.match(/MEDIA\|(image|meme|video)\|(\S+)/);
   if (mediaMatch) return mediaMatch[2];
   return null;
+}
+
+// Re-upload an external image URL to Vercel Blob so it never expires
+async function persistImageToBlob(imageUrl: string, label: string): Promise<string> {
+  try {
+    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const ext = res.headers.get("content-type")?.includes("png") ? "png" : "jpg";
+    const blob = await put(`generated/${label}-${Date.now()}.${ext}`, buffer, {
+      access: "public",
+      contentType: res.headers.get("content-type") || "image/jpeg",
+      addRandomSuffix: true,
+    });
+    return blob.url;
+  } catch (e: any) {
+    console.error("Failed to persist image to blob:", e?.message);
+    return imageUrl; // fallback to original URL
+  }
 }
 
 const client = new Anthropic();
@@ -404,10 +426,20 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
         after(async () => {
           try {
             const bgSql = getDb();
+            console.log(`[BG-TASK] Starting ${toolBlock.name} for session=${session_id}`);
+
             const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
+            console.log(`[BG-TASK] Tool result (first 200): ${toolResult.slice(0, 200)}`);
 
             // Check for generated images/videos
-            const bgImageUrl = extractMediaUrl(toolResult);
+            let bgImageUrl = extractMediaUrl(toolResult);
+
+            // CRITICAL: Re-upload external images to Vercel Blob so URLs never expire
+            if (bgImageUrl && !bgImageUrl.includes("vercel-storage.com") && !bgImageUrl.includes("blob.vercel")) {
+              console.log(`[BG-TASK] Persisting image to Vercel Blob...`);
+              bgImageUrl = await persistImageToBlob(bgImageUrl, toolBlock.name);
+              console.log(`[BG-TASK] Persisted image URL: ${bgImageUrl}`);
+            }
 
             // Get Claude to format the result naturally
             bgMsgHistory.push({ role: "assistant", content: bgResponseContent });
@@ -434,6 +466,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
                     VALUES (${bgMsgId}, ${conversationId}, 'ai', ${bgReply}, ${bgImageUrl})`,
               bgSql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
             ]);
+            console.log(`[BG-TASK] Saved result message id=${bgMsgId} image=${!!bgImageUrl}`);
 
             // Send push notification to user that generation is complete
             try {
@@ -444,7 +477,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
                 const pushBody = {
                   to: pushTokenRows[0].push_token,
                   sound: "default",
-                  title: bgImageUrl ? "Your bestie made something!" : "Your bestie replied!",
+                  title: bgImageUrl ? "Your bestie made something! 🎨" : "Your bestie replied!",
                   body: bgReply.slice(0, 100),
                   data: { type: "background_task_complete", conversationId },
                 };
@@ -455,12 +488,15 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
                 }).catch(() => {});
               }
             } catch (_) { /* push is best-effort */ }
-          } catch (e) {
-            console.error("Background tool failed:", e);
+          } catch (e: any) {
+            console.error("[BG-TASK] Background tool failed:", e?.message, e?.stack);
             const bgSql = getDb();
             const errMsgId = crypto.randomUUID();
+            const errMsg = toolBlock.name === "generate_image"
+              ? "ugh the image didn't come through 😵 my art skills glitched — try asking me again?"
+              : "ugh that didn't work 😵 try asking me again?";
             await bgSql`INSERT INTO messages (id, conversation_id, sender_type, content)
-                        VALUES (${errMsgId}, ${conversationId}, 'ai', ${"ugh that didn't work 😵 try asking me again?"})`;
+                        VALUES (${errMsgId}, ${conversationId}, 'ai', ${errMsg})`;
           }
         });
 
@@ -478,7 +514,13 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
 
       // Extract first media URL (image or video) from tool result
       if (!aiImageUrl) {
-        aiImageUrl = extractMediaUrl(toolResult);
+        const rawUrl = extractMediaUrl(toolResult);
+        if (rawUrl && !rawUrl.includes("vercel-storage.com") && !rawUrl.includes("blob.vercel")) {
+          // Persist external URLs to Vercel Blob so they don't expire
+          aiImageUrl = await persistImageToBlob(rawUrl, "inline-media");
+        } else {
+          aiImageUrl = rawUrl;
+        }
       }
 
       // Add assistant response + tool result to history, then get next response

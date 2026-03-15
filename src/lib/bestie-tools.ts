@@ -591,7 +591,7 @@ export async function generateImage(prompt: string): Promise<string> {
         n: 1,
         response_format: "url",
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
 
     if (!res.ok) {
