@@ -591,7 +591,7 @@ export async function generateImage(prompt: string): Promise<string> {
         "Authorization": `Bearer ${xaiKey}`,
       },
       body: JSON.stringify({
-        model: "grok-2-image",
+        model: "grok-imagine-image",
         prompt: prompt,
         n: 1,
         response_format: "url",
