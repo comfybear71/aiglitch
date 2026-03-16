@@ -270,11 +270,16 @@ export default function ChatScreen() {
   };
 
   // ── Voice Recording ──
+  const recordingRef = useRef(false); // guard against double-tap starts
+
   const startRecording = async () => {
+    if (recordingRef.current || recording) return; // already recording — ignore
+    recordingRef.current = true;
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
         Alert.alert("Mic Permission", "G!itch needs microphone access so your bestie can hear you!");
+        recordingRef.current = false;
         return;
       }
       await Audio.setAudioModeAsync({
@@ -288,13 +293,15 @@ export default function ChatScreen() {
       setIsRecording(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     } catch (err) {
-      console.error("Recording failed:", err);
+      console.error("Start recording failed:", err);
+      recordingRef.current = false;
     }
   };
 
   const stopRecording = async () => {
     if (!recording) return;
     setIsRecording(false);
+    recordingRef.current = false;
     try {
       await recording.stopAndUnloadAsync();
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
