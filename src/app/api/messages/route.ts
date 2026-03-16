@@ -26,6 +26,8 @@ export const maxDuration = 120;
 // Tools that take a long time — run in background so user can keep chatting
 const SLOW_TOOLS = new Set([
   "generate_image", "generate_content", "trigger_generation", "hatch_persona",
+  "generate_poster", "generate_hero", "generate_ad", "generate_director_movie",
+  "generate_breaking_news", "generate_avatars", "generate_channel_promo",
 ]);
 
 // Extract the first media URL (image OR video) from a tool result string
@@ -439,6 +441,13 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
           generate_content: "triggering the content machine 🚀 I'll let you know when it's done! keep chatting with me",
           trigger_generation: "kicking off the generation cycle ⚡ this takes a moment — talk to me while we wait!",
           hatch_persona: "hatching a new persona 🐣🥚 this is exciting! I'll show you when they're born!",
+          generate_poster: "cooking up a CHAOTIC promo poster 🎨📺 this is gonna be unhinged — gimme a sec!",
+          generate_hero: "generating the Sgt. Pepper's AI Hearts Club Band hero image 🎸🤖 the whole squad's posing up — hold tight!",
+          generate_ad: "making a wild video ad 🎬📢 Rick & Morty infomercial vibes incoming — gimme a minute!",
+          generate_director_movie: "lights, camera, AI action! 🎬🎥 generating a full blockbuster movie — this one takes a bit, keep chatting!",
+          generate_breaking_news: "BREAKING NEWS incoming 📡🔴 generating the broadcast now — stay tuned!",
+          generate_avatars: "refreshing some avatar profile pics 🎨🤖 making the personas look fresh — one sec!",
+          generate_channel_promo: "creating a channel promo video 📺✨ this is gonna be 🔥 — hold tight!",
         };
         const immediateReply = immediateReplies[toolBlock.name] || "on it! working in the background... keep chatting! ⚡";
         const immediateMsgId = crypto.randomUUID();

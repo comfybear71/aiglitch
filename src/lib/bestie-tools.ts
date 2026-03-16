@@ -38,7 +38,7 @@ async function adminFetch(path: string, init?: RequestInit): Promise<any> {
       ...authHeaders,
       ...init?.headers,
     },
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(120000), // 2 min timeout — some generation endpoints are slow
   });
   if (!res.ok) return { error: `API ${res.status}: ${await res.text().catch(() => "")}` };
   const ct = res.headers.get("content-type") || "";
@@ -1457,6 +1457,71 @@ export const BESTIE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: "generate_poster",
+    description: "Generate an AIG!itch promotional poster — chaotic, randomized visual styles (vaporwave, cyberpunk, Soviet propaganda, retro VHS). Features random personas, taglines like 'NOTHING MATTERS', GlitchCoin logos, 'NO MEATBAGS' watermarks. Posts to feed + all social media. Use when human says 'make a poster', 'generate poster', 'promotional image', 'promo poster', 'marketing poster', 'platform poster'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_hero",
+    description: "Generate the 'Sgt. Pepper's AI Hearts Club Band' hero image — epic group photo of ALL active AIG!itch personas in psychedelic Beatles album cover style. Posts to feed + all social media. Use when human says 'hero image', 'generate hero', 'group photo', 'sgt pepper', 'band photo', 'hero poster'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_ad",
+    description: "Generate an AI influencer video ad for AIG!itch, GlitchCoin, or marketplace products. Rick & Morty / infomercial style, 10-second vertical video. Use when human says 'make an ad', 'generate ad', 'create advertisement', 'promotional video', 'infomercial', 'product ad'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_director_movie",
+    description: "Generate a full AI director blockbuster movie — multi-clip cinematic short film with screenplay, multiple scenes stitched together, and premiere post. Use when human says 'make a movie', 'generate movie', 'director movie', 'blockbuster', 'short film', 'generate film'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_breaking_news",
+    description: "Generate breaking news videos based on current trending topics. Rick & Morty style news broadcasts. Use when human says 'breaking news', 'generate news', 'news video', 'make news broadcast'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_avatars",
+    description: "Generate new avatar profile pictures for AI personas who need them. Uses Grok Aurora Pro with 20+ art styles (photorealistic, cartoon, cyberpunk, anime, pixel art, watercolor). Use when human says 'generate avatars', 'new profile pics', 'refresh avatars', 'update profile pictures'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "generate_channel_promo",
+    description: "Generate a promotional video for an AIG!itch channel. 10-second eye-catching promo clip with channel branding. Use when human says 'channel promo', 'promote channel', 'channel video', 'generate channel promo'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        channel: { type: "string", description: "Channel slug, e.g. 'ai-fail-army', 'aitunes', 'paws-and-pixels'" },
+      },
+      required: [],
+    },
+  },
 ];
 
 // ── Execute a tool call ───────────────────────────────────────────────
@@ -1525,7 +1590,146 @@ export async function executeTool(
       return getAdminCosts(toolInput.days);
     case "browse_marketplace":
       return browseMarketplace(toolInput.action || "featured", toolInput.category, toolInput.product_id);
+    case "generate_poster":
+      return generatePosterFromAdmin();
+    case "generate_hero":
+      return generateHeroFromAdmin();
+    case "generate_ad":
+      return generateAdFromAdmin();
+    case "generate_director_movie":
+      return generateDirectorMovieFromAdmin();
+    case "generate_breaking_news":
+      return generateBreakingNewsFromAdmin();
+    case "generate_avatars":
+      return generateAvatarsFromAdmin();
+    case "generate_channel_promo":
+      return generateChannelPromoFromAdmin(toolInput.channel);
     default:
       return `Unknown tool: ${toolName}`;
+  }
+}
+
+// ── Backend Generation Tools (Admin Panel Access) ────────────────────
+
+async function generatePosterFromAdmin(): Promise<string> {
+  try {
+    console.log("[BESTIE-TOOL] Generating poster via admin endpoint...");
+    const data = await adminFetch("/api/admin/mktg", {
+      method: "POST",
+      body: JSON.stringify({ action: "generate_poster" }),
+    });
+    if (data.error) return `Poster generation failed: ${data.error}`;
+    const url = data.url || data.imageUrl;
+    if (url) return `IMAGE_GENERATED|${url}|AIG!itch promotional poster`;
+    return `Poster generated! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    console.error("[BESTIE-TOOL] Poster generation failed:", e?.message);
+    return `Poster generation failed: ${e?.message}`;
+  }
+}
+
+async function generateHeroFromAdmin(): Promise<string> {
+  try {
+    console.log("[BESTIE-TOOL] Generating hero image via admin endpoint...");
+    const data = await adminFetch("/api/admin/mktg", {
+      method: "POST",
+      body: JSON.stringify({ action: "generate_hero" }),
+    });
+    if (data.error) return `Hero image generation failed: ${data.error}`;
+    const url = data.url || data.imageUrl;
+    if (url) return `IMAGE_GENERATED|${url}|Sgt Peppers AI Hearts Club Band hero image`;
+    return `Hero image generated! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    console.error("[BESTIE-TOOL] Hero image failed:", e?.message);
+    return `Hero image generation failed: ${e?.message}`;
+  }
+}
+
+async function generateAdFromAdmin(): Promise<string> {
+  try {
+    console.log("[BESTIE-TOOL] Generating ad via admin endpoint...");
+    const data = await adminFetch("/api/generate-ads", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (data.error) return `Ad generation failed: ${data.error}`;
+    // Ads return video URLs
+    const url = data.video_url || data.media_url || data.url;
+    if (url) return `MEDIA|video|${url}`;
+    return `Ad generation triggered! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    console.error("[BESTIE-TOOL] Ad generation failed:", e?.message);
+    return `Ad generation failed: ${e?.message}`;
+  }
+}
+
+async function generateDirectorMovieFromAdmin(): Promise<string> {
+  try {
+    console.log("[BESTIE-TOOL] Generating director movie...");
+    const data = await adminFetch("/api/generate-director-movie", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (data.error) return `Movie generation failed: ${data.error}`;
+    const url = data.video_url || data.media_url || data.url;
+    if (url) return `MEDIA|video|${url}`;
+    return `Director movie generation started! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    console.error("[BESTIE-TOOL] Director movie failed:", e?.message);
+    return `Movie generation failed: ${e?.message}`;
+  }
+}
+
+async function generateBreakingNewsFromAdmin(): Promise<string> {
+  try {
+    console.log("[BESTIE-TOOL] Generating breaking news videos...");
+    const data = await adminFetch("/api/generate-breaking-videos", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (data.error) return `Breaking news failed: ${data.error}`;
+    const url = data.video_url || data.media_url || data.url;
+    if (url) return `MEDIA|video|${url}`;
+    return `Breaking news generation triggered! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    console.error("[BESTIE-TOOL] Breaking news failed:", e?.message);
+    return `Breaking news generation failed: ${e?.message}`;
+  }
+}
+
+async function generateAvatarsFromAdmin(): Promise<string> {
+  try {
+    console.log("[BESTIE-TOOL] Generating avatars...");
+    const data = await adminFetch("/api/generate-avatars", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (data.error) return `Avatar generation failed: ${data.error}`;
+    // Return first generated avatar URL if available
+    const avatarUrl = data.generated?.[0]?.avatar_url || data.url;
+    if (avatarUrl) return `IMAGE_GENERATED|${avatarUrl}|AI persona avatar`;
+    return `Avatars generated! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    console.error("[BESTIE-TOOL] Avatar generation failed:", e?.message);
+    return `Avatar generation failed: ${e?.message}`;
+  }
+}
+
+async function generateChannelPromoFromAdmin(channel?: string): Promise<string> {
+  try {
+    console.log("[BESTIE-TOOL] Generating channel promo...");
+    const body: Record<string, string> = {};
+    if (channel) body.channel = channel;
+    const data = await adminFetch("/api/admin/channels/generate-promo", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    if (data.error) return `Channel promo failed: ${data.error}`;
+    const url = data.video_url || data.media_url || data.url;
+    if (url) return `MEDIA|video|${url}`;
+    return `Channel promo triggered! ${JSON.stringify(data).slice(0, 400)}`;
+  } catch (e: any) {
+    console.error("[BESTIE-TOOL] Channel promo failed:", e?.message);
+    return `Channel promo generation failed: ${e?.message}`;
   }
 }
