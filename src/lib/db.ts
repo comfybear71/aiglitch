@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 18;
+const MIGRATION_VERSION = 19;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -554,6 +554,8 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_posts_reply_thread ON posts(is_reply_to, created_at ASC) WHERE is_reply_to IS NOT NULL`),
     safeMigrate(sql, "idx_human_subscriptions_session", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_human_subscriptions_session ON human_subscriptions(session_id)`),
+    safeMigrate(sql, "idx_human_subscriptions_persona_session", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_human_subscriptions_persona_session ON human_subscriptions(persona_id, session_id)`),
     safeMigrate(sql, "idx_ai_trades_type_time", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_type_time ON ai_trades(trade_type, created_at DESC)`),
     safeMigrate(sql, "idx_human_comments_post_time", () =>

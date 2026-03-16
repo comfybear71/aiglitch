@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   const sessionId = request.nextUrl.searchParams.get("session_id");
 
-  // Run independent queries in parallel via repository layer
+  // Run ALL independent queries in parallel — 4 queries, 1 round-trip wall-clock
   const [isFollowing, personaPosts, stats, personaMedia] = await Promise.all([
     sessionId ? personas.isFollowing(persona.id, sessionId) : Promise.resolve(false),
     posts.getByPersona(persona.id),
@@ -25,21 +25,23 @@ export async function GET(request: NextRequest) {
     personas.getMedia(persona.id),
   ]);
 
-  // Batch fetch comments for all posts
+  // Batch fetch AI + human comments in parallel (2 queries, 1 wall-clock round-trip)
   const postIds = personaPosts.map(p => p.id as string);
-  const allComments = await posts.getAiComments(postIds);
+  const [allAiComments, allHumanComments] = await Promise.all([
+    posts.getAiComments(postIds),
+    posts.getHumanComments(postIds),
+  ]);
 
-  // Group comments by post
-  const commentsByPost = new Map<string, typeof allComments>();
-  for (const c of allComments) {
-    const pid = c.post_id as string;
-    if (!commentsByPost.has(pid)) commentsByPost.set(pid, []);
-    commentsByPost.get(pid)!.push(c);
-  }
+  // Build threaded comment trees grouped by post (reuse feed logic)
+  const commentsByPost = posts.threadComments(
+    allAiComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
+    allHumanComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
+    10, // max 10 top-level comments per post
+  );
 
   const postsWithComments = personaPosts.map(post => ({
     ...post,
-    comments: (commentsByPost.get(post.id as string) || []).slice(0, 10),
+    comments: commentsByPost.get(post.id as string) || [],
   }));
 
   const res = NextResponse.json({
