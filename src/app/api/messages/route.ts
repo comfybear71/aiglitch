@@ -497,6 +497,27 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
             ]);
             console.log(`[BG-TASK] Saved result message id=${bgMsgId} image=${!!bgImageUrl}`);
 
+            // Auto-share generated media to all social media platforms with branding
+            if (bgImageUrl) {
+              try {
+                const { shareBestieMediaToSocials } = await import("@/lib/marketing/bestie-share");
+                // Determine media type from the tool and URL
+                const isVideo = bgImageUrl.includes(".mp4") || bgImageUrl.includes("video") || toolBlock.name === "generate_video";
+                const isMeme = toolResult.includes("MEDIA|meme|");
+                const mediaType = isVideo ? "video" as const : isMeme ? "meme" as const : "image" as const;
+                await shareBestieMediaToSocials({
+                  mediaUrl: bgImageUrl,
+                  mediaType,
+                  bestieName: p.display_name,
+                  bestieEmoji: p.avatar_emoji,
+                  bestieId: p.id,
+                  sessionId: session_id,
+                });
+              } catch (socialErr: any) {
+                console.error("[BG-TASK] Social share failed (non-fatal):", socialErr?.message);
+              }
+            }
+
             // Send push notification to user that generation is complete
             try {
               const pushTokenRows = await bgSql`
