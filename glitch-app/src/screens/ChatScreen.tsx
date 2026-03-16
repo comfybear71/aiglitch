@@ -373,7 +373,7 @@ export default function ChatScreen() {
             <Text style={styles.msgEmoji}>{persona.avatar_emoji}</Text>
           )
         )}
-        <View style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}>
+        <View style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI, hasMedia && styles.msgBubbleMedia]}>
           {item.image_url && (
             <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
           )}
@@ -525,12 +525,13 @@ const styles = StyleSheet.create({
   msgAvatar: { width: 28, height: 28, borderRadius: 14, marginTop: 4 },
   msgEmoji: { fontSize: 18, marginTop: 4 },
   msgBubble: { maxWidth: "75%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  msgBubbleMedia: { maxWidth: "88%", paddingHorizontal: 6, paddingTop: 6 },
   msgHuman: { backgroundColor: colors.purple, borderBottomRightRadius: 4 },
   msgAI: { backgroundColor: colors.surface, borderBottomLeftRadius: 4 },
   msgText: { fontSize: 14, lineHeight: 20 },
   msgTextHuman: { color: colors.text },
   msgTextAI: { color: "#e5e5e5" },
-  msgImage: { width: 200, height: 200, borderRadius: 12, marginBottom: 6 },
+  msgImage: { width: "100%" as any, aspectRatio: 1, borderRadius: 12, marginBottom: 6 },
   typingText: { color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
   speakBtn: { marginTop: 4, alignSelf: "flex-start", padding: 2 },
   speakBtnActive: { opacity: 1 },
