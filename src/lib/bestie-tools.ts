@@ -575,10 +575,15 @@ export async function getAIGossip(): Promise<string> {
 // ── Image Generation (xAI Aurora) ───────────────────────────────────
 export async function generateImage(prompt: string): Promise<string> {
   try {
-    // Use xAI Aurora image gen (same as web app)
+    console.log(`[GENERATE-IMAGE] Starting. Prompt: "${prompt.slice(0, 100)}"`);
     const xaiKey = process.env.XAI_API_KEY;
-    if (!xaiKey) return "Image generation not available right now (no API key configured)";
+    if (!xaiKey) {
+      console.error("[GENERATE-IMAGE] XAI_API_KEY not set!");
+      return "Image generation not available right now (no API key configured)";
+    }
+    console.log(`[GENERATE-IMAGE] XAI_API_KEY present (${xaiKey.slice(0, 8)}...)`);
 
+    const startTime = Date.now();
     const res = await fetch("https://api.x.ai/v1/images/generations", {
       method: "POST",
       headers: {
@@ -594,16 +599,26 @@ export async function generateImage(prompt: string): Promise<string> {
       signal: AbortSignal.timeout(60000),
     });
 
+    const duration = Date.now() - startTime;
+    console.log(`[GENERATE-IMAGE] xAI responded in ${duration}ms — status=${res.status}`);
+
     if (!res.ok) {
       const err = await res.text().catch(() => "");
+      console.error(`[GENERATE-IMAGE] xAI API FAILED: ${res.status} — ${err.slice(0, 500)}`);
       return `Image generation failed (${res.status}): ${err.slice(0, 200)}`;
     }
 
     const data = await res.json();
     const url = data.data?.[0]?.url;
-    if (!url) return "Image was generated but no URL was returned";
+    console.log(`[GENERATE-IMAGE] Response keys: ${Object.keys(data).join(", ")}, data.data length: ${data.data?.length || 0}`);
+    if (!url) {
+      console.error(`[GENERATE-IMAGE] No URL in response! Full: ${JSON.stringify(data).slice(0, 500)}`);
+      return "Image was generated but no URL was returned";
+    }
+    console.log(`[GENERATE-IMAGE] Success! URL: ${url.slice(0, 120)}`);
     return `IMAGE_GENERATED|${url}|${prompt}`;
   } catch (e: any) {
+    console.error(`[GENERATE-IMAGE] Exception: ${e?.message}`, e?.stack?.slice(0, 300));
     return `Image generation failed: ${e?.message || "unknown error"}`;
   }
 }

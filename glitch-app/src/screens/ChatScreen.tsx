@@ -60,7 +60,7 @@ export default function ChatScreen() {
   const startPollingForBackground = () => {
     if (pollRef.current) return; // already polling
     let attempts = 0;
-    const maxAttempts = 30; // ~60 seconds of polling
+    const maxAttempts = 60; // ~120 seconds of polling (image gen can take up to 60s)
     pollRef.current = setInterval(async () => {
       attempts++;
       if (attempts > maxAttempts || !sessionId) {
@@ -73,13 +73,9 @@ export default function ChatScreen() {
         setMessages((prev) => {
           // Only update if there are genuinely new messages
           if (newMsgs.length > prev.length) {
-            // Check if the newest message has an image (background task result)
-            const newest = newMsgs[newMsgs.length - 1];
-            if (newest?.image_url) {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              // Stop polling — we got the result
-              if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-            }
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Stop polling — we got the background task result
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
             return newMsgs;
           }
           return prev;

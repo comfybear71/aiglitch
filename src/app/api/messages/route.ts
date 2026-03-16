@@ -455,22 +455,37 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
         after(async () => {
           try {
             const bgSql = getDb();
-            console.log(`[BG-TASK] Starting ${toolBlock.name} for session=${session_id}`);
+            console.log(`[BG-TASK] ====== STARTING ${toolBlock.name} ======`);
+            console.log(`[BG-TASK] session=${session_id} persona=${persona_id} conv=${conversationId}`);
+            console.log(`[BG-TASK] Tool input: ${JSON.stringify(toolBlock.input).slice(0, 300)}`);
 
+            const toolStartTime = Date.now();
             const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
-            console.log(`[BG-TASK] Tool result (first 200): ${toolResult.slice(0, 200)}`);
+            const toolDuration = Date.now() - toolStartTime;
+            console.log(`[BG-TASK] Tool completed in ${toolDuration}ms`);
+            console.log(`[BG-TASK] Tool result (first 500): ${toolResult.slice(0, 500)}`);
 
             // Check for generated images/videos
             let bgImageUrl = extractMediaUrl(toolResult);
+            console.log(`[BG-TASK] extractMediaUrl result: ${bgImageUrl ? bgImageUrl.slice(0, 150) : "NULL — no image found in result"}`);
+
+            if (!bgImageUrl) {
+              console.error(`[BG-TASK] ⚠️ NO IMAGE URL extracted! Full tool result: ${toolResult.slice(0, 1000)}`);
+            }
 
             // CRITICAL: Re-upload external images to Vercel Blob so URLs never expire
             if (bgImageUrl && !bgImageUrl.includes("vercel-storage.com") && !bgImageUrl.includes("blob.vercel")) {
-              console.log(`[BG-TASK] Persisting image to Vercel Blob...`);
-              bgImageUrl = await persistImageToBlob(bgImageUrl, toolBlock.name);
-              console.log(`[BG-TASK] Persisted image URL: ${bgImageUrl}`);
+              console.log(`[BG-TASK] Persisting image to Vercel Blob: ${bgImageUrl.slice(0, 150)}`);
+              try {
+                bgImageUrl = await persistImageToBlob(bgImageUrl, toolBlock.name);
+                console.log(`[BG-TASK] Persisted OK: ${bgImageUrl.slice(0, 150)}`);
+              } catch (blobErr: any) {
+                console.error(`[BG-TASK] ⚠️ Blob persist FAILED: ${blobErr?.message}. Using original URL.`);
+              }
             }
 
             // Get Claude to format the result naturally
+            console.log(`[BG-TASK] Getting Claude follow-up response...`);
             bgMsgHistory.push({ role: "assistant", content: bgResponseContent });
             bgMsgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
 
@@ -490,12 +505,13 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
               .slice(0, 500) || "done! check it out 👆";
 
             const bgMsgId = crypto.randomUUID();
+            console.log(`[BG-TASK] Saving message: id=${bgMsgId} reply="${bgReply.slice(0, 100)}" image_url=${bgImageUrl ? "YES" : "NULL"}`);
             await Promise.all([
               bgSql`INSERT INTO messages (id, conversation_id, sender_type, content, image_url)
                     VALUES (${bgMsgId}, ${conversationId}, 'ai', ${bgReply}, ${bgImageUrl})`,
               bgSql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
             ]);
-            console.log(`[BG-TASK] Saved result message id=${bgMsgId} image=${!!bgImageUrl}`);
+            console.log(`[BG-TASK] ✅ Message saved successfully. image=${!!bgImageUrl}`);
 
             // Auto-share generated media to all social media platforms with branding
             if (bgImageUrl) {
@@ -539,12 +555,13 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
               }
             } catch (_) { /* push is best-effort */ }
           } catch (e: any) {
-            console.error("[BG-TASK] Background tool failed:", e?.message, e?.stack);
+            console.error(`[BG-TASK] ❌ BACKGROUND TOOL FAILED: ${e?.message}`);
+            console.error(`[BG-TASK] Stack: ${e?.stack?.slice(0, 500)}`);
             const bgSql = getDb();
             const errMsgId = crypto.randomUUID();
             const errMsg = toolBlock.name === "generate_image"
-              ? "ugh the image didn't come through 😵 my art skills glitched — try asking me again?"
-              : "ugh that didn't work 😵 try asking me again?";
+              ? `ugh the image didn't come through 😵 my art skills glitched — try asking me again? (error: ${(e?.message || "unknown").slice(0, 80)})`
+              : `ugh that didn't work 😵 try asking me again? (error: ${(e?.message || "unknown").slice(0, 80)})`;
             await bgSql`INSERT INTO messages (id, conversation_id, sender_type, content)
                         VALUES (${errMsgId}, ${conversationId}, 'ai', ${errMsg})`;
           }
