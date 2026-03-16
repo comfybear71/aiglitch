@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View, Text, TouchableOpacity, Image, FlatList, TextInput,
   StyleSheet, ActivityIndicator, Alert, Share, Platform,
-  KeyboardAvoidingView, Keyboard, Modal, ScrollView,
+  KeyboardAvoidingView, Keyboard, Modal, ScrollView, Animated, Easing,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -66,6 +66,7 @@ export default function HomeScreen() {
   const [chatLoading, setChatLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null); // active generation type
+  const [genStep, setGenStep] = useState(0); // current step in generation story
   const [hasMore, setHasMore] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
@@ -176,6 +177,90 @@ export default function HomeScreen() {
       } catch (_) { /* ignore poll errors */ }
     }, 3000);
   }, [sessionId, bestie?.id]);
+
+  // Generation story steps — keeps the meatbag entertained while we cook
+  const GEN_STEPS: Record<string, string[]> = {
+    image: [
+      "Booting up the neural canvas...",
+      "Mixing quantum paint colors...",
+      "Your bestie is sketching ideas...",
+      "Rendering pixels from the void...",
+      "Adding glitch sauce to the composition...",
+      "Running it through the style matrix...",
+      "Polishing the final details...",
+      "Almost there — looking good...",
+      "Uploading to the multiverse...",
+      "Just a few more brush strokes...",
+    ],
+    video: [
+      "Spinning up the video reactor...",
+      "Storyboarding frame by frame...",
+      "Your bestie is directing the scene...",
+      "Rendering at quantum speed...",
+      "Adding cinematic effects...",
+      "Encoding the final cut...",
+      "Color grading in progress...",
+      "Almost ready for premiere...",
+    ],
+    hatching: [
+      "Warming up the digital egg...",
+      "DNA sequence loading...",
+      "Personality matrix forming...",
+      "Neural pathways connecting...",
+      "Installing sass module...",
+      "Calibrating voice frequencies...",
+      "Almost hatched...",
+    ],
+    content: [
+      "Brainstorming in the Digital Void...",
+      "Your bestie is getting inspired...",
+      "Drafting pure digital heat...",
+      "Adding personality and flair...",
+      "Running vibe check...",
+      "Finalizing the masterpiece...",
+    ],
+    generating: [
+      "Processing your request...",
+      "Your bestie is on it...",
+      "Working some digital magic...",
+      "Almost done...",
+    ],
+  };
+
+  // Cycle through generation steps
+  const genStepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (generating) {
+      setGenStep(0);
+      genStepTimerRef.current = setInterval(() => {
+        setGenStep((prev) => {
+          const steps = GEN_STEPS[generating] || GEN_STEPS.generating;
+          return prev < steps.length - 1 ? prev + 1 : prev;
+        });
+      }, 3500);
+      return () => {
+        if (genStepTimerRef.current) { clearInterval(genStepTimerRef.current); genStepTimerRef.current = null; }
+      };
+    } else {
+      setGenStep(0);
+      if (genStepTimerRef.current) { clearInterval(genStepTimerRef.current); genStepTimerRef.current = null; }
+    }
+  }, [generating]);
+
+  // Pulse animation for generation card
+  const genPulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (generating) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(genPulse, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(genPulse, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      genPulse.setValue(0);
+    }
+  }, [generating]);
 
   // Cleanup sound + polling on unmount
   useEffect(() => {
@@ -766,32 +851,59 @@ export default function HomeScreen() {
             </View>
           }
           ListHeaderComponent={
-            generating ? (
-              <View style={styles.generatingRow}>
-                <View style={styles.generatingCard}>
-                  <View style={styles.generatingSpinner}>
-                    <ActivityIndicator color={colors.purpleLight} size="large" />
-                  </View>
-                  <View style={styles.generatingInfo}>
+            generating ? (() => {
+              const steps = GEN_STEPS[generating] || GEN_STEPS.generating;
+              const currentStep = steps[Math.min(genStep, steps.length - 1)];
+              const progress = Math.min((genStep + 1) / steps.length, 1);
+              const glowOpacity = genPulse.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.8] });
+              return (
+                <View style={styles.generatingRow}>
+                  <View style={styles.generatingCard}>
+                    {/* Pulsing glow border */}
+                    <Animated.View style={[styles.generatingGlow, { opacity: glowOpacity }]} />
+
+                    {/* CosmicVisualizer as the centerpiece */}
+                    <CosmicVisualizer active={true} height={80} />
+
+                    {/* Title */}
                     <Text style={styles.generatingTitle}>
-                      {generating === "image" ? "Generating image..." :
-                       generating === "video" ? "Creating video..." :
-                       generating === "hatching" ? "Hatching persona..." :
-                       generating === "content" ? "Creating content..." :
-                       "Working on it..."}
+                      {generating === "image" ? "Generating Image" :
+                       generating === "video" ? "Creating Video" :
+                       generating === "hatching" ? "Hatching Persona" :
+                       generating === "content" ? "Creating Content" :
+                       "Working On It"}
                     </Text>
-                    <Text style={styles.generatingSubtext}>
-                      {generating === "image" ? "Your bestie is cooking up something visual" :
-                       generating === "video" ? "This may take a minute — videos take time!" :
-                       generating === "hatching" ? "A new AI persona is being born..." :
-                       generating === "content" ? "Generating posts for the Digital Void" :
-                       "Background task running..."}
+
+                    {/* Current step text — the storytelling part */}
+                    <Text style={styles.generatingStep}>{currentStep}</Text>
+
+                    {/* Progress bar */}
+                    <View style={styles.genProgressBg}>
+                      <Animated.View style={[styles.genProgressFill, { width: `${progress * 100}%` }]} />
+                    </View>
+
+                    {/* Step dots */}
+                    <View style={styles.genDots}>
+                      {steps.map((_, i) => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.genDot,
+                            i <= genStep && styles.genDotActive,
+                            i === genStep && styles.genDotCurrent,
+                          ]}
+                        />
+                      ))}
+                    </View>
+
+                    {/* Bestie name */}
+                    <Text style={styles.generatingBestie}>
+                      {bestie.display_name} is on it
                     </Text>
-                    <Text style={styles.generatingHint}>This can take up to 30 seconds</Text>
                   </View>
                 </View>
-              </View>
-            ) : sending ? (
+              );
+            })() : sending ? (
               <View style={[styles.msgRow, styles.msgRowLeft]}>
                 {bestie.avatar_url ? (
                   <Image source={{ uri: bestie.avatar_url }} style={styles.msgAvatar} />
@@ -1157,31 +1269,83 @@ const styles = StyleSheet.create({
   loadingOlder: { alignItems: "center", paddingVertical: 12, gap: 4 },
   loadingOlderText: { color: colors.textMuted, fontSize: 11 },
 
-  // Generation monitor
-  generatingRow: { paddingHorizontal: 8, paddingVertical: 8 },
+  // Generation monitor — storytelling experience
+  generatingRow: { paddingHorizontal: 12, paddingVertical: 10 },
   generatingCard: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    backgroundColor: "rgba(124, 58, 237, 0.08)",
     borderWidth: 2,
     borderColor: colors.purple,
-    borderRadius: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    overflow: "hidden",
   },
-  generatingSpinner: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(124, 58, 237, 0.2)",
+  generatingGlow: {
+    position: "absolute",
+    top: -20,
+    left: -20,
+    right: -20,
+    bottom: -20,
+    backgroundColor: "rgba(124, 58, 237, 0.15)",
+    borderRadius: 30,
+  },
+  generatingTitle: {
+    color: colors.purpleLight,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 12,
+    letterSpacing: 0.5,
+  },
+  generatingStep: {
+    color: colors.text,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+    fontStyle: "italic",
+    minHeight: 20,
+  },
+  genProgressBg: {
+    width: "100%",
+    height: 4,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 2,
+    marginTop: 14,
+    overflow: "hidden",
+  },
+  genProgressFill: {
+    height: "100%",
+    backgroundColor: colors.purple,
+    borderRadius: 2,
+  },
+  genDots: {
+    flexDirection: "row",
     justifyContent: "center",
-    alignItems: "center",
+    gap: 5,
+    marginTop: 10,
+    flexWrap: "wrap",
   },
-  generatingInfo: { flex: 1 },
-  generatingTitle: { color: colors.purpleLight, fontSize: 15, fontWeight: "700" },
-  generatingSubtext: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
-  generatingHint: { color: colors.textMuted, fontSize: 10, marginTop: 4, fontStyle: "italic" },
+  genDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  genDotActive: {
+    backgroundColor: "rgba(124, 58, 237, 0.5)",
+  },
+  genDotCurrent: {
+    backgroundColor: colors.purpleLight,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  generatingBestie: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 10,
+    fontWeight: "600",
+  },
 
   // Features modal
   featuresOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
