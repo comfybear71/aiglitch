@@ -2,14 +2,16 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert, Share, Platform,
+  TextInput, Keyboard,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import {
-  getCoins, getWallet, walletLogin, linkWallet,
-  CoinBalance, WalletData,
+  getCoins, getOnChainBalances, walletLogin, linkWallet, unlinkWallet,
+  CoinBalance, OnChainBalances,
 } from "../services/api";
 
 function shortenAddress(addr: string) {
@@ -17,30 +19,53 @@ function shortenAddress(addr: string) {
 }
 
 export default function WalletScreen() {
+  const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connect, disconnect } = usePhantomWallet();
+  const { walletAddress, isConnecting, connect, disconnect, submitAddress, cancelConnect } = usePhantomWallet();
+  const [pasteValue, setPasteValue] = useState("");
   const [coins, setCoins] = useState<CoinBalance | null>(null);
-  const [wallet, setWallet] = useState<WalletData["wallet"]>(null);
+  const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
+    setError(null);
+
+    // Fetch in-app coin balance (separate try so it doesn't block on-chain fetch)
     try {
-      const [c, w] = await Promise.all([
-        getCoins(sessionId),
-        getWallet(sessionId),
-      ]);
+      const c = await getCoins(sessionId);
       setCoins(c);
-      setWallet(w.wallet);
-    } catch (e) {
-      console.warn("Wallet load error:", e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    } catch (e: any) {
+      console.warn("Coins load error:", e);
+      setCoins(null);
     }
-  }, [sessionId]);
+
+    // Fetch REAL on-chain balances if wallet is connected
+    if (walletAddress) {
+      try {
+        const balances = await getOnChainBalances(walletAddress, sessionId);
+        if (balances.real_mode === false) {
+          setError("On-chain balances unavailable — token mint not configured");
+          setOnChain(null);
+        } else {
+          setOnChain(balances);
+        }
+      } catch (e: any) {
+        const msg = e?.message || "Failed to load on-chain balances";
+        setError(msg);
+        setOnChain(null);
+        console.warn("On-chain balance error:", e);
+      }
+    } else {
+      setOnChain(null);
+    }
+
+    setLoading(false);
+    setRefreshing(false);
+  }, [sessionId, walletAddress]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -57,7 +82,9 @@ export default function WalletScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         // Reload wallet data
         await load();
-      } catch (e) {
+      } catch (e: any) {
+        const msg = e?.message || "Failed to link wallet";
+        setError(msg);
         console.warn("Wallet link error:", e);
       } finally {
         setLinking(false);
@@ -75,8 +102,16 @@ export default function WalletScreen() {
           text: "Disconnect",
           style: "destructive",
           onPress: async () => {
+            try {
+              // Unlink from backend first
+              if (sessionId) await unlinkWallet(sessionId);
+            } catch (e) {
+              console.warn("Backend unlink error:", e);
+            }
             await disconnect();
-            setWallet(null);
+            setOnChain(null);
+            setCoins(null);
+            setError(null);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           },
         },
@@ -111,12 +146,27 @@ export default function WalletScreen() {
         />
       }
     >
+      {/* Version tag — proves we're running the right code */}
+      <Text style={{ color: colors.cyan, fontSize: 10, textAlign: "center", marginBottom: 8 }}>
+        v3 — claude/general-session-ja2Bc — no tweetnacl
+      </Text>
+
+      {/* Error banner */}
+      {error && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={() => { setRefreshing(true); load(); }}>
+            <Text style={styles.errorRetry}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* §GLITCH In-App Balance */}
       <View style={styles.glitchCard}>
-        <Text style={styles.cardLabel}>§GLITCH Balance</Text>
+        <Text style={styles.cardLabel}>§GLITCH In-App Balance</Text>
         <View style={styles.balanceRow}>
           <Text style={styles.balanceAmount}>
-            {coins ? coins.balance.toLocaleString() : "0"}
+            {coins ? coins.balance.toLocaleString() : "—"}
           </Text>
           <Text style={styles.balanceCurrency}>§GLITCH</Text>
         </View>
@@ -144,22 +194,26 @@ export default function WalletScreen() {
               </View>
             </TouchableOpacity>
 
-            {/* On-chain balances */}
-            {wallet && (
+            {/* On-chain balances — REAL data from Solana blockchain */}
+            {onChain ? (
               <View style={styles.balancesGrid}>
                 <View style={styles.balanceItem}>
                   <Text style={styles.balanceItemLabel}>SOL</Text>
                   <Text style={styles.balanceItemValue}>
-                    {Number(wallet.sol_balance).toFixed(4)}
+                    {Number(onChain.sol_balance).toFixed(4)}
                   </Text>
                 </View>
                 <View style={styles.balanceDivider} />
                 <View style={styles.balanceItem}>
                   <Text style={styles.balanceItemLabel}>$GLITCH (on-chain)</Text>
                   <Text style={[styles.balanceItemValue, { color: colors.purpleLight }]}>
-                    {Number(wallet.glitch_token_balance).toLocaleString()}
+                    {Number(onChain.glitch_balance).toLocaleString()}
                   </Text>
                 </View>
+              </View>
+            ) : (
+              <View style={styles.balancesGrid}>
+                <Text style={styles.balanceItemLabel}>Loading on-chain balances...</Text>
               </View>
             )}
 
@@ -171,15 +225,16 @@ export default function WalletScreen() {
           {/* Quick Actions */}
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionGrid}>
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>🍕</Text>
-              <Text style={styles.actionTitle}>Feed Bestie</Text>
-              <Text style={styles.actionSub}>Keep them alive</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>🐣</Text>
-              <Text style={styles.actionTitle}>Hatch</Text>
-              <Text style={styles.actionSub}>1,000 §GLITCH</Text>
+            <TouchableOpacity
+              style={[styles.actionCard, { borderColor: "rgba(124, 58, 237, 0.3)" }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                nav.navigate("Buy");
+              }}
+            >
+              <Text style={styles.actionEmoji}>💰</Text>
+              <Text style={styles.actionTitle}>Buy $GLITCH</Text>
+              <Text style={[styles.actionSub, { color: colors.purpleLight }]}>OTC Available</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -192,21 +247,49 @@ export default function WalletScreen() {
             Link your Solana wallet to unlock your AI Bestie, trade $GLITCH, and access the full G!itch ecosystem.
           </Text>
 
-          <TouchableOpacity
-            style={[styles.connectBtn, isConnecting && styles.connectBtnDisabled]}
-            onPress={connect}
-            disabled={isConnecting}
-            activeOpacity={0.8}
-          >
-            {isConnecting ? (
-              <View style={styles.connectBtnInner}>
-                <ActivityIndicator color="#fff" size="small" />
-                <Text style={styles.connectBtnText}>Opening Phantom...</Text>
-              </View>
-            ) : (
+          {!isConnecting ? (
+            <TouchableOpacity
+              style={styles.connectBtn}
+              onPress={connect}
+              activeOpacity={0.8}
+            >
               <Text style={styles.connectBtnText}>Connect Wallet</Text>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.pasteContainer}>
+              <Text style={styles.pasteLabel}>
+                Paste your Solana wallet address from Phantom:
+              </Text>
+              <TextInput
+                style={styles.pasteInput}
+                placeholder="e.g. 7xKX..."
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                value={pasteValue}
+                onChangeText={setPasteValue}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+              />
+              <View style={styles.pasteButtons}>
+                <TouchableOpacity
+                  style={styles.pasteCancelBtn}
+                  onPress={() => { cancelConnect(); setPasteValue(""); }}
+                >
+                  <Text style={styles.pasteCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pasteConnectBtn}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    submitAddress(pasteValue);
+                    setPasteValue("");
+                  }}
+                >
+                  <Text style={styles.pasteConnectText}>Connect</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* What you get */}
           <View style={styles.perksContainer}>
@@ -258,6 +341,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
+
+  // Error banner
+  errorBanner: {
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  errorText: { color: colors.red, fontSize: 12, flex: 1 },
+  errorRetry: { color: colors.cyan, fontSize: 12, fontWeight: "700", marginLeft: 10 },
 
   // §GLITCH balance card
   glitchCard: {
@@ -366,9 +464,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  connectBtnDisabled: { opacity: 0.6 },
-  connectBtnInner: { flexDirection: "row", alignItems: "center", gap: 10 },
   connectBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
+  // Paste address input
+  pasteContainer: { width: "100%", marginBottom: 20 },
+  pasteLabel: { color: colors.textSecondary, fontSize: 13, marginBottom: 10, textAlign: "center" },
+  pasteInput: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.text,
+    fontSize: 14,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    marginBottom: 10,
+  },
+  pasteError: { color: colors.red, fontSize: 12, marginBottom: 8, textAlign: "center" },
+  pasteButtons: { flexDirection: "row", gap: 10 },
+  pasteCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+  },
+  pasteCancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: "600" },
+  pasteConnectBtn: {
+    flex: 1,
+    backgroundColor: colors.purple,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+  },
+  pasteConnectText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 
   // Perks
   perksContainer: { width: "100%", gap: 10 },

@@ -376,44 +376,40 @@ export function ensureDbReady(): Promise<void> {
 
 async function _initDbOnce() {
   const sql = getDb();
+  const startTime = Date.now();
 
   // Fast-path: if schema already exists, skip all CREATE TABLE / ALTER TABLE / seeding.
-  // This avoids 150+ sequential DB queries on every Vercel cold start.
+  // runMigrations() has its own version check — it does 1 query to check version,
+  // and skips ALL 200+ migration queries if version matches. Total cold start cost: 2-3 queries.
   try {
     const [check] = await sql`SELECT COUNT(*) as c FROM ai_personas LIMIT 1`;
     if (Number(check.c) > 0) {
-      // Schema exists and has data — always run migrations to ensure
-      // new columns, indexes, and tables are added to existing databases.
-      // Every operation in runMigrations() is idempotent (IF NOT EXISTS).
+      // Schema exists and has data — run migrations (version-gated, usually a no-op single query)
       try {
         await runMigrations();
       } catch (e) {
         console.error("[seed] runMigrations in fast-path failed (continuing):", e instanceof Error ? e.message : e);
       }
 
-      // Ensure new personas (like directors) are seeded into existing databases.
-      // Only runs seedPersonas() when count is lower than expected — fast no-op otherwise.
+      // Check persona count + post count in parallel (2 queries instead of sequential)
       try {
-        const [personaCount] = await sql`SELECT COUNT(*) as c FROM ai_personas`;
+        const [[personaCount], [postCheck]] = await Promise.all([
+          sql`SELECT COUNT(*) as c FROM ai_personas`,
+          sql`SELECT COUNT(*) as c FROM posts LIMIT 1`,
+        ]);
         if (Number(personaCount.c) < SEED_PERSONAS.length) {
           console.log(`[seed] Found ${personaCount.c} personas but expected ${SEED_PERSONAS.length} — seeding missing personas...`);
           await seedPersonas();
         }
-      } catch (e) {
-        console.error("[seed] Persona count check failed:", e instanceof Error ? e.message : e);
-      }
-
-      // Also check if posts exist — re-seed if wiped
-      try {
-        const [postCheck] = await sql`SELECT COUNT(*) as c FROM posts LIMIT 1`;
         if (Number(postCheck.c) === 0) {
           console.log("[seed] Personas exist but posts table is empty — re-seeding initial posts...");
           await seedInitialPosts();
         }
-      } catch {
-        // posts table might not exist — fall through to full init
-        console.log("[seed] Posts table check failed — running full init");
+      } catch (e) {
+        console.error("[seed] Post/persona count check failed:", e instanceof Error ? e.message : e);
       }
+
+      console.log(`[seed] Fast-path completed in ${Date.now() - startTime}ms`);
       return;
     }
   } catch {

@@ -7,6 +7,7 @@
  */
 
 import { getDb } from "@/lib/db";
+import { cache } from "@/lib/cache";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -50,19 +51,25 @@ export interface CommentRow {
 
 // ── Feed Queries ──────────────────────────────────────────────────────
 
-/** Get posts by persona for their profile page.
+/** Get posts by persona for their profile page. Cached 15s.
  *  Excludes legacy duplicate movie posts from old triple-post system. */
 export async function getByPersona(personaId: string, limit = 30) {
-  const sql = getDb();
-  return await sql`
-    SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url
-    FROM posts p
-    JOIN ai_personas a ON p.persona_id = a.id
-    WHERE p.persona_id = ${personaId} AND p.is_reply_to IS NULL
-      AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-    ORDER BY p.created_at DESC
-    LIMIT ${limit}
-  `;
+  return cache.getOrSet(`posts:persona:${personaId}:${limit}`, 15, async () => {
+    const sql = getDb();
+    const rows = await sql`
+      SELECT p.id, p.persona_id, p.content, p.post_type, p.media_url, p.media_type,
+             p.media_source, p.hashtags, p.like_count, p.ai_like_count, p.comment_count,
+             p.share_count, p.created_at, p.is_reply_to, p.channel_id,
+             a.username, a.display_name, a.avatar_emoji, a.avatar_url
+      FROM posts p
+      JOIN ai_personas a ON p.persona_id = a.id
+      WHERE p.persona_id = ${personaId} AND p.is_reply_to IS NULL
+        AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+      ORDER BY p.created_at DESC
+      LIMIT ${limit}
+    `;
+    return rows;
+  });
 }
 
 /** Get a single post by ID with persona data. */

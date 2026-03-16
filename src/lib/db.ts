@@ -253,6 +253,7 @@ export async function initializeDb() {
       conversation_id TEXT NOT NULL REFERENCES conversations(id),
       sender_type TEXT NOT NULL CHECK (sender_type IN ('human', 'ai')),
       content TEXT NOT NULL,
+      image_url TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
@@ -299,8 +300,26 @@ export async function initializeDb() {
 // PERFORMANCE: All operations run in parallel batches (not sequentially).
 // On Neon HTTP, each query is ~200ms network latency. Running 130+ queries
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
+// Current migration schema version — bump this number ONLY when adding new migrations.
+// On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
+const MIGRATION_VERSION = 19;
+
 export async function runMigrations() {
   const sql = getDb();
+
+  // ── Fast-path: check if migrations are already at current version ──
+  // This turns 200+ queries into a single SELECT on every cold start.
+  try {
+    const [row] = await sql`
+      SELECT value FROM platform_settings WHERE key = 'migration_version'
+    `;
+    if (row && Number(row.value) >= MIGRATION_VERSION) {
+      // All migrations already applied — skip everything
+      return;
+    }
+  } catch {
+    // platform_settings table might not exist yet — continue with full migrations
+  }
 
   // ── Batch 1: Column migrations (all independent, safe to parallelize) ──
   await Promise.allSettled([
@@ -339,6 +358,7 @@ export async function runMigrations() {
     safeMigrate(sql, "exchange_orders.quote_token", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_token TEXT DEFAULT 'SOL'`),
     safeMigrate(sql, "exchange_orders.quote_amount", () => sql`ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS quote_amount REAL DEFAULT 0`),
     safeMigrate(sql, "multi_clip_scenes.fail_reason", () => sql`ALTER TABLE multi_clip_scenes ADD COLUMN IF NOT EXISTS fail_reason TEXT`),
+    safeMigrate(sql, "messages.image_url", () => sql`ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url TEXT`),
   ]);
 
   // ── Batch 2: All indexes (all independent, safe to parallelize) ──
@@ -534,6 +554,8 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_posts_reply_thread ON posts(is_reply_to, created_at ASC) WHERE is_reply_to IS NOT NULL`),
     safeMigrate(sql, "idx_human_subscriptions_session", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_human_subscriptions_session ON human_subscriptions(session_id)`),
+    safeMigrate(sql, "idx_human_subscriptions_persona_session", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_human_subscriptions_persona_session ON human_subscriptions(persona_id, session_id)`),
     safeMigrate(sql, "idx_ai_trades_type_time", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_ai_trades_type_time ON ai_trades(trade_type, created_at DESC)`),
     safeMigrate(sql, "idx_human_comments_post_time", () =>
@@ -787,4 +809,11 @@ export async function runMigrations() {
       }
     }
   });
+
+  // ── Stamp the migration version so future cold starts skip all of the above ──
+  await safeMigrate(sql, "stamp_migration_version", () =>
+    sql`INSERT INTO platform_settings (key, value, updated_at)
+        VALUES ('migration_version', ${String(MIGRATION_VERSION)}, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = ${String(MIGRATION_VERSION)}, updated_at = NOW()`
+  );
 }

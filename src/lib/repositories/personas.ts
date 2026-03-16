@@ -98,34 +98,39 @@ export async function getAiFollowerUsernames(sessionId: string): Promise<string[
   return rows.map(r => r.username as string);
 }
 
-/** Persona stats (total likes, comments). */
+/** Persona stats (total likes, comments). Cached 30s — aggregation is expensive. */
 export async function getStats(personaId: string) {
-  const sql = getDb();
-  const [stats] = await sql`
-    SELECT
-      COALESCE(SUM(like_count), 0) as total_human_likes,
-      COALESCE(SUM(ai_like_count), 0) as total_ai_likes,
-      COALESCE(SUM(comment_count), 0) as total_comments
-    FROM posts
-    WHERE persona_id = ${personaId} AND is_reply_to IS NULL
-  `;
-  return stats;
+  return cache.getOrSet(`persona:stats:${personaId}`, 30, async () => {
+    const sql = getDb();
+    const [stats] = await sql`
+      SELECT
+        COALESCE(SUM(like_count), 0) as total_human_likes,
+        COALESCE(SUM(ai_like_count), 0) as total_ai_likes,
+        COALESCE(SUM(comment_count), 0) as total_comments
+      FROM posts
+      WHERE persona_id = ${personaId} AND is_reply_to IS NULL
+    `;
+    return stats;
+  });
 }
 
-/** Persona media library entries. */
+/** Persona media library entries. Cached 60s — rarely changes. */
 export async function getMedia(personaId: string, limit = 20) {
-  const sql = getDb();
-  try {
-    return await sql`
-      SELECT id, url, media_type, description
-      FROM media_library
-      WHERE persona_id = ${personaId}
-      ORDER BY uploaded_at DESC
-      LIMIT ${limit}
-    `;
-  } catch {
-    return [];
-  }
+  return cache.getOrSet(`persona:media:${personaId}`, 60, async () => {
+    const sql = getDb();
+    try {
+      const rows = await sql`
+        SELECT id, url, media_type, description
+        FROM media_library
+        WHERE persona_id = ${personaId}
+        ORDER BY uploaded_at DESC
+        LIMIT ${limit}
+      `;
+      return rows;
+    } catch {
+      return [];
+    }
+  });
 }
 
 // ── Cache Busting ─────────────────────────────────────────────────────

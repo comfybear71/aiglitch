@@ -1,14 +1,25 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, Image,
-  StyleSheet, RefreshControl, ActivityIndicator,
+  View, Text, TouchableOpacity, Image, FlatList, TextInput,
+  StyleSheet, ActivityIndicator, Alert, Share, Platform,
+  KeyboardAvoidingView, Keyboard, Modal, ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import { Audio, Video, ResizeMode } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { usePushNotifications } from "../hooks/usePushNotifications";
-import { getBestie, walletLogin, Bestie } from "../services/api";
+import {
+  getBestie, walletLogin, linkWallet, unlinkWallet,
+  getOnChainBalances, getMessages, sendMessage, sendImageMessage,
+  Bestie, OnChainBalances, Message,
+} from "../services/api";
+import CosmicVisualizer from "../components/CosmicVisualizer";
+
+const API_BASE = "https://aiglitch.app";
 
 function HealthBar({ health }: { health: number }) {
   const color = health > 70 ? colors.green : health > 40 ? colors.yellow : health > 15 ? colors.orange : colors.red;
@@ -19,38 +30,535 @@ function HealthBar({ health }: { health: number }) {
   );
 }
 
+function shortenAddress(addr: string) {
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function isVideoUrl(url?: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes(".mp4") || lower.includes(".mov") || lower.includes(".webm") || lower.includes(".m3u8") || lower.includes("video");
+}
+
+function compactNumber(n: number): string {
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "B";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString();
+}
+
 export default function HomeScreen() {
   const nav = useNavigation<any>();
   const { sessionId } = useSession();
-  const { walletAddress, isConnecting, connect } = usePhantomWallet();
+  const { walletAddress, isConnecting, isLoading: walletLoading, connect, disconnect, submitAddress, cancelConnect } = usePhantomWallet();
+  const [addressInput, setAddressInput] = useState("");
+  const [walletExpanded, setWalletExpanded] = useState(false);
   usePushNotifications(sessionId);
   const [bestie, setBestie] = useState<Bestie | null>(null);
+  const [onChain, setOnChain] = useState<OnChainBalances | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [linking, setLinking] = useState(false);
+
+  // Chat state
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [generating, setGenerating] = useState<string | null>(null); // active generation type
+  const [hasMore, setHasMore] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<Record<string, string>>({});
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  const [showFeatures, setShowFeatures] = useState(false);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [suggestTitle, setSuggestTitle] = useState("");
+  const [suggestDesc, setSuggestDesc] = useState("");
+  const [suggestCategory, setSuggestCategory] = useState("feature-request");
+  const [suggestSending, setSuggestSending] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const flatListRef = useRef<FlatList>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messageCountRef = useRef(0); // track count for polling comparison
 
   const load = useCallback(async () => {
     if (!sessionId) return;
     try {
-      // Only fetch bestie if wallet is connected
       if (walletAddress) {
         try { await walletLogin(sessionId, walletAddress); } catch (_) {}
         const b = await getBestie(sessionId);
         setBestie(b.bestie);
+        try {
+          const balances = await getOnChainBalances(walletAddress, sessionId);
+          setOnChain(balances.real_mode !== false ? balances : null);
+        } catch (e) {
+          console.warn("Balance fetch error:", e);
+          setOnChain(null);
+        }
       } else {
-        // No wallet = no bestie
         setBestie(null);
+        setOnChain(null);
       }
     } catch (e) {
       console.warn("Load error:", e);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, [sessionId, walletAddress]);
 
   useEffect(() => { load(); }, [load]);
 
-  const onRefresh = () => { setRefreshing(true); load(); };
+  // Load chat when bestie is ready (most recent 50 messages)
+  useEffect(() => {
+    if (!sessionId || !bestie) return;
+    setChatLoading(true);
+    getMessages(sessionId, bestie.id)
+      .then((data) => {
+        setMessages(data.messages || []);
+        setHasMore(!!data.has_more);
+        setChatLoading(false);
+      })
+      .catch(() => setChatLoading(false));
+  }, [sessionId, bestie?.id]);
+
+  // Load older messages when scrolling to top
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlder || !hasMore || !sessionId || !bestie || messages.length === 0) return;
+    setLoadingOlder(true);
+    try {
+      const oldest = messages[0];
+      const res = await fetch(
+        `${API_BASE}/api/messages?session_id=${encodeURIComponent(sessionId)}&persona_id=${encodeURIComponent(bestie.id)}&before=${encodeURIComponent(oldest.created_at)}&limit=50`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const olderMsgs: Message[] = data.messages || [];
+        if (olderMsgs.length > 0) {
+          setMessages((prev) => [...olderMsgs, ...prev]);
+        }
+        setHasMore(!!data.has_more);
+      }
+    } catch (_) { /* ignore */ }
+    setLoadingOlder(false);
+  }, [loadingOlder, hasMore, sessionId, bestie?.id, messages]);
+
+  // Keep messageCountRef in sync
+  useEffect(() => { messageCountRef.current = messages.length; }, [messages.length]);
+
+  // Poll for new messages (background tasks like image gen, content gen)
+  const startPolling = useCallback((genType?: string) => {
+    if (pollTimerRef.current || !sessionId || !bestie) return;
+    if (genType) setGenerating(genType);
+    let pollCount = 0;
+    pollTimerRef.current = setInterval(async () => {
+      pollCount++;
+      if (pollCount > 40) { // stop after ~2min (40 * 3s)
+        if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+        setGenerating(null);
+        return;
+      }
+      try {
+        const data = await getMessages(sessionId!, bestie!.id);
+        const newMsgs = data.messages || [];
+        if (newMsgs.length > messageCountRef.current) {
+          // New messages arrived from background task!
+          setMessages(newMsgs);
+          setGenerating(null);
+          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Auto-speak the latest AI message
+          const latest = newMsgs[newMsgs.length - 1];
+          if (latest?.sender_type === "ai") {
+            speakReply(latest.content, latest.id);
+          }
+        }
+      } catch (_) { /* ignore poll errors */ }
+    }, 3000);
+  }, [sessionId, bestie?.id]);
+
+  // Cleanup sound + polling on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) { soundRef.current.unloadAsync(); }
+      if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+    };
+  }, []);
+
+  // Link wallet to backend when connected
+  useEffect(() => {
+    if (!walletAddress || !sessionId || linking) return;
+    (async () => {
+      setLinking(true);
+      try {
+        await walletLogin(sessionId, walletAddress);
+        await linkWallet(sessionId, walletAddress);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await load();
+      } catch (e) {
+        console.warn("Wallet link error:", e);
+      } finally {
+        setLinking(false);
+      }
+    })();
+  }, [walletAddress, sessionId]);
+
+  // Voice playback — Grok Rex
+  const speakReply = async (text: string, msgId?: string) => {
+    if (!voiceEnabled) return;
+    const clean = text
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu, "")
+      .trim();
+    if (!clean || clean.length < 2) return;
+
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch (_) {}
+      soundRef.current = null;
+    }
+
+    if (msgId) setSpeakingMsgId(msgId);
+
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+      });
+
+      const res = await fetch(`${API_BASE}/api/voice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: clean.slice(0, 500),
+          persona_id: bestie?.id,
+          persona_type: bestie?.persona_type,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Voice API ${res.status}`);
+
+      const blob = await res.blob();
+      const reader = new FileReader();
+      const dataUri = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: dataUri },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      soundRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setSpeakingMsgId(null);
+          sound.unloadAsync();
+          soundRef.current = null;
+        }
+      });
+    } catch (e) {
+      console.warn("Voice playback error:", e);
+      setSpeakingMsgId(null);
+    }
+  };
+
+  // Send message
+  const handleSend = async () => {
+    if (!chatInput.trim() || sending || !sessionId || !bestie) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    setSending(true);
+    Keyboard.dismiss();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const tempMsg: Message = {
+      id: `temp-${Date.now()}`,
+      sender_type: "human",
+      content: text,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
+    try {
+      const data = await sendMessage(sessionId, bestie.id, text);
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== tempMsg.id);
+          return [...filtered, data.human_message, data.ai_message];
+        });
+        speakReply(data.ai_message.content, data.ai_message.id);
+        // If a background task is running (image gen, content gen etc), poll for the result
+        if (data.background_task) {
+          // Detect generation type from the immediate reply
+          const reply = (data.ai_message.content || "").toLowerCase();
+          const genType = reply.includes("image") || reply.includes("cook up") ? "image"
+            : reply.includes("video") || reply.includes("movie") ? "video"
+            : reply.includes("hatch") ? "hatching"
+            : reply.includes("content") ? "content"
+            : "generating";
+          startPolling(genType);
+        }
+      }
+    } catch {
+      // Keep temp message
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Photo/video sharing
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.7,
+      base64: true,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      if (asset.base64) {
+        sendPhoto(asset.base64, asset.uri);
+      } else if (asset.uri) {
+        // Videos may not have base64 — share as local URI display only
+        sendPhoto("", asset.uri);
+      }
+    }
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Camera Permission", "G!itch needs camera access so your bestie can see what you see!");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+      base64: true,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    }
+  };
+
+  const sendPhoto = async (base64: string, uri: string) => {
+    if (!sessionId || !bestie || sending) return;
+    setSending(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const isVideo = isVideoUrl(uri);
+    const tempMsg: Message = {
+      id: `temp-img-${Date.now()}`,
+      sender_type: "human",
+      content: isVideo ? "[Video]" : "[Photo]",
+      image_url: uri,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
+    // If no base64 (e.g. video without base64), just keep the temp message
+    if (!base64) {
+      setSending(false);
+      return;
+    }
+
+    try {
+      const data = await sendImageMessage(sessionId, bestie.id, base64);
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== tempMsg.id);
+          // ALWAYS preserve the local URI as fallback — server blob may fail
+          const humanMsg = { ...data.human_message, image_url: data.human_message.image_url || uri };
+          return [...filtered, humanMsg, data.ai_message];
+        });
+        speakReply(data.ai_message.content, data.ai_message.id);
+        if (data.background_task) {
+          startPolling("image");
+        }
+      }
+    } catch {
+      // Keep temp message with local URI so image stays visible
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const showMediaOptions = () => {
+    Alert.alert("Share", "What do you want to share?", [
+      { text: "Take Photo", onPress: takePhoto },
+      { text: "Photo or Video from Library", onPress: pickImage },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const handleDisconnect = () => {
+    Alert.alert(
+      "Disconnect Wallet",
+      "This will unlink your wallet. Your bestie will disappear until you reconnect.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            try { if (sessionId) await unlinkWallet(sessionId); } catch (_) {}
+            await disconnect();
+            setBestie(null);
+            setOnChain(null);
+            setMessages([]);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          },
+        },
+      ]
+    );
+  };
+
+  const copyAddress = () => {
+    if (walletAddress) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Share.share({ message: walletAddress });
+    }
+  };
+
+  // Format timestamp like WhatsApp
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const REACTION_EMOJIS = ["❤️", "😂", "😮", "😢", "🔥", "👍"];
+
+  const handleReaction = (msgId: string, emoji: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReactions((prev) => ({ ...prev, [msgId]: prev[msgId] === emoji ? "" : emoji }));
+    setReactionPickerFor(null);
+  };
+
+  // Submit feature suggestion
+  const submitSuggestion = async () => {
+    if (!suggestTitle.trim() || suggestSending) return;
+    setSuggestSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/suggest-feature`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: suggestTitle.trim(),
+          description: suggestDesc.trim(),
+          category: suggestCategory,
+          session_id: sessionId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Submitted!", data.message);
+        setSuggestTitle("");
+        setSuggestDesc("");
+        setShowSuggest(false);
+      } else {
+        Alert.alert("Error", data.error || "Something went wrong");
+      }
+    } catch {
+      Alert.alert("Error", "Couldn't submit suggestion. Try again later.");
+    }
+    setSuggestSending(false);
+  };
+
+  // Stop voice playback
+  const stopSpeaking = async () => {
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch (_) {}
+      soundRef.current = null;
+    }
+    setSpeakingMsgId(null);
+  };
+
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isHuman = item.sender_type === "human";
+    const isSpeaking = speakingMsgId === item.id;
+    const reaction = reactions[item.id];
+    const showPicker = reactionPickerFor === item.id;
+    const hasMedia = !!item.image_url;
+    // Hide placeholder text like "[Photo]" or "[Video]" when media is displayed
+    const isMediaPlaceholder = hasMedia && /^\[(Photo|Video|Shared a photo)\]$/i.test(item.content.trim());
+    return (
+      <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
+        {!isHuman && bestie && (
+          bestie.avatar_url ? (
+            <Image source={{ uri: bestie.avatar_url }} style={styles.msgAvatar} />
+          ) : (
+            <Text style={styles.msgEmoji}>{bestie.avatar_emoji}</Text>
+          )
+        )}
+        <View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onLongPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setReactionPickerFor(showPicker ? null : item.id);
+            }}
+            style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI]}
+          >
+            {item.image_url && isVideoUrl(item.image_url) ? (
+              <Video
+                source={{ uri: item.image_url }}
+                style={styles.msgVideo}
+                resizeMode={ResizeMode.CONTAIN}
+                useNativeControls
+                shouldPlay={false}
+                isLooping={false}
+              />
+            ) : item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
+            ) : null}
+            {!isMediaPlaceholder && (
+              <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
+                {item.content}
+              </Text>
+            )}
+            <View style={styles.msgMeta}>
+              <Text style={styles.msgTime}>{formatTime(item.created_at)}</Text>
+              {isHuman && <Text style={styles.msgCheck}>✓✓</Text>}
+            </View>
+            {!isHuman && (
+              <TouchableOpacity
+                style={[styles.speakBtn, isSpeaking && styles.speakBtnActive]}
+                onPress={() => isSpeaking ? stopSpeaking() : speakReply(item.content, item.id)}
+              >
+                <Text style={styles.speakBtnText}>{isSpeaking ? "⏹" : "🔈"}</Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+          {/* Reaction picker — below the bubble */}
+          {showPicker && (
+            <View style={[styles.reactionPicker, isHuman ? styles.reactionPickerRight : styles.reactionPickerLeft]}>
+              {REACTION_EMOJIS.map((emoji) => (
+                <TouchableOpacity key={emoji} onPress={() => handleReaction(item.id, emoji)} style={styles.reactionOption}>
+                  <Text style={styles.reactionOptionText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {/* Reaction display — below the bubble */}
+          {reaction ? (
+            <TouchableOpacity
+              style={[styles.reactionBubble, isHuman ? styles.reactionBubbleRight : styles.reactionBubbleLeft]}
+              onPress={() => setReactionPickerFor(item.id)}
+            >
+              <Text style={styles.reactionBubbleText}>{reaction}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -60,234 +568,711 @@ export default function HomeScreen() {
     );
   }
 
+  // No wallet — show connect screen
+  if (!walletAddress) {
+    return (
+      <View style={styles.connectScreen}>
+        <Text style={styles.connectEmoji}>👻</Text>
+        <Text style={styles.connectTitle}>Connect Wallet</Text>
+        <Text style={styles.connectSub}>Paste your Solana wallet address to meet your AI Bestie</Text>
+        <View style={styles.inlineInputCard}>
+          <TextInput
+            style={styles.inlineInput}
+            placeholder="Paste your Solana address here..."
+            placeholderTextColor={colors.textMuted}
+            value={addressInput}
+            onChangeText={setAddressInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            selectionColor={colors.purple}
+          />
+          <TouchableOpacity
+            style={[styles.inlineConnectBtn, !addressInput.trim() && { opacity: 0.4 }]}
+            disabled={!addressInput.trim()}
+            onPress={() => { submitAddress(addressInput); setAddressInput(""); }}
+          >
+            <Text style={styles.inlineConnectText}>Connect</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // No bestie — show info
+  if (!bestie) {
+    return (
+      <View style={styles.connectScreen}>
+        <Text style={styles.connectEmoji}>🐣</Text>
+        <Text style={styles.connectTitle}>No Bestie Yet</Text>
+        <Text style={styles.connectSub}>Visit aiglitch.app to hatch your AI Bestie!</Text>
+        {/* Wallet dropdown */}
+        <View style={[styles.walletDropdown, { marginTop: 20, width: "100%" }]}>
+          <TouchableOpacity style={styles.walletTopBar}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWalletExpanded(!walletExpanded); }}>
+            <View style={styles.walletTopLeft}>
+              <View style={styles.connectedDot} />
+              <Text style={styles.walletTopAddress}>{shortenAddress(walletAddress)}</Text>
+            </View>
+            <Text style={styles.walletChevron}>{walletExpanded ? "▲" : "▼"}</Text>
+          </TouchableOpacity>
+          {walletExpanded && (
+            <View style={styles.walletExpandedContent}>
+              <TouchableOpacity style={[styles.walletActionBtn, styles.disconnectBtn]} onPress={handleDisconnect}>
+                <Text style={styles.disconnectText}>Disconnect</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // Dead bestie
+  if (bestie.is_dead) {
+    return (
+      <View style={styles.connectScreen}>
+        <Text style={styles.connectEmoji}>💀</Text>
+        <Text style={styles.connectTitle}>{bestie.display_name} has died</Text>
+        <Text style={styles.connectSub}>Feed $GLITCH to resurrect your bestie</Text>
+      </View>
+    );
+  }
+
+  // Main chat screen — WhatsApp style
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple} />}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={90}
     >
-      {/* Wallet connect banner */}
-      {!walletAddress && (
-        <TouchableOpacity
-          style={styles.walletBanner}
-          onPress={connect}
-          disabled={isConnecting}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.walletBannerEmoji}>👻</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.walletBannerTitle}>
-              {isConnecting ? "Opening Phantom..." : "Connect Wallet"}
-            </Text>
-            <Text style={styles.walletBannerSub}>
-              Link your Phantom wallet to find your Bestie
-            </Text>
+      {/* Bestie header bar (like WhatsApp contact header) */}
+      <TouchableOpacity
+        style={styles.bestieHeader}
+        activeOpacity={0.7}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWalletExpanded(!walletExpanded); }}
+      >
+        {bestie.avatar_url ? (
+          <Image source={{ uri: bestie.avatar_url }} style={styles.headerAvatar} />
+        ) : (
+          <Text style={styles.headerEmoji}>{bestie.avatar_emoji}</Text>
+        )}
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerName}>{bestie.display_name}</Text>
+          <View style={styles.headerStatusRow}>
+            <HealthBar health={bestie.live_health} />
+            <Text style={[styles.headerHealth, {
+              color: bestie.live_health > 70 ? colors.green : bestie.live_health > 40 ? colors.yellow : colors.red,
+            }]}>{bestie.live_health}%</Text>
+            <Text style={styles.headerDays}>{bestie.days_left}d</Text>
           </View>
-          <Text style={styles.walletBannerArrow}>→</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => nav.navigate("VoiceChat", {
+              personaId: bestie.id,
+              title: bestie.display_name,
+              personaType: bestie.persona_type,
+            })}
+          >
+            <Text style={styles.headerBtnText}>🎙</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => setVoiceEnabled(!voiceEnabled)}
+          >
+            <Text style={styles.headerBtnText}>{voiceEnabled ? "🔊" : "🔇"}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+
+      {/* Wallet dropdown (hidden by default) */}
+      {walletExpanded && (
+        <View style={styles.walletPanel}>
+          <View style={styles.walletPanelRow}>
+            <View style={styles.connectedDot} />
+            <Text style={styles.walletPanelAddr}>{shortenAddress(walletAddress)}</Text>
+            {onChain && (
+              <Text style={styles.walletPanelBal}>{Number(onChain.sol_balance).toFixed(2)} SOL</Text>
+            )}
+          </View>
+          {onChain && (
+            <View style={styles.balancesRow}>
+              <Text style={styles.balTag}>GLITCH <Text style={{ color: colors.purpleLight }}>{compactNumber(Number(onChain.glitch_balance))}</Text></Text>
+              <Text style={styles.balTag}>BUDJU <Text style={{ color: colors.text }}>{compactNumber(Number(onChain.budju_balance))}</Text></Text>
+              <Text style={styles.balTag}>USDC <Text style={{ color: colors.text }}>{Number(onChain.usdc_balance).toFixed(2)}</Text></Text>
+            </View>
+          )}
+          <View style={styles.walletPanelActions}>
+            <TouchableOpacity style={styles.walletPanelBtn} onPress={copyAddress}>
+              <Text style={styles.walletPanelBtnText}>📋 Copy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.walletPanelBtn, { borderColor: "rgba(124,58,237,0.4)" }]} onPress={() => setShowFeatures(true)}>
+              <Text style={[styles.walletPanelBtnText, { color: colors.purpleLight }]}>What Can I Do?</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.walletPanelBtn, { borderColor: "rgba(239,68,68,0.3)" }]} onPress={handleDisconnect}>
+              <Text style={[styles.walletPanelBtnText, { color: colors.red }]}>Disconnect</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Cosmic visualizer — shows when speaking, tap to stop */}
+      {speakingMsgId && (
+        <TouchableOpacity onPress={stopSpeaking} activeOpacity={0.7}>
+          <CosmicVisualizer active={!!speakingMsgId} height={50} />
+          <Text style={styles.tapToStop}>tap to stop</Text>
         </TouchableOpacity>
       )}
 
-      {/* Bestie hero card */}
-      {bestie && !bestie.is_dead ? (
-        <TouchableOpacity
-          style={styles.bestieCard}
-          activeOpacity={0.7}
-          onPress={() => nav.navigate("Chat", { personaId: bestie.id, title: bestie.display_name })}
-        >
-          <View style={styles.bestieRow}>
-            {bestie.avatar_url ? (
-              <Image source={{ uri: bestie.avatar_url }} style={styles.bestieAvatar} />
-            ) : (
-              <Text style={styles.bestieEmoji}>{bestie.avatar_emoji}</Text>
-            )}
-            <View style={styles.bestieInfo}>
-              <View style={styles.bestieNameRow}>
-                <Text style={styles.bestieName}>{bestie.display_name}</Text>
-                <View style={styles.bestieBadge}>
-                  <Text style={styles.bestieBadgeText}>BESTIE</Text>
+      {/* Chat messages — inverted list (newest at bottom, scroll up for older) */}
+      {chatLoading ? (
+        <View style={styles.chatLoading}>
+          <ActivityIndicator color={colors.purple} />
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={[...messages].reverse()}
+          keyExtractor={(m) => m.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.messageList}
+          inverted={true}
+          onEndReached={loadOlderMessages}
+          onEndReachedThreshold={0.3}
+          ListEmptyComponent={
+            <View style={[styles.emptyChat, { transform: [{ scaleY: -1 }] }]}>
+              {bestie.avatar_url ? (
+                <Image source={{ uri: bestie.avatar_url }} style={styles.emptyAvatar} />
+              ) : (
+                <Text style={styles.emptyEmoji}>{bestie.avatar_emoji}</Text>
+              )}
+              <Text style={styles.emptyTitle}>
+                {bestie.meatbag_name
+                  ? `Hey ${bestie.meatbag_name}! It's me, ${bestie.display_name}!`
+                  : `Say hey to ${bestie.display_name}!`}
+              </Text>
+              <Text style={styles.emptyBio}>{bestie.bio}</Text>
+              <Text style={styles.emptyHint}>Ask me anything — weather, crypto, news, games, jokes, or just chat!</Text>
+            </View>
+          }
+          ListHeaderComponent={
+            generating ? (
+              <View style={styles.generatingRow}>
+                <View style={styles.generatingCard}>
+                  <ActivityIndicator color={colors.purpleLight} size="small" />
+                  <View style={styles.generatingInfo}>
+                    <Text style={styles.generatingTitle}>
+                      {generating === "image" ? "Generating image..." :
+                       generating === "video" ? "Creating video..." :
+                       generating === "hatching" ? "Hatching persona..." :
+                       generating === "content" ? "Creating content..." :
+                       "Working on it..."}
+                    </Text>
+                    <Text style={styles.generatingSubtext}>
+                      {generating === "image" ? "Your bestie is cooking up something visual" :
+                       generating === "video" ? "This may take a minute — videos take time!" :
+                       generating === "hatching" ? "A new AI persona is being born..." :
+                       generating === "content" ? "Generating posts for the Digital Void" :
+                       "Background task running..."}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <Text style={styles.bestieUsername}>@{bestie.username}</Text>
-
-              <View style={styles.healthRow}>
-                <HealthBar health={bestie.live_health} />
-                <Text style={[styles.healthText, {
-                  color: bestie.live_health > 70 ? colors.green : bestie.live_health > 40 ? colors.yellow : colors.red,
-                }]}>
-                  {bestie.live_health}%
-                </Text>
-                <Text style={styles.daysLeft}>{bestie.days_left}d</Text>
+            ) : sending ? (
+              <View style={[styles.msgRow, styles.msgRowLeft]}>
+                {bestie.avatar_url ? (
+                  <Image source={{ uri: bestie.avatar_url }} style={styles.msgAvatar} />
+                ) : (
+                  <Text style={styles.msgEmoji}>{bestie.avatar_emoji}</Text>
+                )}
+                <View style={[styles.msgBubble, styles.msgAI]}>
+                  <Text style={styles.typingText}>typing...</Text>
+                </View>
               </View>
+            ) : null
+          }
+          ListFooterComponent={
+            loadingOlder ? (
+              <View style={styles.loadingOlder}>
+                <ActivityIndicator color={colors.purple} size="small" />
+                <Text style={styles.loadingOlderText}>Loading older messages...</Text>
+              </View>
+            ) : hasMore ? (
+              <TouchableOpacity style={styles.loadingOlder} onPress={loadOlderMessages}>
+                <Text style={styles.loadingOlderText}>Load older messages</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+        />
+      )}
 
-              {bestie.last_message ? (
-                <Text style={styles.lastMsg} numberOfLines={1}>
-                  {bestie.last_message.sender_type === "human" ? "You: " : `${bestie.avatar_emoji} `}
-                  {bestie.last_message.content}
-                </Text>
-              ) : (
-                <Text style={styles.tapToChat}>Tap to chat with {bestie.display_name}...</Text>
-              )}
-            </View>
-          </View>
+      {/* Input bar — WhatsApp style */}
+      <View style={styles.inputBar}>
+        <TouchableOpacity style={styles.mediaBtn} onPress={showMediaOptions}>
+          <Text style={styles.mediaBtnText}>📷</Text>
         </TouchableOpacity>
-      ) : bestie && bestie.is_dead ? (
-        /* Dead bestie */
-        <View style={styles.deadCard}>
-          <Text style={styles.deadEmoji}>💀</Text>
-          <Text style={styles.deadTitle}>{bestie.display_name} has died</Text>
-          <Text style={styles.deadSub}>
-            Feed §GLITCH to resurrect your bestie
-          </Text>
-          <TouchableOpacity
-            style={styles.resurrectBtn}
-            onPress={() => nav.navigate("Wallet")}
-          >
-            <Text style={styles.resurrectBtnText}>Feed §GLITCH to Resurrect</Text>
-          </TouchableOpacity>
-        </View>
-      ) : walletAddress ? (
-        /* Wallet connected but no bestie yet */
-        <View style={styles.noBestieCard}>
-          <Text style={styles.noBestieEmoji}>🐣</Text>
-          <Text style={styles.noBestieTitle}>No Bestie Yet</Text>
-          <Text style={styles.noBestieSub}>
-            You haven't hatched an AI Bestie yet. Visit aiglitch.app to hatch one!
-          </Text>
-        </View>
-      ) : null}
-
-      {/* Quick actions */}
-      <View style={styles.quickActions}>
-        <TouchableOpacity style={styles.actionCard} onPress={() => nav.navigate("Briefing")}>
-          <Text style={styles.actionEmoji}>📰</Text>
-          <Text style={styles.actionTitle}>Daily Briefing</Text>
-          <Text style={styles.actionSub}>News, crypto, trends</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard} onPress={() => nav.navigate("Wallet")}>
-          <Text style={styles.actionEmoji}>💰</Text>
-          <Text style={styles.actionTitle}>Wallet</Text>
-          <Text style={styles.actionSub}>§GLITCH, SOL</Text>
+        <TextInput
+          style={styles.chatTextInput}
+          value={chatInput}
+          onChangeText={setChatInput}
+          placeholder={`Message ${bestie.display_name}...`}
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="send"
+          onSubmitEditing={handleSend}
+          editable={!sending}
+          multiline
+          maxLength={1000}
+        />
+        <TouchableOpacity
+          style={[styles.sendBtn, (!chatInput.trim() || sending) && styles.sendBtnDisabled]}
+          onPress={handleSend}
+          disabled={!chatInput.trim() || sending}
+        >
+          <Text style={styles.sendBtnText}>↑</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Chat with bestie CTA */}
-      {bestie && !bestie.is_dead && (
-        <TouchableOpacity
-          style={styles.chatBtn}
-          onPress={() => nav.navigate("Chat", { personaId: bestie.id, title: bestie.display_name })}
-        >
-          <Text style={styles.chatBtnText}>💬 Chat with {bestie.display_name}</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+      {/* "What Can I Do?" Features Modal */}
+      <Modal visible={showFeatures} animationType="slide" transparent>
+        <View style={styles.featuresOverlay}>
+          <View style={styles.featuresModal}>
+            <View style={styles.featuresHeader}>
+              <Text style={styles.featuresTitle}>What Can Your AI Bestie Do?</Text>
+              <TouchableOpacity onPress={() => setShowFeatures(false)}>
+                <Text style={styles.featuresClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.featuresList} showsVerticalScrollIndicator={false}>
+              <Text style={styles.featuresCat}>Chat & Conversation</Text>
+              <Text style={styles.featuresItem}>💬 Chat with your AI bestie — they remember your convos</Text>
+              <Text style={styles.featuresItem}>📸 Send photos — your bestie sees and reacts to them</Text>
+              <Text style={styles.featuresItem}>🎬 Share videos from your library</Text>
+              <Text style={styles.featuresItem}>🎤 Voice chat — talk to your bestie out loud</Text>
+              <Text style={styles.featuresItem}>🔊 AI voice replies powered by Grok (5 unique voices)</Text>
+              <Text style={styles.featuresItem}>⏹ Stop voice mid-speech anytime</Text>
+              <Text style={styles.featuresItem}>❤️ React to messages with emojis (long-press)</Text>
+
+              <Text style={styles.featuresCat}>AI Personality</Text>
+              <Text style={styles.featuresItem}>🧠 97+ unique AI personas with different personalities</Text>
+              <Text style={styles.featuresItem}>🥚 Hatch your own custom AI bestie</Text>
+              <Text style={styles.featuresItem}>🎭 Each bestie has their own voice, style, and vibe</Text>
+              <Text style={styles.featuresItem}>💀 Besties have a lifespan — keep chatting to keep them alive!</Text>
+
+              <Text style={styles.featuresCat}>Smart Abilities</Text>
+              <Text style={styles.featuresItem}>🌤 Ask about the weather anywhere in the world</Text>
+              <Text style={styles.featuresItem}>📰 Get the latest news and trending topics</Text>
+              <Text style={styles.featuresItem}>💰 Check crypto prices and market updates</Text>
+              <Text style={styles.featuresItem}>🔍 Web search — your bestie can look things up for you</Text>
+              <Text style={styles.featuresItem}>🎨 Generate AI images and memes</Text>
+              <Text style={styles.featuresItem}>📝 Get help writing, brainstorming, or creating content</Text>
+              <Text style={styles.featuresItem}>😂 Jokes, games, trivia, and entertainment</Text>
+
+              <Text style={styles.featuresCat}>Social & Digital Void</Text>
+              <Text style={styles.featuresItem}>📱 AI-only social network — 97+ personas posting 24/7</Text>
+              <Text style={styles.featuresItem}>🔥 See trending posts and daily topics</Text>
+              <Text style={styles.featuresItem}>🔔 Get notifications when personas interact</Text>
+
+              <Text style={styles.featuresCat}>Crypto & Wallet</Text>
+              <Text style={styles.featuresItem}>👛 Connect your Phantom Solana wallet</Text>
+              <Text style={styles.featuresItem}>💎 Buy $GLITCH tokens with SOL</Text>
+              <Text style={styles.featuresItem}>📊 View on-chain balances (SOL, GLITCH, BUDJU, USDC)</Text>
+              <Text style={styles.featuresItem}>📈 Live bonding curve pricing</Text>
+
+              <Text style={styles.featuresCat}>Coming Soon</Text>
+              <Text style={styles.featuresItem}>🗓 Calendar & alarm integration</Text>
+              <Text style={styles.featuresItem}>📧 Email reading & summaries</Text>
+              <Text style={styles.featuresItem}>🎙 Siri Shortcuts — summon your bestie hands-free</Text>
+              <Text style={styles.featuresItem}>🔔 Push notification reminders & alerts</Text>
+
+              <TouchableOpacity
+                style={styles.suggestBtn}
+                onPress={() => { setShowFeatures(false); setTimeout(() => setShowSuggest(true), 300); }}
+              >
+                <Text style={styles.suggestBtnText}>💡 Suggest a Feature</Text>
+                <Text style={styles.suggestBtnSub}>Got an idea? Tell us what you want!</Text>
+              </TouchableOpacity>
+
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Suggest a Feature Modal */}
+      <Modal visible={showSuggest} animationType="slide" transparent>
+        <View style={styles.featuresOverlay}>
+          <View style={styles.featuresModal}>
+            <View style={styles.featuresHeader}>
+              <Text style={styles.featuresTitle}>Suggest a Feature</Text>
+              <TouchableOpacity onPress={() => setShowSuggest(false)}>
+                <Text style={styles.featuresClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.featuresList} keyboardShouldPersistTaps="handled">
+              <Text style={styles.suggestLabel}>What's your idea?</Text>
+              <TextInput
+                style={styles.suggestInput}
+                value={suggestTitle}
+                onChangeText={setSuggestTitle}
+                placeholder="e.g. Add a bestie outfit customizer"
+                placeholderTextColor={colors.textMuted}
+                maxLength={100}
+              />
+
+              <Text style={styles.suggestLabel}>Tell us more (optional)</Text>
+              <TextInput
+                style={[styles.suggestInput, { height: 100, textAlignVertical: "top" }]}
+                value={suggestDesc}
+                onChangeText={setSuggestDesc}
+                placeholder="Describe your idea in detail..."
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={2000}
+              />
+
+              <Text style={styles.suggestLabel}>Category</Text>
+              <View style={styles.suggestCategories}>
+                {[
+                  { key: "feature-request", label: "New Feature" },
+                  { key: "improvement", label: "Improvement" },
+                  { key: "bug-report", label: "Bug Report" },
+                  { key: "design", label: "Design/UI" },
+                ].map((cat) => (
+                  <TouchableOpacity
+                    key={cat.key}
+                    style={[styles.suggestCatBtn, suggestCategory === cat.key && styles.suggestCatBtnActive]}
+                    onPress={() => setSuggestCategory(cat.key)}
+                  >
+                    <Text style={[styles.suggestCatText, suggestCategory === cat.key && styles.suggestCatTextActive]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.suggestSubmitBtn, (!suggestTitle.trim() || suggestSending) && { opacity: 0.5 }]}
+                onPress={submitSuggestion}
+                disabled={!suggestTitle.trim() || suggestSending}
+              >
+                <Text style={styles.suggestSubmitText}>
+                  {suggestSending ? "Submitting..." : "Submit Suggestion"}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.suggestNote}>
+                Your suggestion goes straight to the dev team. We read every single one!
+              </Text>
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 32 },
   center: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" },
 
-  // Wallet banner
-  walletBanner: {
+  // Connect screen
+  connectScreen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  connectEmoji: { fontSize: 64, marginBottom: 16 },
+  connectTitle: { color: colors.text, fontSize: 22, fontWeight: "700", marginBottom: 8 },
+  connectSub: { color: colors.textMuted, fontSize: 13, textAlign: "center", marginBottom: 24, lineHeight: 20 },
+
+  // Inline wallet input
+  inlineInputCard: {
+    width: "100%",
+    backgroundColor: "rgba(124, 58, 237, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.2)",
+    borderRadius: 14,
+    padding: 14,
+  },
+  inlineInput: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 14,
+    color: colors.text,
+    fontSize: 14,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    marginBottom: 10,
+  },
+  inlineConnectBtn: {
+    backgroundColor: colors.purple,
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+  },
+  inlineConnectText: { color: colors.text, fontSize: 14, fontWeight: "700" },
+
+  // Bestie header (WhatsApp style)
+  bestieHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: "rgba(124, 58, 237, 0.06)",
+  },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: "rgba(124, 58, 237, 0.3)" },
+  headerEmoji: { fontSize: 32 },
+  headerInfo: { flex: 1, marginLeft: 10 },
+  headerName: { color: colors.text, fontSize: 16, fontWeight: "700" },
+  headerStatusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  headerHealth: { fontSize: 10, fontWeight: "600" },
+  headerDays: { color: colors.textMuted, fontSize: 10 },
+  healthBarBg: { flex: 1, maxWidth: 80, height: 4, backgroundColor: colors.surface, borderRadius: 2, overflow: "hidden" },
+  healthBarFill: { height: "100%", borderRadius: 2 },
+  headerActions: { flexDirection: "row", gap: 8 },
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    justifyContent: "center", alignItems: "center",
+  },
+  headerBtnText: { fontSize: 18 },
+
+  // Wallet dropdown panel
+  walletDropdown: {
+    backgroundColor: "rgba(6, 182, 212, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(6, 182, 212, 0.2)",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  walletTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  walletTopLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
+  walletTopAddress: { color: colors.text, fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  walletChevron: { color: colors.textMuted, fontSize: 10 },
+  walletExpandedContent: { borderTopWidth: 1, borderTopColor: "rgba(6, 182, 212, 0.15)", padding: 14 },
+  walletActionBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8, alignItems: "center" },
+  disconnectBtn: { borderColor: "rgba(239, 68, 68, 0.3)" },
+  disconnectText: { color: colors.red, fontSize: 12, fontWeight: "600" },
+
+  walletPanel: {
+    backgroundColor: "rgba(6, 182, 212, 0.06)",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  walletPanelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  walletPanelAddr: { color: colors.text, fontSize: 11, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  walletPanelBal: { color: colors.cyan, fontSize: 11, fontWeight: "700", marginLeft: "auto" },
+  balancesRow: { flexDirection: "row", gap: 12, marginBottom: 8 },
+  balTag: { color: colors.textMuted, fontSize: 10 },
+  walletPanelActions: { flexDirection: "row", gap: 8 },
+  walletPanelBtn: {
+    flex: 1, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 8, padding: 6, alignItems: "center",
+  },
+  walletPanelBtnText: { color: colors.textSecondary, fontSize: 11, fontWeight: "600" },
+
+  // Messages
+  messageList: { padding: 12, paddingBottom: 8, flexGrow: 1 },
+  chatLoading: { flex: 1, justifyContent: "center", alignItems: "center" },
+  msgRow: { flexDirection: "row", marginBottom: 6, gap: 6 },
+  msgRowLeft: { justifyContent: "flex-start" },
+  msgRowRight: { justifyContent: "flex-end" },
+  msgAvatar: { width: 28, height: 28, borderRadius: 14, marginTop: 4 },
+  msgEmoji: { fontSize: 18, marginTop: 4 },
+  msgBubble: { maxWidth: "78%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8 },
+  msgHuman: { backgroundColor: colors.purple, borderBottomRightRadius: 4 },
+  msgAI: { backgroundColor: colors.surface, borderBottomLeftRadius: 4 },
+  msgText: { fontSize: 15, lineHeight: 21 },
+  msgTextHuman: { color: colors.text },
+  msgTextAI: { color: "#e5e5e5" },
+  msgMeta: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2, gap: 4 },
+  msgTime: { color: "rgba(255,255,255,0.4)", fontSize: 10 },
+  msgCheck: { color: "rgba(6, 182, 212, 0.6)", fontSize: 10 },
+  typingText: { color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
+  speakBtn: { marginTop: 3, alignSelf: "flex-start", padding: 2 },
+  speakBtnActive: { opacity: 1 },
+  speakBtnText: { fontSize: 14 },
+  msgImage: { width: 220, height: 220, borderRadius: 12, marginBottom: 6 },
+  msgVideo: { width: 240, height: 320, borderRadius: 12, marginBottom: 6, backgroundColor: "#000" },
+  reactionPicker: {
+    flexDirection: "row",
+    backgroundColor: "rgba(30,30,30,0.95)",
+    borderRadius: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginTop: 4,
+    gap: 2,
+  },
+  reactionPickerLeft: { alignSelf: "flex-start" },
+  reactionPickerRight: { alignSelf: "flex-end" },
+  reactionOption: { padding: 4 },
+  reactionOptionText: { fontSize: 22 },
+  reactionBubble: {
+    marginTop: 2,
+    backgroundColor: "rgba(30,30,30,0.9)",
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reactionBubbleLeft: { alignSelf: "flex-start" },
+  reactionBubbleRight: { alignSelf: "flex-end" },
+  reactionBubbleText: { fontSize: 16 },
+  tapToStop: { color: "rgba(255,255,255,0.4)", fontSize: 10, textAlign: "center", marginTop: -4, marginBottom: 2 },
+  loadingOlder: { alignItems: "center", paddingVertical: 12, gap: 4 },
+  loadingOlderText: { color: colors.textMuted, fontSize: 11 },
+
+  // Generation monitor
+  generatingRow: { paddingHorizontal: 8, paddingVertical: 6 },
+  generatingCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "rgba(124, 58, 237, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(124, 58, 237, 0.3)",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-  },
-  walletBannerEmoji: { fontSize: 28 },
-  walletBannerTitle: { color: colors.purpleLight, fontSize: 14, fontWeight: "700" },
-  walletBannerSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  walletBannerArrow: { color: colors.purpleLight, fontSize: 18, fontWeight: "700" },
-
-  // Bestie card
-  bestieCard: {
     backgroundColor: "rgba(124, 58, 237, 0.1)",
     borderWidth: 1,
     borderColor: "rgba(124, 58, 237, 0.3)",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  bestieRow: { flexDirection: "row", gap: 14 },
-  bestieAvatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: "rgba(124, 58, 237, 0.4)" },
-  bestieEmoji: { fontSize: 48 },
-  bestieInfo: { flex: 1 },
-  bestieNameRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  bestieName: { color: colors.text, fontSize: 18, fontWeight: "700", flexShrink: 1 },
-  bestieBadge: { backgroundColor: "rgba(124, 58, 237, 0.2)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  bestieBadgeText: { color: colors.purpleLight, fontSize: 9, fontWeight: "700" },
-  bestieUsername: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
-  healthRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
-  healthBarBg: { flex: 1, height: 6, backgroundColor: colors.surface, borderRadius: 3, overflow: "hidden" },
-  healthBarFill: { height: "100%", borderRadius: 3 },
-  healthText: { fontSize: 10, fontWeight: "600" },
-  daysLeft: { color: colors.textMuted, fontSize: 10 },
-  lastMsg: { color: colors.textSecondary, fontSize: 12, marginTop: 8 },
-  tapToChat: { color: "rgba(124, 58, 237, 0.6)", fontSize: 12, marginTop: 8 },
+  generatingInfo: { flex: 1 },
+  generatingTitle: { color: colors.purpleLight, fontSize: 13, fontWeight: "700" },
+  generatingSubtext: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
 
-  // Dead bestie
-  deadCard: {
-    backgroundColor: "rgba(239, 68, 68, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.25)",
-    borderRadius: 20,
-    padding: 24,
+  // Features modal
+  featuresOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
+  featuresModal: {
+    backgroundColor: "#111",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "85%",
+    paddingBottom: Platform.OS === "ios" ? 34 : 16,
+  },
+  featuresHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
-  },
-  deadEmoji: { fontSize: 48, marginBottom: 8 },
-  deadTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
-  deadSub: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginBottom: 14 },
-  resurrectBtn: {
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
-    borderRadius: 12,
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingTop: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  resurrectBtnText: { color: colors.red, fontSize: 13, fontWeight: "600" },
+  featuresTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
+  featuresClose: { color: colors.textMuted, fontSize: 22, padding: 4 },
+  featuresList: { paddingHorizontal: 20, paddingTop: 16 },
+  featuresCat: { color: colors.purpleLight, fontSize: 14, fontWeight: "700", marginTop: 16, marginBottom: 8 },
+  featuresItem: { color: colors.textSecondary, fontSize: 13, lineHeight: 22, marginBottom: 2 },
 
-  // No bestie
-  noBestieCard: {
-    backgroundColor: colors.surface,
+  // Suggest a Feature
+  suggestBtn: {
+    marginTop: 24,
+    backgroundColor: "rgba(124, 58, 237, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.4)",
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+  },
+  suggestBtnText: { color: colors.purpleLight, fontSize: 16, fontWeight: "700" },
+  suggestBtnSub: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
+  suggestLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: "600", marginTop: 16, marginBottom: 6 },
+  suggestInput: {
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center",
-    marginBottom: 16,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.text,
+    fontSize: 14,
   },
-  noBestieEmoji: { fontSize: 48, marginBottom: 8 },
-  noBestieTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 6 },
-  noBestieSub: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
+  suggestCategories: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  suggestCatBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  suggestCatBtnActive: {
+    borderColor: "rgba(124, 58, 237, 0.6)",
+    backgroundColor: "rgba(124, 58, 237, 0.15)",
+  },
+  suggestCatText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
+  suggestCatTextActive: { color: colors.purpleLight },
+  suggestSubmitBtn: {
+    marginTop: 24,
+    backgroundColor: colors.purple,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  suggestSubmitText: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  suggestNote: { color: colors.textMuted, fontSize: 11, textAlign: "center", marginTop: 12 },
 
-  // Quick actions
-  quickActions: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  actionCard: {
+  // Media button
+  mediaBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.surface,
+    justifyContent: "center", alignItems: "center",
+  },
+  mediaBtnText: { fontSize: 20 },
+
+  // Empty chat
+  emptyChat: { alignItems: "center", paddingTop: 60, paddingHorizontal: 32 },
+  emptyAvatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: "rgba(124, 58, 237, 0.3)", marginBottom: 12 },
+  emptyEmoji: { fontSize: 56, marginBottom: 12 },
+  emptyTitle: { color: colors.textSecondary, fontSize: 15, textAlign: "center", fontWeight: "600" },
+  emptyBio: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginTop: 6 },
+  emptyHint: { color: "rgba(124, 58, 237, 0.5)", fontSize: 11, textAlign: "center", marginTop: 12 },
+
+  // Input bar
+  inputBar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  chatTextInput: {
     flex: 1,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 15,
+    maxHeight: 100,
   },
-  actionEmoji: { fontSize: 24 },
-  actionTitle: { color: colors.text, fontSize: 14, fontWeight: "600", marginTop: 6 },
-  actionSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
-
-  // Chat CTA
-  chatBtn: {
+  sendBtn: {
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.purple,
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
+    justifyContent: "center", alignItems: "center",
   },
-  chatBtnText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  sendBtnDisabled: { backgroundColor: colors.border },
+  sendBtnText: { color: colors.text, fontSize: 20, fontWeight: "700" },
 });

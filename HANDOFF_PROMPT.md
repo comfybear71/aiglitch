@@ -276,12 +276,12 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - `glitch-app/src/hooks/usePhantomWallet.ts` — Phantom wallet connect via deep links + manual address entry fallback
 - `glitch-app/src/hooks/useSession.ts` — Session management with expo-secure-store
 - `glitch-app/src/hooks/usePushNotifications.ts` — Push notification registration
-- `glitch-app/src/screens/HomeScreen.tsx` — Bestie-only home (NO persona picker, bestie ONLY shows after wallet connect)
-- `glitch-app/src/screens/ChatScreen.tsx` — Chat with bestie, Grok AI voice via /api/voice (NOT device TTS)
-- `glitch-app/src/screens/WalletScreen.tsx` — Native wallet screen (no WebView)
+- `glitch-app/src/screens/HomeScreen.tsx` — Bestie-only home (NO persona picker, bestie ONLY shows after wallet connect). Inverted FlatList with pagination, emoji reactions, voice stop, video sharing, image persistence
+- `glitch-app/src/screens/ChatScreen.tsx` — Chat with bestie, Grok AI voice via /api/voice (NOT device TTS), voice stop button, image/video support
 - `glitch-app/src/screens/BriefingScreen.tsx` — Daily briefing with error/loading/empty states
-- `glitch-app/src/services/api.ts` — API client (walletLogin, getBestie, linkWallet, etc.)
+- `glitch-app/src/services/api.ts` — API client (walletLogin, getBestie, linkWallet, etc.). Chat messages support `has_more` pagination flag
 - `glitch-app/src/theme/colors.ts` — Dark theme colors
+- `glitch-app/src/components/CosmicVisualizer.tsx` — Animated sound wave visualizer during voice playback (tappable to stop)
 - `glitch-app/app.json` — Expo config with LSApplicationQueriesSchemes: ["phantom"]
 
 ### Critical App Rules
@@ -290,15 +290,33 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 3. **Voice must be male for meatbag besties** — voice-config.ts defaults meatbag- personas to "Rex" (confident male)
 4. **Audio plays through speaker** — NOT earpiece. Set `playThroughEarpieceAndroid: false`, `playsInSilentModeIOS: true`
 5. **No WebView for wallet** — Everything native, deep links only
+6. **Voice must have stop button** — ⏹ icon on speaking messages + tappable cosmic visualizer to stop voice mid-speech
+7. **Images must persist** — Always preserve local URI as fallback for sent photos. Hide `[Photo]`/`[Video]` placeholder text when image is displayed
+8. **Chat is paginated** — Inverted FlatList loads 50 most recent messages. Scroll up to load older. Server API supports `before` cursor + `limit` params
+9. **Media picker includes video** — `MediaTypeOptions.All` so users can share photos AND videos
+10. **Emoji reactions at base** — Long-press emoji picker appears below message bubble, not inside it
 
-### Wallet Connect Flow
-- **NO deep link redirect** — Expo Go cannot handle custom URL schemes, so Phantom can never redirect back
-- **Use `phantom://` to open the Phantom APP** — NOT `https://phantom.app` which opens Safari
-- Flow: Open Phantom app (`phantom://`) → user copies their Solana address → comes back → pastes in Alert.prompt
+### Wallet Connect Flow (Current: Manual Paste)
+- **Current approach**: Open Phantom app (`phantom://`) → user copies their Solana address → comes back → pastes in Alert.prompt
+- This works but is clunky. **NO deep link redirect** — Expo Go cannot handle custom URL schemes.
 - Three buttons: "Cancel", "Open Phantom & Copy Address", or if Phantom not installed: "Enter Address" / "Install Phantom"
 - Wallet address stored in expo-secure-store
 - **DO NOT** try to use Phantom v1/connect with redirect_link in Expo Go — it will never return
 - **DO NOT** use `https://phantom.app` — that opens Safari, not the app
+
+### FUTURE: Phantom React Native SDK (REQUIRES DEV BUILD, NOT EXPO GO)
+- **`@phantom/react-native-sdk`** is the official, modern way to connect Phantom in React Native
+- Install: `npx expo install @phantom/react-native-sdk @solana/web3.js expo-web-browser expo-auth-session`
+- Provides `<PhantomProvider>` + `usePhantom()` hook with `connect()`, `disconnect()`, `publicKey`
+- **CRITICAL: Requires a development build (`npx expo run:ios`) — will NOT work in Expo Go**
+- Once user switches from Expo Go to dev builds, migrate wallet connect to use this SDK
+- Docs: https://docs.phantom.com/sdks/react-native-sdk
+
+### Wallet Balance Display
+- **In-app balance**: `getCoins(sessionId)` — §GLITCH earned in-app
+- **On-chain balance**: `getOnChainBalances(walletAddress, sessionId)` — REAL SOL + $GLITCH from Solana blockchain
+- **NEVER use `getWallet(sessionId)` for balance display** — it returns stale backend-stored values
+- **NEVER use fallback/dummy data** — show error message if API fails. User's exact words: "I DONT EVER WANNA USE FALLBACK OR DUMMY DATA I'd RATHER HAVE ERROR MESSAGE"
 
 ### Voice System (Server-Side)
 - `src/lib/voice-config.ts` — Maps persona IDs/types to xAI voices (Ara, Rex, Sal, Eve, Leo)
@@ -332,6 +350,18 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 | Clipboard.setString crash in RN 0.81 | `Clipboard` was removed from react-native in RN 0.73 | Use `Share.share()` from react-native instead, or install expo-clipboard |
 | interruptionModeIOS/Android deprecated | These props were removed from expo-av in SDK 54 | Remove them from `Audio.setAudioModeAsync()` — just use allowsRecordingIOS, playsInSilentModeIOS, etc. |
 | Voice is female/quiet | WebSocket Realtime API times out on Vercel serverless, falls back to Google TTS | Replaced with REST TTS API (`POST https://api.x.ai/v1/tts`) — simple fetch, no WebSocket, works on Vercel |
+| Wallet showing wrong balances (505 GLITCH, 1.19 SOL) | `WalletScreen.tsx` was using `getWallet(sessionId)` which returns stale backend-stored balances | Changed to `getOnChainBalances(walletAddress, sessionId)` which fetches REAL on-chain Solana balances |
+| Silent error swallowing on wallet load | `catch (e) { console.warn() }` hid errors from user | Added `error` state and red error banner with "Retry" button. User said: "I DONT EVER WANNA USE FALLBACK OR DUMMY DATA I'd RATHER HAVE ERROR MESSAGE" |
+| Disconnect doesn't fully reset state | Only cleared local wallet, not backend link | Now calls `unlinkWallet(sessionId)` on backend, clears coins + onChain + error state |
+| Wallet auto-loads cached address on startup | `usePhantomWallet` loaded from SecureStore on mount, showing bestie before connect | Removed auto-load — wallet starts null, user must connect explicitly each launch |
+| NaN for SOL/GLITCH balances | `OnChainBalances` interface had `sol`/`glitch` but API returns `sol_balance`/`glitch_balance` | Fixed interface to match API response fields |
+| API 500 on /api/solana crashes wallet screen | Solana RPC/Helius timeout returns 500, `fetchJSON` throws | Added separate try/catch for on-chain fetch, shows error banner instead of crashing |
+| Sent photo disappears after AI replies | `sendPhoto` replaced temp msg with server response, but server `image_url` was null when blob upload failed | Always preserve local URI as fallback: `image_url: data.human_message.image_url \|\| uri` |
+| "[Photo]" text shown over image | Content always rendered regardless of media presence | Added `isMediaPlaceholder` regex check — hides `[Photo]`/`[Video]`/`[Shared a photo]` text when image_url exists |
+| No way to stop AI voice mid-speech | Speaker button only started new speech, no stop mechanism | Added `stopSpeaking()` — unloads sound, clears state. ⏹ icon when speaking. Cosmic visualizer tappable to stop |
+| Emoji picker inside message bubble | Picker rendered inside TouchableOpacity bubble, overlapping content | Moved picker + reaction badge outside bubble, below it with `marginTop` flow layout |
+| Chat slow with long history | All messages loaded at once, `scrollToEnd` on every render | Inverted FlatList with server-side pagination (`before` cursor, `limit`, `has_more`). Loads 50 most recent, scroll up for older |
+| Video files can't be shared | `ImagePicker.MediaTypeOptions.Images` excluded videos | Changed to `MediaTypeOptions.All`. Videos without base64 display with local URI only |
 
 ## User's Deployment Steps (give these EXACTLY)
 

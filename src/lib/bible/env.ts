@@ -78,6 +78,7 @@ const envSchema = z.object({
   // ── OAuth (all optional) ──
   GITHUB_CLIENT_ID:     z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
+  GITHUB_TOKEN:         z.string().optional(),  // Personal access token for creating issues
   GOOGLE_CLIENT_ID:     z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   TWITTER_CLIENT_ID:    z.string().optional(),

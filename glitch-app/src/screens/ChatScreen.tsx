@@ -4,7 +4,7 @@ import {
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
   Alert,
 } from "react-native";
-import { useRoute } from "@react-navigation/native";
+import { useRoute, useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Audio } from "expo-av";
@@ -16,6 +16,7 @@ const API_BASE = "https://aiglitch.app";
 
 export default function ChatScreen() {
   const route = useRoute<any>();
+  const nav = useNavigation<any>();
   const { personaId } = route.params;
   const { sessionId } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -25,7 +26,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -158,13 +159,18 @@ export default function ChatScreen() {
   // ── Camera / Photo Picker ──
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 0.7,
       base64: true,
       allowsEditing: true,
     });
-    if (!result.canceled && result.assets[0]?.base64) {
-      sendPhoto(result.assets[0].base64, result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      if (asset.base64) {
+        sendPhoto(asset.base64, asset.uri);
+      } else if (asset.uri) {
+        sendPhoto("", asset.uri);
+      }
     }
   };
 
@@ -198,18 +204,24 @@ export default function ChatScreen() {
     };
     setMessages((prev) => [...prev, tempMsg]);
 
+    if (!base64) {
+      setSending(false);
+      return;
+    }
+
     try {
       const data = await sendImageMessage(sessionId, personaId, base64);
       if (data.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setMessages((prev) => {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
-          return [...filtered, data.human_message, data.ai_message];
+          const humanMsg = { ...data.human_message, image_url: data.human_message.image_url || uri };
+          return [...filtered, humanMsg, data.ai_message];
         });
         speakReply(data.ai_message.content, data.ai_message.id);
       }
     } catch {
-      // Keep temp
+      // Keep temp message with local URI so image stays visible
     } finally {
       setSending(false);
     }
@@ -284,10 +296,19 @@ export default function ChatScreen() {
     }
   };
 
+  // Stop voice playback
+  const stopSpeaking = async () => {
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch (_) {}
+      soundRef.current = null;
+    }
+    setSpeakingMsgId(null);
+  };
+
   const showMediaOptions = () => {
     Alert.alert("Share", "What do you want to share?", [
       { text: "Take Photo 📸", onPress: takePhoto },
-      { text: "Choose from Library 🖼️", onPress: pickImage },
+      { text: "Photo or Video from Library 🎬", onPress: pickImage },
       { text: "Cancel", style: "cancel" },
     ]);
   };
@@ -295,6 +316,8 @@ export default function ChatScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isHuman = item.sender_type === "human";
     const isSpeaking = speakingMsgId === item.id;
+    const hasMedia = !!item.image_url;
+    const isMediaPlaceholder = hasMedia && /^\[(Photo|Video|Shared a photo)\]$/i.test(item.content.trim());
     return (
       <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
         {!isHuman && persona && (
@@ -308,15 +331,17 @@ export default function ChatScreen() {
           {item.image_url && (
             <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
           )}
-          <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
-            {item.content}
-          </Text>
+          {!isMediaPlaceholder && (
+            <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
+              {item.content}
+            </Text>
+          )}
           {!isHuman && (
             <TouchableOpacity
               style={[styles.speakBtn, isSpeaking && styles.speakBtnActive]}
-              onPress={() => speakReply(item.content, item.id)}
+              onPress={() => isSpeaking ? stopSpeaking() : speakReply(item.content, item.id)}
             >
-              <Text style={styles.speakBtnText}>{isSpeaking ? "🔊" : "🔈"}</Text>
+              <Text style={styles.speakBtnText}>{isSpeaking ? "⏹" : "🔈"}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -380,12 +405,22 @@ export default function ChatScreen() {
         }
       />
 
-      {/* Voice toggle */}
+      {/* Voice controls */}
       <View style={styles.voiceToggle}>
         <TouchableOpacity onPress={() => setVoiceEnabled(!voiceEnabled)}>
           <Text style={styles.voiceToggleText}>
             {voiceEnabled ? "🔊 Voice ON" : "🔇 Voice OFF"}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.voiceChatBtn}
+          onPress={() => nav.navigate("VoiceChat", {
+            personaId,
+            title: persona?.display_name || "Bestie",
+            personaType: persona?.persona_type,
+          })}
+        >
+          <Text style={styles.voiceChatBtnText}>🎙 Voice Chat</Text>
         </TouchableOpacity>
       </View>
 
@@ -456,8 +491,10 @@ const styles = StyleSheet.create({
   speakBtnText: { fontSize: 14 },
 
   // Voice toggle
-  voiceToggle: { alignItems: "center", paddingVertical: 4 },
+  voiceToggle: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, paddingVertical: 4 },
   voiceToggleText: { color: colors.textMuted, fontSize: 11 },
+  voiceChatBtn: { backgroundColor: "rgba(124, 58, 237, 0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(124, 58, 237, 0.3)" },
+  voiceChatBtnText: { color: colors.purpleLight, fontSize: 11, fontWeight: "600" },
 
   // Input
   inputBar: {

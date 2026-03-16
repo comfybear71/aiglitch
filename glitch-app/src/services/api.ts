@@ -84,7 +84,7 @@ export function getConversations(sessionId: string) {
 }
 
 export function getMessages(sessionId: string, personaId: string) {
-  return fetchJSON<{ conversation: Conversation; messages: Message[] }>(
+  return fetchJSON<{ conversation: Conversation; messages: Message[]; has_more?: boolean }>(
     `/api/messages?session_id=${encodeURIComponent(sessionId)}&persona_id=${encodeURIComponent(personaId)}`
   );
 }
@@ -95,6 +95,7 @@ export function sendMessage(sessionId: string, personaId: string, content: strin
     conversation_id: string;
     human_message: Message;
     ai_message: Message;
+    background_task?: boolean;
   }>("/api/messages", {
     method: "POST",
     body: JSON.stringify({ session_id: sessionId, persona_id: personaId, content }),
@@ -107,6 +108,7 @@ export function sendImageMessage(sessionId: string, personaId: string, imageBase
     conversation_id: string;
     human_message: Message;
     ai_message: Message;
+    background_task?: boolean;
   }>("/api/messages", {
     method: "POST",
     body: JSON.stringify({
@@ -232,13 +234,137 @@ export function unlinkWallet(sessionId: string) {
 // ── On-chain balances ──
 
 export interface OnChainBalances {
-  sol: number;
-  glitch: number;
+  sol_balance: number;
+  glitch_balance: number;
+  onchain_glitch_balance: number;
+  app_glitch_balance: number;
+  budju_balance: number;
+  usdc_balance: number;
   wallet_address: string;
+  real_mode: boolean;
 }
 
 export function getOnChainBalances(walletAddress: string, sessionId: string) {
   return fetchJSON<OnChainBalances>(
     `/api/solana?action=balance&wallet_address=${encodeURIComponent(walletAddress)}&session_id=${encodeURIComponent(sessionId)}`
   );
+}
+
+// ── OTC Swap ──
+
+export interface OtcConfig {
+  enabled: boolean;
+  price_sol: number;
+  price_usd: number;
+  sol_price_usd: number;
+  available_supply: number;
+  min_purchase: number;
+  max_purchase: number;
+  treasury_wallet: string;
+  token_mint: string;
+  stats: {
+    total_swaps: number;
+    total_glitch_sold: number;
+    total_sol_received: number;
+  };
+  bonding_curve: {
+    tier: number;
+    tier_size: number;
+    remaining_in_tier: number;
+    next_price_usd: number;
+    next_price_sol: number;
+    base_price_usd: number;
+    increment_usd: number;
+  };
+  network: string;
+}
+
+export interface OtcSwapResult {
+  success: boolean;
+  swap_id: string;
+  transaction: string; // base64 encoded partially-signed Solana transaction
+  glitch_amount: number;
+  sol_cost: number;
+  price_per_glitch: number;
+  expires_at: string;
+  error?: string;
+  // Legacy fields (may or may not be present)
+  treasury_wallet?: string;
+  sol_amount?: number;
+  price_sol?: number;
+  message?: string;
+}
+
+export interface OtcSubmitResult {
+  success: boolean;
+  message: string;
+  swap_id: string;
+  glitch_amount: number;
+}
+
+export interface SwapHistoryItem {
+  swap_id: string;
+  sol_amount: number;
+  glitch_amount: number;
+  price_sol: number;
+  price_usd: number;
+  status: string;
+  created_at: string;
+}
+
+export function getOtcConfig() {
+  return fetchJSON<OtcConfig>("/api/otc-swap?action=config");
+}
+
+export function createSwap(buyerWallet: string, glitchAmount: number) {
+  return fetchJSON<OtcSwapResult>("/api/otc-swap", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "create_swap",
+      buyer_wallet: buyerWallet,
+      glitch_amount: glitchAmount,
+    }),
+  });
+}
+
+export function submitSwap(swapId: string, txSignature: string) {
+  return fetchJSON<OtcSubmitResult>("/api/otc-swap", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "confirm_swap",
+      swap_id: swapId,
+      tx_signature: txSignature,
+    }),
+  });
+}
+
+/**
+ * Submit a signed transaction to the server for on-chain submission.
+ * This matches the web app's proven flow: client signs → server submits → server confirms.
+ * The server handles sendRawTransaction + confirmTransaction on-chain.
+ */
+export function submitSignedSwap(swapId: string, signedTransactionBase64: string) {
+  return fetchJSON<OtcSubmitResult & { tx_signature?: string }>("/api/otc-swap", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "submit_swap",
+      swap_id: swapId,
+      signed_transaction: signedTransactionBase64,
+    }),
+  });
+}
+
+export function getSwapHistory(walletAddress: string) {
+  return fetchJSON<{ swaps: SwapHistoryItem[] }>(
+    `/api/otc-swap?action=history&wallet=${encodeURIComponent(walletAddress)}`
+  );
+}
+
+// ── Voice Transcription ──
+
+export function transcribeAudio(audioBase64: string, mimeType: string = "audio/m4a") {
+  return fetchJSON<{ text: string; source: string }>("/api/transcribe", {
+    method: "POST",
+    body: JSON.stringify({ audio_base64: audioBase64, mime_type: mimeType }),
+  });
 }
