@@ -571,30 +571,39 @@ export default function HomeScreen() {
   // No wallet — show connect screen
   if (!walletAddress) {
     return (
-      <View style={styles.connectScreen}>
-        <Text style={styles.connectEmoji}>👻</Text>
-        <Text style={styles.connectTitle}>Connect Wallet</Text>
-        <Text style={styles.connectSub}>Paste your Solana wallet address to meet your AI Bestie</Text>
-        <View style={styles.inlineInputCard}>
-          <TextInput
-            style={styles.inlineInput}
-            placeholder="Paste your Solana address here..."
-            placeholderTextColor={colors.textMuted}
-            value={addressInput}
-            onChangeText={setAddressInput}
-            autoCapitalize="none"
-            autoCorrect={false}
-            selectionColor={colors.purple}
-          />
-          <TouchableOpacity
-            style={[styles.inlineConnectBtn, !addressInput.trim() && { opacity: 0.4 }]}
-            disabled={!addressInput.trim()}
-            onPress={() => { submitAddress(addressInput); setAddressInput(""); }}
-          >
-            <Text style={styles.inlineConnectText}>Connect</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <KeyboardAvoidingView
+        style={styles.connectScreen}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.connectScrollContent}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          <Text style={styles.connectEmoji}>👻</Text>
+          <Text style={styles.connectTitle}>Connect Wallet</Text>
+          <Text style={styles.connectSub}>Paste your Solana wallet address to meet your AI Bestie</Text>
+          <View style={styles.inlineInputCard}>
+            <TextInput
+              style={styles.inlineInput}
+              placeholder="Paste your Solana address here..."
+              placeholderTextColor={colors.textMuted}
+              value={addressInput}
+              onChangeText={setAddressInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              selectionColor={colors.purple}
+            />
+            <TouchableOpacity
+              style={[styles.inlineConnectBtn, !addressInput.trim() && { opacity: 0.4 }]}
+              disabled={!addressInput.trim()}
+              onPress={() => { submitAddress(addressInput); setAddressInput(""); }}
+            >
+              <Text style={styles.inlineConnectText}>Connect</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -760,7 +769,9 @@ export default function HomeScreen() {
             generating ? (
               <View style={styles.generatingRow}>
                 <View style={styles.generatingCard}>
-                  <ActivityIndicator color={colors.purpleLight} size="small" />
+                  <View style={styles.generatingSpinner}>
+                    <ActivityIndicator color={colors.purpleLight} size="large" />
+                  </View>
                   <View style={styles.generatingInfo}>
                     <Text style={styles.generatingTitle}>
                       {generating === "image" ? "Generating image..." :
@@ -776,6 +787,7 @@ export default function HomeScreen() {
                        generating === "content" ? "Generating posts for the Digital Void" :
                        "Background task running..."}
                     </Text>
+                    <Text style={styles.generatingHint}>This can take up to 30 seconds</Text>
                   </View>
                 </View>
               </View>
@@ -901,7 +913,10 @@ export default function HomeScreen() {
 
       {/* Suggest a Feature Modal */}
       <Modal visible={showSuggest} animationType="slide" transparent>
-        <View style={styles.featuresOverlay}>
+        <KeyboardAvoidingView
+          style={styles.featuresOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.featuresModal}>
             <View style={styles.featuresHeader}>
               <Text style={styles.featuresTitle}>Suggest a Feature</Text>
@@ -967,7 +982,7 @@ export default function HomeScreen() {
               <View style={{ height: 30 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -981,6 +996,9 @@ const styles = StyleSheet.create({
   connectScreen: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  connectScrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -1140,21 +1158,30 @@ const styles = StyleSheet.create({
   loadingOlderText: { color: colors.textMuted, fontSize: 11 },
 
   // Generation monitor
-  generatingRow: { paddingHorizontal: 8, paddingVertical: 6 },
+  generatingRow: { paddingHorizontal: 8, paddingVertical: 8 },
   generatingCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: "rgba(124, 58, 237, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(124, 58, 237, 0.3)",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: 14,
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    borderWidth: 2,
+    borderColor: colors.purple,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  generatingSpinner: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(124, 58, 237, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   generatingInfo: { flex: 1 },
-  generatingTitle: { color: colors.purpleLight, fontSize: 13, fontWeight: "700" },
-  generatingSubtext: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  generatingTitle: { color: colors.purpleLight, fontSize: 15, fontWeight: "700" },
+  generatingSubtext: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
+  generatingHint: { color: colors.textMuted, fontSize: 10, marginTop: 4, fontStyle: "italic" },
 
   // Features modal
   featuresOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
