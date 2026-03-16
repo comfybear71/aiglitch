@@ -30,6 +30,7 @@ export default function ChatScreen() {
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -42,14 +43,52 @@ export default function ChatScreen() {
       .catch(() => setLoading(false));
   }, [sessionId, personaId]);
 
-  // Cleanup sound on unmount
+  // Cleanup sound + polling on unmount
   useEffect(() => {
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync();
       }
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     };
   }, []);
+
+  // Poll for new messages after a background task starts (image/video generation)
+  const startPollingForBackground = () => {
+    if (pollRef.current) return; // already polling
+    let attempts = 0;
+    const maxAttempts = 30; // ~60 seconds of polling
+    pollRef.current = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts || !sessionId) {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        return;
+      }
+      try {
+        const data = await getMessages(sessionId, personaId);
+        const newMsgs = data.messages || [];
+        setMessages((prev) => {
+          // Only update if there are genuinely new messages
+          if (newMsgs.length > prev.length) {
+            // Check if the newest message has an image (background task result)
+            const newest = newMsgs[newMsgs.length - 1];
+            if (newest?.image_url) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              // Stop polling — we got the result
+              if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            }
+            return newMsgs;
+          }
+          return prev;
+        });
+      } catch {
+        // ignore polling errors
+      }
+    }, 2000);
+  };
 
   // Speak AI reply using server-side Grok voice
   const speakReply = async (text: string, msgId?: string) => {
@@ -148,6 +187,10 @@ export default function ChatScreen() {
         });
         // Grok voice speaks the reply
         speakReply(data.ai_message.content, data.ai_message.id);
+        // If background task started (image/video gen), poll for the result
+        if (data.background_task) {
+          startPollingForBackground();
+        }
       }
     } catch {
       // Keep temp message
@@ -219,6 +262,9 @@ export default function ChatScreen() {
           return [...filtered, humanMsg, data.ai_message];
         });
         speakReply(data.ai_message.content, data.ai_message.id);
+        if (data.background_task) {
+          startPollingForBackground();
+        }
       }
     } catch {
       // Keep temp message with local URI so image stays visible
