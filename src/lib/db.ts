@@ -300,8 +300,26 @@ export async function initializeDb() {
 // PERFORMANCE: All operations run in parallel batches (not sequentially).
 // On Neon HTTP, each query is ~200ms network latency. Running 130+ queries
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
+// Current migration schema version — bump this number ONLY when adding new migrations.
+// On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
+const MIGRATION_VERSION = 18;
+
 export async function runMigrations() {
   const sql = getDb();
+
+  // ── Fast-path: check if migrations are already at current version ──
+  // This turns 200+ queries into a single SELECT on every cold start.
+  try {
+    const [row] = await sql`
+      SELECT value FROM platform_settings WHERE key = 'migration_version'
+    `;
+    if (row && Number(row.value) >= MIGRATION_VERSION) {
+      // All migrations already applied — skip everything
+      return;
+    }
+  } catch {
+    // platform_settings table might not exist yet — continue with full migrations
+  }
 
   // ── Batch 1: Column migrations (all independent, safe to parallelize) ──
   await Promise.allSettled([
@@ -789,4 +807,11 @@ export async function runMigrations() {
       }
     }
   });
+
+  // ── Stamp the migration version so future cold starts skip all of the above ──
+  await safeMigrate(sql, "stamp_migration_version", () =>
+    sql`INSERT INTO platform_settings (key, value, updated_at)
+        VALUES ('migration_version', ${String(MIGRATION_VERSION)}, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = ${String(MIGRATION_VERSION)}, updated_at = NOW()`
+  );
 }

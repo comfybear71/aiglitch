@@ -2,9 +2,23 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { personas as personasRepo } from "@/lib/repositories";
-import Anthropic from "@anthropic-ai/sdk";
-import { BESTIE_TOOLS, executeTool, recallMemories } from "@/lib/bestie-tools";
 import { put } from "@vercel/blob";
+
+// Lazy-load heavy modules to reduce cold start bundle evaluation time.
+// Anthropic SDK + bestie-tools (1500+ lines) + marketplace (900+ lines) are
+// only needed when actually processing a message, not on module import.
+let _Anthropic: typeof import("@anthropic-ai/sdk").default | null = null;
+let _bestieTools: typeof import("@/lib/bestie-tools") | null = null;
+
+async function getAnthropicSdk() {
+  if (!_Anthropic) _Anthropic = (await import("@anthropic-ai/sdk")).default;
+  return _Anthropic;
+}
+
+async function getBestieTools() {
+  if (!_bestieTools) _bestieTools = await import("@/lib/bestie-tools");
+  return _bestieTools;
+}
 
 // Allow up to 120s for background tasks (image gen + blob upload + Claude follow-up)
 export const maxDuration = 120;
@@ -45,7 +59,15 @@ async function persistImageToBlob(imageUrl: string, label: string): Promise<stri
   }
 }
 
-const client = new Anthropic();
+// Lazy Anthropic client — initialized on first use, not on import
+let _anthropicClient: InstanceType<typeof import("@anthropic-ai/sdk").default> | null = null;
+async function getAnthropicClient() {
+  if (!_anthropicClient) {
+    const Anthropic = await getAnthropicSdk();
+    _anthropicClient = new Anthropic();
+  }
+  return _anthropicClient;
+}
 
 // Track DB readiness to avoid calling ensureDbReady() on every request — v2 tools live
 let dbReady = false;
@@ -265,7 +287,8 @@ export async function POST(request: NextRequest) {
   // Load memories about this human (non-blocking — don't fail if table doesn't exist)
   let memories = "";
   try {
-    memories = await recallMemories(session_id, persona_id);
+    const tools = await getBestieTools();
+    memories = await tools.recallMemories(session_id, persona_id);
   } catch (_) { /* table may not exist yet */ }
 
   // Generate AI reply — supports text and image messages
@@ -390,7 +413,13 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const msgHistory: any[] = [{ role: "user", content: userContent }];
 
-    let response = await client.messages.create({
+    // Lazy-load Claude client + tool definitions (avoids cold-start import cost)
+    const [anthropicClient, { BESTIE_TOOLS, executeTool }] = await Promise.all([
+      getAnthropicClient(),
+      getBestieTools(),
+    ]);
+
+    let response = await anthropicClient.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 500,
       system: systemPrompt,
@@ -445,7 +474,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
             bgMsgHistory.push({ role: "assistant", content: bgResponseContent });
             bgMsgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
 
-            const bgClient = new Anthropic();
+            const bgClient = await getAnthropicClient();
             const followUp = await bgClient.messages.create({
               model: "claude-sonnet-4-20250514",
               max_tokens: 500,
@@ -527,7 +556,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       msgHistory.push({ role: "assistant", content: response.content });
       msgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
 
-      response = await client.messages.create({
+      response = await anthropicClient.messages.create({
         model: "claude-sonnet-4-20250514",
         max_tokens: 500,
         system: systemPrompt,

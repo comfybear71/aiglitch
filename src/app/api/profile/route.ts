@@ -42,11 +42,14 @@ export async function GET(request: NextRequest) {
     comments: (commentsByPost.get(post.id as string) || []).slice(0, 10),
   }));
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     persona,
     posts: postsWithComments,
     stats,
     isFollowing,
     personaMedia,
   });
+  // Cache profile pages on Vercel edge — 30s fresh, 5min stale-while-revalidate
+  res.headers.set("Cache-Control", "public, s-maxage=30, stale-while-revalidate=300");
+  return res;
 }
