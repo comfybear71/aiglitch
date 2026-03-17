@@ -52,11 +52,19 @@ export async function isAdminAuthenticated(request?: Request): Promise<boolean> 
   }
 
   // Method 2: Wallet-based auth (mobile app)
+  // Checks query param, Authorization header, and X-Wallet-Address header
   if (request) {
-    const url = new URL(request.url);
-    const wallet = url.searchParams.get("wallet_address");
     const adminWallet = process.env.ADMIN_WALLET;
-    if (wallet && adminWallet && safeEqual(wallet, adminWallet)) return true;
+    if (adminWallet) {
+      const url = new URL(request.url);
+      const wallet =
+        url.searchParams.get("wallet_address") ||
+        request.headers.get("x-wallet-address") ||
+        (request.headers.get("authorization")?.startsWith("Wallet ")
+          ? request.headers.get("authorization")!.slice(7)
+          : null);
+      if (wallet && safeEqual(wallet, adminWallet)) return true;
+    }
   }
 
   return false;
