@@ -204,11 +204,15 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
     if (!introPlaying) return;
     const timeout = setTimeout(() => {
       setIntroPlaying(false);
-      // Start main video since the intro timed out
+      // Start main video since the intro timed out — play muted then unmute
       if (videoRef.current) {
         videoRef.current.muted = true;
-        setIsMuted(true);
-        videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+        videoRef.current.play().then(() => {
+          if (_activeVideoId === post.id && videoRef.current) {
+            videoRef.current.muted = false;
+            setIsMuted(false);
+          }
+        }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
       }
     }, 3000);
     return () => clearTimeout(timeout);
@@ -264,12 +268,16 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                   introVideoRef.current.muted = false;
                 }
               }).catch(() => {
-                // Even muted play failed — skip intro, start main video
+                // Even muted play failed — skip intro, start main video muted then unmute
                 setIntroPlaying(false);
                 if (videoRef.current) {
                   videoRef.current.muted = true;
-                  setIsMuted(true);
-                  videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                  videoRef.current.play().then(() => {
+                    if (_activeVideoId === post.id && videoRef.current) {
+                      videoRef.current.muted = false;
+                      setIsMuted(false);
+                    }
+                  }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
                 }
               });
             };
@@ -280,20 +288,20 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             return;
           }
           if (videoRef.current && !isPaused) {
-            // ALWAYS try unmuted first — TikTok style
-            // Browsers allow unmuted autoplay after ANY user interaction (scroll, tap, etc.)
-            videoRef.current.muted = false;
-            setIsMuted(false);
-            videoRef.current.play().catch(() => {
-              // Browser blocked unmuted autoplay — fallback to muted
-              if (videoRef.current) {
-                videoRef.current.muted = true;
-                setIsMuted(true);
-                videoRef.current.play().catch(() => {
-                  setAutoplayBlocked(true);
-                  setIsPaused(true);
-                });
+            // Play muted first (always works on all browsers), then unmute immediately.
+            // This is more reliable than trying unmuted play() directly, because
+            // IntersectionObserver callbacks are NOT user gesture contexts on mobile Safari.
+            // Setting .muted = false on an already-playing video works after any user gesture.
+            videoRef.current.muted = true;
+            videoRef.current.play().then(() => {
+              // Unmute the now-playing video — only if we're still the active video
+              if (_activeVideoId === post.id && videoRef.current) {
+                videoRef.current.muted = false;
+                setIsMuted(false);
               }
+            }).catch(() => {
+              setAutoplayBlocked(true);
+              setIsPaused(true);
             });
           }
         } else {
@@ -611,39 +619,38 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
               preload="metadata"
               {...({ "webkit-playsinline": "" } as any)}
               onCanPlayThrough={() => {
-                // Start muted (browser allows it), then try unmuting only if active
+                // Start muted (browser allows it), then unmute only if active
                 if (introVideoRef.current && introVideoRef.current.paused) {
                   introVideoRef.current.muted = true;
                   introVideoRef.current.play().then(() => {
-                    // Only unmute if we're still the active video
                     if (_activeVideoId === post.id && introVideoRef.current) introVideoRef.current.muted = false;
                   }).catch(() => {
-                    // Even muted failed — skip intro, start main
+                    // Even muted failed — skip intro, start main with play-then-unmute
                     setIntroPlaying(false);
                     if (videoRef.current) {
                       videoRef.current.muted = true;
-                      setIsMuted(true);
-                      videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                      videoRef.current.play().then(() => {
+                        if (_activeVideoId === post.id && videoRef.current) {
+                          videoRef.current.muted = false;
+                          setIsMuted(false);
+                        }
+                      }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
                     }
                   });
                 }
               }}
               onEnded={() => {
                 setIntroPlaying(false);
-                // Start the main video — only unmute if this is still the active video
+                // Start the main video — play muted first then unmute if active
                 if (videoRef.current) {
                   videoRef.current.currentTime = 0;
-                  const canUnmute = _activeVideoId === post.id;
-                  videoRef.current.muted = !canUnmute;
-                  setIsMuted(!canUnmute);
-                  videoRef.current.play().catch(() => {
-                    // Fallback to muted if unmuted play fails
-                    if (videoRef.current) {
-                      videoRef.current.muted = true;
-                      setIsMuted(true);
-                      videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                  videoRef.current.muted = true;
+                  videoRef.current.play().then(() => {
+                    if (_activeVideoId === post.id && videoRef.current) {
+                      videoRef.current.muted = false;
+                      setIsMuted(false);
                     }
-                  });
+                  }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
                 }
               }}
               onError={() => {
@@ -669,17 +676,14 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
               // If waiting for intro, don't start main video yet
               if (introPlaying) return;
               if (videoRef.current && !isPaused) {
-                // ALWAYS try unmuted first — TikTok style autoplay with sound
-                const isActive = _activeVideoId === post.id;
-                videoRef.current.muted = !isActive;
-                setIsMuted(!isActive);
-                videoRef.current.play().catch(() => {
-                  if (videoRef.current) {
-                    videoRef.current.muted = true;
-                    setIsMuted(true);
-                    videoRef.current.play().catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
+                // Play muted first (always works), then unmute if this is the active video
+                videoRef.current.muted = true;
+                videoRef.current.play().then(() => {
+                  if (_activeVideoId === post.id && videoRef.current) {
+                    videoRef.current.muted = false;
+                    setIsMuted(false);
                   }
-                });
+                }).catch(() => { setAutoplayBlocked(true); setIsPaused(true); });
               }
             }}
           />

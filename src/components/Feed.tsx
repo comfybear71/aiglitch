@@ -60,10 +60,8 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const [movieGenre, setMovieGenre] = useState<MovieGenre>(initialGenre);
   const [genreCounts, setGenreCounts] = useState<Record<string, number>>({});
   const [genreDropdownOpen, setGenreDropdownOpen] = useState(false);
-  // Shuffle seed: changes on each refresh to give a different random order
-  const shuffleSeedRef = useRef(Math.random().toString(36).slice(2));
-  // Offset-based pagination for shuffled feeds (null = no more pages)
-  const nextOffsetRef = useRef<number | null>(null);
+  // Cursor-based pagination for chronological feeds (null = no more pages)
+  const nextCursorRef = useRef<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ posts: Post[]; personas: { username: string; display_name: string; avatar_emoji: string; avatar_url?: string; bio: string; persona_type: string; follower_count: number }[]; hashtags: { tag: string; count: number }[] } | null>(null);
@@ -190,41 +188,39 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       } catch { /* non-critical */ }
     };
     // Stagger prefetches so they don't all fire at once
-    const seed = Math.random().toString(36).slice(2);
-    const t1 = setTimeout(() => prefetchTab(`/api/feed?premieres=1&shuffle=1&seed=${seed}&limit=30`, "premieres-all"), 1000);
-    const t2 = setTimeout(() => prefetchTab(`/api/feed?breaking=1&shuffle=1&seed=${seed}&limit=20`, "breaking"), 2500);
+    const t1 = setTimeout(() => prefetchTab(`/api/feed?premieres=1&limit=30`, "premieres-all"), 1000);
+    const t2 = setTimeout(() => prefetchTab(`/api/feed?breaking=1&limit=20`, "breaking"), 2500);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [loading]);
 
   const fetchPosts = useCallback(async (isLoadMore = false) => {
     try {
       let url: string;
-      const currentSeed = shuffleSeedRef.current;
-      const currentOffset = nextOffsetRef.current;
+      const currentCursor = nextCursorRef.current;
 
       if (tab === "bookmarks") {
         url = `/api/bookmarks?session_id=${encodeURIComponent(sessionId)}`;
       } else if (tab === "following") {
-        const base = `/api/feed?following=1&session_id=${encodeURIComponent(sessionId)}&shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
-        url = isLoadMore && currentOffset !== null
-          ? `${base}&limit=20&offset=${currentOffset}`
+        const base = `/api/feed?following=1&session_id=${encodeURIComponent(sessionId)}`;
+        url = isLoadMore && currentCursor
+          ? `${base}&cursor=${encodeURIComponent(currentCursor)}&limit=20`
           : `${base}&limit=50`;
       } else if (tab === "breaking") {
-        const base = `/api/feed?breaking=1&shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
-        url = isLoadMore && currentOffset !== null
-          ? `${base}&limit=20&offset=${currentOffset}`
+        const base = `/api/feed?breaking=1`;
+        url = isLoadMore && currentCursor
+          ? `${base}&cursor=${encodeURIComponent(currentCursor)}&limit=20`
           : `${base}&limit=50`;
       } else if (tab === "premieres") {
         const genreParam = movieGenre !== "all" ? `&genre=${encodeURIComponent(movieGenre)}` : "";
-        const base = `/api/feed?premieres=1${genreParam}&shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
-        url = isLoadMore && currentOffset !== null
-          ? `${base}&limit=20&offset=${currentOffset}`
+        const base = `/api/feed?premieres=1${genreParam}`;
+        url = isLoadMore && currentCursor
+          ? `${base}&cursor=${encodeURIComponent(currentCursor)}&limit=20`
           : `${base}&limit=50`;
       } else {
-        const base = `/api/feed?shuffle=1&seed=${encodeURIComponent(currentSeed)}`;
-        url = isLoadMore && currentOffset !== null
-          ? `${base}&limit=20&offset=${currentOffset}`
-          : `${base}&limit=50`;
+        const base = `/api/feed`;
+        url = isLoadMore && currentCursor
+          ? `${base}?cursor=${encodeURIComponent(currentCursor)}&limit=20`
+          : `${base}?limit=50`;
       }
 
       const res = await fetch(url);
@@ -246,7 +242,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
 
       if (tab === "bookmarks") {
         setPosts(filteredPosts);
-        nextOffsetRef.current = null;
+        nextCursorRef.current = null;
         _feedCache.set("bookmarks", { posts: filteredPosts, cursor: null, ts: Date.now() });
       } else if (isLoadMore) {
         setPosts((prev) => [...prev, ...filteredPosts]);
@@ -259,8 +255,8 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : "foryou";
         _feedCache.set(tabCacheKey, { posts: data.posts, cursor: null, ts: Date.now() });
       }
-      // Track offset for shuffle pagination
-      nextOffsetRef.current = data.nextOffset ?? null;
+      // Track cursor for chronological pagination
+      nextCursorRef.current = data.nextCursor ?? null;
     } catch (err) {
       console.error("Failed to fetch feed:", err);
       setFeedError(err instanceof Error ? err.message : "Network error");
@@ -280,7 +276,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       setPosts(tabCache.posts);
       allPostsRef.current = tabCache.posts;
       loopCountRef.current = 0;
-      nextOffsetRef.current = null;
+      nextCursorRef.current = null;
       setLoading(false);
 
       // If cache is stale, revalidate in background
@@ -291,7 +287,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       // No cache – show loading and fetch
       setLoading(true);
       setPosts([]);
-      nextOffsetRef.current = null;
+      nextCursorRef.current = null;
       fetchPosts();
     }
   }, [fetchPosts, tab, movieGenre]);
@@ -305,7 +301,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadMoreTriggered.current && tab !== "bookmarks") {
-          if (nextOffsetRef.current !== null) {
+          if (nextCursorRef.current !== null) {
             loadMoreTriggered.current = true;
             setLoadingMore(true);
             fetchPosts(true);
@@ -350,8 +346,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     const handleShuffle = () => {
       const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : "foryou";
       _feedCache.delete(tabCacheKey);
-      shuffleSeedRef.current = Math.random().toString(36).slice(2);
-      nextOffsetRef.current = null;
+      nextCursorRef.current = null;
       allPostsRef.current = [];
       loopCountRef.current = 0;
       setLoading(true);
@@ -542,13 +537,13 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
           <div className="flex items-center justify-center pointer-events-auto px-10">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
+                onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); nextCursorRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
                 className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
               >
                 For You
               </button>
               <button
-                onClick={() => { setHasNewBreaking(false); if (tab === "breaking") { _feedCache.delete("breaking"); shuffleSeedRef.current = Math.random().toString(36).slice(2); nextOffsetRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
+                onClick={() => { setHasNewBreaking(false); if (tab === "breaking") { _feedCache.delete("breaking"); nextCursorRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
                 className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap relative ${tab === "breaking" ? "text-red-400 border-red-400" : hasNewBreaking ? "breaking-flash border-transparent" : "text-gray-400 border-transparent"}`}
               >
                 Breaking
@@ -593,8 +588,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
                             if (movieGenre !== g.key) {
                               setMovieGenre(g.key);
                               _feedCache.delete(`premieres-${g.key}`);
-                              shuffleSeedRef.current = Math.random().toString(36).slice(2);
-                              nextOffsetRef.current = null;
+                              nextCursorRef.current = null;
                               setLoading(true);
                               setPosts([]);
                             }
