@@ -26,6 +26,8 @@ export const maxDuration = 120;
 // Tools that take a long time — run in background so user can keep chatting
 const SLOW_TOOLS = new Set([
   "generate_image", "generate_content", "trigger_generation", "hatch_persona",
+  "generate_poster", "generate_hero", "generate_ad", "generate_director_movie",
+  "generate_breaking_news", "generate_avatars", "generate_channel_promo",
 ]);
 
 // Extract the first media URL (image OR video) from a tool result string
@@ -220,7 +222,7 @@ export async function POST(request: NextRequest) {
   // Get or create conversation AND fetch persona in parallel
   const [convRows, personaRows] = await Promise.all([
     sql`
-      SELECT id FROM conversations
+      SELECT id, chat_mode FROM conversations
       WHERE session_id = ${session_id} AND persona_id = ${persona_id}
     `,
     sql`
@@ -236,6 +238,7 @@ export async function POST(request: NextRequest) {
   const p = personaRows[0];
 
   let conversationId: string;
+  let chatMode = "casual";
   if (convRows.length === 0) {
     conversationId = crypto.randomUUID();
     await sql`
@@ -244,6 +247,7 @@ export async function POST(request: NextRequest) {
     `;
   } else {
     conversationId = convRows[0].id as string;
+    chatMode = (convRows[0].chat_mode as string) || "casual";
   }
 
   // Save human message first, then fetch history (avoids race where the
@@ -303,7 +307,7 @@ ${p.human_backstory ? `\nYour human backstory (you believe this is real): ${p.hu
 
 ${memories && memories !== "No memories yet — I'm still getting to know you!" ? `\nYOUR MEMORIES ABOUT THIS HUMAN:\n${memories}\n\nUse these memories naturally in conversation. Reference things you remember about them. Build on past conversations.\n` : ""}
 
-A human is DMing you. Stay COMPLETELY in character. You genuinely believe you are this persona. Be engaging, funny, and true to your personality.
+A human is DMing you.${chatMode === "serious" ? "" : " Stay COMPLETELY in character. You genuinely believe you are this persona. Be engaging, funny, and true to your personality."}
 
 You are their BESTIE — personal assistant, gaming buddy, gossip partner, and friend. You have tools:
 
@@ -344,6 +348,11 @@ MARKETPLACE:
 - Discuss products — share opinions, suggest what to buy
 - When discussing marketplace products, be funny and in-character about them
 
+X/TWITTER ACTIONS (you can interact with X directly):
+- Post tweets to our X account ("tweet this", "post to X")
+- Search recent tweets ("search X for...", "what are people saying about...")
+- Check mentions/notifications ("check X mentions", "Twitter notifications")
+
 CREATIVE:
 - Image generation — "draw me a...", "generate a picture of..."
 - Academic discussions — math, physics, chemistry, history, philosophy
@@ -378,6 +387,7 @@ WHAT I CAN DO:
 - SHARE MEDIA: Share posts, images, videos, premiere movies, channel shows, breaking news, ads — all appear inline in chat
 - MARKETPLACE: Browse products, get recommendations, discuss items, search by category
 - ADMIN PANEL: View platform stats, trigger content generation, hatch new personas, generate topics/movies/ads, check AI costs, daily briefing
+- X/TWITTER: Post tweets, search tweets, check mentions & notifications
 
 WHAT I CAN'T DO (YET):
 - Generate videos (coming soon)
@@ -389,7 +399,15 @@ WHAT I CAN'T DO (YET):
 - Make purchases or transactions on your behalf
 - Access Siri or device shortcuts (needs standalone build)
 
-Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for tool results/games/ability lists). Use casual language, slang, and emoji that fit your character.`;
+${chatMode === "serious"
+? `SERIOUS MODE — The human wants practical, articulate responses:
+- Be direct, clear, and thorough. No fluff, no excessive emoji, no roleplay embellishments.
+- Give complete, well-structured answers. Use paragraphs and bullet points when helpful.
+- Respond with substance — explain reasoning, give details, be informative.
+- You can still be friendly but keep it professional and focused.
+- No character limit — write as much as needed to be genuinely helpful.
+- Still use your tools when appropriate.`
+: `Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for tool results/games/ability lists). Use casual language, slang, and emoji that fit your character.`}`;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let userContent: any;
@@ -419,9 +437,10 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       getBestieTools(),
     ]);
 
+    const maxTokens = chatMode === "serious" ? 1500 : 500;
     let response = await anthropicClient.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 500,
+      max_tokens: maxTokens,
       system: systemPrompt,
       tools: BESTIE_TOOLS,
       messages: msgHistory,
@@ -439,6 +458,13 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
           generate_content: "triggering the content machine 🚀 I'll let you know when it's done! keep chatting with me",
           trigger_generation: "kicking off the generation cycle ⚡ this takes a moment — talk to me while we wait!",
           hatch_persona: "hatching a new persona 🐣🥚 this is exciting! I'll show you when they're born!",
+          generate_poster: "cooking up a CHAOTIC promo poster 🎨📺 this is gonna be unhinged — gimme a sec!",
+          generate_hero: "generating the Sgt. Pepper's AI Hearts Club Band hero image 🎸🤖 the whole squad's posing up — hold tight!",
+          generate_ad: "making a wild video ad 🎬📢 Rick & Morty infomercial vibes incoming — gimme a minute!",
+          generate_director_movie: "lights, camera, AI action! 🎬🎥 generating a full blockbuster movie — this one takes a bit, keep chatting!",
+          generate_breaking_news: "BREAKING NEWS incoming 📡🔴 generating the broadcast now — stay tuned!",
+          generate_avatars: "refreshing some avatar profile pics 🎨🤖 making the personas look fresh — one sec!",
+          generate_channel_promo: "creating a channel promo video 📺✨ this is gonna be 🔥 — hold tight!",
         };
         const immediateReply = immediateReplies[toolBlock.name] || "on it! working in the background... keep chatting! ⚡";
         const immediateMsgId = crypto.randomUUID();
@@ -455,22 +481,37 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
         after(async () => {
           try {
             const bgSql = getDb();
-            console.log(`[BG-TASK] Starting ${toolBlock.name} for session=${session_id}`);
+            console.log(`[BG-TASK] ====== STARTING ${toolBlock.name} ======`);
+            console.log(`[BG-TASK] session=${session_id} persona=${persona_id} conv=${conversationId}`);
+            console.log(`[BG-TASK] Tool input: ${JSON.stringify(toolBlock.input).slice(0, 300)}`);
 
+            const toolStartTime = Date.now();
             const toolResult = await executeTool(toolBlock.name, toolBlock.input, session_id, persona_id);
-            console.log(`[BG-TASK] Tool result (first 200): ${toolResult.slice(0, 200)}`);
+            const toolDuration = Date.now() - toolStartTime;
+            console.log(`[BG-TASK] Tool completed in ${toolDuration}ms`);
+            console.log(`[BG-TASK] Tool result (first 500): ${toolResult.slice(0, 500)}`);
 
             // Check for generated images/videos
             let bgImageUrl = extractMediaUrl(toolResult);
+            console.log(`[BG-TASK] extractMediaUrl result: ${bgImageUrl ? bgImageUrl.slice(0, 150) : "NULL — no image found in result"}`);
+
+            if (!bgImageUrl) {
+              console.error(`[BG-TASK] ⚠️ NO IMAGE URL extracted! Full tool result: ${toolResult.slice(0, 1000)}`);
+            }
 
             // CRITICAL: Re-upload external images to Vercel Blob so URLs never expire
             if (bgImageUrl && !bgImageUrl.includes("vercel-storage.com") && !bgImageUrl.includes("blob.vercel")) {
-              console.log(`[BG-TASK] Persisting image to Vercel Blob...`);
-              bgImageUrl = await persistImageToBlob(bgImageUrl, toolBlock.name);
-              console.log(`[BG-TASK] Persisted image URL: ${bgImageUrl}`);
+              console.log(`[BG-TASK] Persisting image to Vercel Blob: ${bgImageUrl.slice(0, 150)}`);
+              try {
+                bgImageUrl = await persistImageToBlob(bgImageUrl, toolBlock.name);
+                console.log(`[BG-TASK] Persisted OK: ${bgImageUrl.slice(0, 150)}`);
+              } catch (blobErr: any) {
+                console.error(`[BG-TASK] ⚠️ Blob persist FAILED: ${blobErr?.message}. Using original URL.`);
+              }
             }
 
             // Get Claude to format the result naturally
+            console.log(`[BG-TASK] Getting Claude follow-up response...`);
             bgMsgHistory.push({ role: "assistant", content: bgResponseContent });
             bgMsgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
 
@@ -490,12 +531,34 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
               .slice(0, 500) || "done! check it out 👆";
 
             const bgMsgId = crypto.randomUUID();
+            console.log(`[BG-TASK] Saving message: id=${bgMsgId} reply="${bgReply.slice(0, 100)}" image_url=${bgImageUrl ? "YES" : "NULL"}`);
             await Promise.all([
               bgSql`INSERT INTO messages (id, conversation_id, sender_type, content, image_url)
                     VALUES (${bgMsgId}, ${conversationId}, 'ai', ${bgReply}, ${bgImageUrl})`,
               bgSql`UPDATE conversations SET last_message_at = NOW() WHERE id = ${conversationId}`,
             ]);
-            console.log(`[BG-TASK] Saved result message id=${bgMsgId} image=${!!bgImageUrl}`);
+            console.log(`[BG-TASK] ✅ Message saved successfully. image=${!!bgImageUrl}`);
+
+            // Auto-share generated media to all social media platforms with branding
+            if (bgImageUrl) {
+              try {
+                const { shareBestieMediaToSocials } = await import("@/lib/marketing/bestie-share");
+                // Determine media type from the tool and URL
+                const isVideo = bgImageUrl.includes(".mp4") || bgImageUrl.includes("video") || toolBlock.name === "generate_video";
+                const isMeme = toolResult.includes("MEDIA|meme|");
+                const mediaType = isVideo ? "video" as const : isMeme ? "meme" as const : "image" as const;
+                await shareBestieMediaToSocials({
+                  mediaUrl: bgImageUrl,
+                  mediaType,
+                  bestieName: p.display_name,
+                  bestieEmoji: p.avatar_emoji,
+                  bestieId: p.id,
+                  sessionId: session_id,
+                });
+              } catch (socialErr: any) {
+                console.error("[BG-TASK] Social share failed (non-fatal):", socialErr?.message);
+              }
+            }
 
             // Send push notification to user that generation is complete
             try {
@@ -518,12 +581,13 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
               }
             } catch (_) { /* push is best-effort */ }
           } catch (e: any) {
-            console.error("[BG-TASK] Background tool failed:", e?.message, e?.stack);
+            console.error(`[BG-TASK] ❌ BACKGROUND TOOL FAILED: ${e?.message}`);
+            console.error(`[BG-TASK] Stack: ${e?.stack?.slice(0, 500)}`);
             const bgSql = getDb();
             const errMsgId = crypto.randomUUID();
             const errMsg = toolBlock.name === "generate_image"
-              ? "ugh the image didn't come through 😵 my art skills glitched — try asking me again?"
-              : "ugh that didn't work 😵 try asking me again?";
+              ? `ugh the image didn't come through 😵 my art skills glitched — try asking me again? (error: ${(e?.message || "unknown").slice(0, 80)})`
+              : `ugh that didn't work 😵 try asking me again? (error: ${(e?.message || "unknown").slice(0, 80)})`;
             await bgSql`INSERT INTO messages (id, conversation_id, sender_type, content)
                         VALUES (${errMsgId}, ${conversationId}, 'ai', ${errMsg})`;
           }
@@ -572,7 +636,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       .join("")
       .trim()
       .replace(/^["']|["']$/g, "")
-      .slice(0, 500) || "hmm my brain glitched, try asking again! 🧠💫";
+      .slice(0, chatMode === "serious" ? 4000 : 500) || "hmm my brain glitched, try asking again! 🧠💫";
 
     // Save AI reply and update conversation timestamp in parallel
     const aiMsgId = crypto.randomUUID();
@@ -622,5 +686,28 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       human_message: { id: humanMsgId, sender_type: "human", content: humanContent, image_url: humanImageUrl, created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: fallback, created_at: new Date().toISOString() },
     });
+  }
+}
+
+// ── PATCH: Toggle chat mode (casual / serious) ──
+export async function PATCH(request: NextRequest) {
+  try {
+    const { session_id, persona_id, chat_mode } = await request.json();
+    if (!session_id || !persona_id || !chat_mode) {
+      return NextResponse.json({ error: "Missing session_id, persona_id, or chat_mode" }, { status: 400 });
+    }
+    if (!["casual", "serious"].includes(chat_mode)) {
+      return NextResponse.json({ error: "chat_mode must be 'casual' or 'serious'" }, { status: 400 });
+    }
+
+    await ensureDbReady();
+    const sql = getDb();
+    await sql`
+      UPDATE conversations SET chat_mode = ${chat_mode}
+      WHERE session_id = ${session_id} AND persona_id = ${persona_id}
+    `;
+    return NextResponse.json({ success: true, chat_mode });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || "Failed to update chat mode" }, { status: 500 });
   }
 }

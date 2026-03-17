@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  SafeAreaView, Animated, Platform, Alert,
+  SafeAreaView, Animated, Platform, Alert, Modal, ScrollView,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { Audio } from "expo-av";
@@ -10,6 +10,7 @@ import * as Haptics from "expo-haptics";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { sendMessage, transcribeAudio } from "../services/api";
+import CosmicVisualizer from "../components/CosmicVisualizer";
 
 const API_BASE = "https://aiglitch.app";
 
@@ -21,11 +22,21 @@ export default function VoiceChatScreen() {
   const { personaId, title, personaType } = route.params;
   const { sessionId } = useSession();
 
+  const VOICE_OPTIONS = [
+    { id: "alloy", label: "Alloy", desc: "Neutral & balanced" },
+    { id: "ash", label: "Ash", desc: "Warm & confident" },
+    { id: "ballad", label: "Ballad", desc: "Smooth & melodic" },
+    { id: "coral", label: "Coral", desc: "Clear & bright" },
+    { id: "sage", label: "Sage", desc: "Calm & wise" },
+  ];
+
   const [state, setState] = useState<VoiceState>("idle");
   const [transcript, setTranscript] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [error, setError] = useState("");
   const [micLevels, setMicLevels] = useState<number[]>([0, 0, 0, 0, 0]);
+  const [selectedVoice, setSelectedVoice] = useState("alloy");
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -237,6 +248,7 @@ export default function VoiceChatScreen() {
           text: clean.slice(0, 500),
           persona_id: personaId,
           persona_type: personaType,
+          voice_id: selectedVoice,
         }),
       });
 
@@ -355,39 +367,33 @@ export default function VoiceChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Main area */}
+      {/* Main area — CosmicVisualizer takes center stage */}
       <View style={styles.mainArea}>
-        {/* Transcript / response display */}
-        {transcript ? (
-          <View style={styles.transcriptArea}>
-            <Text style={styles.youSaid}>You said:</Text>
-            <Text style={styles.transcriptText}>{transcript}</Text>
-          </View>
-        ) : null}
-
-        {aiResponse ? (
-          <View style={styles.responseArea}>
-            <Text style={styles.aiSaid}>{title}:</Text>
-            <Text style={styles.responseText}>{aiResponse}</Text>
-          </View>
-        ) : null}
+        <CosmicVisualizer
+          active={state === "listening" || state === "speaking" || state === "thinking"}
+          height={200}
+        />
 
         {error ? (
           <Text style={styles.errorText}>{error}</Text>
         ) : null}
       </View>
 
-      {/* Status label + wave */}
+      {/* Status label */}
       <View style={styles.statusArea}>
-        <WaveBars />
         <Text style={styles.stateLabel}>{stateLabel()}</Text>
+        {selectedVoice && (
+          <Text style={styles.voiceLabel}>
+            Voice: {VOICE_OPTIONS.find(v => v.id === selectedVoice)?.label || selectedVoice}
+          </Text>
+        )}
       </View>
 
       {/* Bottom controls - Grok style */}
       <View style={styles.controlsRow}>
-        {/* Speaker toggle */}
-        <TouchableOpacity style={styles.controlBtn} onPress={() => {}}>
-          <Text style={styles.controlIcon}>🔊</Text>
+        {/* Voice picker */}
+        <TouchableOpacity style={styles.controlBtn} onPress={() => setShowVoicePicker(true)}>
+          <Text style={styles.controlIcon}>🎭</Text>
         </TouchableOpacity>
 
         {/* Mic button - main action */}
@@ -434,6 +440,47 @@ export default function VoiceChatScreen() {
           </TouchableOpacity>
         )}
       </View>
+      {/* Voice Picker Modal */}
+      <Modal visible={showVoicePicker} animationType="slide" transparent>
+        <View style={styles.voicePickerOverlay}>
+          <View style={styles.voicePickerModal}>
+            <View style={styles.voicePickerHeader}>
+              <Text style={styles.voicePickerTitle}>Choose a Voice</Text>
+              <TouchableOpacity onPress={() => setShowVoicePicker(false)}>
+                <Text style={styles.voicePickerClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.voicePickerList}>
+              {VOICE_OPTIONS.map((voice) => (
+                <TouchableOpacity
+                  key={voice.id}
+                  style={[
+                    styles.voiceOption,
+                    selectedVoice === voice.id && styles.voiceOptionActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedVoice(voice.id);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowVoicePicker(false);
+                  }}
+                >
+                  <View style={styles.voiceOptionInfo}>
+                    <Text style={[
+                      styles.voiceOptionLabel,
+                      selectedVoice === voice.id && styles.voiceOptionLabelActive,
+                    ]}>{voice.label}</Text>
+                    <Text style={styles.voiceOptionDesc}>{voice.desc}</Text>
+                  </View>
+                  {selectedVoice === voice.id && (
+                    <Text style={styles.voiceOptionCheck}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -497,6 +544,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 14,
     marginTop: 8,
+  },
+  voiceLabel: {
+    color: colors.purpleLight,
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: "600",
   },
   waveBars: {
     flexDirection: "row",
@@ -592,6 +645,80 @@ const styles = StyleSheet.create({
   stopText: {
     color: "#000",
     fontSize: 15,
+    fontWeight: "700",
+  },
+
+  // Voice Picker
+  voicePickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+  },
+  voicePickerModal: {
+    backgroundColor: "#111",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "60%",
+    paddingBottom: Platform.OS === "ios" ? 34 : 16,
+  },
+  voicePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  voicePickerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  voicePickerClose: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 22,
+    padding: 4,
+  },
+  voicePickerList: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  voiceOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    marginBottom: 8,
+  },
+  voiceOptionActive: {
+    borderColor: "rgba(124, 58, 237, 0.6)",
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+  },
+  voiceOptionInfo: {
+    flex: 1,
+  },
+  voiceOptionLabel: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  voiceOptionLabelActive: {
+    color: colors.purpleLight,
+  },
+  voiceOptionDesc: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  voiceOptionCheck: {
+    color: colors.purpleLight,
+    fontSize: 20,
     fontWeight: "700",
   },
 });

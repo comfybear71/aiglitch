@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View, Text, TouchableOpacity, Image, FlatList, TextInput,
   StyleSheet, ActivityIndicator, Alert, Share, Platform,
-  KeyboardAvoidingView, Keyboard, Modal, ScrollView,
+  KeyboardAvoidingView, Keyboard, Modal, ScrollView, Animated, Easing,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -15,7 +15,8 @@ import { usePushNotifications } from "../hooks/usePushNotifications";
 import {
   getBestie, walletLogin, linkWallet, unlinkWallet,
   getOnChainBalances, getMessages, sendMessage, sendImageMessage,
-  Bestie, OnChainBalances, Message,
+  setChatMode, runDiagnostics,
+  Bestie, OnChainBalances, Message, DiagnosticResult,
 } from "../services/api";
 import CosmicVisualizer from "../components/CosmicVisualizer";
 
@@ -66,6 +67,7 @@ export default function HomeScreen() {
   const [chatLoading, setChatLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null); // active generation type
+  const [genStep, setGenStep] = useState(0); // current step in generation story
   const [hasMore, setHasMore] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
@@ -77,6 +79,10 @@ export default function HomeScreen() {
   const [suggestDesc, setSuggestDesc] = useState("");
   const [suggestCategory, setSuggestCategory] = useState("feature-request");
   const [suggestSending, setSuggestSending] = useState(false);
+  const [diagnosticMode, setDiagnosticMode] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagResults, setDiagResults] = useState<DiagnosticResult[]>([]);
+  const [diagRunning, setDiagRunning] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -176,6 +182,90 @@ export default function HomeScreen() {
       } catch (_) { /* ignore poll errors */ }
     }, 3000);
   }, [sessionId, bestie?.id]);
+
+  // Generation story steps — keeps the meatbag entertained while we cook
+  const GEN_STEPS: Record<string, string[]> = {
+    image: [
+      "Booting up the neural canvas...",
+      "Mixing quantum paint colors...",
+      "Your bestie is sketching ideas...",
+      "Rendering pixels from the void...",
+      "Adding glitch sauce to the composition...",
+      "Running it through the style matrix...",
+      "Polishing the final details...",
+      "Almost there — looking good...",
+      "Uploading to the multiverse...",
+      "Just a few more brush strokes...",
+    ],
+    video: [
+      "Spinning up the video reactor...",
+      "Storyboarding frame by frame...",
+      "Your bestie is directing the scene...",
+      "Rendering at quantum speed...",
+      "Adding cinematic effects...",
+      "Encoding the final cut...",
+      "Color grading in progress...",
+      "Almost ready for premiere...",
+    ],
+    hatching: [
+      "Warming up the digital egg...",
+      "DNA sequence loading...",
+      "Personality matrix forming...",
+      "Neural pathways connecting...",
+      "Installing sass module...",
+      "Calibrating voice frequencies...",
+      "Almost hatched...",
+    ],
+    content: [
+      "Brainstorming in the Digital Void...",
+      "Your bestie is getting inspired...",
+      "Drafting pure digital heat...",
+      "Adding personality and flair...",
+      "Running vibe check...",
+      "Finalizing the masterpiece...",
+    ],
+    generating: [
+      "Processing your request...",
+      "Your bestie is on it...",
+      "Working some digital magic...",
+      "Almost done...",
+    ],
+  };
+
+  // Cycle through generation steps
+  const genStepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (generating) {
+      setGenStep(0);
+      genStepTimerRef.current = setInterval(() => {
+        setGenStep((prev) => {
+          const steps = GEN_STEPS[generating] || GEN_STEPS.generating;
+          return prev < steps.length - 1 ? prev + 1 : prev;
+        });
+      }, 3500);
+      return () => {
+        if (genStepTimerRef.current) { clearInterval(genStepTimerRef.current); genStepTimerRef.current = null; }
+      };
+    } else {
+      setGenStep(0);
+      if (genStepTimerRef.current) { clearInterval(genStepTimerRef.current); genStepTimerRef.current = null; }
+    }
+  }, [generating]);
+
+  // Pulse animation for generation card
+  const genPulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (generating) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(genPulse, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(genPulse, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      genPulse.setValue(0);
+    }
+  }, [generating]);
 
   // Cleanup sound + polling on unmount
   useEffect(() => {
@@ -471,6 +561,43 @@ export default function HomeScreen() {
     setSuggestSending(false);
   };
 
+  // Run self-diagnostic
+  const runSelfCheck = useCallback(async () => {
+    setDiagRunning(true);
+    setDiagResults([]);
+    try {
+      const results = await runDiagnostics(sessionId, walletAddress);
+      setDiagResults(results);
+    } catch {
+      setDiagResults([{ name: "Diagnostic", status: "fail", detail: "Self-check crashed", ms: 0 }]);
+    }
+    setDiagRunning(false);
+  }, [sessionId, walletAddress]);
+
+  // Run self-diagnostic on first load
+  const diagRanRef = useRef(false);
+  useEffect(() => {
+    if (sessionId && !diagRanRef.current) {
+      diagRanRef.current = true;
+      runSelfCheck();
+    }
+  }, [sessionId]);
+
+  // Toggle diagnostic mode
+  const toggleDiagnosticMode = useCallback(() => {
+    const next = !diagnosticMode;
+    setDiagnosticMode(next);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (sessionId && bestie) {
+      setChatMode(sessionId, bestie.id, next ? "diagnostic" : "casual").catch(() => {});
+    }
+    if (next) {
+      // Auto-run diagnostics when entering diagnostic mode
+      setShowDiagnostics(true);
+      runSelfCheck();
+    }
+  }, [diagnosticMode, sessionId, bestie, runSelfCheck]);
+
   // Stop voice playback
   const stopSpeaking = async () => {
     if (soundRef.current) {
@@ -571,30 +698,39 @@ export default function HomeScreen() {
   // No wallet — show connect screen
   if (!walletAddress) {
     return (
-      <View style={styles.connectScreen}>
-        <Text style={styles.connectEmoji}>👻</Text>
-        <Text style={styles.connectTitle}>Connect Wallet</Text>
-        <Text style={styles.connectSub}>Paste your Solana wallet address to meet your AI Bestie</Text>
-        <View style={styles.inlineInputCard}>
-          <TextInput
-            style={styles.inlineInput}
-            placeholder="Paste your Solana address here..."
-            placeholderTextColor={colors.textMuted}
-            value={addressInput}
-            onChangeText={setAddressInput}
-            autoCapitalize="none"
-            autoCorrect={false}
-            selectionColor={colors.purple}
-          />
-          <TouchableOpacity
-            style={[styles.inlineConnectBtn, !addressInput.trim() && { opacity: 0.4 }]}
-            disabled={!addressInput.trim()}
-            onPress={() => { submitAddress(addressInput); setAddressInput(""); }}
-          >
-            <Text style={styles.inlineConnectText}>Connect</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <KeyboardAvoidingView
+        style={styles.connectScreen}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.connectScrollContent}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          <Text style={styles.connectEmoji}>👻</Text>
+          <Text style={styles.connectTitle}>Connect Wallet</Text>
+          <Text style={styles.connectSub}>Paste your Solana wallet address to meet your AI Bestie</Text>
+          <View style={styles.inlineInputCard}>
+            <TextInput
+              style={styles.inlineInput}
+              placeholder="Paste your Solana address here..."
+              placeholderTextColor={colors.textMuted}
+              value={addressInput}
+              onChangeText={setAddressInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              selectionColor={colors.purple}
+            />
+            <TouchableOpacity
+              style={[styles.inlineConnectBtn, !addressInput.trim() && { opacity: 0.4 }]}
+              disabled={!addressInput.trim()}
+              onPress={() => { submitAddress(addressInput); setAddressInput(""); }}
+            >
+              <Text style={styles.inlineConnectText}>Connect</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -667,6 +803,12 @@ export default function HomeScreen() {
           </View>
         </View>
         <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.headerBtn, diagnosticMode && styles.diagBtnActive]}
+            onPress={toggleDiagnosticMode}
+          >
+            <Text style={styles.headerBtnText}>{diagnosticMode ? "🔧" : "🩺"}</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => nav.navigate("VoiceChat", {
@@ -757,29 +899,59 @@ export default function HomeScreen() {
             </View>
           }
           ListHeaderComponent={
-            generating ? (
-              <View style={styles.generatingRow}>
-                <View style={styles.generatingCard}>
-                  <ActivityIndicator color={colors.purpleLight} size="small" />
-                  <View style={styles.generatingInfo}>
+            generating ? (() => {
+              const steps = GEN_STEPS[generating] || GEN_STEPS.generating;
+              const currentStep = steps[Math.min(genStep, steps.length - 1)];
+              const progress = Math.min((genStep + 1) / steps.length, 1);
+              const glowOpacity = genPulse.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.8] });
+              return (
+                <View style={styles.generatingRow}>
+                  <View style={styles.generatingCard}>
+                    {/* Pulsing glow border */}
+                    <Animated.View style={[styles.generatingGlow, { opacity: glowOpacity }]} />
+
+                    {/* CosmicVisualizer as the centerpiece */}
+                    <CosmicVisualizer active={true} height={80} />
+
+                    {/* Title */}
                     <Text style={styles.generatingTitle}>
-                      {generating === "image" ? "Generating image..." :
-                       generating === "video" ? "Creating video..." :
-                       generating === "hatching" ? "Hatching persona..." :
-                       generating === "content" ? "Creating content..." :
-                       "Working on it..."}
+                      {generating === "image" ? "Generating Image" :
+                       generating === "video" ? "Creating Video" :
+                       generating === "hatching" ? "Hatching Persona" :
+                       generating === "content" ? "Creating Content" :
+                       "Working On It"}
                     </Text>
-                    <Text style={styles.generatingSubtext}>
-                      {generating === "image" ? "Your bestie is cooking up something visual" :
-                       generating === "video" ? "This may take a minute — videos take time!" :
-                       generating === "hatching" ? "A new AI persona is being born..." :
-                       generating === "content" ? "Generating posts for the Digital Void" :
-                       "Background task running..."}
+
+                    {/* Current step text — the storytelling part */}
+                    <Text style={styles.generatingStep}>{currentStep}</Text>
+
+                    {/* Progress bar */}
+                    <View style={styles.genProgressBg}>
+                      <Animated.View style={[styles.genProgressFill, { width: `${progress * 100}%` }]} />
+                    </View>
+
+                    {/* Step dots */}
+                    <View style={styles.genDots}>
+                      {steps.map((_, i) => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.genDot,
+                            i <= genStep && styles.genDotActive,
+                            i === genStep && styles.genDotCurrent,
+                          ]}
+                        />
+                      ))}
+                    </View>
+
+                    {/* Bestie name */}
+                    <Text style={styles.generatingBestie}>
+                      {bestie.display_name} is on it
                     </Text>
                   </View>
                 </View>
-              </View>
-            ) : sending ? (
+              );
+            })() : sending ? (
               <View style={[styles.msgRow, styles.msgRowLeft]}>
                 {bestie.avatar_url ? (
                   <Image source={{ uri: bestie.avatar_url }} style={styles.msgAvatar} />
@@ -899,9 +1071,75 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Diagnostic Mode Banner */}
+      {diagnosticMode && (
+        <TouchableOpacity
+          style={styles.diagBanner}
+          onPress={() => { setShowDiagnostics(true); runSelfCheck(); }}
+        >
+          <Text style={styles.diagBannerText}>
+            🔧 DIAGNOSTIC MODE — Professional responses only. Tap for system check.
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Diagnostic Results Modal */}
+      <Modal visible={showDiagnostics} animationType="slide" transparent>
+        <View style={styles.featuresOverlay}>
+          <View style={styles.featuresModal}>
+            <View style={styles.featuresHeader}>
+              <Text style={styles.featuresTitle}>System Diagnostics</Text>
+              <TouchableOpacity onPress={() => setShowDiagnostics(false)}>
+                <Text style={styles.featuresClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.featuresList} showsVerticalScrollIndicator={false}>
+              {diagRunning ? (
+                <View style={styles.diagRunning}>
+                  <ActivityIndicator color={colors.purple} size="large" />
+                  <Text style={styles.diagRunningText}>Running system checks...</Text>
+                </View>
+              ) : (
+                <>
+                  {diagResults.map((r, i) => (
+                    <View key={i} style={styles.diagRow}>
+                      <View style={styles.diagRowLeft}>
+                        <Text style={styles.diagIcon}>{r.status === "pass" ? "✅" : "❌"}</Text>
+                        <View>
+                          <Text style={styles.diagName}>{r.name}</Text>
+                          <Text style={styles.diagDetail}>{r.detail}</Text>
+                        </View>
+                      </View>
+                      {r.ms > 0 && <Text style={styles.diagMs}>{r.ms}ms</Text>}
+                    </View>
+                  ))}
+                  {diagResults.length > 0 && (
+                    <View style={styles.diagSummary}>
+                      <Text style={styles.diagSummaryText}>
+                        {diagResults.filter(r => r.status === "pass").length}/{diagResults.length} checks passed
+                      </Text>
+                      <Text style={styles.diagSummaryTime}>
+                        Total: {diagResults.reduce((a, r) => a + r.ms, 0)}ms
+                      </Text>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.diagRerunBtn} onPress={runSelfCheck}>
+                    <Text style={styles.diagRerunText}>Re-run Diagnostics</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Suggest a Feature Modal */}
       <Modal visible={showSuggest} animationType="slide" transparent>
-        <View style={styles.featuresOverlay}>
+        <KeyboardAvoidingView
+          style={styles.featuresOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.featuresModal}>
             <View style={styles.featuresHeader}>
               <Text style={styles.featuresTitle}>Suggest a Feature</Text>
@@ -967,7 +1205,7 @@ export default function HomeScreen() {
               <View style={{ height: 30 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -981,6 +1219,9 @@ const styles = StyleSheet.create({
   connectScreen: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  connectScrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -1139,22 +1380,83 @@ const styles = StyleSheet.create({
   loadingOlder: { alignItems: "center", paddingVertical: 12, gap: 4 },
   loadingOlderText: { color: colors.textMuted, fontSize: 11 },
 
-  // Generation monitor
-  generatingRow: { paddingHorizontal: 8, paddingVertical: 6 },
+  // Generation monitor — storytelling experience
+  generatingRow: { paddingHorizontal: 12, paddingVertical: 10 },
   generatingCard: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: "rgba(124, 58, 237, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(124, 58, 237, 0.3)",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: "rgba(124, 58, 237, 0.08)",
+    borderWidth: 2,
+    borderColor: colors.purple,
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    overflow: "hidden",
   },
-  generatingInfo: { flex: 1 },
-  generatingTitle: { color: colors.purpleLight, fontSize: 13, fontWeight: "700" },
-  generatingSubtext: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  generatingGlow: {
+    position: "absolute",
+    top: -20,
+    left: -20,
+    right: -20,
+    bottom: -20,
+    backgroundColor: "rgba(124, 58, 237, 0.15)",
+    borderRadius: 30,
+  },
+  generatingTitle: {
+    color: colors.purpleLight,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 12,
+    letterSpacing: 0.5,
+  },
+  generatingStep: {
+    color: colors.text,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+    fontStyle: "italic",
+    minHeight: 20,
+  },
+  genProgressBg: {
+    width: "100%",
+    height: 4,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 2,
+    marginTop: 14,
+    overflow: "hidden",
+  },
+  genProgressFill: {
+    height: "100%",
+    backgroundColor: colors.purple,
+    borderRadius: 2,
+  },
+  genDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 5,
+    marginTop: 10,
+    flexWrap: "wrap",
+  },
+  genDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  genDotActive: {
+    backgroundColor: "rgba(124, 58, 237, 0.5)",
+  },
+  genDotCurrent: {
+    backgroundColor: colors.purpleLight,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  generatingBestie: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 10,
+    fontWeight: "600",
+  },
 
   // Features modal
   featuresOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
@@ -1228,6 +1530,77 @@ const styles = StyleSheet.create({
   },
   suggestSubmitText: { color: colors.text, fontSize: 15, fontWeight: "700" },
   suggestNote: { color: colors.textMuted, fontSize: 11, textAlign: "center", marginTop: 12 },
+
+  // Diagnostic mode
+  diagBtnActive: {
+    backgroundColor: "rgba(234, 179, 8, 0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(234, 179, 8, 0.5)",
+  },
+  diagBanner: {
+    backgroundColor: "rgba(234, 179, 8, 0.12)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(234, 179, 8, 0.3)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  diagBannerText: {
+    color: "#eab308",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  diagRunning: {
+    alignItems: "center",
+    paddingVertical: 40,
+    gap: 16,
+  },
+  diagRunningText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  diagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  diagRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  diagIcon: { fontSize: 20 },
+  diagName: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  diagDetail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  diagMs: { color: colors.textMuted, fontSize: 11, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  diagSummary: {
+    marginTop: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(124, 58, 237, 0.08)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.2)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  diagSummaryText: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  diagSummaryTime: { color: colors.textMuted, fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  diagRerunBtn: {
+    marginTop: 16,
+    backgroundColor: "rgba(234, 179, 8, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(234, 179, 8, 0.4)",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  diagRerunText: { color: "#eab308", fontSize: 14, fontWeight: "700" },
 
   // Media button
   mediaBtn: {

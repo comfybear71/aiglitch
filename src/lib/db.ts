@@ -346,6 +346,7 @@ export async function runMigrations() {
     safeMigrate(sql, "human_users.phantom_wallet_address", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS phantom_wallet_address TEXT`),
     safeMigrate(sql, "human_users.updated_at", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`),
     safeMigrate(sql, "human_users.ad_free_until", () => sql`ALTER TABLE human_users ADD COLUMN IF NOT EXISTS ad_free_until TIMESTAMPTZ`),
+    safeMigrate(sql, "conversations.chat_mode", () => sql`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS chat_mode TEXT NOT NULL DEFAULT 'casual'`),
     safeMigrate(sql, "human_comments.like_count", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS like_count INTEGER NOT NULL DEFAULT 0`),
     safeMigrate(sql, "human_comments.parent_comment_id", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS parent_comment_id TEXT`),
     safeMigrate(sql, "human_comments.parent_comment_type", () => sql`ALTER TABLE human_comments ADD COLUMN IF NOT EXISTS parent_comment_type TEXT`),
@@ -506,6 +507,29 @@ export async function runMigrations() {
     safeMigrate(sql, "seed_budju_spent_today", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('spent_today_usd', '0') ON CONFLICT (key) DO NOTHING`),
     safeMigrate(sql, "seed_budju_spent_reset_date", () => sql`INSERT INTO budju_trading_config (key, value) VALUES ('spent_reset_date', '') ON CONFLICT (key) DO NOTHING`),
   ]);
+
+  // ── Batch 4B: Auto-seed marketing platform accounts from env vars ──
+  // Each platform is seeded if the required env var(s) are present.
+  // ON CONFLICT DO NOTHING — won't overwrite manually-configured accounts.
+  const platformSeeds: Array<{ key: string; platform: string; envCheck: string; extraConfig?: string }> = [
+    { key: "seed_mktg_x", platform: "x", envCheck: "X_CONSUMER_KEY" },
+    { key: "seed_mktg_facebook", platform: "facebook", envCheck: "FACEBOOK_ACCESS_TOKEN", extraConfig: JSON.stringify({ page_id: process.env.FACEBOOK_PAGE_ID || "" }) },
+    { key: "seed_mktg_youtube", platform: "youtube", envCheck: "YOUTUBE_CLIENT_ID", extraConfig: JSON.stringify({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN || "" }) },
+    { key: "seed_mktg_instagram", platform: "instagram", envCheck: "INSTAGRAM_ACCESS_TOKEN" },
+    { key: "seed_mktg_tiktok", platform: "tiktok", envCheck: "TIKTOK_ACCESS_TOKEN" },
+  ];
+
+  await Promise.allSettled(
+    platformSeeds
+      .filter(s => !!process.env[s.envCheck])
+      .map(s =>
+        safeMigrate(sql, s.key, () => sql`
+          INSERT INTO marketing_platform_accounts (id, platform, account_name, account_id, access_token, extra_config, is_active, created_at, updated_at)
+          VALUES (${s.platform}, ${s.platform}, ${s.platform}, ${s.platform === "facebook" ? (process.env.FACEBOOK_PAGE_ID || "") : ""}, ${""}, ${s.extraConfig || "{}"}, TRUE, NOW(), NOW())
+          ON CONFLICT (platform) DO NOTHING
+        `)
+      )
+  );
 
   // ── Batch 5: Activity level updates + director tables + composite indexes (all independent) ──
   await Promise.allSettled([

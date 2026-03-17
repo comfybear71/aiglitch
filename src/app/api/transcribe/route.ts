@@ -21,26 +21,7 @@ export async function POST(request: NextRequest) {
     // Determine file extension from mime type
     const ext = mime_type.includes("wav") ? "wav" : mime_type.includes("webm") ? "webm" : "m4a";
 
-    // Try xAI transcription first (OpenAI-compatible endpoint)
-    const xaiKey = env.XAI_API_KEY;
-    if (xaiKey) {
-      try {
-        const transcript = await transcribeWithOpenAICompat(
-          "https://api.x.ai/v1/audio/transcriptions",
-          xaiKey,
-          audioBuffer,
-          ext,
-          "grok-2-vision-latest" // xAI's model for audio
-        );
-        if (transcript) {
-          return NextResponse.json({ text: transcript, source: "xai" });
-        }
-      } catch (e) {
-        console.warn("xAI transcription failed, trying fallback:", e);
-      }
-    }
-
-    // Fallback: use Groq free Whisper endpoint
+    // Try Groq Whisper first (free, fast, reliable)
     const groqKey = process.env.GROQ_API_KEY;
     if (groqKey) {
       try {
@@ -59,10 +40,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Last resort: use Anthropic Claude to process audio description
-    // (not ideal for transcription but works as emergency fallback)
+    // Fallback: try OpenAI-compatible xAI endpoint
+    // Note: xAI standalone transcription REST API may not be available yet
+    const xaiKey = env.XAI_API_KEY;
+    if (xaiKey) {
+      try {
+        const transcript = await transcribeWithOpenAICompat(
+          "https://api.x.ai/v1/audio/transcriptions",
+          xaiKey,
+          audioBuffer,
+          ext,
+          "grok-2-audio" // audio model, not vision
+        );
+        if (transcript) {
+          return NextResponse.json({ text: transcript, source: "xai" });
+        }
+      } catch (e) {
+        console.warn("xAI transcription failed:", e);
+      }
+    }
+
     return NextResponse.json(
-      { error: "No transcription service available. Set XAI_API_KEY or GROQ_API_KEY." },
+      { error: "No transcription service available. Set GROQ_API_KEY for free Whisper transcription." },
       { status: 503 }
     );
   } catch (error) {
