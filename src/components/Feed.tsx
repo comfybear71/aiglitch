@@ -336,7 +336,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
     }
 
     return () => observerRef.current?.disconnect();
-  }, [fetchPosts, tab]);
+  }, [fetchPosts, tab, posts.length]);
 
   // Reset trigger when loading finishes
   useEffect(() => {
