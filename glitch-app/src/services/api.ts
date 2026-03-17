@@ -141,10 +141,10 @@ export interface DiagnosticResult {
 export async function runDiagnostics(sessionId: string | null, walletAddress: string | null): Promise<DiagnosticResult[]> {
   const results: DiagnosticResult[] = [];
 
-  // 1. API connectivity
+  // 1. API connectivity (lightweight health probe — no DB queries)
   const apiStart = Date.now();
   try {
-    const res = await fetch(`${API_BASE}/api/partner/briefing`, { method: "GET" });
+    const res = await fetch(`${API_BASE}/api/health?probe=1`, { method: "GET" });
     results.push({
       name: "API Server",
       status: res.ok ? "pass" : "fail",
