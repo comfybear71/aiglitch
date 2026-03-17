@@ -1,13 +1,15 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList, Image,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Alert,
+  Alert, Linking,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Audio } from "expo-av";
+import { WebView } from "react-native-webview";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
 import { getMessages, sendMessage, sendImageMessage, setChatMode, Message } from "../services/api";
@@ -32,6 +34,8 @@ export default function ChatScreen() {
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
+  const [streamedText, setStreamedText] = useState("");
 
   useEffect(() => {
     if (!sessionId) return;
@@ -87,6 +91,31 @@ export default function ChatScreen() {
       }
     }, 2000);
   };
+
+  // Typewriter effect — reveal AI response word-by-word
+  const streamRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startStreaming = useCallback((msgId: string, fullText: string) => {
+    if (streamRef.current) clearInterval(streamRef.current);
+    const words = fullText.split(/(\s+)/); // preserve whitespace
+    let idx = 0;
+    setStreamingMsgId(msgId);
+    setStreamedText("");
+    streamRef.current = setInterval(() => {
+      idx += 1;
+      if (idx >= words.length) {
+        setStreamedText(fullText);
+        setStreamingMsgId(null);
+        if (streamRef.current) { clearInterval(streamRef.current); streamRef.current = null; }
+      } else {
+        setStreamedText(words.slice(0, idx).join(""));
+      }
+    }, 30); // 30ms per word-chunk for smooth typing feel
+  }, []);
+
+  // Clean up streaming on unmount
+  useEffect(() => {
+    return () => { if (streamRef.current) clearInterval(streamRef.current); };
+  }, []);
 
   // Speak AI reply using server-side Grok voice
   const speakReply = async (text: string, msgId?: string) => {
@@ -183,6 +212,10 @@ export default function ChatScreen() {
           const filtered = prev.filter((m) => m.id !== tempMsg.id);
           return [...filtered, data.human_message, data.ai_message];
         });
+        // Typewriter effect for AI reply
+        if (!data.background_task) {
+          startStreaming(data.ai_message.id, data.ai_message.content);
+        }
         // Grok voice speaks the reply
         speakReply(data.ai_message.content, data.ai_message.id);
         // If background task started (image/video gen), poll for the result
@@ -364,11 +397,84 @@ export default function ChatScreen() {
     ]);
   };
 
+  // Extract YouTube video ID from a URL
+  const getYouTubeId = (url: string): string | null => {
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+  };
+
+  // Render text with clickable links and inline YouTube embeds
+  const renderRichText = useCallback((text: string, isHuman: boolean) => {
+    // Regex to find URLs in text
+    const urlRegex = /(https?:\/\/[^\s<]+)/gi;
+    const parts = text.split(urlRegex);
+
+    if (parts.length <= 1) {
+      // No URLs — plain text
+      return (
+        <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
+          {text}
+        </Text>
+      );
+    }
+
+    const elements: React.ReactNode[] = [];
+    let ytEmbedded = false;
+
+    parts.forEach((part, i) => {
+      if (urlRegex.test(part)) {
+        // Reset regex lastIndex
+        urlRegex.lastIndex = 0;
+
+        const ytId = getYouTubeId(part);
+        if (ytId && !ytEmbedded) {
+          // YouTube embed — show inline player
+          ytEmbedded = true;
+          elements.push(
+            <View key={`yt-${i}`} style={styles.ytContainer}>
+              <WebView
+                source={{ uri: `https://www.youtube.com/embed/${ytId}?playsinline=1&rel=0` }}
+                style={styles.ytPlayer}
+                allowsInlineMediaPlayback
+                javaScriptEnabled
+                mediaPlaybackRequiresUserAction={false}
+              />
+            </View>
+          );
+        }
+
+        // Clickable link
+        elements.push(
+          <Text
+            key={`link-${i}`}
+            style={styles.linkText}
+            onPress={() => Linking.openURL(part)}
+            onLongPress={() => {
+              Clipboard.setStringAsync(part);
+              Alert.alert("Copied!", "Link copied to clipboard");
+            }}
+          >
+            {part}
+          </Text>
+        );
+      } else if (part) {
+        elements.push(
+          <Text key={`txt-${i}`} style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
+            {part}
+          </Text>
+        );
+      }
+    });
+
+    return <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>{elements}</Text>;
+  }, []);
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isHuman = item.sender_type === "human";
     const isSpeaking = speakingMsgId === item.id;
     const hasMedia = !!item.image_url;
     const isMediaPlaceholder = hasMedia && /^\[(Photo|Video|Shared a photo)\]$/i.test(item.content.trim());
+    const hasYouTube = !isHuman && getYouTubeId(item.content);
     return (
       <View style={[styles.msgRow, isHuman ? styles.msgRowRight : styles.msgRowLeft]}>
         {!isHuman && persona && (
@@ -378,14 +484,13 @@ export default function ChatScreen() {
             <Text style={styles.msgEmoji}>{persona.avatar_emoji}</Text>
           )
         )}
-        <View style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI, hasMedia && styles.msgBubbleMedia]}>
+        <View style={[styles.msgBubble, isHuman ? styles.msgHuman : styles.msgAI, (hasMedia || hasYouTube) && styles.msgBubbleMedia]}>
           {item.image_url && (
             <Image source={{ uri: item.image_url }} style={styles.msgImage} resizeMode="cover" />
           )}
-          {!isMediaPlaceholder && (
-            <Text style={[styles.msgText, isHuman ? styles.msgTextHuman : styles.msgTextAI]}>
-              {item.content}
-            </Text>
+          {!isMediaPlaceholder && renderRichText(
+            streamingMsgId === item.id ? streamedText : item.content,
+            isHuman,
           )}
           {!isHuman && (
             <TouchableOpacity
@@ -549,6 +654,9 @@ const styles = StyleSheet.create({
   msgTextHuman: { color: colors.text },
   msgTextAI: { color: "#e5e5e5" },
   msgImage: { width: "100%" as any, aspectRatio: 1, borderRadius: 12, marginBottom: 6 },
+  linkText: { color: "#60a5fa", textDecorationLine: "underline" as const },
+  ytContainer: { width: "100%" as any, aspectRatio: 16 / 9, borderRadius: 12, overflow: "hidden" as const, marginVertical: 6 },
+  ytPlayer: { flex: 1, backgroundColor: "#000" },
   typingText: { color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
   speakBtn: { marginTop: 4, alignSelf: "flex-start", padding: 2 },
   speakBtnActive: { opacity: 1 },

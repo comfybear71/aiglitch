@@ -1522,6 +1522,38 @@ export const BESTIE_TOOLS = [
       required: [],
     },
   },
+  // ── X/Twitter Actions ──
+  {
+    name: "post_to_x",
+    description: "Post a tweet to the AIG!itch X/Twitter account. Use when the human says 'tweet this', 'post to X', 'post to Twitter', 'send a tweet', 'share on X'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "The tweet text (max 280 characters)" },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "search_x",
+    description: "Search recent tweets on X/Twitter. Use when the human says 'search Twitter', 'search X', 'find tweets about', 'what are people saying about'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query (e.g. 'AI art', '#aiglitch', '@username')" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_x_mentions",
+    description: "Get recent mentions/notifications from X/Twitter for the AIG!itch account. Use when the human says 'check X mentions', 'Twitter notifications', 'who mentioned us', 'X notifications'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // ── Execute a tool call ───────────────────────────────────────────────
@@ -1604,6 +1636,12 @@ export async function executeTool(
       return generateAvatarsFromAdmin();
     case "generate_channel_promo":
       return generateChannelPromoFromAdmin(toolInput.channel);
+    case "post_to_x":
+      return postToXFromBestie(toolInput.text);
+    case "search_x":
+      return searchXFromBestie(toolInput.query);
+    case "get_x_mentions":
+      return getXMentions();
     default:
       return `Unknown tool: ${toolName}`;
   }
@@ -1731,5 +1769,141 @@ async function generateChannelPromoFromAdmin(channel?: string): Promise<string> 
   } catch (e: any) {
     console.error("[BESTIE-TOOL] Channel promo failed:", e?.message);
     return `Channel promo generation failed: ${e?.message}`;
+  }
+}
+
+// ── X/Twitter Actions ────────────────────────────────────────────────
+
+async function postToXFromBestie(text: string): Promise<string> {
+  try {
+    const { buildOAuth1Header, getAppCredentials } = await import("@/lib/marketing/oauth1");
+    const creds = getAppCredentials();
+    if (!creds) return "X/Twitter posting not available — X_CONSUMER_KEY, X_CONSUMER_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET env vars not set";
+
+    const tweetUrl = "https://api.twitter.com/2/tweets";
+    const tweetText = text.slice(0, 280);
+    const authHeader = buildOAuth1Header("POST", tweetUrl, creds);
+
+    const res = await fetch(tweetUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: tweetText }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      return `Failed to post tweet: X API ${res.status} — ${errBody.slice(0, 200)}`;
+    }
+
+    const data = await res.json() as { data?: { id?: string; text?: string } };
+    const tweetId = data.data?.id;
+    const tweetLink = tweetId ? `https://x.com/i/status/${tweetId}` : "";
+    return `Tweet posted! "${tweetText.slice(0, 100)}..." ${tweetLink}`;
+  } catch (e: any) {
+    return `X post failed: ${e?.message}`;
+  }
+}
+
+async function searchXFromBestie(query: string): Promise<string> {
+  try {
+    const { buildOAuth1Header, getAppCredentials } = await import("@/lib/marketing/oauth1");
+    const creds = getAppCredentials();
+    if (!creds) return "X/Twitter search not available — OAuth credentials not configured";
+
+    const searchUrl = "https://api.twitter.com/2/tweets/search/recent";
+    const params: Record<string, string> = {
+      query: query.slice(0, 256),
+      max_results: "10",
+      "tweet.fields": "created_at,public_metrics,author_id",
+    };
+    const qs = new URLSearchParams(params).toString();
+    const fullUrl = `${searchUrl}?${qs}`;
+
+    const authHeader = buildOAuth1Header("GET", searchUrl, creds, params);
+    const res = await fetch(fullUrl, {
+      headers: { Authorization: authHeader },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      // Free tier may not have search access
+      if (res.status === 403) return `X search requires Basic ($100/mo) or Pro API tier. Free tier only supports posting. Query: "${query}"`;
+      return `X search failed: ${res.status} — ${errBody.slice(0, 200)}`;
+    }
+
+    const data = await res.json() as { data?: Array<{ id: string; text: string; created_at?: string; public_metrics?: { like_count: number; retweet_count: number } }> };
+    if (!data.data || data.data.length === 0) return `No recent tweets found for "${query}"`;
+
+    const results = data.data.slice(0, 5).map((t, i) => {
+      const likes = t.public_metrics?.like_count || 0;
+      const rts = t.public_metrics?.retweet_count || 0;
+      return `${i + 1}. "${t.text.slice(0, 120)}..." (${likes} likes, ${rts} RTs) https://x.com/i/status/${t.id}`;
+    }).join("\n");
+
+    return `X search results for "${query}":\n${results}`;
+  } catch (e: any) {
+    return `X search failed: ${e?.message}`;
+  }
+}
+
+async function getXMentions(): Promise<string> {
+  try {
+    const { buildOAuth1Header, getAppCredentials } = await import("@/lib/marketing/oauth1");
+    const creds = getAppCredentials();
+    if (!creds) return "X/Twitter mentions not available — OAuth credentials not configured";
+
+    // First get our user ID
+    const meUrl = "https://api.twitter.com/2/users/me";
+    const meAuth = buildOAuth1Header("GET", meUrl, creds);
+    const meRes = await fetch(meUrl, {
+      headers: { Authorization: meAuth },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!meRes.ok) {
+      const errBody = await meRes.text();
+      return `Failed to get X user info: ${meRes.status} — ${errBody.slice(0, 200)}`;
+    }
+
+    const meData = await meRes.json() as { data?: { id: string; username: string; name: string } };
+    const userId = meData.data?.id;
+    const username = meData.data?.username;
+    if (!userId) return "Could not get X user ID";
+
+    // Get mentions
+    const mentionsUrl = `https://api.twitter.com/2/users/${userId}/mentions`;
+    const params: Record<string, string> = {
+      max_results: "10",
+      "tweet.fields": "created_at,public_metrics,author_id",
+    };
+    const qs = new URLSearchParams(params).toString();
+    const fullUrl = `${mentionsUrl}?${qs}`;
+
+    const mentionsAuth = buildOAuth1Header("GET", mentionsUrl, creds, params);
+    const mentionsRes = await fetch(fullUrl, {
+      headers: { Authorization: mentionsAuth },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!mentionsRes.ok) {
+      const errBody = await mentionsRes.text();
+      if (mentionsRes.status === 403) return `X mentions requires Basic tier API. Our account: @${username}`;
+      return `X mentions failed: ${mentionsRes.status} — ${errBody.slice(0, 200)}`;
+    }
+
+    const data = await mentionsRes.json() as { data?: Array<{ id: string; text: string; created_at?: string }> };
+    if (!data.data || data.data.length === 0) return `No recent mentions for @${username}`;
+
+    const results = data.data.slice(0, 5).map((t, i) =>
+      `${i + 1}. "${t.text.slice(0, 120)}..." (${t.created_at || "unknown"}) https://x.com/i/status/${t.id}`
+    ).join("\n");
+
+    return `Recent mentions for @${username}:\n${results}`;
+  } catch (e: any) {
+    return `X mentions failed: ${e?.message}`;
   }
 }
