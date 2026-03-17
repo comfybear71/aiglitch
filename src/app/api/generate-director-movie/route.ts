@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       WHERE created_at > NOW() - INTERVAL '24 hours' AND source = 'cron'
     ` as unknown as { count: number }[];
 
-    if (todayCount[0]?.count >= 1 && !(await isAdminAuthenticated())) {
+    if (todayCount[0]?.count >= 1 && !(await isAdminAuthenticated(request))) {
       await cronFinish("director-movie");
       return NextResponse.json({
         action: "daily_limit",
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
 
 // POST for manual admin triggers — accepts optional genre, director, concept from form
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
 
 // PATCH — manually trigger stitching for a specific job
 export async function PATCH(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -360,7 +360,7 @@ export async function PATCH(request: NextRequest) {
  * Body: { sceneUrls: Record<number, string>, title, genre, directorUsername, directorId, synopsis, tagline, castList }
  */
 export async function PUT(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

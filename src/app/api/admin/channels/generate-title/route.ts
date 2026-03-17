@@ -18,7 +18,7 @@ export const maxDuration = 60;
  * overlaid on top of the promo video using mix-blend-screen.
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
  * Poll for title video completion.
  */
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }

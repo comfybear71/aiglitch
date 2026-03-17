@@ -33,7 +33,7 @@ export const maxDuration = 300;
  *   4. Submit each scene as an image-to-video job using the last frame
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
@@ -249,7 +249,7 @@ Respond in this exact JSON format:
  * ?requestId=XXX
  */
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
@@ -316,7 +316,7 @@ export async function GET(request: NextRequest) {
  * Body: { movieId, originalVideoUrl, extensionVideoUrls: string[] }
  */
 export async function PUT(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }

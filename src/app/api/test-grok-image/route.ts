@@ -9,7 +9,7 @@ export const maxDuration = 60;
  * No blob persistence, no DB writes — pure API test.
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }

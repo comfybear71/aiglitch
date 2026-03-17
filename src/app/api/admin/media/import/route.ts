@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
  * No more manual download → re-upload cycle!
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

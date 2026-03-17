@@ -59,7 +59,7 @@ const CHANNEL_SCENES: Record<string, string[]> = {
  * Client polls GET endpoint for each clip, then calls PUT to stitch.
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
  * Poll a single clip for completion. Returns the blob URL when done.
  */
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
@@ -236,7 +236,7 @@ export async function GET(request: NextRequest) {
  * Body: { channel_id, channel_slug, clip_urls: string[] }
  */
 export async function PUT(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }

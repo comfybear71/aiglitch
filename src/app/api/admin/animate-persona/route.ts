@@ -24,7 +24,7 @@ export const maxDuration = 60;
  *   Polls for video completion, persists to blob, creates post, spreads to socials.
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
  * GET /api/admin/animate-persona?id=REQUEST_ID&persona_id=...
  */
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }

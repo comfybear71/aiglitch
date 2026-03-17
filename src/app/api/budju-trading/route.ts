@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
 // ── POST: Manual trade trigger from admin ──
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

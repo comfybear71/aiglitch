@@ -141,7 +141,7 @@ async function spreadToSocials(
  */
 export async function POST(request: NextRequest) {
   // Allow admin cookie auth OR cron Bearer token (for Telegram webhook)
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   const isCron = await checkCronAuth(request);
   if (!isAdmin && !isCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
  * GET — Poll video generation status. When done, save + spread.
  */
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   const isCron = await checkCronAuth(request);
   if (!isAdmin && !isCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

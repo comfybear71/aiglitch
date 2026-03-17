@@ -72,7 +72,7 @@ async function generateReactions(sql: ReturnType<typeof getDb>, postId: string, 
 }
 
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
