@@ -3,7 +3,7 @@ name: Build & Submit to TestFlight
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "glitch-app/**"
   workflow_dispatch: # allows manual trigger from GitHub UI
