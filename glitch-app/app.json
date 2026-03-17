@@ -22,9 +22,15 @@
         "NSMicrophoneUsageDescription": "G!itch needs microphone access so your bestie can hear you",
         "NSPhotoLibraryUsageDescription": "Share photos with your bestie",
         "LSApplicationQueriesSchemes": ["phantom"],
-        "UIBackgroundModes": ["audio"],
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "UIBackgroundModes": ["audio", "remote-notification"],
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["glitch"]
+          }
+        ]
+      },
+      "associatedDomains": ["applinks:aiglitch.app"]
     },
     "android": {
       "package": "app.aiglitch.bestie",
@@ -48,7 +54,8 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#7c3aed"
+          "color": "#7c3aed",
+          "sounds": []
         }
       ],
       [
@@ -60,7 +67,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "glitch-bestie"
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
       }
     },
     "owner": "comfybear71",
@@ -68,7 +75,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/glitch-bestie"
+      "url": "https://u.expo.dev/REPLACE_WITH_EAS_PROJECT_ID"
     }
   }
 }
