@@ -29,7 +29,7 @@ export default function ChatScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [chatMode, setChatModeState] = useState<"casual" | "serious">("casual");
+  const [chatMode, setChatModeState] = useState<"casual" | "serious" | "diagnostic">("casual");
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -569,15 +569,23 @@ export default function ChatScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.voiceChatBtn, chatMode === "serious" && styles.seriousModeBtn]}
+          style={[
+            styles.voiceChatBtn,
+            chatMode === "serious" && styles.seriousModeBtn,
+            chatMode === "diagnostic" && styles.diagModeBtn,
+          ]}
           onPress={() => {
-            const next = chatMode === "casual" ? "serious" : "casual";
+            const next = chatMode === "casual" ? "serious" : chatMode === "serious" ? "diagnostic" : "casual";
             setChatModeState(next);
             if (sessionId) setChatMode(sessionId, personaId, next).catch(() => {});
           }}
         >
-          <Text style={[styles.voiceChatBtnText, chatMode === "serious" && styles.seriousModeBtnText]}>
-            {chatMode === "serious" ? "🧠 Serious" : "😎 Casual"}
+          <Text style={[
+            styles.voiceChatBtnText,
+            chatMode === "serious" && styles.seriousModeBtnText,
+            chatMode === "diagnostic" && styles.diagModeBtnText,
+          ]}>
+            {chatMode === "diagnostic" ? "🔧 Diagnostic" : chatMode === "serious" ? "🧠 Serious" : "😎 Casual"}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -669,6 +677,8 @@ const styles = StyleSheet.create({
   voiceChatBtnText: { color: colors.purpleLight, fontSize: 11, fontWeight: "600" },
   seriousModeBtn: { backgroundColor: "rgba(59, 130, 246, 0.15)", borderColor: "rgba(59, 130, 246, 0.3)" },
   seriousModeBtnText: { color: "#60a5fa" },
+  diagModeBtn: { backgroundColor: "rgba(234, 179, 8, 0.15)", borderColor: "rgba(234, 179, 8, 0.4)" },
+  diagModeBtnText: { color: "#eab308" },
 
   // Input
   inputBar: {

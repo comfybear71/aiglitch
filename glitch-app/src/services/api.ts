@@ -122,11 +122,111 @@ export function sendImageMessage(sessionId: string, personaId: string, imageBase
 
 // ── Chat Mode Toggle ──
 
-export function setChatMode(sessionId: string, personaId: string, chatMode: "casual" | "serious") {
+export function setChatMode(sessionId: string, personaId: string, chatMode: "casual" | "serious" | "diagnostic") {
   return fetchJSON<{ success: boolean; chat_mode: string }>("/api/messages", {
     method: "PATCH",
     body: JSON.stringify({ session_id: sessionId, persona_id: personaId, chat_mode: chatMode }),
   });
+}
+
+// ── Self-Diagnostic ──
+
+export interface DiagnosticResult {
+  name: string;
+  status: "pass" | "fail";
+  detail: string;
+  ms: number;
+}
+
+export async function runDiagnostics(sessionId: string | null, walletAddress: string | null): Promise<DiagnosticResult[]> {
+  const results: DiagnosticResult[] = [];
+
+  // 1. API connectivity
+  const apiStart = Date.now();
+  try {
+    const res = await fetch(`${API_BASE}/api/partner/briefing`, { method: "GET" });
+    results.push({
+      name: "API Server",
+      status: res.ok ? "pass" : "fail",
+      detail: res.ok ? `Connected (${res.status})` : `HTTP ${res.status}`,
+      ms: Date.now() - apiStart,
+    });
+  } catch (e: any) {
+    results.push({ name: "API Server", status: "fail", detail: e.message || "Unreachable", ms: Date.now() - apiStart });
+  }
+
+  // 2. Session check
+  if (sessionId) {
+    const sessStart = Date.now();
+    try {
+      const res = await fetch(`${API_BASE}/api/partner/bestie?session_id=${encodeURIComponent(sessionId)}`);
+      const data = await res.json();
+      results.push({
+        name: "Session",
+        status: res.ok ? "pass" : "fail",
+        detail: res.ok ? (data.bestie ? `Active (${data.bestie.display_name})` : "Valid (no bestie)") : `Error ${res.status}`,
+        ms: Date.now() - sessStart,
+      });
+    } catch (e: any) {
+      results.push({ name: "Session", status: "fail", detail: e.message || "Failed", ms: Date.now() - sessStart });
+    }
+  } else {
+    results.push({ name: "Session", status: "fail", detail: "No session ID", ms: 0 });
+  }
+
+  // 3. Voice API
+  const voiceStart = Date.now();
+  try {
+    const res = await fetch(`${API_BASE}/api/voice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "test", persona_id: "diagnostic" }),
+    });
+    results.push({
+      name: "Voice API",
+      status: res.ok ? "pass" : "fail",
+      detail: res.ok ? "Online" : `HTTP ${res.status}`,
+      ms: Date.now() - voiceStart,
+    });
+  } catch (e: any) {
+    results.push({ name: "Voice API", status: "fail", detail: e.message || "Unreachable", ms: Date.now() - voiceStart });
+  }
+
+  // 4. Wallet
+  if (walletAddress) {
+    const walletStart = Date.now();
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/solana?action=balance&wallet_address=${encodeURIComponent(walletAddress)}&session_id=${encodeURIComponent(sessionId || "")}`
+      );
+      results.push({
+        name: "Wallet / Solana",
+        status: res.ok ? "pass" : "fail",
+        detail: res.ok ? "Connected" : `HTTP ${res.status}`,
+        ms: Date.now() - walletStart,
+      });
+    } catch (e: any) {
+      results.push({ name: "Wallet / Solana", status: "fail", detail: e.message || "Failed", ms: Date.now() - walletStart });
+    }
+  } else {
+    results.push({ name: "Wallet / Solana", status: "fail", detail: "No wallet connected", ms: 0 });
+  }
+
+  // 5. OTC Swap service
+  const otcStart = Date.now();
+  try {
+    const res = await fetch(`${API_BASE}/api/otc-swap?action=config`);
+    results.push({
+      name: "OTC Swap",
+      status: res.ok ? "pass" : "fail",
+      detail: res.ok ? "Online" : `HTTP ${res.status}`,
+      ms: Date.now() - otcStart,
+    });
+  } catch (e: any) {
+    results.push({ name: "OTC Swap", status: "fail", detail: e.message || "Unreachable", ms: Date.now() - otcStart });
+  }
+
+  return results;
 }
 
 // ── Push Notifications ──

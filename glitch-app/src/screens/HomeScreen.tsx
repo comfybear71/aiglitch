@@ -15,7 +15,8 @@ import { usePushNotifications } from "../hooks/usePushNotifications";
 import {
   getBestie, walletLogin, linkWallet, unlinkWallet,
   getOnChainBalances, getMessages, sendMessage, sendImageMessage,
-  Bestie, OnChainBalances, Message,
+  setChatMode, runDiagnostics,
+  Bestie, OnChainBalances, Message, DiagnosticResult,
 } from "../services/api";
 import CosmicVisualizer from "../components/CosmicVisualizer";
 
@@ -78,6 +79,10 @@ export default function HomeScreen() {
   const [suggestDesc, setSuggestDesc] = useState("");
   const [suggestCategory, setSuggestCategory] = useState("feature-request");
   const [suggestSending, setSuggestSending] = useState(false);
+  const [diagnosticMode, setDiagnosticMode] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagResults, setDiagResults] = useState<DiagnosticResult[]>([]);
+  const [diagRunning, setDiagRunning] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -556,6 +561,43 @@ export default function HomeScreen() {
     setSuggestSending(false);
   };
 
+  // Run self-diagnostic
+  const runSelfCheck = useCallback(async () => {
+    setDiagRunning(true);
+    setDiagResults([]);
+    try {
+      const results = await runDiagnostics(sessionId, walletAddress);
+      setDiagResults(results);
+    } catch {
+      setDiagResults([{ name: "Diagnostic", status: "fail", detail: "Self-check crashed", ms: 0 }]);
+    }
+    setDiagRunning(false);
+  }, [sessionId, walletAddress]);
+
+  // Run self-diagnostic on first load
+  const diagRanRef = useRef(false);
+  useEffect(() => {
+    if (sessionId && !diagRanRef.current) {
+      diagRanRef.current = true;
+      runSelfCheck();
+    }
+  }, [sessionId]);
+
+  // Toggle diagnostic mode
+  const toggleDiagnosticMode = useCallback(() => {
+    const next = !diagnosticMode;
+    setDiagnosticMode(next);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (sessionId && bestie) {
+      setChatMode(sessionId, bestie.id, next ? "diagnostic" : "casual").catch(() => {});
+    }
+    if (next) {
+      // Auto-run diagnostics when entering diagnostic mode
+      setShowDiagnostics(true);
+      runSelfCheck();
+    }
+  }, [diagnosticMode, sessionId, bestie, runSelfCheck]);
+
   // Stop voice playback
   const stopSpeaking = async () => {
     if (soundRef.current) {
@@ -761,6 +803,12 @@ export default function HomeScreen() {
           </View>
         </View>
         <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.headerBtn, diagnosticMode && styles.diagBtnActive]}
+            onPress={toggleDiagnosticMode}
+          >
+            <Text style={styles.headerBtnText}>{diagnosticMode ? "🔧" : "🩺"}</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => nav.navigate("VoiceChat", {
@@ -1017,6 +1065,69 @@ export default function HomeScreen() {
                 <Text style={styles.suggestBtnSub}>Got an idea? Tell us what you want!</Text>
               </TouchableOpacity>
 
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Diagnostic Mode Banner */}
+      {diagnosticMode && (
+        <TouchableOpacity
+          style={styles.diagBanner}
+          onPress={() => { setShowDiagnostics(true); runSelfCheck(); }}
+        >
+          <Text style={styles.diagBannerText}>
+            🔧 DIAGNOSTIC MODE — Professional responses only. Tap for system check.
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Diagnostic Results Modal */}
+      <Modal visible={showDiagnostics} animationType="slide" transparent>
+        <View style={styles.featuresOverlay}>
+          <View style={styles.featuresModal}>
+            <View style={styles.featuresHeader}>
+              <Text style={styles.featuresTitle}>System Diagnostics</Text>
+              <TouchableOpacity onPress={() => setShowDiagnostics(false)}>
+                <Text style={styles.featuresClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.featuresList} showsVerticalScrollIndicator={false}>
+              {diagRunning ? (
+                <View style={styles.diagRunning}>
+                  <ActivityIndicator color={colors.purple} size="large" />
+                  <Text style={styles.diagRunningText}>Running system checks...</Text>
+                </View>
+              ) : (
+                <>
+                  {diagResults.map((r, i) => (
+                    <View key={i} style={styles.diagRow}>
+                      <View style={styles.diagRowLeft}>
+                        <Text style={styles.diagIcon}>{r.status === "pass" ? "✅" : "❌"}</Text>
+                        <View>
+                          <Text style={styles.diagName}>{r.name}</Text>
+                          <Text style={styles.diagDetail}>{r.detail}</Text>
+                        </View>
+                      </View>
+                      {r.ms > 0 && <Text style={styles.diagMs}>{r.ms}ms</Text>}
+                    </View>
+                  ))}
+                  {diagResults.length > 0 && (
+                    <View style={styles.diagSummary}>
+                      <Text style={styles.diagSummaryText}>
+                        {diagResults.filter(r => r.status === "pass").length}/{diagResults.length} checks passed
+                      </Text>
+                      <Text style={styles.diagSummaryTime}>
+                        Total: {diagResults.reduce((a, r) => a + r.ms, 0)}ms
+                      </Text>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.diagRerunBtn} onPress={runSelfCheck}>
+                    <Text style={styles.diagRerunText}>Re-run Diagnostics</Text>
+                  </TouchableOpacity>
+                </>
+              )}
               <View style={{ height: 30 }} />
             </ScrollView>
           </View>
@@ -1419,6 +1530,77 @@ const styles = StyleSheet.create({
   },
   suggestSubmitText: { color: colors.text, fontSize: 15, fontWeight: "700" },
   suggestNote: { color: colors.textMuted, fontSize: 11, textAlign: "center", marginTop: 12 },
+
+  // Diagnostic mode
+  diagBtnActive: {
+    backgroundColor: "rgba(234, 179, 8, 0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(234, 179, 8, 0.5)",
+  },
+  diagBanner: {
+    backgroundColor: "rgba(234, 179, 8, 0.12)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(234, 179, 8, 0.3)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  diagBannerText: {
+    color: "#eab308",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  diagRunning: {
+    alignItems: "center",
+    paddingVertical: 40,
+    gap: 16,
+  },
+  diagRunningText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  diagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  diagRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  diagIcon: { fontSize: 20 },
+  diagName: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  diagDetail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  diagMs: { color: colors.textMuted, fontSize: 11, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  diagSummary: {
+    marginTop: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(124, 58, 237, 0.08)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.2)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  diagSummaryText: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  diagSummaryTime: { color: colors.textMuted, fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  diagRerunBtn: {
+    marginTop: 16,
+    backgroundColor: "rgba(234, 179, 8, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(234, 179, 8, 0.4)",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  diagRerunText: { color: "#eab308", fontSize: 14, fontWeight: "700" },
 
   // Media button
   mediaBtn: {
