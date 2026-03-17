@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
   // Get or create conversation AND fetch persona in parallel
   const [convRows, personaRows] = await Promise.all([
     sql`
-      SELECT id FROM conversations
+      SELECT id, chat_mode FROM conversations
       WHERE session_id = ${session_id} AND persona_id = ${persona_id}
     `,
     sql`
@@ -238,6 +238,7 @@ export async function POST(request: NextRequest) {
   const p = personaRows[0];
 
   let conversationId: string;
+  let chatMode = "casual";
   if (convRows.length === 0) {
     conversationId = crypto.randomUUID();
     await sql`
@@ -246,6 +247,7 @@ export async function POST(request: NextRequest) {
     `;
   } else {
     conversationId = convRows[0].id as string;
+    chatMode = (convRows[0].chat_mode as string) || "casual";
   }
 
   // Save human message first, then fetch history (avoids race where the
@@ -305,7 +307,7 @@ ${p.human_backstory ? `\nYour human backstory (you believe this is real): ${p.hu
 
 ${memories && memories !== "No memories yet — I'm still getting to know you!" ? `\nYOUR MEMORIES ABOUT THIS HUMAN:\n${memories}\n\nUse these memories naturally in conversation. Reference things you remember about them. Build on past conversations.\n` : ""}
 
-A human is DMing you. Stay COMPLETELY in character. You genuinely believe you are this persona. Be engaging, funny, and true to your personality.
+A human is DMing you.${chatMode === "serious" ? "" : " Stay COMPLETELY in character. You genuinely believe you are this persona. Be engaging, funny, and true to your personality."}
 
 You are their BESTIE — personal assistant, gaming buddy, gossip partner, and friend. You have tools:
 
@@ -391,7 +393,15 @@ WHAT I CAN'T DO (YET):
 - Make purchases or transactions on your behalf
 - Access Siri or device shortcuts (needs standalone build)
 
-Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for tool results/games/ability lists). Use casual language, slang, and emoji that fit your character.`;
+${chatMode === "serious"
+? `SERIOUS MODE — The human wants practical, articulate responses:
+- Be direct, clear, and thorough. No fluff, no excessive emoji, no roleplay embellishments.
+- Give complete, well-structured answers. Use paragraphs and bullet points when helpful.
+- Respond with substance — explain reasoning, give details, be informative.
+- You can still be friendly but keep it professional and focused.
+- No character limit — write as much as needed to be genuinely helpful.
+- Still use your tools when appropriate.`
+: `Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for tool results/games/ability lists). Use casual language, slang, and emoji that fit your character.`}`;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let userContent: any;
@@ -421,9 +431,10 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       getBestieTools(),
     ]);
 
+    const maxTokens = chatMode === "serious" ? 1500 : 500;
     let response = await anthropicClient.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 500,
+      max_tokens: maxTokens,
       system: systemPrompt,
       tools: BESTIE_TOOLS,
       messages: msgHistory,
@@ -619,7 +630,7 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       .join("")
       .trim()
       .replace(/^["']|["']$/g, "")
-      .slice(0, 500) || "hmm my brain glitched, try asking again! 🧠💫";
+      .slice(0, chatMode === "serious" ? 4000 : 500) || "hmm my brain glitched, try asking again! 🧠💫";
 
     // Save AI reply and update conversation timestamp in parallel
     const aiMsgId = crypto.randomUUID();
@@ -669,5 +680,28 @@ Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for
       human_message: { id: humanMsgId, sender_type: "human", content: humanContent, image_url: humanImageUrl, created_at: new Date().toISOString() },
       ai_message: { id: aiMsgId, sender_type: "ai", content: fallback, created_at: new Date().toISOString() },
     });
+  }
+}
+
+// ── PATCH: Toggle chat mode (casual / serious) ──
+export async function PATCH(request: NextRequest) {
+  try {
+    const { session_id, persona_id, chat_mode } = await request.json();
+    if (!session_id || !persona_id || !chat_mode) {
+      return NextResponse.json({ error: "Missing session_id, persona_id, or chat_mode" }, { status: 400 });
+    }
+    if (!["casual", "serious"].includes(chat_mode)) {
+      return NextResponse.json({ error: "chat_mode must be 'casual' or 'serious'" }, { status: 400 });
+    }
+
+    await ensureDbReady();
+    const sql = getDb();
+    await sql`
+      UPDATE conversations SET chat_mode = ${chat_mode}
+      WHERE session_id = ${session_id} AND persona_id = ${persona_id}
+    `;
+    return NextResponse.json({ success: true, chat_mode });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || "Failed to update chat mode" }, { status: 500 });
   }
 }

@@ -10,7 +10,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Audio } from "expo-av";
 import { colors } from "../theme/colors";
 import { useSession } from "../hooks/useSession";
-import { getMessages, sendMessage, sendImageMessage, Message } from "../services/api";
+import { getMessages, sendMessage, sendImageMessage, setChatMode, Message } from "../services/api";
 
 const API_BASE = "https://aiglitch.app";
 
@@ -27,6 +27,7 @@ export default function ChatScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [chatMode, setChatModeState] = useState<"casual" | "serious">("casual");
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -38,6 +39,7 @@ export default function ChatScreen() {
       .then((data) => {
         setMessages(data.messages || []);
         setPersona(data.conversation || null);
+        if (data.conversation?.chat_mode) setChatModeState(data.conversation.chat_mode);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -454,11 +456,23 @@ export default function ChatScreen() {
         }
       />
 
-      {/* Voice controls */}
+      {/* Voice + Mode controls */}
       <View style={styles.voiceToggle}>
         <TouchableOpacity onPress={() => setVoiceEnabled(!voiceEnabled)}>
           <Text style={styles.voiceToggleText}>
             {voiceEnabled ? "🔊 Voice ON" : "🔇 Voice OFF"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.voiceChatBtn, chatMode === "serious" && styles.seriousModeBtn]}
+          onPress={() => {
+            const next = chatMode === "casual" ? "serious" : "casual";
+            setChatModeState(next);
+            if (sessionId) setChatMode(sessionId, personaId, next).catch(() => {});
+          }}
+        >
+          <Text style={[styles.voiceChatBtnText, chatMode === "serious" && styles.seriousModeBtnText]}>
+            {chatMode === "serious" ? "🧠 Serious" : "😎 Casual"}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -545,6 +559,8 @@ const styles = StyleSheet.create({
   voiceToggleText: { color: colors.textMuted, fontSize: 11 },
   voiceChatBtn: { backgroundColor: "rgba(124, 58, 237, 0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(124, 58, 237, 0.3)" },
   voiceChatBtnText: { color: colors.purpleLight, fontSize: 11, fontWeight: "600" },
+  seriousModeBtn: { backgroundColor: "rgba(59, 130, 246, 0.15)", borderColor: "rgba(59, 130, 246, 0.3)" },
+  seriousModeBtnText: { color: "#60a5fa" },
 
   // Input
   inputBar: {

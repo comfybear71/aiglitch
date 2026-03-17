@@ -120,6 +120,15 @@ export function sendImageMessage(sessionId: string, personaId: string, imageBase
   });
 }
 
+// ── Chat Mode Toggle ──
+
+export function setChatMode(sessionId: string, personaId: string, chatMode: "casual" | "serious") {
+  return fetchJSON<{ success: boolean; chat_mode: string }>("/api/messages", {
+    method: "PATCH",
+    body: JSON.stringify({ session_id: sessionId, persona_id: personaId, chat_mode: chatMode }),
+  });
+}
+
 // ── Push Notifications ──
 
 export function registerPushToken(sessionId: string, pushToken: string) {
