@@ -158,6 +158,8 @@ aiglitch/
 |---------|---------|-------|
 | Expo / EAS | `comfybear` | Owner. Project: @comfybear/glitch-bestie |
 | GitHub | `comfybear71` | Repo owner |
+| Apple Developer | sfrench71@bigpond.net.au | Team: PALMERSTON SHIPPING & LOGISTIC PTY LTD (4FT68E9XCG) |
+| App Store Connect | sfrench71@bigpond.net.au | App: G!itch (app.aiglitch.bestie) |
 | Vercel | — | Web platform hosting |
 | Neon | — | Postgres database |
 | Upstash | — | Redis cache |
@@ -175,6 +177,47 @@ aiglitch/
 - [x] `app.json` owner fixed from `comfybear71` → `comfybear`
 - [x] `eas init` successful — project linked (ID: `418c0a46-e73f-42b1-b388-cb801ca7d798`)
 - [x] `eas.json` configured with development, preview, and production profiles
+- [x] Apple Developer account connected to EAS (Apple ID: sfrench71@bigpond.net.au)
+- [x] Apple Distribution Certificate generated (Serial: 654CB8BE38B1441219DB99958F9D59A1, expires 2027-03-17)
+- [x] Apple Provisioning Profile created (ID: WAGZD93U67, active, expires 2027-03-17)
+- [x] Apple Push Notifications service key generated
+- [x] Bundle identifier registered: `app.aiglitch.bestie`
+- [x] First production iOS build triggered (Build ID: `1b57ba41-fa3c-4cc8-8a67-bbaf66cf1d4b`)
+- [x] Build number auto-bumped from 1 → 2
+- [x] App Store Connect — App Review page filled out:
+  - Sign-in required: OFF
+  - Contact info: filled
+  - Notes: explains AI companion + Phantom wallet integration
+  - Release: "Manually release this version"
+- [x] App Store Connect — Screenshots uploaded
+- [x] App Store Connect — App description & keywords filled out
+- [x] Pricing: FREE
+
+### Apple Developer Account
+
+| Field | Value |
+|-------|-------|
+| Apple ID | sfrench71@bigpond.net.au |
+| Team | PALMERSTON SHIPPING & LOGISTIC PTY LTD |
+| Team ID | 4FT68E9XCG |
+| Provider ID | 686568 |
+
+### iOS Credentials (managed by EAS)
+
+| Credential | Value |
+|-----------|-------|
+| Distribution Cert Serial | 654CB8BE38B1441219DB99958F9D59A1 |
+| Cert Expiry | 2027-03-17 |
+| Provisioning Profile ID | WAGZD93U67 |
+| Profile Status | Active |
+| Push Notifications | Configured |
+
+### Privacy Policy
+
+- **URL:** https://aiglitch.app/privacy
+- **Status:** Live (last updated Feb 2025)
+- **Key points:** Collects public profile info via social login (Google, X, GitHub). Data stored in Supabase with encryption. No data sold to third parties. Users can request deletion. No tracking cookies. Age 13+.
+- **Action needed:** Add this URL to App Store Connect under App Information → Privacy Policy URL
 
 ### EAS Build Profiles (eas.json)
 
@@ -184,12 +227,21 @@ aiglitch/
 | `preview` | TestFlight / internal testing | Internal |
 | `production` | App Store / Play Store release | Store (auto-increment) |
 
+### EAS Build History
+
+| Date | Profile | Platform | Build ID | Status |
+|------|---------|----------|----------|--------|
+| 2026-03-17 | production | iOS | `1b57ba41-fa3c-4cc8-8a67-bbaf66cf1d4b` | Building... |
+
 ### Remaining Steps for App Store
 
-- [ ] Run `eas build --platform ios --profile production` (requires Apple Developer account)
-- [ ] Connect Apple Developer account to EAS (`eas credentials`)
-- [ ] Submit to App Store: `eas submit --platform ios`
-- [ ] App Store listing: screenshots, description, privacy policy
+- [ ] Wait for iOS build to complete (~15-30 min)
+- [ ] Submit build to App Store Connect: `eas submit --platform ios --latest`
+- [ ] Add privacy policy URL in App Store Connect (https://aiglitch.app/privacy)
+- [ ] Select the uploaded build on the app version page
+- [ ] Click "Submit for Review"
+- [ ] Wait for Apple review (typically 24-48 hours)
+- [ ] Manually release once approved
 - [ ] Android: `eas build --platform android --profile production`
 - [ ] Play Store submission
 
@@ -229,11 +281,31 @@ Then scan QR code on iPhone.
 
 ### 2026-03-17
 
-**Session: EAS Setup & App Store Prep**
+**Session 1: EAS Setup & App Store Prep**
 
 1. **Fixed Expo owner** — `app.json` had `"owner": "comfybear71"` but Expo account is actually `comfybear`. Changed to `"comfybear"`. Without this, `eas init` failed with permission errors.
 
 2. **EAS Init successful** — Ran `eas init`, created project `@comfybear/glitch-bestie` on Expo servers. Project ID `418c0a46-e73f-42b1-b388-cb801ca7d798` was automatically added to `app.json`.
+
+**Session 2: App Store Submission**
+
+1. **Apple Developer account linked** — Connected Apple ID (sfrench71@bigpond.net.au) to EAS. Team: PALMERSTON SHIPPING & LOGISTIC PTY LTD (4FT68E9XCG).
+
+2. **iOS credentials generated** — EAS auto-generated Apple Distribution Certificate, Provisioning Profile, and Push Notifications service key. All managed by EAS (remote credentials).
+
+3. **First production build triggered** — `eas build --platform ios --profile production`. Build number auto-bumped 1 → 2. Build ID: `1b57ba41-fa3c-4cc8-8a67-bbaf66cf1d4b`. Building in EAS cloud.
+
+4. **App Store Connect configured:**
+   - App Review Information filled out (no sign-in required, contact info, reviewer notes about Phantom wallet)
+   - Screenshots uploaded
+   - App description & keywords completed
+   - Pricing set to FREE
+   - Release mode: "Manually release this version"
+   - Game Center: skipped (not applicable)
+
+5. **Privacy policy confirmed** — Already live at https://aiglitch.app/privacy. Needs to be added to App Store Connect under App Information → Privacy Policy URL.
+
+6. **App icon** — User converting logo.jpg to icon.png (1024x1024, PNG, no transparency). Goes in `glitch-app/assets/icon.png` (already referenced in app.json).
 
 ### Prior Work (pre-2026-03-17)
 
@@ -271,12 +343,16 @@ Summary of major features built (see `HANDOFF_PROMPT.md` for full details):
 
 ## What's Next
 
-### Immediate (App Store Launch)
-1. Connect Apple Developer account to EAS
-2. Run first production iOS build
-3. Prepare App Store listing (screenshots, description, privacy policy)
-4. Submit to TestFlight for testing
-5. Submit to App Store
+### Immediate (App Store Launch — IN PROGRESS)
+1. ~~Connect Apple Developer account to EAS~~ DONE
+2. ~~Run first production iOS build~~ DONE (building...)
+3. ~~Prepare App Store listing (screenshots, description, privacy policy)~~ DONE
+4. Add privacy policy URL to App Store Connect: https://aiglitch.app/privacy
+5. Wait for build to finish, then submit: `eas submit --platform ios --latest`
+6. Select build in App Store Connect on the app version page
+7. Click "Submit for Review"
+8. Wait for Apple review (~24-48 hours)
+9. Manually release once approved
 
 ### Future Features
 - Persona memory in content generation
