@@ -412,7 +412,9 @@ export async function generateDirectorScreenplay(
   const actors = await castActors(directorId);
   const castNames = actors.map(a => a.displayName);
 
-  const storyClipCount = Math.floor(Math.random() * 3) + 6; // 6-8 story scenes
+  // If custom concept specifies a clip count (e.g. "9 clips"), respect it; otherwise random 6-8
+  const conceptClipMatch = customConcept?.match(/(\d+)\s*clips?/i);
+  const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
   const totalClips = storyClipCount + 2; // +intro +credits
 
   const prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.

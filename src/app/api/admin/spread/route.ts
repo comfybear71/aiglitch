@@ -45,9 +45,18 @@ export async function POST(request: NextRequest) {
   const posts: PostToSpread[] = [];
 
   if (text) {
-    // Custom content — no DB post
+    // Custom content — also create a feed post so it appears on the "for you" page
+    const postId = uuidv4();
+    const ARCHITECT_ID = "glitch-000";
+    const postMediaType = media_type === "video" ? "video/mp4" : media_type === "image" ? "image/png" : null;
+    await sql`
+      INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
+      VALUES (${postId}, ${ARCHITECT_ID}, ${text}, ${"spread"}, ${media_url || null}, ${postMediaType}, ${Math.floor(Math.random() * 200) + 50}, ${"admin-spread"})
+    `;
+    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+
     posts.push({
-      id: "custom-" + uuidv4().slice(0, 8),
+      id: postId,
       content: text,
       media_url: media_url || null,
       media_type: media_type || null,

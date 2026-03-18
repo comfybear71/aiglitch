@@ -317,7 +317,8 @@ export async function POST(request: NextRequest) {
           console.error("[generate_hero] Telegram push failed:", err);
         }
 
-        return NextResponse.json({ ok: true, ...result, postId, spreadResults });
+        const spreading = spreadResults.filter(r => r.status === "posted").map(r => r.platform);
+        return NextResponse.json({ ok: true, ...result, postId, spreadResults, spreading, post: { id: postId } });
       }
       return NextResponse.json({ ok: true, ...result });
     }
@@ -395,7 +396,8 @@ export async function POST(request: NextRequest) {
           console.error("[generate_poster] Telegram push failed:", err);
         }
 
-        return NextResponse.json({ ok: true, ...result, postId, spreadResults });
+        const spreading = spreadResults.filter(r => r.status === "posted").map(r => r.platform);
+        return NextResponse.json({ ok: true, ...result, postId, spreadResults, spreading, post: { id: postId } });
       }
       return NextResponse.json({ ok: true, ...result });
     }

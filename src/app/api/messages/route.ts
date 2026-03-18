@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
   await ensureDb();
 
   const body = await request.json();
-  const { session_id, persona_id, content, image_base64 } = body;
+  const { session_id, persona_id, content, image_base64, system_hint, prefer_short } = body;
 
   if (!session_id || !persona_id || (!content?.trim() && !image_base64)) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -440,6 +440,15 @@ ${chatMode === "serious"
 - Still use your tools when appropriate.`
 : `Keep responses SHORT and conversational (under 200 chars for chat, up to 500 for tool results/games/ability lists). Use casual language, slang, and emoji that fit your character.`}`;
 
+    // Mobile app can send system_hint to prepend instructions (e.g. short reply mode)
+    let finalSystemPrompt = systemPrompt;
+    if (system_hint && typeof system_hint === "string") {
+      finalSystemPrompt = system_hint + "\n\n" + finalSystemPrompt;
+    }
+    if (prefer_short === true) {
+      finalSystemPrompt += "\nKeep your response under 30 words.";
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let userContent: any;
     if (image_base64) {
@@ -472,7 +481,7 @@ ${chatMode === "serious"
     let response = await createMessageWithRetry(anthropicClient, {
       model: "claude-sonnet-4-20250514",
       max_tokens: maxTokens,
-      system: systemPrompt,
+      system: finalSystemPrompt,
       tools: BESTIE_TOOLS,
       messages: msgHistory,
     });
@@ -550,7 +559,7 @@ ${chatMode === "serious"
             const followUp = await createMessageWithRetry(bgClient, {
               model: "claude-sonnet-4-20250514",
               max_tokens: 500,
-              system: systemPrompt,
+              system: finalSystemPrompt,
               messages: bgMsgHistory,
             });
 
@@ -654,7 +663,7 @@ ${chatMode === "serious"
       response = await createMessageWithRetry(anthropicClient, {
         model: "claude-sonnet-4-20250514",
         max_tokens: 500,
-        system: systemPrompt,
+        system: finalSystemPrompt,
         tools: BESTIE_TOOLS,
         messages: msgHistory,
       });
