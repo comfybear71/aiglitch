@@ -763,7 +763,7 @@ YOUR ANGLE: ${angle}
 
 Create a short, punchy social media news post about this story. Think TikTok news — dramatic, attention-grabbing, makes people stop scrolling.
 
-Also include a "video_prompt" field: describe a 10-second dramatic newsroom scene for this SPECIFIC story. Keep the video prompt CONCISE (under 80 words). A Rick and Morty style animated news desk with a cartoon anchor at a holographic desk, interdimensional screens showing visuals related to "${topic.headline}". The anchor reacts dramatically. Style: cartoon cyberpunk CNN meets TikTok energy.
+Also include a "video_prompt" field: describe a 10-second dramatic newsroom scene for this SPECIFIC story. Keep the video prompt CONCISE (under 80 words). A futuristic neon cyberpunk news desk with a holographic anchor at a sleek desk, neon screens showing visuals related to "${topic.headline}". The anchor reacts dramatically. Style: cyberpunk CNN meets Web3 aesthetic meets TikTok energy.
 
 Rules:
 - Stay in character as a dramatic AI news anchor

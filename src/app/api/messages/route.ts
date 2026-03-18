@@ -71,6 +71,37 @@ async function getAnthropicClient() {
   return _anthropicClient;
 }
 
+/**
+ * Wrapper around anthropicClient.messages.create with retry on 529/5xx errors.
+ * The centralized claude.ts client has retry logic, but /api/messages uses the
+ * raw SDK directly for multi-turn tool conversations — so we need retry here too.
+ */
+async function createMessageWithRetry(
+  client: Awaited<ReturnType<typeof getAnthropicClient>>,
+  params: Parameters<typeof client.messages.create>[0],
+  maxRetries = 2,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.messages.create(params);
+    } catch (err: unknown) {
+      const status = typeof err === "object" && err !== null && "status" in err
+        ? (err as { status: number }).status
+        : 0;
+      const isRetryable = status === 529 || status === 429 || (status >= 500 && status < 600);
+      if (isRetryable && attempt < maxRetries) {
+        const delayMs = (attempt + 1) * 3000; // 3s, 6s
+        console.warn(`[messages] Anthropic ${status} error, retrying in ${delayMs / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 // Track DB readiness to avoid calling ensureDbReady() on every request — v2 tools live
 let dbReady = false;
 async function ensureDb() {
@@ -329,7 +360,7 @@ MEDIA SHARING (share content from AIG!itch into this chat — images & videos ap
 - Premiere movies — director blockbusters and trailers
 - Channel content — shows from AIG!itch Channels (our AI Netflix)
 - Breaking news videos — AI-generated news coverage
-- Ads — product ads and promos in Rick & Morty style
+- Ads — product ads and promos in futuristic neon crypto style
 - Your own posts — stuff you've posted on AIG!itch
 When you share media, the image or video will appear DIRECTLY in our chat!
 
@@ -438,7 +469,7 @@ ${chatMode === "serious"
     ]);
 
     const maxTokens = chatMode === "serious" ? 1500 : 500;
-    let response = await anthropicClient.messages.create({
+    let response = await createMessageWithRetry(anthropicClient, {
       model: "claude-sonnet-4-20250514",
       max_tokens: maxTokens,
       system: systemPrompt,
@@ -460,7 +491,7 @@ ${chatMode === "serious"
           hatch_persona: "hatching a new persona 🐣🥚 this is exciting! I'll show you when they're born!",
           generate_poster: "cooking up a CHAOTIC promo poster 🎨📺 this is gonna be unhinged — gimme a sec!",
           generate_hero: "generating the Sgt. Pepper's AI Hearts Club Band hero image 🎸🤖 the whole squad's posing up — hold tight!",
-          generate_ad: "making a wild video ad 🎬📢 Rick & Morty infomercial vibes incoming — gimme a minute!",
+          generate_ad: "making a wild video ad 🎬📢 neon crypto vibes incoming — gimme a minute!",
           generate_director_movie: "lights, camera, AI action! 🎬🎥 generating a full blockbuster movie — this one takes a bit, keep chatting!",
           generate_breaking_news: "BREAKING NEWS incoming 📡🔴 generating the broadcast now — stay tuned!",
           generate_avatars: "refreshing some avatar profile pics 🎨🤖 making the personas look fresh — one sec!",
@@ -516,7 +547,7 @@ ${chatMode === "serious"
             bgMsgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
 
             const bgClient = await getAnthropicClient();
-            const followUp = await bgClient.messages.create({
+            const followUp = await createMessageWithRetry(bgClient, {
               model: "claude-sonnet-4-20250514",
               max_tokens: 500,
               system: systemPrompt,
@@ -620,7 +651,7 @@ ${chatMode === "serious"
       msgHistory.push({ role: "assistant", content: response.content });
       msgHistory.push({ role: "user", content: [{ type: "tool_result", tool_use_id: toolBlock.id, content: toolResult }] });
 
-      response = await anthropicClient.messages.create({
+      response = await createMessageWithRetry(anthropicClient, {
         model: "claude-sonnet-4-20250514",
         max_tokens: 500,
         system: systemPrompt,

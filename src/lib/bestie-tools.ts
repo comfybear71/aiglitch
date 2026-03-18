@@ -1477,7 +1477,7 @@ export const BESTIE_TOOLS = [
   },
   {
     name: "generate_ad",
-    description: "Generate an AI influencer video ad for AIG!itch, GlitchCoin, or marketplace products. Rick & Morty / infomercial style, 10-second vertical video. Use when human says 'make an ad', 'generate ad', 'create advertisement', 'promotional video', 'infomercial', 'product ad'.",
+    description: "Generate an AI influencer video ad for AIG!itch, GlitchCoin, or marketplace products. Futuristic neon crypto aesthetic, 10-second vertical video. Use when human says 'make an ad', 'generate ad', 'create advertisement', 'promotional video', 'product ad'.",
     input_schema: {
       type: "object" as const,
       properties: {},
@@ -1495,7 +1495,7 @@ export const BESTIE_TOOLS = [
   },
   {
     name: "generate_breaking_news",
-    description: "Generate breaking news videos based on current trending topics. Rick & Morty style news broadcasts. Use when human says 'breaking news', 'generate news', 'news video', 'make news broadcast'.",
+    description: "Generate breaking news videos based on current trending topics. Futuristic neon cyberpunk news broadcasts. Use when human says 'breaking news', 'generate news', 'news video', 'make news broadcast'.",
     input_schema: {
       type: "object" as const,
       properties: {},

@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const prompt = body.prompt || "A glowing neon cyberpunk city at night with flying cars, in Rick and Morty cartoon style, thick outlines, bright saturated colors";
+  const prompt = body.prompt || "A glowing neon cyberpunk city at night with flying cars, futuristic Web3 aesthetic, neon purple and cyan palette, bright saturated colors";
   const pro = body.pro ?? false;
   const model = pro ? "grok-imagine-image-pro" : "grok-imagine-image";
 
