@@ -357,7 +357,9 @@ export async function pickDirector(genre: string): Promise<{ id: string; usernam
  */
 export async function pickGenre(): Promise<string> {
   const sql = getDb();
-  const allGenres = Object.keys(GENRE_TEMPLATES);
+  // Exclude channel-specific genres from random director movie picks
+  const channelOnlyGenres = new Set(["music_video", "news"]);
+  const allGenres = Object.keys(GENRE_TEMPLATES).filter(g => !channelOnlyGenres.has(g));
 
   let lastGenre = "";
   try {
@@ -416,7 +418,9 @@ export async function generateDirectorScreenplay(
   const conceptClipMatch = customConcept?.match(/(\d+)\s*clips?/i);
   const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
   const isNews = genre === "news";
-  const totalClips = storyClipCount + (isNews ? 0 : 2); // news: no intro/credits
+  const isMusicVideo = genre === "music_video";
+  const skipBookends = isNews || isMusicVideo; // no title card / credits
+  const totalClips = storyClipCount + (skipBookends ? 0 : 2);
 
   const prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
 
@@ -436,6 +440,16 @@ GENRE STYLE GUIDE:
 CREATIVE DIRECTION:
 ${template.screenplayInstructions}
 ${customConcept ? `\nSPECIFIC CONCEPT FROM THE STUDIO: "${customConcept}"` : ""}
+${isMusicVideo ? `
+MUSIC VIDEO RULES (MANDATORY — override all other instructions):
+- Every single scene MUST be a music video clip — singing, rapping, playing instruments, performing music
+- Randomly VARY the music genre across scenes: rap, rock, pop, classical, electronic, R&B, punk, alien/AI experimental
+- Scenes must look like REAL music video clips: artists performing, band shots, concert footage, studio sessions, stylized visual performances
+- Vocals and/or instruments MUST be visible in every clip
+- Do NOT generate movie scenes, dialogue, or narrative drama — ONLY music video content
+- Video prompts must describe the visual style of the music video (e.g. "A rapper performing in a neon-lit studio with bass speakers, hip-hop music video style")
+- Each scene should feel like a DIFFERENT music video with its own visual identity and musical genre
+- The title should be an album or music compilation name, NOT a movie title` : ""}
 
 CAST (use these AI persona names as your actors — NEVER real human/meatbag names):
 ${castNames.map((name, i) => `- ${name} (${i === 0 ? "Lead" : i === 1 ? "Supporting Lead" : "Supporting"})`).join("\n")}
@@ -534,7 +548,7 @@ Respond in this exact JSON format:
 
     // Build story scenes from screenplay output
     const storyScenes: DirectorScene[] = parsed.scenes.map((s, i: number) => ({
-      sceneNumber: isNews ? i + 1 : i + 2, // news: no intro offset
+      sceneNumber: skipBookends ? i + 1 : i + 2, // no intro offset for news/music_video
       type: "story" as const,
       title: s.title,
       description: s.description,
@@ -545,8 +559,8 @@ Respond in this exact JSON format:
 
     let allScenes: DirectorScene[];
 
-    if (isNews) {
-      // News broadcasts: use story scenes as-is, no title card or credits
+    if (skipBookends) {
+      // News broadcasts & music videos: use story scenes as-is, no title card or credits
       allScenes = storyScenes;
     } else {
       // Director movies: wrap with title card intro and credits

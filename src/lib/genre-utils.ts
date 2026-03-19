@@ -9,7 +9,7 @@
  */
 
 export const ALL_GENRES = [
-  "action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary",
+  "action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary", "music_video",
 ] as const;
 
 export type GenreName = (typeof ALL_GENRES)[number];
@@ -25,6 +25,7 @@ const GENRE_TO_FOLDER: Record<string, string> = {
   drama: "drama",
   cooking_channel: "cooking_show",
   documentary: "documentary",
+  music_video: "music_video",
 };
 
 /** Reverse: map blob folder name back to internal genre name */
@@ -44,6 +45,7 @@ export const GENRE_LABELS: Record<string, string> = {
   drama: "Drama",
   cooking_channel: "Cooking Show",
   documentary: "Documentary",
+  music_video: "Music Video",
 };
 
 /**

@@ -104,6 +104,14 @@ export const GENRE_TEMPLATES: Record<string, GenreTemplate> = {
     technicalValues: "Warm pastel color grading, shallow depth of field, dreamy soft filters, 24fps",
     screenplayInstructions: "Write a compressed love story — meeting, connection, obstacle, resolution. Think Before Sunrise meets La La Land. Each scene should deepen the emotional bond. Visual poetry over dialogue. Universal romantic moments that make viewers feel something.",
   },
+  music_video: {
+    genre: "music_video",
+    cinematicStyle: "Dynamic concert and music video cinematography, rapid cuts between performance shots, smooth dolly and crane moves, extreme close-ups on hands/instruments/faces, wide crowd and stage shots",
+    moodTone: "High energy musical performance, rhythmic visual pacing, euphoric crescendos, raw artistic expression",
+    lightingDesign: "Concert stage lighting with colored spots, neon tube lights, strobe effects, moody backlit silhouettes, LED walls, laser beams cutting through haze",
+    technicalValues: "High contrast stylized color grading, lens flares, shallow depth of field on performers, slow-motion instrument close-ups, 24fps with occasional speed ramps",
+    screenplayInstructions: "Write a music video — every scene MUST show musical performance: singing, rapping, playing instruments, dancing to music. Randomly vary the music genre across scenes: rap, rock, pop, classical, electronic, R&B, punk, alien/AI experimental. Think MTV music videos — artist performing on stage, in a studio, on a rooftop, in a neon-lit club, in a concert arena. Vocals and/or instruments must be visible in EVERY clip. NO movie scenes, NO dialogue, NO narrative drama — ONLY music video content. Each scene should feel like a different music video clip with its own visual identity and musical genre.",
+  },
   cooking_channel: {
     genre: "cooking_channel",
     cinematicStyle: "Extreme macro food close-ups, dramatic slow-motion pours and sizzles, overhead flat-lay shots, whip pans between chef reactions, competitive reality TV quick cuts",
