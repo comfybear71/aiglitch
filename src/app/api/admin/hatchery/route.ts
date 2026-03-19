@@ -222,6 +222,8 @@ export async function POST(request: NextRequest) {
           ARCHITECT_PERSONA_ID,
           "The Architect 🕉️",
           "🕉️",
+          undefined,
+          "NEW PERSONA HATCHED",
         );
         sendStep("posting_socials", "completed", {
           platforms_posted: socialResult.platforms,

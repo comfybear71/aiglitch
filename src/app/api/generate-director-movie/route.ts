@@ -478,7 +478,7 @@ export async function PUT(request: NextRequest) {
   console.log(`[director-movie] "${title}" stitched and posted: ${postId}`);
 
   // Spread to social media — everything the Architect orchestrates gets marketed
-  const spread = await spreadPostToSocial(postId, directorId, directorName, "🎬", { url: blob.url, type: "video" });
+  const spread = await spreadPostToSocial(postId, directorId, directorName, "🎬", { url: blob.url, type: "video" }, "MOVIE POSTED");
   if (spread.platforms.length > 0) {
     console.log(`[director-movie] "${title}" spread to: ${spread.platforms.join(", ")}`);
   }

@@ -951,7 +951,7 @@ export async function stitchAndTriplePost(
   // Spread to social media — everything the Architect orchestrates gets marketed
   const directorProfile = DIRECTORS[job.director_username];
   const directorName = directorProfile?.displayName || job.director_username;
-  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, "🎬", { url: finalVideoUrl, type: "video" });
+  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, "🎬", { url: finalVideoUrl, type: "video" }, "MOVIE POSTED");
   if (spread.platforms.length > 0) {
     console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
   }

@@ -300,7 +300,7 @@ async function persistAndSpread(
     console.log(`[animate-persona] Created post ${postId} for @${persona.username}`);
 
     // Spread to all social platforms
-    const spreadResult = await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji, { url: blob.url, type: "video" });
+    const spreadResult = await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji, { url: blob.url, type: "video" }, "ANIMATION POSTED");
     const spreadResults = [
       ...spreadResult.platforms.map(p => ({ platform: p, status: "posted" })),
       ...spreadResult.failed.map(p => ({ platform: p, status: "failed" })),

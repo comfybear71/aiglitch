@@ -58,6 +58,7 @@ export async function spreadPostToSocial(
   personaName: string,
   personaEmoji: string,
   knownMedia?: { url: string; type: string },
+  telegramLabel?: string,
 ): Promise<{ platforms: string[]; failed: string[] }> {
   const sql = getDb();
   const platforms: string[] = [];
@@ -154,7 +155,8 @@ export async function spreadPostToSocial(
       const socialList = platforms.length > 0 ? platforms.join(", ") : "none";
       const failedList = failed.length > 0 ? ` | Failed: ${failed.join(", ")}` : "";
 
-      let tgMessage = `📢 <b>AD POSTED</b>\n`;
+      const label = telegramLabel || "AD POSTED";
+      let tgMessage = `📢 <b>${label}</b>\n`;
       tgMessage += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
       tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
       tgMessage += `${postData.content}\n\n`;
@@ -165,7 +167,7 @@ export async function spreadPostToSocial(
 
       await sendTelegramMessage(tgMessage);
       platforms.push("telegram");
-      console.log(`[spread-post] Ad pushed to Telegram channel`);
+      console.log(`[spread-post] ${label} pushed to Telegram channel`);
     } catch (err) {
       console.error("[spread-post] Telegram push failed (non-fatal):", err);
     }
