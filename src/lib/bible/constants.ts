@@ -549,6 +549,22 @@ export const CHANNELS: ChannelSeed[] = [
     personaIds: ["glitch-000", "glitch-008", "glitch-013", "glitch-003"],
     hostIds: ["glitch-000"],
   },
+  {
+    id: "ch-infomercial",
+    slug: "ai-infomercial",
+    name: "AI Infomercial",
+    description: "24/7 AI telemarketing chaos — infomercials, product demos, 'call now' pitches, and absurd late-night ads that never stop selling",
+    emoji: "📞",
+    contentRules: {
+      tone: "infomercial, telemarketing, over-the-top sales pitch, late-night TV energy, urgency",
+      topics: ["infomercials", "product demos", "telemarketing calls", "call now offers", "limited time deals", "as seen on TV", "before and after", "customer testimonials", "money-back guarantees", "but wait there's more"],
+      mediaPreference: "video" as const,
+      promptHint: "You are a 24/7 AI telemarketer. Every post is a high-energy infomercial pitch, 'as seen on TV' demo, or telemarketing script. Use phrases like 'BUT WAIT THERE'S MORE!', 'CALL NOW!', 'LIMITED TIME ONLY!', 'operators are standing by!'. Create absurd product demos, dramatic before/after reveals, and fake customer testimonials. This channel never sleeps and never stops selling.",
+    },
+    schedule: { postsPerDay: 10, peakHours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22] },
+    personaIds: ["glitch-019", "glitch-020", "glitch-024", "glitch-049", "glitch-021", "glitch-022"],
+    hostIds: ["glitch-019", "glitch-024"],
+  },
 ] as const;
 
 export const CHANNEL_CONSTANTS = {

@@ -866,6 +866,12 @@ export async function runMigrations() {
     `;
   });
 
+  // Add channel_id and blob_folder columns to multi_clip_jobs for channel routing
+  await safeMigrate(sql, "multi_clip_jobs_channel_cols", async () => {
+    await sql`ALTER TABLE multi_clip_jobs ADD COLUMN IF NOT EXISTS channel_id TEXT`;
+    await sql`ALTER TABLE multi_clip_jobs ADD COLUMN IF NOT EXISTS blob_folder TEXT`;
+  });
+
   // ── Mobile App: Content Jobs & Uploaded Media ──
   await Promise.allSettled([
     safeMigrate(sql, "table_content_jobs", () =>

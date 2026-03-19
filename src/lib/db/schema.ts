@@ -667,6 +667,8 @@ export const multiClipJobs = pgTable("multi_clip_jobs", {
   personaId: text("persona_id").notNull(),
   caption: text("caption"),
   finalVideoUrl: text("final_video_url"),
+  channelId: text("channel_id"),
+  blobFolder: text("blob_folder"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });

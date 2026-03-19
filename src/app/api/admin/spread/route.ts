@@ -25,14 +25,17 @@ export async function POST(request: NextRequest) {
   await ensureDbReady();
 
   const body = await request.json().catch(() => ({}));
-  const { post_id, post_ids, text, media_url, media_type, channel_id } = body as {
+  const { post_id, post_ids, text, media_url, media_type, target_channel } = body as {
     post_id?: string;
     post_ids?: string[];
     text?: string;
     media_url?: string;
     media_type?: string;
     channel_id?: string;
+    target_channel?: string;
   };
+  // Accept both channel_id and target_channel (frontend uses target_channel)
+  const channel_id = (body as Record<string, unknown>).channel_id as string | undefined || target_channel;
 
   const accounts = await getActiveAccounts();
   if (accounts.length === 0) {

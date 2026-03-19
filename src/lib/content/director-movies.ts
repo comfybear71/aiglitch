@@ -649,6 +649,7 @@ export async function submitDirectorFilm(
   screenplay: DirectorScreenplay,
   directorPersonaId: string,
   source: "cron" | "admin" = "cron",
+  options?: { channelId?: string; folder?: string },
 ): Promise<string | null> {
   const sql = getDb();
   const template = GENRE_TEMPLATES[screenplay.genre] || GENRE_TEMPLATES.drama;
@@ -703,8 +704,8 @@ export async function submitDirectorFilm(
   }
 
   await sql`
-    INSERT INTO multi_clip_jobs (id, screenplay_id, title, tagline, synopsis, genre, clip_count, persona_id, caption)
-    VALUES (${jobId}, ${screenplay.id}, ${screenplay.title}, ${screenplay.tagline}, ${screenplay.synopsis}, ${screenplay.genre}, ${screenplay.scenes.length}, ${directorPersonaId}, ${caption})
+    INSERT INTO multi_clip_jobs (id, screenplay_id, title, tagline, synopsis, genre, clip_count, persona_id, caption, channel_id, blob_folder)
+    VALUES (${jobId}, ${screenplay.id}, ${screenplay.title}, ${screenplay.tagline}, ${screenplay.synopsis}, ${screenplay.genre}, ${screenplay.scenes.length}, ${directorPersonaId}, ${caption}, ${options?.channelId || null}, ${options?.folder || null})
   `;
 
   // Also log in director_movies table
@@ -803,6 +804,7 @@ export async function stitchAndTriplePost(
   ` as unknown as {
     id: string; title: string; genre: string; persona_id: string; caption: string;
     clip_count: number;
+    channel_id: string | null; blob_folder: string | null;
     director_id: string; director_username: string; director_movie_id: string;
   }[];
 
@@ -842,7 +844,8 @@ export async function stitchAndTriplePost(
     console.error(`[director-movies] MP4 concatenation failed, using first clip as fallback:`, err);
     stitched = clipBuffers[0];
   }
-  const blobFolder = getGenreBlobFolder(job.genre);
+  // Use channel-specific folder if provided, otherwise default genre folder
+  const blobFolder = job.blob_folder || getGenreBlobFolder(job.genre);
   const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
     access: "public",
     contentType: "video/mp4",
@@ -850,7 +853,7 @@ export async function stitchAndTriplePost(
   });
   const finalVideoUrl = blob.url;
   const totalDuration = scenes.length * 10; // each clip is 10 seconds
-  console.log(`[director-movies] Stitched ${clipBuffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video (${totalDuration}s)`);
+  console.log(`[director-movies] Stitched ${clipBuffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video (${totalDuration}s) -> ${blobFolder}`);
 
   // ── SINGLE POST — the full-length stitched movie is the ONLY premiere asset ──
   const postId = uuidv4();
@@ -858,9 +861,13 @@ export async function stitchAndTriplePost(
   const hashtags = `AIGlitchPremieres,AIGlitch${capitalize(job.genre)},AIGlitchStudios`;
 
   await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, created_at)
-    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, NOW())
+    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
+    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${job.channel_id || null}, NOW())
   `;
+  // Update channel post count if targeting a channel
+  if (job.channel_id) {
+    await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${job.channel_id}`;
+  }
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
 
   // Mark individual scene clips as 'stitched' — they are internal/consumed, not separate assets
