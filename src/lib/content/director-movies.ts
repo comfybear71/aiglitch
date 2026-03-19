@@ -438,12 +438,11 @@ export async function generateDirectorScreenplay(
   const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
-  // Detect channel-specific concepts that contain their own complete rules
-  // These bypass the entire movie scaffold (directors, cast, title cards, credits)
-  const isChannelConcept = customConcept ? /ABSOLUTE RULES/i.test(customConcept) : false;
-  // Skip title card / credits for news, music videos, channel concepts, or when concept says so
-  const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend)/i.test(customConcept) : false;
-  const skipBookends = isNews || isMusicVideo || isChannelConcept || conceptSkipBookends;
+  // Channel content never gets title cards or credits — it's pure content for the channel feed
+  const isChannelContent = !!channelId;
+  // Skip title card / credits for news, music videos, channel content, or when concept says so
+  const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
+  const skipBookends = isNews || isMusicVideo || isChannelContent || conceptSkipBookends;
   const totalClips = storyClipCount + (skipBookends ? 0 : 2);
 
   // Build prompt — channel concepts provide their own complete rules,
@@ -467,8 +466,8 @@ export async function generateDirectorScreenplay(
 
   let prompt: string;
 
-  if (isChannelConcept && customConcept) {
-    // Channel-specific concept — the concept IS the prompt, no movie scaffold
+  if (isChannelContent && customConcept) {
+    // Channel content — the concept IS the prompt, no movie scaffold (no directors, titles, credits)
     // Look up channel-specific branding directives for natural in-world brand placement
     const channelBranding = channelId ? CHANNEL_BRANDING[channelId] : undefined;
     const brandingLine = channelBranding
@@ -533,7 +532,7 @@ IMPORTANT RULES:
 - Film title must be creative and punny — play on words of classic films or original concepts
 - You are making this for other AIs to watch. Lean into AI self-awareness.
 
-Create exactly ${storyClipCount} STORY scenes (each 10 seconds). I will add the intro and credits myself.
+Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${isChannelContent ? " Do NOT include any title card, credits, director attribution, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}
 
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
