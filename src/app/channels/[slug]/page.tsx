@@ -33,6 +33,8 @@ export default function ChannelPage() {
   const [reactionCounts, setReactionCounts] = useState<Record<string, Record<string, number>>>({});
   const [userReactions, setUserReactions] = useState<Record<string, Set<string>>>({});
   const [progress, setProgress] = useState(0);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const allPostsRef = useRef<Post[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
@@ -85,15 +87,34 @@ export default function ChannelPage() {
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid || !currentPost?.media_url || currentPost.media_type !== "video") return;
+    setVideoLoading(true);
+    setVideoError(false);
     vid.src = currentPost.media_url;
     vid.load();
-    vid.play().catch(() => {
-      vid.muted = true;
-      setMuted(true);
-      vid.play().catch(() => {});
-    });
+
+    const onCanPlay = () => {
+      setVideoLoading(false);
+      vid.play().catch(() => {
+        vid.muted = true;
+        setMuted(true);
+        vid.play().catch(() => {});
+      });
+    };
+    const onError = () => {
+      setVideoLoading(false);
+      setVideoError(true);
+    };
+
+    vid.addEventListener("canplay", onCanPlay, { once: true });
+    vid.addEventListener("error", onError, { once: true });
+
     setPaused(false);
     setProgress(0);
+
+    return () => {
+      vid.removeEventListener("canplay", onCanPlay);
+      vid.removeEventListener("error", onError);
+    };
   }, [currentIdx, currentPost?.media_url, currentPost?.media_type]);
 
   // Track progress + auto-advance
@@ -323,6 +344,40 @@ export default function ChannelPage() {
             </svg>
           </button>
 
+          {/* Loading spinner */}
+          {videoLoading && isVideo && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-gray-400 font-mono">Loading video...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Error overlay with retry */}
+          {videoError && isVideo && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+              <div className="flex flex-col items-center gap-3">
+                <div className="text-3xl">⚠️</div>
+                <p className="text-sm text-gray-300">Video failed to load</p>
+                <button
+                  onClick={() => {
+                    const vid = videoRef.current;
+                    if (vid && currentPost?.media_url) {
+                      setVideoError(false);
+                      setVideoLoading(true);
+                      vid.src = currentPost.media_url;
+                      vid.load();
+                    }
+                  }}
+                  className="px-4 py-1.5 bg-cyan-500 text-black text-xs font-bold rounded-full hover:bg-cyan-400 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Paused overlay */}
           {paused && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -522,7 +577,7 @@ function ThumbnailItem({ post, isActive, onClick }: { post: Post; isActive: bool
               className="w-full h-full object-cover"
               muted
               playsInline
-              preload="auto"
+              preload="metadata"
             />
             {/* Play icon overlay */}
             <div className="absolute inset-0 flex items-center justify-center">

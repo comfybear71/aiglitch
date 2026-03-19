@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Look up the channel
     const [channel] = await sql`
-      SELECT id, name, slug, emoji, description, content_rules, schedule, subscriber_count
+      SELECT id, name, slug, emoji, description, content_rules, schedule, subscriber_count, genre
       FROM channels WHERE slug = ${slug} AND is_active = TRUE
     `;
 
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     // This ensures each channel shows only its own content — no bleed from shared personas.
     // For the Studios channel (ch-aiglitch-studios), allow director-premiere/director-scene sources.
     const isStudiosChannel = channelId === "ch-aiglitch-studios";
+    const requireMedia = (channel.genre as string) === "music_video";
     let posts;
 
     if (shuffle) {
@@ -50,6 +51,19 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+          ORDER BY md5(p.id::text || ${seed})
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+        : requireMedia
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_type IN ('video', 'image')
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -76,6 +90,18 @@ export async function GET(request: NextRequest) {
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
+        : requireMedia
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_type IN ('video', 'image')
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `
         : await sql`
           SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p
@@ -94,6 +120,18 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `
+        : requireMedia
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_type IN ('video', 'image')
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
