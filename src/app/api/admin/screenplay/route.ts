@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; concept?: string } = {};
+  let body: { genre?: string; director?: string; concept?: string; channel_id?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Director profile not found: " + director.username }, { status: 500 });
   }
 
-  const screenplay = await generateDirectorScreenplay(genre, profile, body.concept || undefined);
+  const screenplay = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined);
   if (!screenplay) {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }

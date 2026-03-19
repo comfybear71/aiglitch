@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
 
   console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${genre} film`);
 
-  const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined);
+  const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined, body.channelId);
   if (!screenplay) {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }

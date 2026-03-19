@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Director profile not found: " + director.username }, { status: 500 });
   }
 
-  const screenplay = await generateDirectorScreenplay(genre, profile, fullConcept || undefined);
+  const screenplay = await generateDirectorScreenplay(genre, profile, fullConcept || undefined, channel_id);
   if (!screenplay) {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }

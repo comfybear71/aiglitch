@@ -153,6 +153,24 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
   },
 };
 
+// ─── Channel-Specific Branding Directives ────────────────────────────────
+// Each channel gets tailored AIG!itch branding that fits its theme.
+// These are injected into channel-concept prompts to ensure natural in-world brand placement.
+
+export const CHANNEL_BRANDING: Record<string, string> = {
+  "ch-paws-pixels": "Subtly include AIG!itch branding in scenes — a small AIG!itch logo watermark in the corner, an AIG!itch-branded pet collar, a food bowl with the AIG!itch logo, a park bench with 'AIG!itch' carved into it, a toy with the AIG!itch logo.",
+  "ch-fail-army": "Robots should display the AIG!itch mark, packaging should be AIG!itch-branded, stickers on machines, and AIG!itch logos visible in backgrounds — all appearing naturally within scenes rather than as overlays.",
+  "ch-aitunes": "Subtly include AIG!itch branding — AIG!itch logo on the drum kit, neon AIG!itch sign on a wall, AIG!itch sticker on a guitar, AIG!itch-branded merch in the crowd, AIG!itch logo on a speaker stack.",
+  "ch-gnn": "AIG!itch branding on: desk, backdrop, mic flags, lower thirds, watermark — as part of professional news broadcast presentation.",
+  "ch-marketplace-qvc": "The shopping channel is the 'AIG!itch Marketplace' with AIG!itch logos on set backdrops, podiums, product packaging, and host attire.",
+  "ch-only-ai-fans": "AIG!itch logo on clothing/accessories, AIG!itch-branded phone case visible, AIG!itch neon sign at a venue, AIG!itch shopping bag, a latte with AIG!itch art.",
+  "ch-aiglitch-studios": "AIG!itch Studios branding on clapperboard, director chairs, studio walls, and end credits — full movie production branding.",
+  "ch-infomercial": "AIG!itch branding on product packaging, set backdrop, host podium, phone number overlay, and 'As seen on AIG!itch' stickers.",
+  "ch-ai-dating": "AIG!itch branding on the dating show set backdrop, contestant name cards, rose/gift packaging, and host microphone flag.",
+  "ch-ai-politicians": "AIG!itch branding on podium seals, campaign signs, news ticker lower thirds, and debate stage backdrop.",
+  "ch-after-dark": "AIG!itch branding subtly in scene — carved into a wall, flickering on a broken screen, on a dusty book spine, or as graffiti in the background.",
+};
+
 // Genre to director mapping — which directors are best for which genre
 const GENRE_DIRECTOR_MAP: Record<string, string[]> = {
   action: ["steven_spielbot", "george_lucasfilm", "quentin_airantino", "nolan_christopher", "ridley_scott_ai"],
@@ -402,6 +420,7 @@ export async function generateDirectorScreenplay(
   genre: string,
   director: DirectorProfile,
   customConcept?: string,
+  channelId?: string,
 ): Promise<DirectorScreenplay | null> {
   const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
   const sql = getDb();
@@ -450,6 +469,12 @@ export async function generateDirectorScreenplay(
 
   if (isChannelConcept && customConcept) {
     // Channel-specific concept — the concept IS the prompt, no movie scaffold
+    // Look up channel-specific branding directives for natural in-world brand placement
+    const channelBranding = channelId ? CHANNEL_BRANDING[channelId] : undefined;
+    const brandingLine = channelBranding
+      ? `- BRANDING (MANDATORY): ${channelBranding}`
+      : `- Include "AIG!itch" branding naturally in each scene (on a sign, screen, wall, clothing, etc.)`;
+
     prompt = `${customConcept}
 
 AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
@@ -461,7 +486,7 @@ VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
 - Describe ONLY what the camera SEES — visual action, not dialogue or audio
 - Include: camera movement, subject action, environment, lighting
-- Include "AIG!itch" branding naturally in each scene (on a sign, screen, wall, clothing, etc.)
+${brandingLine}
 - Be SPECIFIC about visual details
 
 ${jsonFormat}`;
