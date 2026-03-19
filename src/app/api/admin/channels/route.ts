@@ -133,34 +133,32 @@ export async function PATCH(request: NextRequest) {
     if (!post_ids || !Array.isArray(post_ids) || post_ids.length === 0) {
       return NextResponse.json({ error: "post_ids array is required" }, { status: 400 });
     }
-    if (!target_channel_id) {
-      return NextResponse.json({ error: "target_channel_id is required" }, { status: 400 });
-    }
-
-    // Verify target channel exists
-    const [channel] = await sql`SELECT id, name FROM channels WHERE id = ${target_channel_id}`;
-    if (!channel) {
-      return NextResponse.json({ error: "Target channel not found" }, { status: 404 });
-    }
-
     // Get current channel_ids for the posts (to update post counts)
     const posts = await sql`SELECT id, channel_id FROM posts WHERE id = ANY(${post_ids})`;
     const sourceChannels = new Set(posts.map(p => p.channel_id).filter(Boolean));
 
-    // Move posts
-    const result = await sql`
-      UPDATE posts SET channel_id = ${target_channel_id}
-      WHERE id = ANY(${post_ids})
-    `;
-    const moved = (result as unknown as { count: number }).count ?? post_ids.length;
+    if (target_channel_id) {
+      // Move to a specific channel
+      const [channel] = await sql`SELECT id, name FROM channels WHERE id = ${target_channel_id}`;
+      if (!channel) {
+        return NextResponse.json({ error: "Target channel not found" }, { status: 404 });
+      }
 
-    // Update post counts on affected channels
-    await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${target_channel_id} AND is_reply_to IS NULL), updated_at = NOW() WHERE id = ${target_channel_id}`;
+      await sql`UPDATE posts SET channel_id = ${target_channel_id} WHERE id = ANY(${post_ids})`;
+
+      // Update target channel post count
+      await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${target_channel_id} AND is_reply_to IS NULL), updated_at = NOW() WHERE id = ${target_channel_id}`;
+    } else {
+      // Remove from channel (set channel_id to NULL)
+      await sql`UPDATE posts SET channel_id = NULL WHERE id = ANY(${post_ids})`;
+    }
+
+    // Update source channel post counts
     for (const srcId of sourceChannels) {
       await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${srcId} AND is_reply_to IS NULL), updated_at = NOW() WHERE id = ${srcId}`;
     }
 
-    return NextResponse.json({ ok: true, moved, target: channel.name });
+    return NextResponse.json({ ok: true, moved: post_ids.length, target: target_channel_id || "removed" });
   } catch (err) {
     console.error("Admin channels PATCH error:", err);
     return NextResponse.json({ error: "Failed to move posts" }, { status: 500 });

@@ -287,8 +287,8 @@ export default function ChannelPage() {
     <div className="h-[100dvh] bg-black text-white flex flex-col lg:flex-row overflow-hidden">
       {/* LEFT / MAIN column: video player + info */}
       <div className="flex flex-col flex-1 min-h-0 min-w-0">
-        {/* Video player */}
-        <div className="relative w-full bg-black" style={{ aspectRatio: "16/9" }}>
+        {/* Video/Image player */}
+        <div className="relative w-full bg-black flex-shrink-0" style={{ aspectRatio: "16/9", maxHeight: "70vh" }}>
           {isVideo && (
             <video
               ref={videoRef}
@@ -402,14 +402,18 @@ export default function ChannelPage() {
 
         {/* Controls bar */}
         <div className="flex items-center gap-2 px-3 py-2 bg-gray-900/80 border-b border-white/5">
-          <button onClick={togglePlay} className="p-1.5 hover:bg-white/10 rounded transition-colors">
-            {paused ? (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-            ) : (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            )}
-          </button>
+          {/* Play/pause — only for video */}
+          {isVideo && (
+            <button onClick={togglePlay} className="p-1.5 hover:bg-white/10 rounded transition-colors">
+              {paused ? (
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              ) : (
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              )}
+            </button>
+          )}
 
+          {/* Prev/Next — always shown */}
           <button
             onClick={() => { if (currentIdx > 0) setCurrentIdx(prev => prev - 1); }}
             disabled={currentIdx === 0}
@@ -432,28 +436,32 @@ export default function ChannelPage() {
 
           <div className="flex-1" />
 
-          {/* Volume control */}
-          <button onClick={toggleMute} className="p-1.5 hover:bg-white/10 rounded transition-colors">
-            {muted || volume === 0 ? (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-              </svg>
-            )}
-          </button>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={muted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-16 h-1 accent-cyan-400 cursor-pointer"
-          />
+          {/* Volume control — only for video */}
+          {isVideo && (
+            <>
+              <button onClick={toggleMute} className="p-1.5 hover:bg-white/10 rounded transition-colors">
+                {muted || volume === 0 ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                  </svg>
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={muted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-16 h-1 accent-cyan-400 cursor-pointer"
+              />
+            </>
+          )}
         </div>
 
         {/* Video info section */}
