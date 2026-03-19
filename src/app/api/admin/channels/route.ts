@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
   try {
     const sql = getDb();
     const body = await request.json();
-    const { id, slug, name, description, emoji, content_rules, schedule, is_active, sort_order, persona_ids, host_ids } = body;
+    const { id, slug, name, description, emoji, genre, is_reserved, content_rules, schedule, is_active, sort_order, persona_ids, host_ids } = body;
 
     if (!slug || !name) {
       return NextResponse.json({ error: "slug and name are required" }, { status: 400 });
@@ -77,14 +77,17 @@ export async function POST(request: NextRequest) {
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule || {});
 
     await sql`
-      INSERT INTO channels (id, slug, name, description, emoji, content_rules, schedule, is_active, sort_order, updated_at)
+      INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, content_rules, schedule, is_active, sort_order, updated_at)
       VALUES (${channelId}, ${slug}, ${name}, ${description || ""}, ${emoji || "📺"},
+              ${genre || "drama"}, ${is_reserved === true},
               ${contentRulesStr}, ${scheduleStr}, ${is_active !== false}, ${sort_order || 0}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         slug = ${slug},
         name = ${name},
         description = ${description || ""},
         emoji = ${emoji || "📺"},
+        genre = ${genre || "drama"},
+        is_reserved = ${is_reserved === true},
         content_rules = ${contentRulesStr},
         schedule = ${scheduleStr},
         is_active = ${is_active !== false},

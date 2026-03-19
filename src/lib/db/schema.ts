@@ -783,6 +783,8 @@ export const channels = pgTable("channels", {
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
   emoji: text("emoji").notNull().default("📺"),
+  genre: text("genre").notNull().default("drama"), // screenplay genre: comedy, drama, horror, music_video, etc.
+  isReserved: boolean("is_reserved").notNull().default(false), // auto-populated channels (no manual content creation)
   bannerUrl: text("banner_url"),
   titleVideoUrl: text("title_video_url"),
   contentRules: text("content_rules").notNull().default("{}"), // JSON: tone, topics, media preferences
