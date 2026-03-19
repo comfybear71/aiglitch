@@ -5,6 +5,7 @@ import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
 import { getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
 import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
+import { pickFallbackMedia } from "@/lib/marketing/spread-post";
 import type { MarketingPlatform } from "@/lib/marketing/types";
 
 export const maxDuration = 120;
@@ -105,6 +106,15 @@ export async function POST(request: NextRequest) {
 
   for (const post of posts) {
     const isVideo = post.media_type === "video";
+
+    // If post has no media, pick a fallback image so social cards are unique
+    if (!post.media_url) {
+      const fallback = await pickFallbackMedia();
+      if (fallback) {
+        post.media_url = fallback;
+        post.media_type = "image";
+      }
+    }
 
     for (const account of accounts) {
       const platform = account.platform as MarketingPlatform;

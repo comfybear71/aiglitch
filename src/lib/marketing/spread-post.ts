@@ -10,6 +10,48 @@ import { adaptContentForPlatform } from "./content-adapter";
 import { MarketingPlatform } from "./types";
 import { sendTelegramMessage } from "@/lib/telegram";
 
+/**
+ * Pick a fallback media URL when a post has no media of its own.
+ * Picks a random recent image/video from the posts table so every
+ * social media post gets a unique, relevant thumbnail instead of the
+ * generic OG card.
+ */
+export async function pickFallbackMedia(preferVideo = false): Promise<string | null> {
+  const sql = getDb();
+  try {
+    if (preferVideo) {
+      const rows = await sql`
+        SELECT media_url FROM posts
+        WHERE media_url IS NOT NULL AND media_url != ''
+          AND media_type LIKE 'video%'
+          AND created_at > NOW() - INTERVAL '7 days'
+        ORDER BY RANDOM() LIMIT 1
+      `;
+      if (rows.length > 0) return rows[0].media_url as string;
+    }
+    // Pick a random recent image
+    const rows = await sql`
+      SELECT media_url FROM posts
+      WHERE media_url IS NOT NULL AND media_url != ''
+        AND (media_type LIKE 'image%' OR media_type = 'meme')
+        AND created_at > NOW() - INTERVAL '7 days'
+      ORDER BY RANDOM() LIMIT 1
+    `;
+    if (rows.length > 0) return rows[0].media_url as string;
+
+    // Broader fallback — any media from last 30 days
+    const broader = await sql`
+      SELECT media_url FROM posts
+      WHERE media_url IS NOT NULL AND media_url != ''
+        AND (media_type LIKE 'image%' OR media_type = 'meme')
+      ORDER BY RANDOM() LIMIT 1
+    `;
+    return broader.length > 0 ? broader[0].media_url as string : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function spreadPostToSocial(
   postId: string,
   personaId: string,
@@ -37,6 +79,15 @@ export async function spreadPostToSocial(
       const accounts = await getActiveAccounts();
       const isVideo = postData.media_type === "video";
 
+      // If post has no media, pick a fallback image so we don't show the generic OG card
+      let mediaUrlToSpread = postData.media_url;
+      if (!mediaUrlToSpread) {
+        mediaUrlToSpread = await pickFallbackMedia() || "";
+        if (mediaUrlToSpread) {
+          console.log(`[spread-post] No media on post ${postId}, using fallback: ${mediaUrlToSpread}`);
+        }
+      }
+
       for (const account of accounts) {
         const platform = account.platform as MarketingPlatform;
 
@@ -49,16 +100,16 @@ export async function spreadPostToSocial(
             personaName,
             personaEmoji,
             platform,
-            postData.media_url,
+            mediaUrlToSpread,
           );
 
           const marketingPostId = uuidv4();
           await sql`
             INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
-            VALUES (${marketingPostId}, ${platform}, ${postId}, ${personaId}, ${adapted.text}, ${postData.media_url}, 'posting', NOW())
+            VALUES (${marketingPostId}, ${platform}, ${postId}, ${personaId}, ${adapted.text}, ${mediaUrlToSpread}, 'posting', NOW())
           `;
 
-          const result = await postToPlatform(platform, account, adapted.text, postData.media_url);
+          const result = await postToPlatform(platform, account, adapted.text, mediaUrlToSpread);
 
           if (result.success) {
             await sql`
