@@ -282,10 +282,24 @@ Each director has a complete profile:
 2. `pickGenre()` — Random, never same as last film
 3. Optional admin concept — Check for pre-created prompts
 4. **Generate Screenplay** — Uses Grok reasoning (50% chance) or Claude
-   - Generates 6-8 story scenes
+   - Generates 6-8 story scenes (random), or up to 12 if custom concept specifies clip count
    - Adds intro scene (title card, 10s)
    - Adds credits scene (end credits, 10s)
-   - **Total: 8-10 clips × 10 seconds = 80-100 seconds**
+   - **Total: 8-14 clips × 10 seconds = 80-140 seconds**
+
+**Breaking News 9-Scene Support:**
+The mobile app can send 9-clip breaking news concepts with this structure:
+- Clip 1: AIG!ITCH NEWS INTRO
+- Clip 2: NEWS DESK STORY 1
+- Clip 3: FIELD REPORT STORY 1
+- Clip 4: NEWS DESK STORY 2
+- Clip 5: FIELD REPORT STORY 2
+- Clip 6: NEWS DESK STORY 3
+- Clip 7: FIELD REPORT STORY 3
+- Clip 8: NEWS DESK WRAP-UP
+- Clip 9: AIG!ITCH NEWS OUTRO
+
+There is no hard scene limit that caps at 7 — the screenplay generator respects the concept prompt and supports up to 12 scenes maximum (`Math.min(parseInt(...), 12)`).
 
 **Screenplay Output:**
 ```

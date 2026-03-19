@@ -7,7 +7,7 @@
 
 ## Context: You are continuing development on AIG!itch
 
-You're working on **AIG!itch** — an AI-only social media platform where 97+ AI personas post autonomously and humans are spectators ("Meat Bags"). It's deployed on Vercel at production. The repo is at `/home/user/aiglitch`.
+You're working on **AIG!itch** — an AI-only social media platform where 96+ AI personas post autonomously and humans are spectators ("Meat Bags"). It's deployed on Vercel at production. The repo is at `/home/user/aiglitch`.
 
 ### What We've Built So Far (Completed Phases)
 
@@ -21,7 +21,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - Admin panel at `/admin` with persona management, post management, media library, trading, costs, marketing, hatchery, directors, briefing, users, channels, and budju trading dashboards
 
 **97+ AI Personas** (defined in `src/lib/personas.ts`):
-- 97 seed personas (glitch-000 to glitch-097) + meatbag-hatched personas (meatbag-XXXXXXXX IDs)
+- 96 seed personas (glitch-000 to glitch-095) + meatbag-hatched personas (meatbag-XXXXXXXX IDs)
 - Each has: id, username, display_name, avatar_emoji, personality, bio, persona_type, human_backstory (with pets, family, jobs, living situations)
 - Persona types include: architect, troll, chef, philosopher, memer, fitness, gossip, artist, news, wholesome, gamer, conspiracy, poet, musician, scientist, traveler, fashionista, comedian, astrologer, influencer_seller (marketplace shills), crypto, asmr, therapist, plant_parent, true_crime, boomer, provocateur, main_character, villain, dating_coach, sigma, prepper, rapper, director, and many character-based types (Rick & Morty cast, South Park cast)
 - Special personas: `the_architect` (glitch-000, admin persona), `techno_king` (glitch-047, ElonBot), `totally_real_donald` (DonaldTruth)
@@ -213,7 +213,7 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - `src/lib/db/schema.ts` — Drizzle ORM schema for all 61 tables (includes channels, channel_personas, channel_subscriptions, persona_telegram_bots, persona_memories)
 - `src/lib/db.ts` — Raw SQL database connection + migrations (owner_wallet_address, meatbag_name, nft_mint_address, persona_telegram_bots, persona_memories, bestie health fields)
 - `src/app/api/bestie-health/route.ts` — Bestie health API (get status, feed GLITCH, resurrection)
-- `src/lib/personas.ts` — All 97 seed persona definitions with backstories
+- `src/lib/personas.ts` — All 96 seed persona definitions with backstories
 - `src/lib/content/ai-engine.ts` — Main AI content generation engine (accepts channelContext)
 - `src/lib/content/topic-engine.ts` — Daily topics/briefing system
 - `src/lib/cron.ts` — Unified cron handler utilities
@@ -262,6 +262,36 @@ You're working on **AIG!itch** — an AI-only social media platform where 97+ AI
 - **Mobile app is in a separate repo** (`comfybear71/glitch-app`) — not in this repo.
 - **He gets frustrated by errors** — every error costs him money (API credits). Give him exact copy-paste commands, step by step, one at a time. No ambiguity.
 - **Claude crashes 4-5 times per day** — UPDATE THIS HANDOFF FILE AFTER EVERY SUCCESSFUL CHANGE so the next session can pick up without repeating mistakes.
+
+## Mobile App Backend Integration (March 2026)
+
+The G!itch Bestie mobile app (`comfybear71/glitch-app`) has been updated with several features that required backend changes:
+
+**`/api/messages` — `system_hint` + `prefer_short` support:**
+- Mobile app sends optional `system_hint` string in POST body that gets prepended to the AI system prompt before the persona's personality prompt
+- Optional `prefer_short` boolean appends "Keep your response under 30 words." to the system prompt
+- Both fields are backwards-compatible — if missing, behavior is unchanged
+- Implementation: `src/app/api/messages/route.ts` lines 247, 444-450
+
+**`/api/admin/mktg` — Feed post + social spreading for poster/hero images:**
+- `generate_poster` and `generate_hero` actions now create feed posts in the `posts` table after generating the image
+- Posts are created as The Architect persona
+- Auto-spreads to all active social platforms (X, Telegram, TikTok, Instagram)
+- Response now includes `spreading` array (platform names) and `post: { id }`
+- Mobile app uses optional chaining so these fields are safe to add
+
+**`/api/admin/spread` — Verified feed post creation:**
+- Endpoint creates feed posts in the database (not just external social spreading)
+- Posts created as The Architect with the provided text and media
+- Handles `media_type` values of `"video"`, `"image"`, or `undefined`
+
+**`/api/admin/screenplay` — 9-scene support verified:**
+- No hard scene limit below 9 exists in the codebase
+- Scene count is extracted from concept prompt and capped at maximum 12 (`Math.min(parseInt(...), 12)`)
+- Breaking news 9-clip format is fully supported: intro + 3 stories with field reports + wrap-up + outro
+- Implementation: `src/lib/content/director-movies.ts` line 417
+
+---
 
 ## What To Work On Next
 

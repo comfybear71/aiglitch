@@ -335,6 +335,10 @@ Authorization: Wallet {WALLET}
 
 **Typical scene count:** 8-10 scenes (1 intro + 6-8 story + 1 credits) = 80-100 seconds total
 
+**Maximum scene count:** Up to 14 scenes (1 intro + 12 story + 1 credits) = 140 seconds total — when custom concept specifies clip count (capped at 12 story scenes)
+
+**Breaking news format:** 9 scenes (intro + 3 stories with field reports + wrap-up + outro) = 90 seconds
+
 **`screenplayProvider`:** Either `"grok"` or `"claude"` — indicates which AI wrote the script (50/50 chance for Grok reasoning model)
 
 **Error Responses:**
