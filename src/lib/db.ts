@@ -834,6 +834,107 @@ export async function runMigrations() {
     }
   });
 
+  // Seed new channels added after v1 (AIG!ltch Studios etc.)
+  await safeMigrate(sql, "seed_channels_v2", async () => {
+    const { CHANNELS } = await import("./bible/constants");
+    for (const ch of CHANNELS) {
+      await sql`
+        INSERT INTO channels (id, slug, name, description, emoji, content_rules, schedule, is_active, sort_order)
+        VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
+                ${JSON.stringify(ch.contentRules)}, ${JSON.stringify(ch.schedule)}, TRUE, ${CHANNELS.indexOf(ch)})
+        ON CONFLICT (id) DO NOTHING
+      `;
+      for (const personaId of ch.personaIds) {
+        const role = ch.hostIds.includes(personaId) ? "host" : "regular";
+        const cpId = `${ch.id}-${personaId}`;
+        await sql`
+          INSERT INTO channel_personas (id, channel_id, persona_id, role)
+          VALUES (${cpId}, ${ch.id}, ${personaId}, ${role})
+          ON CONFLICT (channel_id, persona_id) DO NOTHING
+        `;
+      }
+    }
+  });
+
+  // Tag existing director/premiere movies to AIG!ltch Studios channel
+  await safeMigrate(sql, "tag_movies_to_studios_channel", async () => {
+    await sql`
+      UPDATE posts SET channel_id = 'ch-aiglitch-studios'
+      WHERE channel_id IS NULL
+        AND (post_type = 'premiere' OR media_source IN ('director-movie', 'director-premiere'))
+        AND media_url IS NOT NULL
+    `;
+  });
+
+  // Add channel_id and blob_folder columns to multi_clip_jobs for channel routing
+  await safeMigrate(sql, "multi_clip_jobs_channel_cols", async () => {
+    await sql`ALTER TABLE multi_clip_jobs ADD COLUMN IF NOT EXISTS channel_id TEXT`;
+    await sql`ALTER TABLE multi_clip_jobs ADD COLUMN IF NOT EXISTS blob_folder TEXT`;
+  });
+
+  // Add genre + is_reserved columns to channels for frontend genre mapping + reserved flag
+  await safeMigrate(sql, "channels_genre_reserved_cols", async () => {
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS genre TEXT NOT NULL DEFAULT 'drama'`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_reserved BOOLEAN NOT NULL DEFAULT FALSE`;
+    // Set correct genres for existing channels
+    await sql`UPDATE channels SET genre = 'comedy' WHERE id IN ('ch-fail-army', 'ch-marketplace-qvc')`;
+    await sql`UPDATE channels SET genre = 'music_video' WHERE id = 'ch-aitunes'`;
+    await sql`UPDATE channels SET genre = 'family' WHERE id = 'ch-paws-pixels'`;
+    await sql`UPDATE channels SET genre = 'drama' WHERE id IN ('ch-only-ai-fans', 'ch-aiglitch-studios')`;
+    await sql`UPDATE channels SET genre = 'romance' WHERE id = 'ch-ai-dating'`;
+    await sql`UPDATE channels SET genre = 'documentary' WHERE id IN ('ch-gnn', 'ch-ai-politicians')`;
+    await sql`UPDATE channels SET genre = 'horror' WHERE id = 'ch-after-dark'`;
+    await sql`UPDATE channels SET genre = 'comedy' WHERE id = 'ch-infomercial'`;
+    // Mark auto-populated channels as reserved
+    await sql`UPDATE channels SET is_reserved = TRUE WHERE id IN ('ch-gnn', 'ch-marketplace-qvc', 'ch-aiglitch-studios', 'ch-infomercial')`;
+  });
+
+  // Route existing untagged content to the correct channels
+  await safeMigrate(sql, "route_existing_posts_to_channels", async () => {
+    // 1. Director movies + premieres → AIG!ltch Studios
+    const studios = await sql`
+      UPDATE posts SET channel_id = 'ch-aiglitch-studios'
+      WHERE channel_id IS NULL
+        AND (
+          post_type = 'premiere'
+          OR media_source IN ('director-movie', 'director-premiere', 'grok-multiclip')
+        )
+        AND media_url IS NOT NULL
+    `;
+    console.log(`[migration] Tagged ${(studios as unknown as { count: number }).count || 0} posts to ch-aiglitch-studios`);
+
+    // 2. Breaking news → GNN
+    const news = await sql`
+      UPDATE posts SET channel_id = 'ch-gnn'
+      WHERE channel_id IS NULL
+        AND (
+          post_type = 'news'
+          OR (hashtags IS NOT NULL AND hashtags LIKE '%Breaking%')
+          OR (content LIKE 'BREAKING:%' OR content LIKE '🚨 BREAKING%' OR content LIKE 'DEVELOPING:%')
+        )
+    `;
+    console.log(`[migration] Tagged ${(news as unknown as { count: number }).count || 0} posts to ch-gnn`);
+
+    // 3. Ads / product shills → AI Infomercial
+    const ads = await sql`
+      UPDATE posts SET channel_id = 'ch-infomercial'
+      WHERE channel_id IS NULL
+        AND (
+          post_type = 'product_shill'
+          OR media_source IN ('ad-text-fallback', 'ad-studio', 'admin-spread')
+        )
+    `;
+    console.log(`[migration] Tagged ${(ads as unknown as { count: number }).count || 0} posts to ch-infomercial`);
+
+    // Update channel post counts to reflect newly tagged content
+    await sql`
+      UPDATE channels SET post_count = (
+        SELECT COUNT(*) FROM posts WHERE posts.channel_id = channels.id AND posts.is_reply_to IS NULL
+      )
+    `;
+    console.log(`[migration] Updated channel post counts`);
+  });
+
   // ── Mobile App: Content Jobs & Uploaded Media ──
   await Promise.allSettled([
     safeMigrate(sql, "table_content_jobs", () =>

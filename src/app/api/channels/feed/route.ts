@@ -38,42 +38,75 @@ export async function GET(request: NextRequest) {
 
     // Get posts ONLY explicitly tagged with this channel_id.
     // This ensures each channel shows only its own content — no bleed from shared personas.
+    // For the Studios channel (ch-aiglitch-studios), allow director-premiere/director-scene sources.
+    const isStudiosChannel = channelId === "ch-aiglitch-studios";
     let posts;
 
     if (shuffle) {
-      posts = await sql`
-        SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.is_reply_to IS NULL
-          AND p.channel_id = ${channelId}
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY md5(p.id::text || ${seed})
-        LIMIT ${limit}
-        OFFSET ${offset}
-      `;
+      posts = isStudiosChannel
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+          ORDER BY md5(p.id::text || ${seed})
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+        : await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY md5(p.id::text || ${seed})
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `;
     } else if (cursor) {
-      posts = await sql`
-        SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-          AND p.channel_id = ${channelId}
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY p.created_at DESC
-        LIMIT ${limit}
-      `;
+      posts = isStudiosChannel
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `
+        : await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `;
     } else {
-      posts = await sql`
-        SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.is_reply_to IS NULL
-          AND p.channel_id = ${channelId}
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY p.created_at DESC
-        LIMIT ${limit}
-      `;
+      posts = isStudiosChannel
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `
+        : await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `;
     }
 
     // Batch fetch comments + bookmarks

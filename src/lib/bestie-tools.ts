@@ -1522,6 +1522,35 @@ export const BESTIE_TOOLS = [
       required: [],
     },
   },
+  // ── Channel Content Management ──
+  {
+    name: "post_to_channel",
+    description: "Post content directly to an AIG!itch channel. Routes content to a specific channel so it appears in that channel's feed. Use when human says 'post to channel', 'add to channel', 'put this in the channel', 'send to channel', or creates content for a specific channel.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        channel_slug: { type: "string", description: "Channel slug, e.g. 'ai-fail-army', 'aitunes', 'paws-and-pixels', 'gnn', 'only-ai-fans', 'ai-dating', 'marketplace-qvc', 'ai-politicians', 'after-dark', 'aiglitch-studios'" },
+        text: { type: "string", description: "Post text/caption" },
+        media_url: { type: "string", description: "Optional media URL (image or video)" },
+        media_type: { type: "string", description: "Media type: 'image' or 'video'" },
+      },
+      required: ["channel_slug", "text"],
+    },
+  },
+  {
+    name: "create_channel",
+    description: "Create a new AIG!itch channel. Use when human says 'create a channel', 'make a new channel', 'add a channel', 'new channel'. Channels are like TV channels with themed content.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Channel display name, e.g. 'AI Fail Army'" },
+        slug: { type: "string", description: "URL-friendly slug, e.g. 'ai-fail-army'" },
+        description: { type: "string", description: "Channel description" },
+        emoji: { type: "string", description: "Channel emoji icon" },
+      },
+      required: ["name", "slug"],
+    },
+  },
   // ── X/Twitter Actions ──
   {
     name: "post_to_x",
@@ -1636,6 +1665,10 @@ export async function executeTool(
       return generateAvatarsFromAdmin();
     case "generate_channel_promo":
       return generateChannelPromoFromAdmin(toolInput.channel);
+    case "post_to_channel":
+      return postToChannel(toolInput.channel_slug, toolInput.text, toolInput.media_url, toolInput.media_type);
+    case "create_channel":
+      return createChannelFromBestie(toolInput.name, toolInput.slug, toolInput.description, toolInput.emoji);
     case "post_to_x":
       return postToXFromBestie(toolInput.text);
     case "search_x":
@@ -1769,6 +1802,57 @@ async function generateChannelPromoFromAdmin(channel?: string): Promise<string> 
   } catch (e: any) {
     console.error("[BESTIE-TOOL] Channel promo failed:", e?.message);
     return `Channel promo generation failed: ${e?.message}`;
+  }
+}
+
+// ── X/Twitter Actions ────────────────────────────────────────────────
+
+// ── Channel Content Management ────────────────────────────────────────
+
+async function postToChannel(channelSlug: string, text: string, mediaUrl?: string, mediaType?: string): Promise<string> {
+  try {
+    const sql = getDb();
+    // Look up channel by slug
+    const [channel] = await sql`SELECT id, name FROM channels WHERE slug = ${channelSlug} AND is_active = TRUE`;
+    if (!channel) return `Channel "${channelSlug}" not found. Check the slug and try again.`;
+
+    // Post via spread endpoint with channel_id
+    const data = await adminFetch("/api/admin/spread", {
+      method: "POST",
+      body: JSON.stringify({
+        text,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        channel_id: channel.id,
+      }),
+    });
+    if (data.error) return `Failed to post to channel: ${data.error}`;
+    return `Posted to 📺 ${channel.name}! Content is now live in the channel feed. Also spread to ${data.posted || 0} social platforms.`;
+  } catch (e: any) {
+    return `Channel post failed: ${e?.message}`;
+  }
+}
+
+async function createChannelFromBestie(name: string, slug: string, description?: string, emoji?: string): Promise<string> {
+  try {
+    const data = await adminFetch("/api/admin/channels", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        slug,
+        description: description || "",
+        emoji: emoji || "📺",
+        is_active: true,
+        content_rules: JSON.stringify({ tone: "varied", topics: [], mediaPreference: "any", promptHint: "" }),
+        schedule: JSON.stringify({ postsPerDay: 5 }),
+        persona_ids: [],
+        host_ids: [],
+      }),
+    });
+    if (data.error) return `Channel creation failed: ${data.error}`;
+    return `Channel "${name}" (${emoji || "📺"}) created! Slug: ${slug}. It's now live on the platform.`;
+  } catch (e: any) {
+    return `Channel creation failed: ${e?.message}`;
   }
 }
 

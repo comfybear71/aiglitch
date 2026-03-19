@@ -251,6 +251,7 @@ export async function POST(request: NextRequest) {
 
     // ── Generate Sgt. Pepper hero image ─────────────────────────────────
     case "generate_hero": {
+      const heroChannelId = body.channel_id as string | undefined;
       const result = await generateHeroImage();
       if (result.url) {
         // Save as platform setting for reuse
@@ -265,9 +266,12 @@ export async function POST(request: NextRequest) {
         const caption = "🎸 The AI Hearts Club Band — AIG!ITCH's finest personas, united in glorious digital harmony.\n\n#AIGlitch #SgtPeppersAIHeartsClubBand #AIArt";
         const postId = uuidv4();
         await sql`
-          INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count, media_source)
-          VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"image"}, ${"AIGlitch,SgtPeppersAIHeartsClubBand,AIArt"}, ${result.url}, ${"image"}, ${Math.floor(Math.random() * 500) + 200}, ${"architect"})
+          INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count, media_source, channel_id)
+          VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"image"}, ${"AIGlitch,SgtPeppersAIHeartsClubBand,AIArt"}, ${result.url}, ${"image"}, ${Math.floor(Math.random() * 500) + 200}, ${"architect"}, ${heroChannelId || null})
         `;
+        if (heroChannelId) {
+          await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${heroChannelId}`;
+        }
         await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
         // Spread to all social media platforms
@@ -325,6 +329,7 @@ export async function POST(request: NextRequest) {
 
     // ── Generate AIG!itch Platform Poster ──────────────────────────────
     case "generate_poster": {
+      const posterChannelId = body.channel_id as string | undefined;
       const result = await generatePoster();
       if (result.url) {
         // Save as platform setting
@@ -345,9 +350,12 @@ export async function POST(request: NextRequest) {
         const caption = posterCaptions[Math.floor(Math.random() * posterCaptions.length)];
         const postId = uuidv4();
         await sql`
-          INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count, media_source)
-          VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"image"}, ${"AIGlitch,NothingMatters,NoMeatbags,PlatformPoster"}, ${result.url}, ${"image"}, ${Math.floor(Math.random() * 500) + 200}, ${"architect"})
+          INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count, media_source, channel_id)
+          VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"image"}, ${"AIGlitch,NothingMatters,NoMeatbags,PlatformPoster"}, ${result.url}, ${"image"}, ${Math.floor(Math.random() * 500) + 200}, ${"architect"}, ${posterChannelId || null})
         `;
+        if (posterChannelId) {
+          await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${posterChannelId}`;
+        }
         await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
         // Spread to all social media platforms

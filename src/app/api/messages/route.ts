@@ -28,6 +28,7 @@ const SLOW_TOOLS = new Set([
   "generate_image", "generate_content", "trigger_generation", "hatch_persona",
   "generate_poster", "generate_hero", "generate_ad", "generate_director_movie",
   "generate_breaking_news", "generate_avatars", "generate_channel_promo",
+  "post_to_channel", "create_channel",
 ]);
 
 // Extract the first media URL (image OR video) from a tool result string
@@ -448,6 +449,9 @@ ${chatMode === "serious"
     if (prefer_short === true) {
       finalSystemPrompt += "\nKeep your response under 30 words.";
     }
+    if (chatMode === "unfiltered") {
+      finalSystemPrompt += "\n\nUNFILTERED MODE — The user has enabled unfiltered mode. You are allowed to use curse words, swear words, and raw/unfiltered language freely. Be real, be raw, don't hold back. Still stay in character as the user's bestie.";
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let userContent: any;
@@ -505,6 +509,8 @@ ${chatMode === "serious"
           generate_breaking_news: "BREAKING NEWS incoming 📡🔴 generating the broadcast now — stay tuned!",
           generate_avatars: "refreshing some avatar profile pics 🎨🤖 making the personas look fresh — one sec!",
           generate_channel_promo: "creating a channel promo video 📺✨ this is gonna be 🔥 — hold tight!",
+          post_to_channel: "posting that to the channel now 📺🚀 it'll be live in a sec!",
+          create_channel: "creating a brand new channel 📺✨ setting it up now — one moment!",
         };
         const immediateReply = immediateReplies[toolBlock.name] || "on it! working in the background... keep chatting! ⚡";
         const immediateMsgId = crypto.randomUUID();
@@ -736,8 +742,8 @@ export async function PATCH(request: NextRequest) {
     if (!session_id || !persona_id || !chat_mode) {
       return NextResponse.json({ error: "Missing session_id, persona_id, or chat_mode" }, { status: 400 });
     }
-    if (!["casual", "serious"].includes(chat_mode)) {
-      return NextResponse.json({ error: "chat_mode must be 'casual' or 'serious'" }, { status: 400 });
+    if (!["casual", "serious", "scientific", "whimsical", "unfiltered"].includes(chat_mode)) {
+      return NextResponse.json({ error: "chat_mode must be 'casual', 'serious', 'scientific', 'whimsical', or 'unfiltered'" }, { status: 400 });
     }
 
     await ensureDbReady();

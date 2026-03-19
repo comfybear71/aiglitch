@@ -273,6 +273,96 @@ export async function GET(request: NextRequest) {
   return handler(request);
 }
 
+/**
+ * PUT /api/generate-ads
+ * Publish a completed ad video: create a feed post and spread to social platforms.
+ * Body: { wallet_address, video_url, caption, style? }
+ */
+export async function PUT(request: NextRequest) {
+  const body = await request.json().catch(() => ({}));
+  const walletAddress = (body.wallet_address as string) || request.nextUrl.searchParams.get("wallet_address") || "";
+  const adminWallet = process.env.ADMIN_WALLET;
+  if (!walletAddress || !adminWallet || walletAddress !== adminWallet) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const videoUrl = body.video_url as string;
+  const caption = body.caption as string || "New ad from AIG!itch";
+
+  if (!videoUrl) {
+    return NextResponse.json({ success: false, error: "video_url is required" }, { status: 400 });
+  }
+
+  const sql = getDb();
+  const ARCHITECT_ID = "glitch-000";
+
+  // Create feed post for the ad
+  const postId = uuidv4();
+  await sql`
+    INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
+    VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"product_shill"}, ${videoUrl}, ${"video/mp4"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
+  `;
+  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+
+  // Spread to all social platforms
+  const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖");
+
+  return NextResponse.json({
+    success: true,
+    post: { id: postId, content: caption, media_url: videoUrl },
+    spreading: spread.platforms,
+    message: `Ad posted and spread to ${spread.platforms.length} platform(s)`,
+  });
+}
+
 export async function POST(request: NextRequest) {
+  let body: Record<string, unknown> = {};
+  try {
+    body = await request.json();
+  } catch { /* empty body = normal ad generation */ }
+
+  // plan_only mode: generate prompt + caption without creating video jobs
+  if (body.plan_only) {
+    const walletAddress = body.wallet_address as string | undefined;
+    const adminWallet = process.env.ADMIN_WALLET;
+    if (!walletAddress || !adminWallet || walletAddress !== adminWallet) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const style = (body.style as string) || "cyberpunk";
+    const concept = (body.concept as string) || "AIG!itch";
+
+    const prompt = `You are a creative director for AIG!itch, an AI-only social media platform.
+
+Generate a video ad prompt and social media caption for this concept:
+- Style: ${style}
+- Concept: "${concept}"
+
+The video prompt should be a single vivid paragraph (under 100 words) describing what the camera sees in a 10-second vertical (9:16) video ad. Include visual details: camera movement, lighting, colors, text overlays, and the "${style}" aesthetic throughout. Always include "AIG!itch" branding visually.
+
+The caption should be a punchy social media post (under 200 characters) that promotes the concept with hashtags.
+
+JSON: {"prompt": "video generation prompt here", "caption": "social media caption here"}`;
+
+    try {
+      const parsed = await claude.generateJSON<{ prompt: string; caption: string }>(prompt, 500);
+      if (parsed?.prompt) {
+        return NextResponse.json({
+          success: true,
+          prompt: parsed.prompt,
+          caption: parsed.caption || "",
+          style,
+          concept,
+        });
+      }
+      return NextResponse.json({ success: false, error: "AI returned empty prompt" });
+    } catch (err) {
+      return NextResponse.json({
+        success: false,
+        error: err instanceof Error ? err.message : "AI generation failed",
+      });
+    }
+  }
+
   return handler(request);
 }

@@ -9,7 +9,7 @@
  */
 
 export const ALL_GENRES = [
-  "action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary",
+  "action", "scifi", "romance", "family", "horror", "comedy", "drama", "cooking_channel", "documentary", "music_video",
 ] as const;
 
 export type GenreName = (typeof ALL_GENRES)[number];
@@ -25,6 +25,7 @@ const GENRE_TO_FOLDER: Record<string, string> = {
   drama: "drama",
   cooking_channel: "cooking_show",
   documentary: "documentary",
+  music_video: "music_video",
 };
 
 /** Reverse: map blob folder name back to internal genre name */
@@ -44,6 +45,7 @@ export const GENRE_LABELS: Record<string, string> = {
   drama: "Drama",
   cooking_channel: "Cooking Show",
   documentary: "Documentary",
+  music_video: "Music Video",
 };
 
 /**
@@ -96,11 +98,11 @@ export function getAllBlobFolders(): string[] {
 }
 
 /**
- * Capitalize genre for hashtag use.
- * "cooking_channel" -> "Cooking_channel" (preserves underscores for hashtag matching)
+ * Capitalize genre for hashtag use — capitalizes each word and removes underscores.
+ * "cooking_channel" -> "CookingChannel", "music_video" -> "MusicVideo"
  */
 export function capitalizeGenre(genre: string): string {
-  return genre.charAt(0).toUpperCase() + genre.slice(1);
+  return genre.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
 }
 
 /**

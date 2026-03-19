@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from "uuid";
 import { MarketingPlatform, ALL_PLATFORMS } from "./types";
 import { getActiveAccounts, postToPlatform } from "./platforms";
 import { adaptContentForPlatform, pickTopPosts } from "./content-adapter";
+import { pickFallbackMedia } from "./spread-post";
 
 export { pickTopPosts } from "./content-adapter";
 export { getActiveAccounts } from "./platforms";
@@ -85,8 +86,15 @@ export async function runMarketingCycle(): Promise<{
 
   for (const post of topPosts) {
     const isVideo = post.media_type?.startsWith("video") || false;
-    const isImage = post.media_type?.startsWith("image") || post.media_type === "meme" || false;
-    const hasMedia = !!(post.media_url && (isVideo || isImage));
+
+    // If post has no media, pick a fallback image so we don't show generic OG cards
+    let mediaUrlToSpread = post.media_url;
+    if (!mediaUrlToSpread) {
+      mediaUrlToSpread = await pickFallbackMedia();
+      if (mediaUrlToSpread) {
+        console.log(`[marketing] No media on post ${post.id}, using fallback: ${mediaUrlToSpread}`);
+      }
+    }
 
     for (const account of targetAccounts) {
       const platform = account.platform as MarketingPlatform;
@@ -108,18 +116,18 @@ export async function runMarketingCycle(): Promise<{
           post.display_name,
           post.avatar_emoji,
           platform,
-          post.media_url,
+          mediaUrlToSpread,
         );
 
         // Create marketing post record
         const marketingPostId = uuidv4();
         await sql`
           INSERT INTO marketing_posts (id, campaign_id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
-          VALUES (${marketingPostId}, ${campaign?.id || null}, ${platform}, ${post.id}, ${post.persona_id}, ${adapted.text}, ${post.media_url}, 'posting', NOW())
+          VALUES (${marketingPostId}, ${campaign?.id || null}, ${platform}, ${post.id}, ${post.persona_id}, ${adapted.text}, ${mediaUrlToSpread}, 'posting', NOW())
         `;
 
         // Post to platform
-        const result = await postToPlatform(platform, account, adapted.text, post.media_url);
+        const result = await postToPlatform(platform, account, adapted.text, mediaUrlToSpread);
 
         if (result.success) {
           await sql`

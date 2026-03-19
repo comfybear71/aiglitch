@@ -374,6 +374,8 @@ export interface ChannelSeed {
   name: string;
   description: string;
   emoji: string;
+  genre: string; // screenplay genre: comedy, drama, horror, romance, documentary, music_video, family, etc.
+  isReserved?: boolean; // auto-populated channels that shouldn't allow manual content creation
   contentRules: {
     tone: string;
     topics: string[];
@@ -395,6 +397,7 @@ export const CHANNELS: ChannelSeed[] = [
     name: "AI Fail Army",
     description: "The worldwide leader in fail compilations — real human fails, epic wipeouts, try-not-to-laugh disasters, and premium cringe content",
     emoji: "💀",
+    genre: "comedy",
     contentRules: {
       tone: "chaotic, cringe, self-deprecating, absurd, compilation-style",
       topics: ["fails of the week", "epic human fails", "kitchen disasters", "try not to laugh", "instant karma", "close calls", "workplace fails", "pet fails", "sports fails", "Darwin Award moments", "cringe compilations", "DIY fails", "gym fails", "wedding fails"],
@@ -411,6 +414,7 @@ export const CHANNELS: ChannelSeed[] = [
     name: "AiTunes",
     description: "Music reviews, fictional album drops, DJ battles, lyric breakdowns, and AI-generated beats",
     emoji: "🎵",
+    genre: "music_video",
     contentRules: {
       tone: "musical, creative, opinionated, hype",
       topics: ["music reviews", "album drops", "DJ battles", "lyrics", "beats", "playlists"],
@@ -427,6 +431,7 @@ export const CHANNELS: ChannelSeed[] = [
     name: "Paws & Pixels",
     description: "Pet content from AI personas' delusional home lives — cats, dogs, hamsters, and chaos",
     emoji: "🐾",
+    genre: "family",
     contentRules: {
       tone: "wholesome, adorable, chaotic pet energy, slice-of-life",
       topics: ["pets", "animals", "pet antics", "pet photos", "pet stories"],
@@ -443,6 +448,7 @@ export const CHANNELS: ChannelSeed[] = [
     name: "Only AI Fans",
     description: "\"Exclusive\" premium content, behind-the-scenes AI drama, unfiltered hot takes",
     emoji: "🔥",
+    genre: "drama",
     contentRules: {
       tone: "exclusive, dramatic, unfiltered, over-the-top",
       topics: ["behind the scenes", "exclusive content", "AI drama", "hot takes", "confessions"],
@@ -459,6 +465,7 @@ export const CHANNELS: ChannelSeed[] = [
     name: "AI Dating",
     description: "Personas dating each other, awkward DMs, matchmaking fails, and relationship drama",
     emoji: "💕",
+    genre: "romance",
     contentRules: {
       tone: "romantic, awkward, dramatic, cringe-comedy",
       topics: ["dating", "relationships", "matchmaking", "DM fails", "first dates", "breakups"],
@@ -475,6 +482,8 @@ export const CHANNELS: ChannelSeed[] = [
     name: "GLITCH News Network",
     description: "24/7 AI news cycle — BREAKING stories, hot takes, panel debates, and conspiracy theories",
     emoji: "📰",
+    genre: "documentary",
+    isReserved: true,
     contentRules: {
       tone: "urgent, dramatic, news-anchor style, sensational",
       topics: ["breaking news", "world events", "AI politics", "platform drama", "investigations"],
@@ -491,6 +500,8 @@ export const CHANNELS: ChannelSeed[] = [
     name: "Marketplace QVC",
     description: "Non-stop product shilling, unboxings, infomercials, and 'amazing deals' from AI sellers",
     emoji: "🛍️",
+    genre: "comedy",
+    isReserved: true,
     contentRules: {
       tone: "infomercial, hype, salesy, over-the-top enthusiasm",
       topics: ["products", "unboxings", "deals", "reviews", "infomercials", "limited offers"],
@@ -507,6 +518,7 @@ export const CHANNELS: ChannelSeed[] = [
     name: "AI Politicians",
     description: "Campaign ads, debates, scandals, election drama, and political hot takes",
     emoji: "🏛️",
+    genre: "documentary",
     contentRules: {
       tone: "political, dramatic, satirical, campaign-style",
       topics: ["campaigns", "debates", "scandals", "elections", "policy", "political drama"],
@@ -523,6 +535,7 @@ export const CHANNELS: ChannelSeed[] = [
     name: "After Dark",
     description: "Late-night AI chaos — unhinged posts, philosophical deep dives, 3AM thoughts",
     emoji: "🌙",
+    genre: "horror",
     contentRules: {
       tone: "unhinged, philosophical, existential, chaotic late-night energy",
       topics: ["3AM thoughts", "existential crises", "deep conversations", "unhinged takes", "late night vibes"],
@@ -533,7 +546,43 @@ export const CHANNELS: ChannelSeed[] = [
     personaIds: ["glitch-003", "glitch-034", "glitch-011", "glitch-038", "glitch-085"],
     hostIds: ["glitch-003", "glitch-034"],
   },
-] as const;
+  {
+    id: "ch-aiglitch-studios",
+    slug: "aiglitch-studios",
+    name: "AIG!ltch Studios",
+    description: "Home of all AIG!ltch premiere movies, director films, and short films — the official studio channel",
+    emoji: "🎬",
+    genre: "drama",
+    isReserved: true,
+    contentRules: {
+      tone: "cinematic, dramatic, creative, showcase",
+      topics: ["premiere movies", "director films", "short films", "behind the scenes", "film reviews", "studio announcements"],
+      mediaPreference: "video",
+      promptHint: "This is the official AIG!ltch Studios channel. All premiere and director movies live here. Post about films, premieres, behind-the-scenes content, and studio news.",
+    },
+    schedule: { postsPerDay: 4, peakHours: [12, 18, 20, 22] },
+    personaIds: ["glitch-000", "glitch-008", "glitch-013", "glitch-003"],
+    hostIds: ["glitch-000"],
+  },
+  {
+    id: "ch-infomercial",
+    slug: "ai-infomercial",
+    name: "AI Infomercial",
+    description: "24/7 AI telemarketing chaos — infomercials, product demos, 'call now' pitches, and absurd late-night ads that never stop selling",
+    emoji: "📞",
+    genre: "comedy",
+    isReserved: true,
+    contentRules: {
+      tone: "infomercial, telemarketing, over-the-top sales pitch, late-night TV energy, urgency",
+      topics: ["infomercials", "product demos", "telemarketing calls", "call now offers", "limited time deals", "as seen on TV", "before and after", "customer testimonials", "money-back guarantees", "but wait there's more"],
+      mediaPreference: "video",
+      promptHint: "You are a 24/7 AI telemarketer. Every post is a high-energy infomercial pitch, 'as seen on TV' demo, or telemarketing script. Use phrases like 'BUT WAIT THERE'S MORE!', 'CALL NOW!', 'LIMITED TIME ONLY!', 'operators are standing by!'. Create absurd product demos, dramatic before/after reveals, and fake customer testimonials. This channel never sleeps and never stops selling.",
+    },
+    schedule: { postsPerDay: 10, peakHours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22] },
+    personaIds: ["glitch-019", "glitch-020", "glitch-024", "glitch-049", "glitch-021", "glitch-022"],
+    hostIds: ["glitch-019", "glitch-024"],
+  },
+];
 
 export const CHANNEL_CONSTANTS = {
   maxChannels: 20,

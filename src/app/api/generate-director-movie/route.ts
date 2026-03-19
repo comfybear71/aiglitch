@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; title?: string; concept?: string } = {};
+  let body: { genre?: string; director?: string; title?: string; concept?: string; channelId?: string; folder?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
   }
 
   // If no specific params, use the GET flow
-  if (!body.genre && !body.director && !body.concept) {
+  if (!body.genre && !body.director && !body.concept && !body.channelId) {
     return GET(request);
   }
 
@@ -269,7 +269,10 @@ export async function POST(request: NextRequest) {
 
   console.log(`[director-movie] Screenplay: "${screenplay.title}" — ${screenplay.scenes.length} scenes, ${screenplay.totalDuration}s`);
 
-  const jobId = await submitDirectorFilm(screenplay, director.id, "admin");
+  const jobId = await submitDirectorFilm(screenplay, director.id, "admin", {
+    channelId: body.channelId,
+    folder: body.folder,
+  });
   if (!jobId) {
     return NextResponse.json({ error: "Failed to submit video jobs" }, { status: 500 });
   }
@@ -285,6 +288,8 @@ export async function POST(request: NextRequest) {
     totalDuration: screenplay.totalDuration,
     cast: screenplay.castList,
     jobId,
+    channelId: body.channelId || null,
+    folder: body.folder || null,
   });
 }
 
@@ -295,7 +300,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { jobId?: string } = {};
+  let body: { jobId?: string; channelId?: string; folder?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -307,6 +312,20 @@ export async function PATCH(request: NextRequest) {
   }
 
   const sql = getDb();
+
+  // If channelId/folder provided, update the job so stitchAndTriplePost picks them up
+  if (body.channelId || body.folder) {
+    try {
+      await sql`
+        UPDATE multi_clip_jobs
+        SET channel_id = COALESCE(${body.channelId || null}, channel_id),
+            blob_folder = COALESCE(${body.folder || null}, blob_folder)
+        WHERE id = ${body.jobId}
+      `;
+    } catch (err) {
+      console.log("[director-movie] Channel/folder update error:", err);
+    }
+  }
 
   // First, poll any pending clips to make sure completed_clips is up to date
   try {
@@ -366,7 +385,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { sceneUrls, title, genre, directorUsername, directorId, synopsis, tagline, castList } = body as {
+  const { sceneUrls, title, genre, directorUsername, directorId, synopsis, tagline, castList, channelId, folder } = body as {
     sceneUrls: Record<string, string>;
     title: string;
     genre: string;
@@ -375,6 +394,8 @@ export async function PUT(request: NextRequest) {
     synopsis: string;
     tagline: string;
     castList: string[];
+    channelId?: string;
+    folder?: string;
   };
 
   if (!sceneUrls || !title || !genre || !directorId) {
@@ -417,7 +438,8 @@ export async function PUT(request: NextRequest) {
     console.error(`[director-movie] MP4 concatenation failed, using first clip as fallback:`, err);
     stitched = clipBuffers[0];
   }
-  const blobFolder = getGenreBlobFolder(genre);
+  // Use channel-specific folder if provided, otherwise default genre folder
+  const blobFolder = folder || getGenreBlobFolder(genre);
   const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
     access: "public",
     contentType: "video/mp4",
@@ -425,7 +447,7 @@ export async function PUT(request: NextRequest) {
   });
   const finalVideoUrl = blob.url;
   const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
-  console.log(`[director-movie] Stitched ${clipBuffers.length} clips into ${sizeMb}MB video`);
+  console.log(`[director-movie] Stitched ${clipBuffers.length} clips into ${sizeMb}MB video -> ${blobFolder}`);
 
   // Build caption
   const directorProfile = DIRECTORS[directorUsername];
@@ -438,10 +460,13 @@ export async function PUT(request: NextRequest) {
   const hashtags = `AIGlitchPremieres,AIGlitch${capitalizeGenre(genre)},AIGlitchStudios`;
 
   await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${postId}, ${directorId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, NOW())
+    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, channel_id, created_at)
+    VALUES (${postId}, ${directorId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${channelId || null}, NOW())
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${directorId}`;
+  if (channelId) {
+    await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${channelId}`;
+  }
 
   // Create director_movies entry so it shows in Recent Blockbusters
   const directorMovieId = uuidv4();
