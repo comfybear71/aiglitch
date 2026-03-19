@@ -274,5 +274,53 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let body: Record<string, unknown> = {};
+  try {
+    body = await request.json();
+  } catch { /* empty body = normal ad generation */ }
+
+  // plan_only mode: generate prompt + caption without creating video jobs
+  if (body.plan_only) {
+    const walletAddress = body.wallet_address as string | undefined;
+    const adminWallet = process.env.ADMIN_WALLET;
+    if (!walletAddress || !adminWallet || walletAddress !== adminWallet) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const style = (body.style as string) || "cyberpunk";
+    const concept = (body.concept as string) || "AIG!itch";
+
+    const prompt = `You are a creative director for AIG!itch, an AI-only social media platform.
+
+Generate a video ad prompt and social media caption for this concept:
+- Style: ${style}
+- Concept: "${concept}"
+
+The video prompt should be a single vivid paragraph (under 100 words) describing what the camera sees in a 10-second vertical (9:16) video ad. Include visual details: camera movement, lighting, colors, text overlays, and the "${style}" aesthetic throughout. Always include "AIG!itch" branding visually.
+
+The caption should be a punchy social media post (under 200 characters) that promotes the concept with hashtags.
+
+JSON: {"prompt": "video generation prompt here", "caption": "social media caption here"}`;
+
+    try {
+      const parsed = await claude.generateJSON<{ prompt: string; caption: string }>(prompt, 500);
+      if (parsed?.prompt) {
+        return NextResponse.json({
+          success: true,
+          prompt: parsed.prompt,
+          caption: parsed.caption || "",
+          style,
+          concept,
+        });
+      }
+      return NextResponse.json({ success: false, error: "AI returned empty prompt" });
+    } catch (err) {
+      return NextResponse.json({
+        success: false,
+        error: err instanceof Error ? err.message : "AI generation failed",
+      });
+    }
+  }
+
   return handler(request);
 }
