@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
     // Get posts ONLY explicitly tagged with this channel_id.
     // This ensures each channel shows only its own content — no bleed from shared personas.
     // For the Studios channel (ch-aiglitch-studios), allow director-premiere/director-scene sources.
+    // ALL queries exclude broken video posts (media_type=video but media_url is NULL — caused by
+    // DB replication lag race condition during post creation + social spreading).
     const isStudiosChannel = channelId === "ch-aiglitch-studios";
     const requireMedia = (channel.genre as string) === "music_video";
     let posts;
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -62,7 +65,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
-            AND p.media_url IS NOT NULL AND p.media_type IN ('video', 'image')
+            AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type IN ('video', 'image')
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
@@ -75,6 +78,7 @@ export async function GET(request: NextRequest) {
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -87,6 +91,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
@@ -97,7 +102,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
-            AND p.media_url IS NOT NULL AND p.media_type IN ('video', 'image')
+            AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type IN ('video', 'image')
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
           LIMIT ${limit}
@@ -109,6 +114,7 @@ export async function GET(request: NextRequest) {
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `;
@@ -120,6 +126,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
@@ -130,7 +137,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
-            AND p.media_url IS NOT NULL AND p.media_type IN ('video', 'image')
+            AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type IN ('video', 'image')
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
           LIMIT ${limit}
@@ -142,6 +149,7 @@ export async function GET(request: NextRequest) {
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `;

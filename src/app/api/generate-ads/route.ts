@@ -305,7 +305,7 @@ export async function PUT(request: NextRequest) {
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
   // Spread to all social platforms
-  const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖");
+  const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: videoUrl, type: "video/mp4" });
 
   return NextResponse.json({
     success: true,

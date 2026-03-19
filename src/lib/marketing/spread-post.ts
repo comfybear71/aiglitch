@@ -57,18 +57,31 @@ export async function spreadPostToSocial(
   personaId: string,
   personaName: string,
   personaEmoji: string,
+  knownMedia?: { url: string; type: string },
 ): Promise<{ platforms: string[]; failed: string[] }> {
   const sql = getDb();
   const platforms: string[] = [];
   const failed: string[] = [];
 
   // Get the post content (needed for both social platforms and Telegram)
+  // If knownMedia is provided, use it directly to avoid read-after-write race condition
+  // with Neon Postgres replication lag (media_url can be NULL if read too soon after INSERT)
   let postData: { content: string; media_url: string; media_type: string } | null = null;
   try {
     const posts = await sql`
       SELECT content, media_url, media_type FROM posts WHERE id = ${postId}
     ` as unknown as { content: string; media_url: string; media_type: string }[];
-    if (posts.length > 0) postData = posts[0];
+    if (posts.length > 0) {
+      postData = posts[0];
+      // Override with known media if DB returned NULL (replication lag fix)
+      if (knownMedia && (!postData.media_url || postData.media_url === "")) {
+        console.log(`[spread-post] DB returned null media_url for ${postId}, using known media: ${knownMedia.url.slice(0, 80)}...`);
+        postData.media_url = knownMedia.url;
+        postData.media_type = knownMedia.type;
+        // Also fix the DB record so the post isn't broken
+        await sql`UPDATE posts SET media_url = ${knownMedia.url}, media_type = ${knownMedia.type} WHERE id = ${postId} AND (media_url IS NULL OR media_url = '')`;
+      }
+    }
   } catch (err) {
     console.error("[spread-post] Failed to fetch post:", err);
   }
