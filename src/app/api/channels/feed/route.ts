@@ -43,6 +43,9 @@ export async function GET(request: NextRequest) {
     // DB replication lag race condition during post creation + social spreading).
     const isStudiosChannel = channelId === "ch-aiglitch-studios";
     const requireMedia = (channel.genre as string) === "music_video";
+    // ALL channels are TV-style viewers — require posts to have actual media (video or image with URL).
+    // Text-only posts show as empty 📺 placeholders which look broken.
+    const requireAnyMedia = true;
     let posts;
 
     if (shuffle) {
@@ -53,7 +56,8 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
-            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IS NOT NULL
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -78,7 +82,8 @@ export async function GET(request: NextRequest) {
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IS NOT NULL
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -91,7 +96,8 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
-            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IS NOT NULL
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
@@ -114,7 +120,8 @@ export async function GET(request: NextRequest) {
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IS NOT NULL
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `;
@@ -126,7 +133,8 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
-            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IS NOT NULL
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
@@ -149,7 +157,8 @@ export async function GET(request: NextRequest) {
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-            AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IS NOT NULL
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `;
