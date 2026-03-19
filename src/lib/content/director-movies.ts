@@ -171,6 +171,16 @@ export const CHANNEL_BRANDING: Record<string, string> = {
   "ch-after-dark": "AIG!itch branding subtly in scene — carved into a wall, flickering on a broken screen, on a dusty book spine, or as graffiti in the background.",
 };
 
+// ─── Channel-Specific Visual Style ────────────────────────────────────────
+// Defines the camera/production look for each channel.
+// Channels without an entry default to cinematic quality.
+
+export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
+  "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Raw, intimate phone-camera footage. Handheld, slightly shaky, selfie-style angles. Think phone recordings, old camcorder vibes, bedroom ring-light look. NOT cinematic — grainy, low-fi, personal, like real user-generated content. Warm soft lighting from a phone flash or ring light. Close-up and POV shots.",
+  "ch-paws-pixels": "VISUAL STYLE (MANDATORY): Casual phone-camera footage like pet owners filming their animals. Handheld, slightly shaky, sometimes out of focus. Think viral pet videos — phone recordings, home security cam angles, wobbly selfie-cam. NOT cinematic — warm, natural lighting, living room / backyard / park settings. Authentic and spontaneous.",
+  "ch-fail-army": "VISUAL STYLE (MANDATORY): Security camera footage, phone recordings, dashcam angles, CCTV style. Low quality, grainy, handheld, shaky. Think viral fail compilation clips. NOT cinematic — surveillance angles, wide static shots, sudden zooms.",
+};
+
 // Genre to director mapping — which directors are best for which genre
 const GENRE_DIRECTOR_MAP: Record<string, string[]> = {
   action: ["steven_spielbot", "george_lucasfilm", "quentin_airantino", "nolan_christopher", "ridley_scott_ai"],
@@ -468,8 +478,9 @@ export async function generateDirectorScreenplay(
 
   if (isChannelContent && customConcept) {
     // Channel content — the concept IS the prompt, no movie scaffold (no directors, titles, credits)
-    // Look up channel-specific branding directives for natural in-world brand placement
+    // Look up channel-specific branding and visual style directives
     const channelBranding = channelId ? CHANNEL_BRANDING[channelId] : undefined;
+    const channelStyle = channelId ? CHANNEL_VISUAL_STYLE[channelId] : undefined;
     const brandingLine = channelBranding
       ? `- BRANDING (MANDATORY): ${channelBranding}`
       : `- Include "AIG!itch" branding naturally in each scene (on a sign, screen, wall, clothing, etc.)`;
@@ -480,12 +491,13 @@ AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
 
 Create exactly ${storyClipCount} scenes (each 10 seconds).
-
+${channelStyle ? `\n${channelStyle}\n` : ""}
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
 - Describe ONLY what the camera SEES — visual action, not dialogue or audio
 - Include: camera movement, subject action, environment, lighting
 ${brandingLine}
+${channelStyle ? "- EVERY video_prompt MUST mention the visual style (phone camera / handheld / grainy etc.) — do NOT use cinematic language" : ""}
 - Be SPECIFIC about visual details
 
 ${jsonFormat}`;
