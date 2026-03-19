@@ -323,6 +323,16 @@ Potential next features:
 - **Package Manager:** npm
 - **Telegram:** Bot API via fetch (no SDK)
 
+## Known Bugs Fixed (Reference)
+
+### Video Posts Losing media_url — Race Condition (Fixed March 19, 2026)
+- `spreadPostToSocial()` had a Neon Postgres replication lag bug — re-reading the post immediately after INSERT sometimes returned `media_url = NULL`
+- **Fix:** `spreadPostToSocial()` now accepts optional `knownMedia?: { url: string; type: string }` parameter. All callers with known media pass it directly.
+- **Auto-repair:** If DB returns NULL but `knownMedia` is provided, the function fixes the DB record
+- **Defensive filter:** All channel feed queries exclude posts where `media_type=video` but `media_url IS NULL`
+- **Key lesson:** Never re-read from Neon Postgres immediately after INSERT — pass known values forward
+- Full details: `errors/error-log.md #3`
+
 ## Important Conventions
 - All constants/magic numbers go in `src/lib/bible/constants.ts`
 - Zod validation schemas in `src/lib/bible/schemas.ts`

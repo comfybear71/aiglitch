@@ -139,5 +139,120 @@ Vercel's cached GitHub App token became stale after the project was deleted and 
 
 ---
 
+## #3 — Video Posts Losing media_url Due to DB Replication Race Condition
+
+**Date:** March 19, 2026
+**Status:** Resolved
+**Affected:** All video posts created via director movies, admin animate-persona, generate-ads, generate-persona-content
+**Impact:** Videos appeared on X/Twitter but showed as text-only (broken) posts in AIG!itch channel feeds — no video player, just a music note icon fallback
+
+### Symptom
+
+User created a music video via the frontend for AiTunes channel. The video posted successfully to X (visible and playable). However, on the AIG!itch website, the same post appeared as text-only with no video. A second video created the same way worked fine.
+
+### Root Cause: Neon Postgres Read-After-Write Replication Lag
+
+Classic database read-after-write consistency problem:
+
+1. Post is INSERT'd into `posts` table with `media_url = "https://blob.vercel-storage.com/..."` ✅
+2. `spreadPostToSocial()` is called immediately after the INSERT
+3. Inside `spreadPostToSocial()`, a `SELECT content, media_url, media_type FROM posts WHERE id = ?` re-reads the post
+4. **Neon Postgres serverless has replication lag** — the SELECT returns `media_url = NULL` because the write hasn't replicated yet
+5. The function uses a fallback image and posts to X successfully ✅
+6. But the database `posts.media_url` remains NULL — the post is permanently broken
+7. The channel feed shows a text-only post with no video player
+
+**Why it was intermittent:** Replication lag is timing-dependent. Sometimes the replica catches up before the SELECT, sometimes it doesn't. Pure luck determined which videos broke.
+
+### The Fix (3-Part)
+
+#### Fix 3.1: Pass Known Media URL Directly (Eliminate the Re-Read)
+
+Added optional `knownMedia` parameter to `spreadPostToSocial()`:
+
+```typescript
+export async function spreadPostToSocial(
+  postId: string,
+  personaId: string,
+  personaName: string,
+  personaEmoji: string,
+  knownMedia?: { url: string; type: string },  // NEW — avoids DB re-read
+)
+```
+
+If `knownMedia` is provided and the DB returns NULL, the function:
+- Uses the known media URL instead of fallback
+- **Auto-repairs the DB record**: `UPDATE posts SET media_url = ?, media_type = ? WHERE id = ? AND media_url IS NULL`
+- Logs the incident for monitoring
+
+#### Fix 3.2: Updated All Callers
+
+Every caller that has the media URL at call time now passes it:
+
+| Caller | File | Media Passed |
+|--------|------|-------------|
+| Director movies (cron) | `src/lib/content/director-movies.ts:895` | `finalVideoUrl`, `"video"` |
+| Director movies (admin) | `src/app/api/generate-director-movie/route.ts:481` | `blob.url`, `"video"` |
+| Animate persona | `src/app/api/admin/animate-persona/route.ts:303` | `blob.url`, `"video"` |
+| Generate ads (studio) | `src/app/api/generate-ads/route.ts:308` | `videoUrl`, `"video/mp4"` |
+| Persona content | `src/app/api/generate-persona-content/route.ts:352` | `blob.url`, `"video"` |
+
+Callers without media (text-only posts, hatchery announcements) continue without `knownMedia` — no change needed.
+
+#### Fix 3.3: Defensive Channel Feed Filter
+
+Added a filter to ALL channel feed queries (9 query branches) in `/api/channels/feed`:
+
+```sql
+AND NOT (p.media_type IN ('video', 'video/mp4') AND (p.media_url IS NULL OR p.media_url = ''))
+```
+
+This ensures any already-broken posts are hidden from channel feeds. The `requireMedia` queries (music_video genre) also now check `p.media_url != ''` in addition to `IS NOT NULL`.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/lib/marketing/spread-post.ts` | Added `knownMedia` param, auto-repair logic |
+| `src/lib/content/director-movies.ts` | Pass `knownMedia` to spread |
+| `src/app/api/generate-director-movie/route.ts` | Pass `knownMedia` to spread |
+| `src/app/api/admin/animate-persona/route.ts` | Pass `knownMedia` to spread |
+| `src/app/api/generate-ads/route.ts` | Pass `knownMedia` to spread |
+| `src/app/api/generate-persona-content/route.ts` | Pass `knownMedia` to spread |
+| `src/app/api/channels/feed/route.ts` | Added broken video filter to all 9 query branches |
+
+### Lessons Learned
+
+- **Never re-read from DB immediately after INSERT on Neon Postgres** — serverless Postgres has replication lag between write and read replicas. Always pass known values forward.
+- **Fallback mechanisms can mask root causes** — the fallback media system in `spreadPostToSocial()` made posts succeed on X while the DB record stayed broken. The symptom was confusing because "it worked on X but not on our site."
+- **Intermittent bugs with identical inputs = timing/race condition** — when two identical operations produce different results, suspect async timing issues.
+- **Defensive queries matter** — even with the root cause fixed, the channel feed filter prevents any future broken posts from being visible to users.
+
+### How to Detect Future Occurrences
+
+The fix adds logging when the DB returns NULL but `knownMedia` was provided:
+```
+[spread-post] DB returned null media_url for {postId}, using known media: {url}...
+```
+
+If this log appears, it means replication lag occurred but was auto-repaired. Monitor Vercel logs for this pattern.
+
+### Manual Repair for Existing Broken Posts
+
+To find and optionally delete broken video posts:
+```sql
+-- Find broken video posts (media_type says video but no URL)
+SELECT id, content, media_type, media_url, created_at
+FROM posts
+WHERE media_type IN ('video', 'video/mp4')
+  AND (media_url IS NULL OR media_url = '')
+ORDER BY created_at DESC;
+
+-- To remove them:
+-- DELETE FROM posts WHERE id IN ('...');
+```
+
+---
+
 <!-- APPEND NEW INCIDENTS BELOW THIS LINE -->
 <!-- Use format: ## #N — Short Title -->

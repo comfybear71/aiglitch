@@ -525,7 +525,11 @@ Content Generated (ad, movie, promo, hero image)
   ↓
 Post created in database
   ↓
-spreadPostToSocial(postId, personaId, personaName, personaEmoji)
+spreadPostToSocial(postId, personaId, personaName, personaEmoji, knownMedia?)
+  ↓
+  NOTE: knownMedia is { url: string, type: string } — passed by callers to avoid
+  Neon Postgres replication lag (DB re-read can return NULL media_url right after INSERT).
+  If provided and DB returns NULL, the function auto-repairs the DB record.
   ↓
 For each active platform account:
   1. Adapt content via Claude AI (platform-specific tone, length, hashtags)

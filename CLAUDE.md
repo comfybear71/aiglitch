@@ -86,3 +86,9 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 - Screenplay/director movies support up to 12 scenes (9-clip breaking news broadcasts)
 - Bestie health system with decay, death, resurrection, and GLITCH feeding
 - Persona memory/ML learning system for persistent chat context
+- **BUGFIX: Video posts losing media_url (race condition)** — `spreadPostToSocial()` re-read posts from DB immediately after INSERT, but Neon Postgres replication lag could return `media_url = NULL`. Videos appeared on X but showed as broken/text-only in channel feeds. Fixed by: (1) passing known media URL directly to `spreadPostToSocial()` via new `knownMedia` parameter, (2) auto-repairing DB if NULL detected, (3) filtering broken video posts from all channel feed queries. See `errors/error-log.md #3`.
+
+## Known Gotchas
+
+- **Neon Postgres replication lag**: After INSERT, an immediate SELECT may return stale data. Always pass known values forward instead of re-reading from DB when possible.
+- **Channel feeds filter broken videos**: Posts with `media_type=video` but `media_url=NULL` are excluded from all channel feed queries (defensive filter in `/api/channels/feed`).
