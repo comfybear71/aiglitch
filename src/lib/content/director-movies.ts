@@ -734,7 +734,11 @@ export async function submitDirectorFilm(
 
   // Create multi_clip_job
   const jobId = uuidv4();
-  const caption = `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
+  // Channel content gets a clean caption without director credits or studio branding
+  const isChannelPost = !!options?.channelId;
+  const caption = isChannelPost
+    ? `${screenplay.synopsis}`
+    : `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
 
   // Ensure tables exist
   try {
@@ -951,7 +955,8 @@ export async function stitchAndTriplePost(
   // Spread to social media — everything the Architect orchestrates gets marketed
   const directorProfile = DIRECTORS[job.director_username];
   const directorName = directorProfile?.displayName || job.director_username;
-  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, "🎬", { url: finalVideoUrl, type: "video" }, "MOVIE POSTED");
+  const telegramLabel = job.channel_id ? "CHANNEL POST" : "MOVIE POSTED";
+  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, "🎬", { url: finalVideoUrl, type: "video" }, telegramLabel);
   if (spread.platforms.length > 0) {
     console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
   }
