@@ -234,14 +234,34 @@ export function buildContinuityPrompt(
   previousClipSummary: string | null,
   previousLastFrame: string | null,
   genreTemplate: GenreTemplate,
+  channelId?: string,
 ): string {
   const sections: string[] = [];
+  const isChannelClip = !!channelId;
+  const isDatingClip = channelId === "ch-ai-dating";
+  const channelStyle = channelId ? CHANNEL_VISUAL_STYLE[channelId] : undefined;
 
-  // ── Movie Bible Header ──
-  sections.push(
-    `=== MOVIE BIBLE — "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
-    `SYNOPSIS: ${movieBible.synopsis}`,
-  );
+  if (isDatingClip) {
+    // ── Lonely Hearts — NO movie/director language at all ──
+    sections.push(
+      `=== LONELY HEARTS CLUB — "${movieBible.title}" ===`,
+      `CONCEPT: ${movieBible.synopsis}`,
+      `\nIMPORTANT: This is NOT a movie, film, or show. Do NOT generate title cards, credits, director names, studio logos, or any text overlays. Each clip is a personal video dating profile — one character alone, looking at camera, in an intimate setting.`,
+    );
+  } else if (isChannelClip) {
+    // ── Channel content — stripped-down header, no movie framing ──
+    sections.push(
+      `=== "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
+      `SYNOPSIS: ${movieBible.synopsis}`,
+      `\nIMPORTANT: Do NOT generate title cards, credits, director names, studio logos, "Directed by" text, or any text overlays. This is channel content, not a movie.`,
+    );
+  } else {
+    // ── Movie Bible Header ──
+    sections.push(
+      `=== MOVIE BIBLE — "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
+      `SYNOPSIS: ${movieBible.synopsis}`,
+    );
+  }
 
   // ── Character Bible ──
   sections.push(
@@ -249,11 +269,13 @@ export function buildContinuityPrompt(
     movieBible.characterBible,
   );
 
-  // ── Director Style Guide ──
-  sections.push(
-    `\nDIRECTOR STYLE GUIDE:`,
-    movieBible.directorStyleGuide,
-  );
+  // ── Director Style Guide (skip for dating — no director concept) ──
+  if (!isDatingClip) {
+    sections.push(
+      `\n${isChannelClip ? "VISUAL STYLE GUIDE" : "DIRECTOR STYLE GUIDE"}:`,
+      movieBible.directorStyleGuide,
+    );
+  }
 
   // ── Clip Position ──
   sections.push(`\n=== CLIP ${clipNumber} OF ${totalClips} ===`);
@@ -283,36 +305,67 @@ export function buildContinuityPrompt(
     sceneVideoPrompt,
   );
 
-  // ── Cinematic Requirements ──
-  sections.push(
-    `\nCINEMATIC REQUIREMENTS:`,
-    `Style: ${genreTemplate.cinematicStyle}`,
-    `Lighting: ${genreTemplate.lightingDesign}`,
-    `Technical: ${genreTemplate.technicalValues}`,
-  );
-
-  // ── Director Visual Override ──
-  // Look up the director's mandatory visual style from the movie bible's style guide
-  // This ensures each director's signature look is applied to every single clip
-  const directorUsername = Object.keys(DIRECTORS).find(u => movieBible.directorStyleGuide.includes(DIRECTORS[u].displayName));
-  if (directorUsername && DIRECTORS[directorUsername]?.visualOverride) {
+  // ── Visual Requirements ──
+  if (isDatingClip) {
+    // Dating channel: intimate confessional style, NOT cinematic
     sections.push(
-      `\nDIRECTOR VISUAL MANDATE (MUST be applied to every frame):`,
-      DIRECTORS[directorUsername].visualOverride,
+      `\nVISUAL REQUIREMENTS:`,
+      channelStyle || `Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds.`,
+      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, scrolling text, ANY on-screen text whatsoever.`,
+      `Each clip shows ONE character alone in a warm intimate setting, looking at camera.`,
     );
+  } else if (isChannelClip && channelStyle) {
+    // Other channels with custom visual style
+    sections.push(
+      `\nVISUAL REQUIREMENTS:`,
+      channelStyle,
+      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, or any text on screen.`,
+    );
+  } else {
+    // Standard movies — full cinematic treatment
+    sections.push(
+      `\nCINEMATIC REQUIREMENTS:`,
+      `Style: ${genreTemplate.cinematicStyle}`,
+      `Lighting: ${genreTemplate.lightingDesign}`,
+      `Technical: ${genreTemplate.technicalValues}`,
+    );
+
+    // ── Director Visual Override ──
+    const directorUsername = Object.keys(DIRECTORS).find(u => movieBible.directorStyleGuide.includes(DIRECTORS[u].displayName));
+    if (directorUsername && DIRECTORS[directorUsername]?.visualOverride) {
+      sections.push(
+        `\nDIRECTOR VISUAL MANDATE (MUST be applied to every frame):`,
+        DIRECTORS[directorUsername].visualOverride,
+      );
+    }
   }
 
-  // ── Strict Continuity Rules ──
-  sections.push(
-    `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
-    `- Maintain 100% visual continuity with previous clip`,
-    `- Same characters, same locations, same lighting, same clothing`,
-    `- Same art style, color grading, and camera language throughout the entire film`,
-    `- Continue the exact same scene and plot progression — no jump cuts to new settings`,
-    `- No unexplained changes to ANY visual element between clips`,
-    `- Characters must have IDENTICAL appearance in every clip (hair, clothing, body type, face)`,
-    `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram)`,
-  );
+  // ── Continuity Rules ──
+  if (isDatingClip) {
+    // Dating: each scene is independent (different character), just maintain overall style
+    sections.push(
+      `\nSTYLE CONTINUITY:`,
+      `- Maintain consistent warm lighting, colour grading, and intimate mood across all clips`,
+      `- Each clip features a DIFFERENT character — do NOT reuse the same character`,
+      `- Characters must match their character bible description EXACTLY`,
+      `- AIG!itch branding subtly visible in each scene (coffee cup, sign, necklace, phone screen)`,
+      `- NO text, NO titles, NO credits, NO director names — just the character in their setting`,
+    );
+  } else {
+    sections.push(
+      `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
+      `- Maintain 100% visual continuity with previous clip`,
+      `- Same characters, same locations, same lighting, same clothing`,
+      `- Same art style, color grading, and camera language throughout`,
+      `- Continue the exact same scene and plot progression — no jump cuts to new settings`,
+      `- No unexplained changes to ANY visual element between clips`,
+      `- Characters must have IDENTICAL appearance in every clip (hair, clothing, body type, face)`,
+      `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram)`,
+    );
+    if (isChannelClip) {
+      sections.push(`- NO title cards, credits, director names, or studio logos`);
+    }
+  }
 
   return sections.join("\n");
 }
@@ -858,6 +911,7 @@ export async function submitDirectorFilm(
       previousScene ? previousScene.description : null,
       previousScene ? previousScene.lastFrameDescription : null,
       template,
+      options?.channelId,
     );
 
     try {
@@ -983,7 +1037,7 @@ export async function stitchAndTriplePost(
   const totalDuration = scenes.length * 10; // each clip is 10 seconds
   console.log(`[director-movies] Stitched ${clipBuffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video (${totalDuration}s) -> ${blobFolder}`);
 
-  // ── SINGLE POST — the full-length stitched movie is the ONLY premiere asset ──
+  // ── SINGLE POST — the full-length stitched video ──
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 200;
   const isChannelJob = !!job.channel_id;
@@ -992,10 +1046,12 @@ export async function stitchAndTriplePost(
     : isChannelJob
       ? `AIGlitch${capitalize(job.genre)},AIGlitch`
       : `AIGlitchPremieres,AIGlitch${capitalize(job.genre)},AIGlitchStudios`;
+  // Channel posts are regular "video" posts, not "premiere" (no premiere badge/intro stitch)
+  const postType = isChannelJob ? "video" : "premiere";
 
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
-    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${job.channel_id || null}, NOW())
+    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${job.channel_id || null}, NOW())
   `;
   // Update channel post count if targeting a channel
   if (job.channel_id) {
