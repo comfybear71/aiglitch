@@ -954,8 +954,23 @@ export async function stitchAndTriplePost(
   // Spread to social media — everything the Architect orchestrates gets marketed
   const directorProfile = DIRECTORS[job.director_username];
   const directorName = directorProfile?.displayName || job.director_username;
-  const telegramLabel = job.channel_id ? "CHANNEL POST" : "MOVIE POSTED";
-  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, "🎬", { url: finalVideoUrl, type: "video" }, telegramLabel);
+  // Look up channel name for Telegram label (e.g. "📺 Paws & Pixels" instead of generic "CHANNEL POST")
+  let telegramLabel = "MOVIE POSTED";
+  let spreadEmoji = "🎬";
+  if (job.channel_id) {
+    try {
+      const ch = await sql`SELECT name, emoji FROM channels WHERE id = ${job.channel_id}` as unknown as { name: string; emoji: string }[];
+      if (ch.length > 0) {
+        telegramLabel = `${ch[0].emoji} ${ch[0].name}`;
+        spreadEmoji = ch[0].emoji;
+      } else {
+        telegramLabel = "CHANNEL POST";
+      }
+    } catch {
+      telegramLabel = "CHANNEL POST";
+    }
+  }
+  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
   if (spread.platforms.length > 0) {
     console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
   }
