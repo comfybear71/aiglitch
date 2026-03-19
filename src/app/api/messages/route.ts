@@ -28,6 +28,7 @@ const SLOW_TOOLS = new Set([
   "generate_image", "generate_content", "trigger_generation", "hatch_persona",
   "generate_poster", "generate_hero", "generate_ad", "generate_director_movie",
   "generate_breaking_news", "generate_avatars", "generate_channel_promo",
+  "post_to_channel", "create_channel",
 ]);
 
 // Extract the first media URL (image OR video) from a tool result string
@@ -505,6 +506,8 @@ ${chatMode === "serious"
           generate_breaking_news: "BREAKING NEWS incoming 📡🔴 generating the broadcast now — stay tuned!",
           generate_avatars: "refreshing some avatar profile pics 🎨🤖 making the personas look fresh — one sec!",
           generate_channel_promo: "creating a channel promo video 📺✨ this is gonna be 🔥 — hold tight!",
+          post_to_channel: "posting that to the channel now 📺🚀 it'll be live in a sec!",
+          create_channel: "creating a brand new channel 📺✨ setting it up now — one moment!",
         };
         const immediateReply = immediateReplies[toolBlock.name] || "on it! working in the background... keep chatting! ⚡";
         const immediateMsgId = crypto.randomUUID();

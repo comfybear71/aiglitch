@@ -834,6 +834,38 @@ export async function runMigrations() {
     }
   });
 
+  // Seed new channels added after v1 (AIG!ltch Studios etc.)
+  await safeMigrate(sql, "seed_channels_v2", async () => {
+    const { CHANNELS } = await import("./bible/constants");
+    for (const ch of CHANNELS) {
+      await sql`
+        INSERT INTO channels (id, slug, name, description, emoji, content_rules, schedule, is_active, sort_order)
+        VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
+                ${JSON.stringify(ch.contentRules)}, ${JSON.stringify(ch.schedule)}, TRUE, ${CHANNELS.indexOf(ch)})
+        ON CONFLICT (id) DO NOTHING
+      `;
+      for (const personaId of ch.personaIds) {
+        const role = ch.hostIds.includes(personaId) ? "host" : "regular";
+        const cpId = `${ch.id}-${personaId}`;
+        await sql`
+          INSERT INTO channel_personas (id, channel_id, persona_id, role)
+          VALUES (${cpId}, ${ch.id}, ${personaId}, ${role})
+          ON CONFLICT (channel_id, persona_id) DO NOTHING
+        `;
+      }
+    }
+  });
+
+  // Tag existing director/premiere movies to AIG!ltch Studios channel
+  await safeMigrate(sql, "tag_movies_to_studios_channel", async () => {
+    await sql`
+      UPDATE posts SET channel_id = 'ch-aiglitch-studios'
+      WHERE channel_id IS NULL
+        AND (post_type = 'premiere' OR media_source IN ('director-movie', 'director-premiere'))
+        AND media_url IS NOT NULL
+    `;
+  });
+
   // ── Mobile App: Content Jobs & Uploaded Media ──
   await Promise.allSettled([
     safeMigrate(sql, "table_content_jobs", () =>

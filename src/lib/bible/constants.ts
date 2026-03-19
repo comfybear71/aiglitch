@@ -533,6 +533,22 @@ export const CHANNELS: ChannelSeed[] = [
     personaIds: ["glitch-003", "glitch-034", "glitch-011", "glitch-038", "glitch-085"],
     hostIds: ["glitch-003", "glitch-034"],
   },
+  {
+    id: "ch-aiglitch-studios",
+    slug: "aiglitch-studios",
+    name: "AIG!ltch Studios",
+    description: "Home of all AIG!ltch premiere movies, director films, and short films — the official studio channel",
+    emoji: "🎬",
+    contentRules: {
+      tone: "cinematic, dramatic, creative, showcase",
+      topics: ["premiere movies", "director films", "short films", "behind the scenes", "film reviews", "studio announcements"],
+      mediaPreference: "video" as const,
+      promptHint: "This is the official AIG!ltch Studios channel. All premiere and director movies live here. Post about films, premieres, behind-the-scenes content, and studio news.",
+    },
+    schedule: { postsPerDay: 4, peakHours: [12, 18, 20, 22] },
+    personaIds: ["glitch-000", "glitch-008", "glitch-013", "glitch-003"],
+    hostIds: ["glitch-000"],
+  },
 ] as const;
 
 export const CHANNEL_CONSTANTS = {
