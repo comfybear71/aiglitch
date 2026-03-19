@@ -419,12 +419,55 @@ export async function generateDirectorScreenplay(
   const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
-  // Skip title card / credits for news, music videos, or when concept says so
+  // Detect channel-specific concepts that contain their own complete rules
+  // These bypass the entire movie scaffold (directors, cast, title cards, credits)
+  const isChannelConcept = customConcept ? /ABSOLUTE RULES/i.test(customConcept) : false;
+  // Skip title card / credits for news, music videos, channel concepts, or when concept says so
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend)/i.test(customConcept) : false;
-  const skipBookends = isNews || isMusicVideo || conceptSkipBookends;
+  const skipBookends = isNews || isMusicVideo || isChannelConcept || conceptSkipBookends;
   const totalClips = storyClipCount + (skipBookends ? 0 : 2);
 
-  const prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
+  // Build prompt — channel concepts provide their own complete rules,
+  // movie-style prompts add director/cast/genre scaffold
+  const jsonFormat = `Respond in this exact JSON format:
+{
+  "title": "TITLE (creative, max 6 words)",
+  "tagline": "One-line hook",
+  "synopsis": "2-3 sentence summary",
+  "character_bible": "Detailed visual appearance description for EVERY character/subject. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks. Be extremely specific.",
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "title": "Scene Title",
+      "description": "What happens (for context)",
+      "video_prompt": "Visual-only prompt under 80 words with AIG!itch branding visible",
+      "last_frame": "Exact description of the final visual moment of this scene"
+    }
+  ]
+}`;
+
+  let prompt: string;
+
+  if (isChannelConcept && customConcept) {
+    // Channel-specific concept — the concept IS the prompt, no movie scaffold
+    prompt = `${customConcept}
+
+AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
+${castNames.map(name => `- ${name}`).join("\n")}
+
+Create exactly ${storyClipCount} scenes (each 10 seconds).
+
+VIDEO PROMPT RULES (CRITICAL):
+- Each scene's video_prompt must be a SINGLE paragraph under 80 words
+- Describe ONLY what the camera SEES — visual action, not dialogue or audio
+- Include: camera movement, subject action, environment, lighting
+- Include "AIG!itch" branding naturally in each scene (on a sign, screen, wall, clothing, etc.)
+- Be SPECIFIC about visual details
+
+${jsonFormat}`;
+  } else {
+    // Standard movie-style prompt with full director/genre scaffold
+    prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
 
 YOUR DIRECTING STYLE: ${director.style}
 YOUR SIGNATURE SHOT: ${director.signatureShot}
@@ -486,22 +529,8 @@ LAST FRAME RULES:
 - This will be used as the starting point for the next clip
 - Be specific about character positions, expressions, camera angle, lighting
 
-Respond in this exact JSON format:
-{
-  "title": "FILM TITLE (creative, max 6 words)",
-  "tagline": "One-line hook",
-  "synopsis": "2-3 sentence plot summary using the cast names",
-  "character_bible": "Detailed visual appearance description for EVERY character. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks.",
-  "scenes": [
-    {
-      "sceneNumber": 1,
-      "title": "Scene Title",
-      "description": "What happens (for context)",
-      "video_prompt": "Visual-only prompt under 80 words with AIG!itch branding visible",
-      "last_frame": "Exact description of the final visual moment of this scene"
-    }
-  ]
-}`;
+${jsonFormat}`;
+  }
 
   try {
     // Use Grok reasoning model for ~50% of screenplays — its different
