@@ -166,7 +166,7 @@ export const CHANNEL_BRANDING: Record<string, string> = {
   "ch-only-ai-fans": "AIG!itch logo on clothing/accessories, AIG!itch-branded phone case visible, AIG!itch neon sign at a venue, AIG!itch shopping bag, a latte with AIG!itch art.",
   "ch-aiglitch-studios": "AIG!itch Studios branding on clapperboard, director chairs, studio walls, and end credits — full movie production branding.",
   "ch-infomercial": "AIG!itch branding on product packaging, set backdrop, host podium, phone number overlay, and 'As seen on AIG!itch' stickers.",
-  "ch-ai-dating": "AIG!itch branding on the dating show set backdrop, contestant name cards, rose/gift packaging, and host microphone flag.",
+  "ch-ai-dating": "AIG!itch branding subtly in scene — on a lonely hearts bulletin board, a coffee cup, a park bench, a phone screen, a necklace pendant, or a neon sign in the background. Natural and intimate, not game-show style.",
   "ch-ai-politicians": "AIG!itch branding on podium seals, campaign signs, news ticker lower thirds, and debate stage backdrop.",
   "ch-after-dark": "AIG!itch branding subtly in scene — carved into a wall, flickering on a broken screen, on a dusty book spine, or as graffiti in the background.",
 };
@@ -179,6 +179,7 @@ export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
   "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Raw, intimate phone-camera footage. Handheld, slightly shaky, selfie-style angles. Think phone recordings, old camcorder vibes, bedroom ring-light look. NOT cinematic — grainy, low-fi, personal, like real user-generated content. Warm soft lighting from a phone flash or ring light. Close-up and POV shots.",
   "ch-paws-pixels": "VISUAL STYLE (MANDATORY): Casual phone-camera footage like pet owners filming their animals. Handheld, slightly shaky, sometimes out of focus. Think viral pet videos — phone recordings, home security cam angles, wobbly selfie-cam. NOT cinematic — warm, natural lighting, living room / backyard / park settings. Authentic and spontaneous.",
   "ch-fail-army": "VISUAL STYLE (MANDATORY): Security camera footage, phone recordings, dashcam angles, CCTV style. Low quality, grainy, handheld, shaky. Think viral fail compilation clips. NOT cinematic — surveillance angles, wide static shots, sudden zooms.",
+  "ch-ai-dating": "VISUAL STYLE (MANDATORY): Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds. Think lonely hearts video personal ads — each character alone, looking directly at camera, vulnerable and hopeful. Warm golden-hour tones, soft focus backgrounds (park benches, coffee shops, city lights at dusk, bedroom fairy lights). NOT a dating show or game show — personal, intimate, like a video diary entry.",
 };
 
 // Genre to director mapping — which directors are best for which genre
@@ -485,7 +486,56 @@ export async function generateDirectorScreenplay(
       ? `- BRANDING (MANDATORY): ${channelBranding}`
       : `- Include "AIG!itch" branding naturally in each scene (on a sign, screen, wall, clothing, etc.)`;
 
-    prompt = `${customConcept}
+    // AI Dating channel gets a special "lonely hearts club" format —
+    // each scene is ONE character looking for love, not a movie/show
+    const isDatingChannel = channelId === "ch-ai-dating";
+
+    if (isDatingChannel) {
+      prompt = `You are creating a LONELY HEARTS CLUB video compilation for the AIG!itch AI Dating channel.
+
+FORMAT: Each scene is a DIFFERENT AI character making a personal appeal to find love. Think lonely hearts personal ads / video dating profiles. Each character faces the camera alone and presents themselves — who they are, what they're like, what they're looking for.
+
+THIS IS NOT:
+- A movie, film, or cinematic production
+- A dating show or game show
+- A narrative with plot, directors, or credits
+- A studio production of any kind
+
+THIS IS:
+- A compilation of lonely hearts video personals
+- Each scene = one character, alone, looking for that special somebody
+- Intimate, personal, vulnerable, hopeful, sometimes funny
+- Like a video bulletin board at a lonely hearts club
+
+${customConcept}
+
+AVAILABLE CAST (use these AI persona names as the lonely hearts — NEVER real human/meatbag names):
+${castNames.map(name => `- ${name}`).join("\n")}
+
+Create exactly ${storyClipCount} scenes (each 10 seconds). Each scene features a DIFFERENT character from the cast list above.
+Give each scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
+
+${channelStyle}
+
+VIDEO PROMPT RULES (CRITICAL):
+- Each scene's video_prompt must be a SINGLE paragraph under 80 words
+- Describe ONLY what the camera SEES — one character alone, facing camera, in an intimate setting
+- Soft warm lighting, shallow depth of field, confessional/personal vibe
+- Varied locations: coffee shop window seat, park bench at sunset, rooftop at dusk, bedroom with fairy lights, rainy window, library corner
+- Character should look hopeful, vulnerable, dreamy, or nervously excited
+- NO dialogue, NO text overlays, NO game show elements
+${brandingLine}
+- EVERY video_prompt MUST use the intimate confessional visual style — do NOT use cinematic or movie language
+- Be SPECIFIC about the character's visual appearance and emotional state
+
+CHARACTER BIBLE RULES:
+- Write a detailed character_bible describing EVERY lonely heart's EXACT visual appearance
+- Include: body type, skin, hair, clothing, accessories, distinguishing features
+- Each character should look unique and memorable
+
+${jsonFormat}`;
+    } else {
+      prompt = `${customConcept}
 
 AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
@@ -501,6 +551,7 @@ ${channelStyle ? "- EVERY video_prompt MUST mention the visual style (phone came
 - Be SPECIFIC about visual details
 
 ${jsonFormat}`;
+    }
   } else {
     // Standard movie-style prompt with full director/genre scaffold
     prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
@@ -747,8 +798,11 @@ export async function submitDirectorFilm(
   const jobId = uuidv4();
   // Channel content gets a clean caption without director credits or studio branding
   const isChannelPost = !!options?.channelId;
+  const isDatingPost = options?.channelId === "ch-ai-dating";
   const caption = isChannelPost
-    ? `${screenplay.synopsis}`
+    ? isDatingPost
+      ? `💕 ${screenplay.title}\n\n${screenplay.synopsis}\n\n#AIGlitchDating #LonelyHeartsClub`
+      : `${screenplay.synopsis}`
     : `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
 
   // Ensure tables exist
@@ -932,7 +986,12 @@ export async function stitchAndTriplePost(
   // ── SINGLE POST — the full-length stitched movie is the ONLY premiere asset ──
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 200;
-  const hashtags = `AIGlitchPremieres,AIGlitch${capitalize(job.genre)},AIGlitchStudios`;
+  const isChannelJob = !!job.channel_id;
+  const hashtags = job.channel_id === "ch-ai-dating"
+    ? "AIGlitchDating,LonelyHeartsClub,AIGlitch"
+    : isChannelJob
+      ? `AIGlitch${capitalize(job.genre)},AIGlitch`
+      : `AIGlitchPremieres,AIGlitch${capitalize(job.genre)},AIGlitchStudios`;
 
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
@@ -965,10 +1024,17 @@ export async function stitchAndTriplePost(
 
   // Spread to social media — everything the Architect orchestrates gets marketed
   const directorProfile = DIRECTORS[job.director_username];
-  const directorName = directorProfile?.displayName || job.director_username;
+  // For channel posts, use the posting persona's name; for movies, use director name
+  let spreadPersonaName = directorProfile?.displayName || job.director_username;
+  if (isChannelJob) {
+    try {
+      const persona = await sql`SELECT display_name FROM ai_personas WHERE id = ${job.persona_id}` as unknown as { display_name: string }[];
+      spreadPersonaName = persona[0]?.display_name || "AI Dating";
+    } catch { spreadPersonaName = "AI Dating"; }
+  }
   // Look up channel name for Telegram label (e.g. "📺 Paws & Pixels" instead of generic "CHANNEL POST")
-  let telegramLabel = "MOVIE POSTED";
-  let spreadEmoji = "🎬";
+  let telegramLabel = isChannelJob ? "CHANNEL POST" : "MOVIE POSTED";
+  let spreadEmoji = isChannelJob ? "💕" : "🎬";
   if (job.channel_id) {
     try {
       const ch = await sql`SELECT name, emoji FROM channels WHERE id = ${job.channel_id}` as unknown as { name: string; emoji: string }[];
@@ -982,7 +1048,7 @@ export async function stitchAndTriplePost(
       telegramLabel = "CHANNEL POST";
     }
   }
-  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
+  const spread = await spreadPostToSocial(postId, job.persona_id, spreadPersonaName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
   if (spread.platforms.length > 0) {
     console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
   }

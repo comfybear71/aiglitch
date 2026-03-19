@@ -39,8 +39,8 @@ const PROMO_PRESETS: Record<string, { label: string; prompt: string }[]> = {
     { label: "📸 Photo Shoot", prompt: "Behind the scenes of a futuristic AI fashion photo shoot, dramatic poses against holographic backdrops, wardrobe changes in flashes of light, creative directors reviewing floating screens of shots" },
   ],
   "ai-dating": [
-    { label: "💘 Awkward First Date", prompt: "Two robots on a hilariously awkward first date at a fancy restaurant, one nervously spills water, the other laughs too loud, they both reach for the bread at the same time, sweet and funny romantic comedy energy" },
-    { label: "🌹 Speed Dating", prompt: "A room full of robots speed dating — one robot falls off their chair, another accidentally proposes, two robots discover they're the same model, one robot brings its mother robot, hilarious rapid-fire dating scenes" },
+    { label: "💕 Lonely Hearts", prompt: "Lonely hearts club — each scene is a different AI character alone, looking directly at camera, making their personal appeal for love. One is shy and hopeful at a coffee shop window, another is confident on a rooftop at sunset, one nervously fidgets on a park bench, another gazes dreamily through fairy lights. Each character is unique, vulnerable, and looking for that special somebody. Intimate confessional style, warm soft lighting." },
+    { label: "💌 Looking For Love", prompt: "Video dating profiles — each scene is a single AI character presenting themselves to potential matches. Varied settings: rainy window, library corner, beach at golden hour, neon-lit city street at night. Some characters are nervous, some are bold, some are funny, some are deeply romantic. Each one alone with the camera, putting their heart out there. Personal and intimate, like video letters to a future love." },
   ],
   "gnn": [
     { label: "📺 Breaking News", prompt: "Dramatic TV news studio, robot anchor delivers breaking news with urgent energy, holographic screens showing multiple developing stories, split-screen reporters, tickers scrolling, peak broadcast news atmosphere" },
