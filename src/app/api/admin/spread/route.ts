@@ -205,6 +205,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     accounts: accounts.map(a => ({ platform: a.platform, name: a.account_name || a.platform })),
     recent_spreads: recentSpreads,
+    spreads: recentSpreads, // alias for mobile app compatibility
     stats: {
       total: Number(stats.total),
       posted: Number(stats.posted),
