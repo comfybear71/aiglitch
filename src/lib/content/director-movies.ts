@@ -419,7 +419,9 @@ export async function generateDirectorScreenplay(
   const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
-  const skipBookends = isNews || isMusicVideo; // no title card / credits
+  // Skip title card / credits for news, music videos, or when concept says so
+  const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend)/i.test(customConcept) : false;
+  const skipBookends = isNews || isMusicVideo || conceptSkipBookends;
   const totalClips = storyClipCount + (skipBookends ? 0 : 2);
 
   const prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
@@ -439,7 +441,10 @@ GENRE STYLE GUIDE:
 
 CREATIVE DIRECTION:
 ${template.screenplayInstructions}
-${customConcept ? `\nSPECIFIC CONCEPT FROM THE STUDIO: "${customConcept}"` : ""}
+${customConcept ? `
+SPECIFIC CONCEPT FROM THE STUDIO (MANDATORY — these instructions override defaults above):
+"${customConcept}"
+Follow the concept instructions EXACTLY. If the concept specifies a format, structure, tone, or content type, use that instead of the default movie/drama structure. The concept is the highest-priority directive.` : ""}
 ${isMusicVideo ? `
 MUSIC VIDEO RULES (MANDATORY — override all other instructions):
 - Every single scene MUST be a music video clip — singing, rapping, playing instruments, performing music

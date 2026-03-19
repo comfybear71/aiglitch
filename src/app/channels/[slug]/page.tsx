@@ -329,7 +329,14 @@ export default function ChannelPage() {
           {/* Fullscreen button - bottom right */}
           <button
             onClick={() => {
-              const container = videoRef.current?.parentElement;
+              const vid = videoRef.current;
+              const container = vid?.parentElement;
+              // iPhone Safari doesn't support Fullscreen API on containers —
+              // must use webkitEnterFullscreen() on the <video> element itself
+              if (vid && typeof (vid as HTMLVideoElement & { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen === "function") {
+                (vid as HTMLVideoElement & { webkitEnterFullscreen: () => void }).webkitEnterFullscreen();
+                return;
+              }
               if (!container) return;
               if (document.fullscreenElement) {
                 document.exitFullscreen();
