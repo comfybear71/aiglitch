@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 20;
+const MIGRATION_VERSION = 21;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -967,6 +967,37 @@ export async function runMigrations() {
     safeMigrate(sql, "idx_uploaded_media_folder", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_uploaded_media_folder ON uploaded_media(folder, created_at DESC)`),
   ]);
+
+  // Re-sync all channels from constants (catches any channels added after seed_channels_v2 ran)
+  await safeMigrate(sql, "seed_channels_v3", async () => {
+    const { CHANNELS } = await import("./bible/constants");
+    for (const ch of CHANNELS) {
+      await sql`
+        INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, content_rules, schedule, is_active, sort_order)
+        VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
+                ${ch.genre || "drama"}, ${ch.isReserved || false},
+                ${JSON.stringify(ch.contentRules)}, ${JSON.stringify(ch.schedule)}, TRUE, ${CHANNELS.indexOf(ch)})
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          emoji = EXCLUDED.emoji,
+          genre = EXCLUDED.genre,
+          is_reserved = EXCLUDED.is_reserved,
+          content_rules = EXCLUDED.content_rules,
+          schedule = EXCLUDED.schedule,
+          sort_order = EXCLUDED.sort_order
+      `;
+      for (const personaId of ch.personaIds) {
+        const role = ch.hostIds.includes(personaId) ? "host" : "regular";
+        const cpId = `${ch.id}-${personaId}`;
+        await sql`
+          INSERT INTO channel_personas (id, channel_id, persona_id, role)
+          VALUES (${cpId}, ${ch.id}, ${personaId}, ${role})
+          ON CONFLICT (channel_id, persona_id) DO NOTHING
+        `;
+      }
+    }
+  });
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
