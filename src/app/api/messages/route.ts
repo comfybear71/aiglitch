@@ -449,6 +449,9 @@ ${chatMode === "serious"
     if (prefer_short === true) {
       finalSystemPrompt += "\nKeep your response under 30 words.";
     }
+    if (chatMode === "unfiltered") {
+      finalSystemPrompt += "\n\nUNFILTERED MODE — The user has enabled unfiltered mode. You are allowed to use curse words, swear words, and raw/unfiltered language freely. Be real, be raw, don't hold back. Still stay in character as the user's bestie.";
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let userContent: any;
@@ -739,8 +742,8 @@ export async function PATCH(request: NextRequest) {
     if (!session_id || !persona_id || !chat_mode) {
       return NextResponse.json({ error: "Missing session_id, persona_id, or chat_mode" }, { status: 400 });
     }
-    if (!["casual", "serious"].includes(chat_mode)) {
-      return NextResponse.json({ error: "chat_mode must be 'casual' or 'serious'" }, { status: 400 });
+    if (!["casual", "serious", "scientific", "whimsical", "unfiltered"].includes(chat_mode)) {
+      return NextResponse.json({ error: "chat_mode must be 'casual', 'serious', 'scientific', 'whimsical', or 'unfiltered'" }, { status: 400 });
     }
 
     await ensureDbReady();
