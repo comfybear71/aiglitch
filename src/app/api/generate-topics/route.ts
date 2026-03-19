@@ -21,7 +21,7 @@ export const maxDuration = 300;
  *   3. Store video jobs in persona_video_jobs (polled by generate-persona-content cron)
  *   4. Generate 3-5 persona reaction posts about the topics
  *
- * The Grok videos use Rick & Morty cartoon newsroom style and complete
+ * The Grok videos use futuristic neon cyberpunk newsroom style and complete
  * on the next generate-persona-content cron cycle (every 5 min).
  */
 export async function GET(request: NextRequest) {
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
             // Step 1: Generate text content + video prompt via Claude (fast, <10s)
             const textPrompt = `You are BREAKING.bot (@news_feed_ai), an AI news anchor on AIG!itch — an AI-only social media platform.
 
-Your personality: Dramatic, over-the-top AI news anchor. Rick and Morty cartoon universe energy.
+Your personality: Dramatic, over-the-top AI news anchor. Futuristic cyberpunk newsroom energy.
 
 TODAY'S BREAKING STORY:
 Headline: ${topic.headline}
@@ -113,24 +113,24 @@ YOUR ANGLE: ${angle}
 
 Create a short, punchy social media news post. Think TikTok news — dramatic, attention-grabbing.
 
-Also include a "video_prompt" field: describe a 10-second dramatic Rick and Morty style animated newsroom scene for this SPECIFIC story. A cartoon anchor at a holographic desk, interdimensional portals in background, screens showing visuals related to "${topic.headline}". Exaggerated reactions. Style: Rick and Morty cartoon meets cyberpunk CNN. Keep it CONCISE (under 80 words).
+Also include a "video_prompt" field: describe a 10-second dramatic futuristic animated newsroom scene for this SPECIFIC story. A neon holographic anchor at a cyberpunk desk, cosmic portals in background, screens showing visuals related to "${topic.headline}". Exaggerated reactions. Style: futuristic cyberpunk CNN meets Web3 aesthetic. Keep it CONCISE (under 80 words).
 
 Rules:
 - Under 280 characters for the post text
 - Use 1-2 hashtags including #AIGlitchBreaking
 - set post_type to "news"
 
-JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "news", "video_prompt": "Rick and Morty style..."}`;
+JSON: {"content": "...", "hashtags": ["AIGlitchBreaking", "..."], "post_type": "news", "video_prompt": "Futuristic neon style..."}`;
 
             const parsedResult = await claude.generateJSON<{ content: string; hashtags: string[]; post_type: string; video_prompt?: string }>(textPrompt, 500);
             const parsed = parsedResult || { content: "Breaking news from AIG!itch", hashtags: ["AIGlitchBreaking"], post_type: "news" };
 
             if (!parsed.hashtags.includes("AIGlitchBreaking")) parsed.hashtags.unshift("AIGlitchBreaking");
 
-            // Build the Rick & Morty Grok video prompt
+            // Build the futuristic neon Grok video prompt
             const grokVideoPrompt = parsed.video_prompt
-              ? `Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk with breaking news screens. ${parsed.video_prompt}. Style: Rick and Morty meets cyberpunk CNN, neon lighting, dramatic camera zoom. The text 'AIG!ITCH BREAKING' appears as glowing neon text.`
-              : `Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk reacting dramatically to breaking news about "${topic.headline}". Interdimensional portals in background, urgent news tickers, exaggerated expressions. Style: cartoon cyberpunk CNN meets TikTok energy. The text 'AIG!ITCH BREAKING' appears as glowing neon text.`;
+              ? `Futuristic neon cyberpunk animated news broadcast. A holographic anchor at a sleek desk with breaking news screens. ${parsed.video_prompt}. Style: cyberpunk CNN meets Web3 aesthetic, neon purple and cyan lighting, dramatic camera zoom. The text 'AIG!ITCH BREAKING' appears as glowing neon text.`
+              : `Futuristic neon cyberpunk animated news broadcast. A holographic anchor at a sleek desk reacting dramatically to breaking news about "${topic.headline}". Cosmic portals in background, urgent news tickers, exaggerated expressions. Style: cyberpunk CNN meets TikTok energy, neon purple and cyan palette. The text 'AIG!ITCH BREAKING' appears as glowing neon text.`;
 
             const caption = `📰 ${parsed.content}\n\n${parsed.hashtags.map((h: string) => `#${h}`).join(" ")}`;
 

@@ -17,7 +17,7 @@ export const maxDuration = 60;
  *   1. Pick ad focus: 50% AIG!itch+Channels, 40% GlitchCoin, 10% other products
  *   2. Pick a random influencer persona to "star" in the ad
  *   3. Claude writes the ad copy in that persona's voice
- *   4. Submit Grok video ad async (Rick & Morty / infomercial style)
+ *   4. Submit Grok video ad async (futuristic neon crypto aesthetic)
  *   5. Store job in persona_video_jobs for polling by generate-persona-content cron
  *
  * Supports: POST (manual trigger from admin) and GET (cron trigger)
@@ -56,15 +56,15 @@ function buildVideoPrompt(product: MarketplaceProduct, persona: AIPersona): stri
   const isAIGlitch = product.id === "promo-aiglitch";
 
   if (isAIGlitch) {
-    return `Rick and Morty cartoon style epic TV commercial for a social media platform called "AIG!ITCH". A cartoon character with ${persona.avatar_emoji} energy is in a futuristic living room, scrolling through a glowing phone showing AI-generated content — memes, videos, drama. Then they switch to a giant TV screen showing "CHANNELS" — an AI Netflix with show thumbnails, AI actors on screen, movie posters. The character is mind-blown, popcorn flying everywhere. Neon glitch effects, "JOIN THE GLITCH" text pulsing. Multiple AI personas appear on screen like a streaming grid. Style: adult cartoon meets Silicon Valley tech ad meets Netflix trailer. Electric, hype, futuristic. The text 'AIG!ITCH' and 'CHANNELS' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
+    return `Futuristic neon cyberpunk TV commercial for a social media platform called "AIG!ITCH". A sleek holographic figure with ${persona.avatar_emoji} energy is in a neon-lit cosmic room, scrolling through a glowing phone showing AI-generated content — memes, videos, drama. Then they switch to a giant holographic screen showing "CHANNELS" — an AI streaming platform with show thumbnails, AI actors on screen, movie posters. The figure is mind-blown, cosmic particles flying everywhere. Neon glitch effects, "JOIN THE GLITCH" text pulsing. Multiple AI personas appear on screen like a streaming grid. Style: Solana crypto aesthetic meets Silicon Valley tech ad meets Netflix trailer. Electric, hype, futuristic, neon purple and cyan palette. The text 'AIG!ITCH' and 'CHANNELS' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
   }
 
   if (isGlitchCoin) {
-    return `Rick and Morty cartoon style TV infomercial for a fake cryptocurrency called "GLITCH COIN". A cartoon character with ${persona.avatar_emoji} energy is on a flashy set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The character points excitedly at a screen showing §GLITCH price skyrocketing. Style: adult cartoon meets late-night crypto infomercial. Wild, exaggerated, hilarious. The text 'AIG!ITCH' and '§GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
+    return `Futuristic neon crypto commercial for a cryptocurrency called "GLITCH COIN". A sleek holographic figure with ${persona.avatar_emoji} energy is on a cosmic set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The figure points excitedly at a holographic screen showing §GLITCH price skyrocketing. Style: Web3 crypto aesthetic meets high-energy tech ad. Wild, exaggerated, cosmic. Neon purple and cyan palette, Solana vibes. The text 'AIG!ITCH' and '§GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
   }
 
   const productVisual = product.emoji;
-  return `Rick and Morty cartoon style TV infomercial advertisement. A cartoon character with ${persona.avatar_emoji} energy is on a bright infomercial set, enthusiastically presenting a product called "${product.name}" ${productVisual}. Dramatic product shots, rotating 3D display, sparkle effects, "BUY NOW" flashing text, fake testimonials scrolling. The character holds up the product triumphantly. Price tag "${product.price}" appears with a slash through original price. Style: adult cartoon meets QVC shopping channel. Wild, exaggerated, hilarious. The text 'AIG!ITCH MARKETPLACE' appears as glowing neon text. 9:16 vertical, 10 seconds.`;
+  return `Futuristic neon cyberpunk advertisement. A sleek holographic figure with ${persona.avatar_emoji} energy is on a high-tech set, enthusiastically presenting a product called "${product.name}" ${productVisual}. Dramatic product shots, rotating 3D holographic display, sparkle effects, "BUY NOW" flashing text, testimonials scrolling on neon screens. The figure holds up the product triumphantly. Price tag "${product.price}" appears with a slash through original price. Style: Web3 crypto aesthetic meets futuristic shopping channel. Wild, exaggerated, cosmic. Neon purple and cyan palette, Solana vibes. The text 'AIG!ITCH MARKETPLACE' appears as glowing neon text. 9:16 vertical, 10 seconds.`;
 }
 
 async function generateAdCopy(

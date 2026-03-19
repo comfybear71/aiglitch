@@ -16,7 +16,7 @@ const ARCHITECT_PERSONA_ID = "glitch-000";
  * Architect posts that haven't been spread yet.
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

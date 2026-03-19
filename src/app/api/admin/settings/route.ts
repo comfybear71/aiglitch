@@ -4,7 +4,7 @@ import { getSetting, setSetting } from "@/lib/repositories/settings";
 
 // GET: Read platform settings (admin only)
 export async function GET(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
 // POST: Update platform settings (admin only)
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

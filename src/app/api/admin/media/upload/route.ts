@@ -11,7 +11,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
  * 4. Browser then calls /api/admin/media/save to record in DB
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

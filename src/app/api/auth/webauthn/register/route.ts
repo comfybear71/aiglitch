@@ -18,7 +18,7 @@ function getRpInfo(request: NextRequest) {
 
 // GET — generate registration options (must be logged in as admin already)
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Must be logged in as admin first" }, { status: 401 });
   }
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
 // POST — verify registration and store credential
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Must be logged in as admin first" }, { status: 401 });
   }

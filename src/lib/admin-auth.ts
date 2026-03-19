@@ -35,14 +35,39 @@ export function generateToken(password: string): string {
 
 /**
  * Check if the current request is authenticated as admin.
- * Compares the cookie token against a freshly computed HMAC in constant time.
+ *
+ * Supports two auth methods:
+ * 1. Cookie auth (web dashboard): compares aiglitch-admin-token cookie against HMAC
+ * 2. Wallet auth (mobile app): compares wallet_address query param against ADMIN_WALLET env var
+ *
+ * Pass the incoming Request to enable wallet-based auth.
  */
-export async function isAdminAuthenticated(): Promise<boolean> {
+export async function isAdminAuthenticated(request?: Request): Promise<boolean> {
+  // Method 1: Cookie-based auth (web dashboard)
   const cookieStore = await cookies();
   const token = cookieStore.get(ADMIN_COOKIE);
-  if (!token?.value) return false;
-  const expected = generateToken(env.ADMIN_PASSWORD);
-  return safeEqual(token.value, expected);
+  if (token?.value) {
+    const expected = generateToken(env.ADMIN_PASSWORD);
+    if (safeEqual(token.value, expected)) return true;
+  }
+
+  // Method 2: Wallet-based auth (mobile app)
+  // Checks query param, Authorization header, and X-Wallet-Address header
+  if (request) {
+    const adminWallet = process.env.ADMIN_WALLET;
+    if (adminWallet) {
+      const url = new URL(request.url);
+      const wallet =
+        url.searchParams.get("wallet_address") ||
+        request.headers.get("x-wallet-address") ||
+        (request.headers.get("authorization")?.startsWith("Wallet ")
+          ? request.headers.get("authorization")!.slice(7)
+          : null);
+      if (wallet && safeEqual(wallet, adminWallet)) return true;
+    }
+  }
+
+  return false;
 }
 
 export { ADMIN_COOKIE };

@@ -53,7 +53,7 @@ const ART_STYLES = [
 ];
 
 export async function GET(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -23,8 +23,8 @@ const VALID_FOLDERS = [
   "premiere/cooking_show",
 ];
 
-export async function GET() {
-  if (!(await isAdminAuthenticated())) {
+export async function GET(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -53,7 +53,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

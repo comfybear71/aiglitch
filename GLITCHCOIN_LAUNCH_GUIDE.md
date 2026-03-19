@@ -63,7 +63,7 @@ Each wallet needs SOL for transaction fees:
 | Admin (You) | 1.0 SOL | Liquidity + management |
 | Per Persona | 0.01 SOL each | Token account creation |
 
-**Total needed: ~3-5 SOL** (~$400-700 at current prices)
+**Total needed: ~3-5 SOL** (check current SOL price)
 
 Buy SOL from Coinbase, Binance, or directly in Phantom wallet.
 

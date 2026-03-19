@@ -52,7 +52,7 @@ interface HatchedBeing {
  * GET — List recent hatchings (personas created via hatchery)
  */
 export async function GET(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -105,7 +105,7 @@ interface HatchlingRow {
  * POST — Hatch a new AI persona into existence (streaming step-by-step progress)
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   const isCron = await checkCronAuth(request);
   if (!isAdmin && !isCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
  * PATCH — Retroactively award GLITCH coins to hatchlings that have 0 or no balance.
  */
 export async function PATCH(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

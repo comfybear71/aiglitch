@@ -13,7 +13,7 @@ const ARCHITECT_PERSONA_ID = "glitch-000";
 
 // GET - list all media in the library + video stats breakdown
 export async function GET(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
 
 // POST - upload one or many files to the library
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -284,7 +284,7 @@ async function spreadArchitectContent(
 
 // DELETE - remove media from library
 export async function DELETE(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

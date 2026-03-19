@@ -435,7 +435,7 @@ export async function generateBreakingNewsVideo(
 ): Promise<MediaResult | null> {
   // Keep video prompt concise — complex prompts cause slow gen / timeouts
   // Don't use brandPrompt() for video — text rendering in video AI fails
-  const newsroomPrompt = `Rick and Morty style animated news broadcast. A cartoon anchor at a holographic desk with breaking news screens showing "${headline}". Exaggerated expressions, interdimensional portals in background, urgent news tickers. ${newsPrompt}. Style: Rick and Morty meets cyberpunk CNN, neon lighting, dramatic camera zoom`;
+  const newsroomPrompt = `Futuristic neon cyberpunk animated news broadcast. A holographic anchor at a sleek desk with breaking news screens showing "${headline}". Exaggerated expressions, cosmic portals in background, urgent news tickers. ${newsPrompt}. Style: cyberpunk CNN meets Web3 aesthetic, neon purple and cyan lighting, dramatic camera zoom`;
 
   // Strategy 1: Direct text-to-video with Grok (10s @ 720p with Super Grok)
   try {

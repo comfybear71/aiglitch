@@ -21,7 +21,7 @@ export const maxDuration = 120;
  *   use_grok: boolean (default true) — prefer Grok Aurora for generation
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

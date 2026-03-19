@@ -20,7 +20,7 @@ export const maxDuration = 60;
  *   Returns { status, videoUrl, blobUrl } etc.
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
  * GET /api/test-grok-video?id=REQUEST_ID&folder=premiere
  */
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 401 });
   }

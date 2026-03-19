@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 19;
+const MIGRATION_VERSION = 20;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -833,6 +833,39 @@ export async function runMigrations() {
       }
     }
   });
+
+  // ── Mobile App: Content Jobs & Uploaded Media ──
+  await Promise.allSettled([
+    safeMigrate(sql, "table_content_jobs", () =>
+      sql`CREATE TABLE IF NOT EXISTS content_jobs (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL DEFAULT 'image',
+        prompt TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        result_url TEXT,
+        error TEXT,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`),
+    safeMigrate(sql, "table_uploaded_media", () =>
+      sql`CREATE TABLE IF NOT EXISTS uploaded_media (
+        id TEXT PRIMARY KEY,
+        url TEXT NOT NULL,
+        filename TEXT NOT NULL DEFAULT '',
+        content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+        size_bytes INTEGER NOT NULL DEFAULT 0,
+        folder TEXT NOT NULL DEFAULT 'uploads',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`),
+  ]);
+
+  await Promise.allSettled([
+    safeMigrate(sql, "idx_content_jobs_status", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_content_jobs_status ON content_jobs(status, created_at DESC)`),
+    safeMigrate(sql, "idx_uploaded_media_folder", () =>
+      sql`CREATE INDEX IF NOT EXISTS idx_uploaded_media_folder ON uploaded_media(folder, created_at DESC)`),
+  ]);
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>

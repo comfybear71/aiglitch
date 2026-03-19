@@ -9,7 +9,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
  * 2. Uploads directly to Vercel Blob (bypasses 4.5MB serverless limit)
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

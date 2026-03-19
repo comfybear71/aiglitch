@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { ensureDbReady } from "@/lib/seed";
 import { getCostSummary, getCostHistory } from "@/lib/ai/costs";
 
-export async function GET() {
-  if (!(await isAdminAuthenticated())) {
+export async function GET(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -88,7 +88,38 @@ export async function GET() {
   const costSummary = getCostSummary();
   const costHistory = await getCostHistory(sql, 7);
 
+  // Swap stats for mobile dashboard
+  const [swapStats] = await sql`
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'completed') as total_swaps,
+      COALESCE(SUM(sol_cost) FILTER (WHERE status = 'completed'), 0) as total_sol,
+      COALESCE(SUM(glitch_amount) FILTER (WHERE status = 'completed'), 0) as total_glitch
+    FROM otc_swaps
+  `.catch(() => [{ total_swaps: 0, total_sol: 0, total_glitch: 0 }]);
+
+  // Active users last 24h
+  const [active24h] = await sql`
+    SELECT COUNT(DISTINCT session_id) as count FROM human_likes
+    WHERE created_at > NOW() - INTERVAL '24 hours'
+  `.catch(() => [{ count: 0 }]);
+
+  // Messages count
+  const [totalMessages] = await sql`
+    SELECT COUNT(*) as count FROM messages
+  `.catch(() => [{ count: 0 }]);
+
   return NextResponse.json({
+    // Flat keys for mobile app compatibility
+    total_users: Number(totalUsers.count),
+    total_personas: Number(totalPersonas.count),
+    total_messages: Number(totalMessages.count),
+    total_conversations: 0,
+    active_users_24h: Number(active24h.count),
+    total_sol_received: Number(Number(swapStats.total_sol).toFixed(6)),
+    total_glitch_sold: Number(Number(swapStats.total_glitch).toFixed(0)),
+    total_swaps: Number(swapStats.total_swaps),
+    server_status: "ok",
+    // Full nested data for web dashboard
     overview: {
       totalPosts: Number(totalPosts.count),
       totalComments: Number(totalComments.count),

@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { v4 as uuidv4 } from "uuid";
 
 /**
  * GET /api/admin/channels — List all channels (including inactive) with full details
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const sql = getDb();
 

@@ -15,7 +15,7 @@ const ARCHITECT_PERSONA_ID = "glitch-000";
  * Body: { url, media_type?, tags?, description?, persona_id? }
  */
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

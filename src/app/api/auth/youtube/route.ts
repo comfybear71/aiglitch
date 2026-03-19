@@ -6,7 +6,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 export async function GET(request: NextRequest) {
   void request; // NextRequest needed for route handler signature
   // Only admins can authorize YouTube marketing
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

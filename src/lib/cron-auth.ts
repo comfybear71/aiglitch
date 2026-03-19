@@ -24,7 +24,7 @@ import { cronEndpointLimiter } from "@/lib/rate-limit";
 export async function checkCronAuth(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get("authorization");
   const cronSecret = env.CRON_SECRET;
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
 
   // If no cron secret configured, allow all (dev mode)
   if (!cronSecret) return true;

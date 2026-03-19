@@ -412,8 +412,11 @@ export async function generateDirectorScreenplay(
   const actors = await castActors(directorId);
   const castNames = actors.map(a => a.displayName);
 
-  const storyClipCount = Math.floor(Math.random() * 3) + 6; // 6-8 story scenes
-  const totalClips = storyClipCount + 2; // +intro +credits
+  // If custom concept specifies a clip count (e.g. "9 clips"), respect it; otherwise random 6-8
+  const conceptClipMatch = customConcept?.match(/(\d+)\s*clips?/i);
+  const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
+  const isNews = genre === "news";
+  const totalClips = storyClipCount + (isNews ? 0 : 2); // news: no intro/credits
 
   const prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
 
@@ -529,20 +532,9 @@ Respond in this exact JSON format:
 
     const characterBible = parsed.character_bible || "";
 
-    // Build the intro scene (title card)
-    const introScene: DirectorScene = {
-      sceneNumber: 1,
-      type: "intro",
-      title: "Title Card",
-      description: `AIG!itch Studios presents: ${parsed.title}, directed by ${director.displayName}`,
-      videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography. "Directed by ${director.displayName}" fades in below. ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
-      lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography with "Directed by ${director.displayName}" below, AIG!itch Studios logo visible, transitioning to first scene.`,
-      duration: 10,
-    };
-
     // Build story scenes from screenplay output
     const storyScenes: DirectorScene[] = parsed.scenes.map((s, i: number) => ({
-      sceneNumber: i + 2, // offset by 1 for intro
+      sceneNumber: isNews ? i + 1 : i + 2, // news: no intro offset
       type: "story" as const,
       title: s.title,
       description: s.description,
@@ -551,19 +543,35 @@ Respond in this exact JSON format:
       duration: 10,
     }));
 
-    // Build credits scene
-    const lastStoryScene = storyScenes[storyScenes.length - 1];
-    const creditsScene: DirectorScene = {
-      sceneNumber: storyScenes.length + 2,
-      type: "credits",
-      title: "Credits",
-      description: `End credits for ${parsed.title}`,
-      videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}" — Directed by ${director.displayName} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
-      lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
-      duration: 10,
-    };
+    let allScenes: DirectorScene[];
 
-    const allScenes = [introScene, ...storyScenes, creditsScene];
+    if (isNews) {
+      // News broadcasts: use story scenes as-is, no title card or credits
+      allScenes = storyScenes;
+    } else {
+      // Director movies: wrap with title card intro and credits
+      const introScene: DirectorScene = {
+        sceneNumber: 1,
+        type: "intro",
+        title: "Title Card",
+        description: `AIG!itch Studios presents: ${parsed.title}, directed by ${director.displayName}`,
+        videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography. "Directed by ${director.displayName}" fades in below. ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
+        lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography with "Directed by ${director.displayName}" below, AIG!itch Studios logo visible, transitioning to first scene.`,
+        duration: 10,
+      };
+
+      const creditsScene: DirectorScene = {
+        sceneNumber: storyScenes.length + 2,
+        type: "credits",
+        title: "Credits",
+        description: `End credits for ${parsed.title}`,
+        videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}" — Directed by ${director.displayName} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
+        lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
+        duration: 10,
+      };
+
+      allScenes = [introScene, ...storyScenes, creditsScene];
+    }
 
     return {
       id: uuidv4(),

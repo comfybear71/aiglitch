@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { ensureDbReady } from "@/lib/seed";
@@ -11,8 +11,8 @@ import { v4 as uuidv4 } from "uuid";
  * Scans ALL Vercel Blob storage and re-registers any files missing
  * from the media_library DB table. Recovers from DB resets.
  */
-export async function POST() {
-  if (!(await isAdminAuthenticated())) {
+export async function POST(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

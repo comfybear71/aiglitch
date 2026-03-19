@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 
-export async function GET() {
-  if (!(await isAdminAuthenticated())) {
+export async function GET(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -22,7 +22,7 @@ export async function GET() {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

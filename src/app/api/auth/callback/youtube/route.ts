@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 // YouTube OAuth callback — exchanges code for tokens and saves to DB
 // Uses YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET (marketing keys)
 export async function GET(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated();
+  const isAdmin = await isAdminAuthenticated(request);
   if (!isAdmin) {
     return NextResponse.redirect(new URL("/admin?yt_error=unauthorized", request.url));
   }
