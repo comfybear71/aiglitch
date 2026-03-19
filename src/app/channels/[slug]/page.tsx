@@ -265,7 +265,7 @@ export default function ChannelPage() {
   return (
     <div className="h-[100dvh] bg-black text-white flex flex-col lg:flex-row overflow-hidden">
       {/* LEFT / MAIN column: video player + info */}
-      <div className="flex flex-col lg:flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-h-0 min-w-0">
         {/* Video player */}
         <div className="relative w-full bg-black" style={{ aspectRatio: "16/9" }}>
           {isVideo && (
@@ -455,7 +455,8 @@ export default function ChannelPage() {
         {/* On mobile: scrollable thumbnail list below */}
         <div
           ref={listRef}
-          className="flex-1 overflow-y-auto lg:hidden"
+          className="flex-1 min-h-0 overflow-y-auto lg:hidden"
+          style={{ WebkitOverflowScrolling: "touch" }}
           onScroll={handleListScroll}
         >
           <div className="px-3 py-2">

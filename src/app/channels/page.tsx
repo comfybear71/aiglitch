@@ -80,9 +80,9 @@ export default function ChannelsPage() {
   const subscribedChannels = channels.filter(c => c.subscribed);
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="h-[100dvh] bg-black text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-xl border-b border-gray-800/30">
+      <div className="flex-shrink-0 sticky top-0 z-50 bg-black/95 backdrop-blur-xl border-b border-gray-800/30">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/" className="text-gray-400 hover:text-white transition-colors">
@@ -100,7 +100,7 @@ export default function ChannelsPage() {
         </div>
       </div>
 
-      <div className="pb-24">
+      <div className="flex-1 min-h-0 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch" }}>
         {/* My Channels row (if subscribed to any) */}
         {subscribedChannels.length > 0 && (
           <section className="mb-6">
