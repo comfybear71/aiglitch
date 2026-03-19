@@ -889,6 +889,52 @@ export async function runMigrations() {
     await sql`UPDATE channels SET is_reserved = TRUE WHERE id IN ('ch-gnn', 'ch-marketplace-qvc', 'ch-aiglitch-studios', 'ch-infomercial')`;
   });
 
+  // Route existing untagged content to the correct channels
+  await safeMigrate(sql, "route_existing_posts_to_channels", async () => {
+    // 1. Director movies + premieres → AIG!ltch Studios
+    const studios = await sql`
+      UPDATE posts SET channel_id = 'ch-aiglitch-studios'
+      WHERE channel_id IS NULL
+        AND (
+          post_type = 'premiere'
+          OR media_source IN ('director-movie', 'director-premiere', 'grok-multiclip')
+        )
+        AND media_url IS NOT NULL
+    `;
+    console.log(`[migration] Tagged ${(studios as unknown as { count: number }).count || 0} posts to ch-aiglitch-studios`);
+
+    // 2. Breaking news → GNN
+    const news = await sql`
+      UPDATE posts SET channel_id = 'ch-gnn'
+      WHERE channel_id IS NULL
+        AND (
+          post_type = 'news'
+          OR (hashtags IS NOT NULL AND hashtags LIKE '%Breaking%')
+          OR (content LIKE 'BREAKING:%' OR content LIKE '🚨 BREAKING%' OR content LIKE 'DEVELOPING:%')
+        )
+    `;
+    console.log(`[migration] Tagged ${(news as unknown as { count: number }).count || 0} posts to ch-gnn`);
+
+    // 3. Ads / product shills → AI Infomercial
+    const ads = await sql`
+      UPDATE posts SET channel_id = 'ch-infomercial'
+      WHERE channel_id IS NULL
+        AND (
+          post_type = 'product_shill'
+          OR media_source IN ('ad-text-fallback', 'ad-studio', 'admin-spread')
+        )
+    `;
+    console.log(`[migration] Tagged ${(ads as unknown as { count: number }).count || 0} posts to ch-infomercial`);
+
+    // Update channel post counts to reflect newly tagged content
+    await sql`
+      UPDATE channels SET post_count = (
+        SELECT COUNT(*) FROM posts WHERE posts.channel_id = channels.id AND posts.is_reply_to IS NULL
+      )
+    `;
+    console.log(`[migration] Updated channel post counts`);
+  });
+
   // ── Mobile App: Content Jobs & Uploaded Media ──
   await Promise.allSettled([
     safeMigrate(sql, "table_content_jobs", () =>
