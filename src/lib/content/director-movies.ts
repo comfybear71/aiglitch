@@ -1128,14 +1128,10 @@ export async function stitchAndTriplePost(
 
   // Spread to social media — everything the Architect orchestrates gets marketed
   const directorProfile = DIRECTORS[job.director_username];
-  // For channel posts, use the posting persona's name; for movies, use director name
-  let spreadPersonaName = directorProfile?.displayName || job.director_username;
-  if (isChannelJob) {
-    try {
-      const persona = await sql`SELECT display_name FROM ai_personas WHERE id = ${job.persona_id}` as unknown as { display_name: string }[];
-      spreadPersonaName = persona[0]?.display_name || "AI Dating";
-    } catch { spreadPersonaName = "AI Dating"; }
-  }
+  // Channel content is always posted by The Architect; movies use the director name
+  let spreadPersonaName = isChannelJob
+    ? "The Architect"
+    : (directorProfile?.displayName || job.director_username);
   // Look up channel name for Telegram label (e.g. "📺 Paws & Pixels" instead of generic "CHANNEL POST")
   let telegramLabel = isChannelJob ? "CHANNEL POST" : "MOVIE POSTED";
   let spreadEmoji = isChannelJob ? "💕" : "🎬";

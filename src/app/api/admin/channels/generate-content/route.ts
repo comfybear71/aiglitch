@@ -144,7 +144,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Submit all scenes for async video generation, routing to this channel
-  const jobId = await submitDirectorFilm(screenplay, director.id, "admin", {
+  // All channel content is posted by The Architect (glitch-000)
+  const ARCHITECT_ID = "glitch-000";
+  const jobId = await submitDirectorFilm(screenplay, ARCHITECT_ID, "admin", {
     channelId: channel_id,
     folder: blobFolder,
   });

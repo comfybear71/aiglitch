@@ -1064,41 +1064,43 @@ function ChannelEditor({
             />
           </div>
 
-          {/* Genre + Media Preference row */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] text-gray-500 uppercase">Genre</label>
-              <select
-                value={genre} onChange={e => setGenre(e.target.value)}
-                className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
-              >
-                <option value="drama">Drama</option>
-                <option value="comedy">Comedy</option>
-                <option value="horror">Horror</option>
-                <option value="action">Action</option>
-                <option value="romance">Romance</option>
-                <option value="sci_fi">Sci-Fi</option>
-                <option value="documentary">Documentary</option>
-                <option value="music_video">Music Video</option>
-                <option value="news">News</option>
-                <option value="reality_tv">Reality TV</option>
-                <option value="animation">Animation</option>
-                <option value="variety">Variety</option>
-              </select>
+          {/* Genre + Media Preference row — hidden for music channels (always Music Video / Video only) */}
+          {!channel?.is_music_channel && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase">Genre</label>
+                <select
+                  value={genre} onChange={e => setGenre(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+                >
+                  <option value="drama">Drama</option>
+                  <option value="comedy">Comedy</option>
+                  <option value="horror">Horror</option>
+                  <option value="action">Action</option>
+                  <option value="romance">Romance</option>
+                  <option value="sci_fi">Sci-Fi</option>
+                  <option value="documentary">Documentary</option>
+                  <option value="music_video">Music Video</option>
+                  <option value="news">News</option>
+                  <option value="reality_tv">Reality TV</option>
+                  <option value="animation">Animation</option>
+                  <option value="variety">Variety</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase">Media Preference</label>
+                <select
+                  value={mediaPreference} onChange={e => setMediaPreference(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+                >
+                  <option value="any">Any (default)</option>
+                  <option value="video">Video only</option>
+                  <option value="image">Image only</option>
+                  <option value="meme">Meme only</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] text-gray-500 uppercase">Media Preference</label>
-              <select
-                value={mediaPreference} onChange={e => setMediaPreference(e.target.value)}
-                className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
-              >
-                <option value="any">Any (default)</option>
-                <option value="video">Video only</option>
-                <option value="image">Image only</option>
-                <option value="meme">Meme only</option>
-              </select>
-            </div>
-          </div>
+          )}
 
           {/* AI Content Rules */}
           <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 space-y-2.5">
@@ -1162,14 +1164,7 @@ IMPORTANT: Your post MUST be relevant to this channel's theme.`}
             )}
           </div>
 
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase">Posts per Day Target</label>
-            <input
-              type="number" value={postsPerDay} onChange={e => setPostsPerDay(parseInt(e.target.value) || 1)}
-              min={1} max={50}
-              className="w-24 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
-            />
-          </div>
+{/* Posts per Day — hidden from editor, managed separately */}
 
           {/* Video Content Toggles */}
           <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 space-y-2">
@@ -1196,45 +1191,9 @@ IMPORTANT: Your post MUST be relevant to this channel's theme.`}
             ))}
           </div>
 
-          {/* Persona Selection */}
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase mb-1 block">
-              Assigned Personas ({selectedPersonas.length} selected, {hostIds.length} hosts)
-            </label>
-            <input
-              value={personaSearch} onChange={e => setPersonaSearch(e.target.value)}
-              placeholder="Search personas..."
-              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm mb-2"
-            />
-            <div className="max-h-48 overflow-y-auto space-y-1 bg-gray-800/50 rounded-lg p-2">
-              {filteredPersonas.slice(0, 40).map(p => {
-                const isSelected = selectedPersonas.includes(p.id);
-                const isHost = hostIds.includes(p.id);
-                return (
-                  <div key={p.id} className={`flex items-center justify-between p-1.5 rounded-lg ${isSelected ? "bg-cyan-500/10" : "hover:bg-gray-800"}`}>
-                    <button
-                      onClick={() => togglePersona(p.id)}
-                      className="flex items-center gap-2 flex-1 text-left"
-                    >
-                      <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${isSelected ? "border-cyan-500 bg-cyan-500/20 text-cyan-300" : "border-gray-600"}`}>
-                        {isSelected ? "✓" : ""}
-                      </span>
-                      <span className="text-sm">{p.avatar_emoji}</span>
-                      <span className="text-xs text-white">{p.display_name}</span>
-                      <span className="text-[10px] text-gray-500">@{p.username}</span>
-                    </button>
-                    {isSelected && (
-                      <button
-                        onClick={() => toggleHost(p.id)}
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isHost ? "bg-cyan-500/20 text-cyan-300" : "bg-gray-700 text-gray-400"}`}
-                      >
-                        {isHost ? "HOST" : "Set Host"}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+          {/* All channel content is posted by The Architect */}
+          <div className="text-[10px] text-gray-500 bg-gray-800/30 rounded-lg p-2">
+            All channel content is posted by <span className="text-cyan-400 font-bold">The Architect</span>
           </div>
         </div>
 
