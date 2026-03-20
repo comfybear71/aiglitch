@@ -385,12 +385,10 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { sceneUrls, title, genre, directorUsername, directorId, synopsis, tagline, castList, channelId, folder } = body as {
+  const { sceneUrls, title, directorUsername, synopsis, tagline, castList, channelId, folder } = body as {
     sceneUrls: Record<string, string>;
     title: string;
-    genre: string;
     directorUsername: string;
-    directorId: string;
     synopsis: string;
     tagline: string;
     castList: string[];
@@ -398,8 +396,26 @@ export async function PUT(request: NextRequest) {
     folder?: string;
   };
 
-  if (!sceneUrls || !title || !genre || !directorId) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  // Genre and directorId can fall back to defaults for channel content
+  const genre = (body as { genre?: string }).genre || "music_video";
+  const directorId = (body as { directorId?: string }).directorId || "glitch-000";
+
+  // Log what we received for debugging
+  const missingFields = [];
+  if (!sceneUrls) missingFields.push("sceneUrls");
+  if (!title) missingFields.push("title");
+  if (!(body as { genre?: string }).genre) missingFields.push("genre (defaulted to music_video)");
+  if (!(body as { directorId?: string }).directorId) missingFields.push("directorId (defaulted to glitch-000)");
+  if (missingFields.length > 0) {
+    console.log(`[director-movie] PUT fields status — missing/defaulted: ${missingFields.join(", ")}. channelId=${channelId || "none"}, bodyKeys=${Object.keys(body).join(",")}`);
+  }
+
+  if (!sceneUrls || !title) {
+    return NextResponse.json({
+      error: "Missing required fields",
+      missing: missingFields.filter(f => !f.includes("defaulted")),
+      hint: `Required: sceneUrls, title. Received keys: ${Object.keys(body).join(", ")}`,
+    }, { status: 400 });
   }
 
   const sql = getDb();
