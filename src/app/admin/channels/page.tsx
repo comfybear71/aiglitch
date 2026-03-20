@@ -959,27 +959,48 @@ function ChannelEditor({
     };
     const schedule = { postsPerDay };
 
-    await fetch("/api/admin/channels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: channel?.id,
-        slug,
-        name,
-        description,
-        emoji,
-        genre,
-        content_rules: contentRules,
-        schedule,
-        is_active: true,
-        sort_order: channel?.sort_order || 0,
-        show_title_page: showTitlePage,
-        show_director: showDirector,
-        show_credits: showCredits,
-        persona_ids: selectedPersonas,
-        host_ids: hostIds,
-      }),
-    });
+    try {
+      const res = await fetch("/api/admin/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: channel?.id,
+          slug,
+          name,
+          description,
+          emoji,
+          genre,
+          content_rules: contentRules,
+          schedule,
+          is_active: true,
+          sort_order: channel?.sort_order || 0,
+          show_title_page: showTitlePage,
+          show_director: showDirector,
+          show_credits: showCredits,
+          // Preserve existing channel config fields not in this editor
+          is_reserved: channel?.is_reserved || false,
+          scene_count: channel?.scene_count ?? null,
+          scene_duration: channel?.scene_duration ?? 10,
+          default_director: channel?.default_director || null,
+          generation_genre: channel?.generation_genre || null,
+          short_clip_mode: channel?.short_clip_mode || false,
+          is_music_channel: channel?.is_music_channel || false,
+          auto_publish_to_feed: channel?.auto_publish_to_feed !== false,
+          persona_ids: selectedPersonas,
+          host_ids: hostIds,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        alert(`Save failed: ${err.error || "Server error"}`);
+        setSaving(false);
+        return;
+      }
+    } catch {
+      alert("Save failed: Network error");
+      setSaving(false);
+      return;
+    }
     setSaving(false);
     onSave();
   };

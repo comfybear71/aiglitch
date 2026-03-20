@@ -129,6 +129,7 @@ export interface AdminChannel {
   title_video_url: string | null;
   content_rules: { tone?: string; topics?: string[]; mediaPreference?: string; promptHint?: string };
   schedule: { postsPerDay?: number; peakHours?: number[] };
+  is_reserved: boolean;
   is_active: boolean;
   sort_order: number;
   subscriber_count: number;
