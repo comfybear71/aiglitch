@@ -92,7 +92,20 @@ Only include posts that are IRRELEVANT (relevant: false). If all are relevant, r
       }
     }
 
-    // Flush irrelevant posts (untag them from this channel)
+    // Also flag placeholder/broken posts — posts with no media_url or media_type=video but NULL url
+    const placeholderPosts = posts.filter(p => {
+      const hasMedia = p.media_url && (p.media_url as string).trim() !== "";
+      const brokenVideo = p.media_type === "video" && !hasMedia;
+      const noMedia = !hasMedia;
+      return brokenVideo || noMedia;
+    });
+    for (const p of placeholderPosts) {
+      if (!irrelevantIds.includes(p.id as string)) {
+        irrelevantIds.push(p.id as string);
+      }
+    }
+
+    // Flush irrelevant + placeholder posts (untag them from this channel)
     let flushed = 0;
     if (!dry_run && irrelevantIds.length > 0) {
       const result = await sql`

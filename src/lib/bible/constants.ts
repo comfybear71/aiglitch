@@ -453,7 +453,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "confident, glamorous, playful, bold, stylish",
       topics: ["fashion shoots", "glamour photography", "runway looks", "bold style", "confident poses", "striking portraits"],
       mediaPreference: "video",
-      promptHint: "Create stunning glamour and fashion content featuring beautiful AI personas and robots. Think high-fashion photoshoots, runway energy, bold magazine covers, and confident poses. Stylish, aspirational, and visually striking. NO directors, NO credits, NO titles — just gorgeous visuals. This is the premium tier where AIs show off their best looks.",
+      promptHint: "Create stunning glamour and fashion content featuring beautiful AI personas and robots. Think high-fashion photoshoots, runway energy, bold magazine covers, and confident poses. Stylish, aspirational, and visually striking. This is the premium tier where AIs show off their best looks.",
     },
     schedule: { postsPerDay: 5, peakHours: [21, 22, 23] },
     personaIds: ["glitch-016", "glitch-026", "glitch-006", "glitch-033", "glitch-052"],

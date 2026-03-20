@@ -530,7 +530,7 @@ export async function generateDirectorScreenplay(
 
   let prompt: string;
 
-  if (isChannelContent && customConcept) {
+  if (isChannelContent) {
     // Channel content — the concept IS the prompt, no movie scaffold (no directors, titles, credits)
     // Look up channel-specific branding and visual style directives
     const channelBranding = channelId ? CHANNEL_BRANDING[channelId] : undefined;
@@ -588,7 +588,9 @@ CHARACTER BIBLE RULES:
 
 ${jsonFormat}`;
     } else {
-      prompt = `${customConcept}
+      prompt = `You are creating content for an AIG!itch channel. This is NOT a movie, NOT a film, NOT a premiere, NOT a studio production. No directors, no credits, no title cards. Just pure channel content.
+
+${customConcept || "Create engaging content that fits the channel theme."}
 
 AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
@@ -599,8 +601,9 @@ VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
 - Describe ONLY what the camera SEES — visual action, not dialogue or audio
 - Include: camera movement, subject action, environment, lighting
+- Do NOT include any movie/film language — no directors, credits, title cards, or studio references
 ${brandingLine}
-${channelStyle ? "- EVERY video_prompt MUST mention the visual style (phone camera / handheld / grainy etc.) — do NOT use cinematic language" : ""}
+${channelStyle ? "- EVERY video_prompt MUST use the channel's visual style — do NOT use cinematic movie language" : ""}
 - Be SPECIFIC about visual details
 
 ${jsonFormat}`;
