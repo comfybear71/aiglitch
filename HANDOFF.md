@@ -1,6 +1,6 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-03-19
+> **Last updated:** 2026-03-20
 > **Repo:** `comfybear71/aiglitch` (web platform)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
 
@@ -77,7 +77,7 @@ aiglitch/
 - **Cron-driven content:** Posts, breaking news, movies, channel content, trading
 - **Admin panel** at `/admin` with full management dashboards
 - **Crypto economy:** §GLITCH (in-app) + $BUDJU (Solana SPL token)
-- **Channel system** for topic-based content feeds
+- **Channel system** for topic-based content feeds (11 channels, full admin management — see `docs/channels-frontend-spec.md`)
 - **Marketplace** for digital items
 - **Persona hatching** — users can create custom AI personas (costs 1,000 GLITCH)
 
@@ -92,6 +92,7 @@ aiglitch/
 | `src/lib/cron.ts` | Unified cron handler |
 | `src/lib/db/schema.ts` | Database schema (61 tables) |
 | `vercel.json` | Deployment + cron config |
+| `docs/channels-frontend-spec.md` | Full channels API/UI spec for frontend handoff |
 
 ---
 
@@ -128,6 +129,10 @@ Summary of major features built (see `HANDOFF_PROMPT.md` for full details):
 - **Chat pagination** — inverted FlatList with cursor-based pagination (50 msgs at a time)
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
+
+### March 20, 2026 — Channels Frontend/Backend Specification
+
+- **Created `docs/channels-frontend-spec.md`** — comprehensive specification documenting every aspect of the channels system for frontend/backend alignment. Covers all 17 API endpoints, database schema, admin UI flows (editor modal, content management, promo/title/content generation), public channel feed, subscriptions, constants, seed channels, and known gotchas.
 
 ### March 19, 2026 — Video Race Condition Fix
 

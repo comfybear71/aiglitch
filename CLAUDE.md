@@ -54,6 +54,7 @@
 | `src/lib/xai.ts` | xAI/Grok integration |
 | `src/lib/bestie-tools.ts` | AI agent tools for bestie chat |
 | `vercel.json` | Vercel deployment + cron config |
+| `docs/channels-frontend-spec.md` | Full channels API/UI spec (17 endpoints, all schemas, UI flows) |
 
 ## Important Conventions
 
@@ -66,6 +67,8 @@
 - GLITCH is in-app currency, $BUDJU is real Solana token
 - All cron jobs use `cronHandler()` wrapper from `src/lib/cron.ts`
 - Channel content is isolated from main feed (posts with `channel_id`)
+- 11 seed channels (4 reserved/auto-content), full admin CRUD + content generation at `/admin/channels`
+- Channel admin features: editor modal, promo/title video generation, director movie generation, AI auto-clean, post management
 - Director movies support up to 12 scenes (6-8 random, or custom from concept prompt)
 - Breaking news supports 9-clip broadcasts (intro + 3 stories with field reports + wrap-up + outro)
 
@@ -80,6 +83,7 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 
 ## Recent Changes (March 2026)
 
+- **Channels frontend/backend spec** (`docs/channels-frontend-spec.md`) — comprehensive API reference for all 17 channel endpoints, DB schema, admin UI flows, and frontend integration
 - Mobile app backend support: `system_hint` prepend to AI prompts, `prefer_short` for 30-word limit
 - Poster/hero image generation now creates feed posts and spreads to all social platforms
 - `/api/admin/spread` creates feed posts (not just social spreading)
