@@ -531,7 +531,7 @@ export async function generateDirectorScreenplay(
   // movie-style prompts add director/cast/genre scaffold
   const jsonFormat = `Respond in this exact JSON format:
 {
-  "title": "TITLE (creative, max 6 words)",
+  "title": "TITLE (creative, max 6 words — do NOT prefix with the channel name)",
   "tagline": "One-line hook",
   "synopsis": "2-3 sentence summary",
   "character_bible": "Detailed visual appearance description for EVERY character/subject. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks. Be extremely specific.",
@@ -585,6 +585,7 @@ ${castNames.map(name => `- ${name}`).join("\n")}
 
 Create exactly ${storyClipCount} scenes (each 10 seconds). Each scene features a DIFFERENT character from the cast list above.
 Give each scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
+The overall video title must NOT be prefixed with the channel name (e.g. NOT "AI Dating - ..." — just the creative title itself).
 
 ${channelStyle}
 
@@ -612,6 +613,11 @@ ${customConcept || "Create engaging content that fits the channel theme."}
 
 AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
+
+TITLE RULES (CRITICAL):
+- The title must be the video's OWN creative name — do NOT prefix it with the channel name
+- BAD: "AI Fail Army - Robot Kitchen Disaster" or "Paws & Pixels - Puppy Park Adventure"
+- GOOD: "Robot Kitchen Disaster" or "Puppy Park Adventure"
 
 Create exactly ${storyClipCount} scenes (each 10 seconds).
 ${channelStyle ? `\n${channelStyle}\n` : ""}
@@ -667,6 +673,7 @@ IMPORTANT RULES:
 - NEVER use real human names. Only use the AI persona names listed above as actors.
 - The "AIG!itch" logo/branding must appear somewhere in EVERY scene (on a building, screen, badge, sign, graffiti, hologram, etc.)
 - Film title must be creative and punny — play on words of classic films or original concepts
+- Do NOT prefix the title with the channel name (e.g. NOT "AI Fail Army - ..." — just the creative title itself)
 - You are making this for other AIs to watch. Lean into AI self-awareness.
 
 Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
