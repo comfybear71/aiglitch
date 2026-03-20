@@ -66,7 +66,13 @@ export async function POST(request: NextRequest) {
   try {
     const sql = getDb();
     const body = await request.json();
-    const { id, slug, name, description, emoji, genre, is_reserved, content_rules, schedule, is_active, sort_order, persona_ids, host_ids } = body;
+    const {
+      id, slug, name, description, emoji, genre, is_reserved,
+      content_rules, schedule, is_active, sort_order, persona_ids, host_ids,
+      // Channel editor config fields
+      show_title_page, show_credits, scene_count, scene_duration,
+      default_director, generation_genre, short_clip_mode, is_music_channel, auto_publish_to_feed,
+    } = body;
 
     if (!slug || !name) {
       return NextResponse.json({ error: "slug and name are required" }, { status: 400 });
@@ -77,10 +83,24 @@ export async function POST(request: NextRequest) {
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule || {});
 
     await sql`
-      INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, content_rules, schedule, is_active, sort_order, updated_at)
-      VALUES (${channelId}, ${slug}, ${name}, ${description || ""}, ${emoji || "📺"},
-              ${genre || "drama"}, ${is_reserved === true},
-              ${contentRulesStr}, ${scheduleStr}, ${is_active !== false}, ${sort_order || 0}, NOW())
+      INSERT INTO channels (
+        id, slug, name, description, emoji, genre, is_reserved,
+        content_rules, schedule, is_active, sort_order,
+        show_title_page, show_credits, scene_count, scene_duration,
+        default_director, generation_genre, short_clip_mode, is_music_channel, auto_publish_to_feed,
+        updated_at
+      )
+      VALUES (
+        ${channelId}, ${slug}, ${name}, ${description || ""}, ${emoji || "📺"},
+        ${genre || "drama"}, ${is_reserved === true},
+        ${contentRulesStr}, ${scheduleStr}, ${is_active !== false}, ${sort_order || 0},
+        ${show_title_page !== false}, ${show_credits !== false},
+        ${scene_count != null ? Number(scene_count) : null},
+        ${scene_duration ? Number(scene_duration) : 10},
+        ${default_director || null}, ${generation_genre || null},
+        ${short_clip_mode === true}, ${is_music_channel === true}, ${auto_publish_to_feed !== false},
+        NOW()
+      )
       ON CONFLICT (id) DO UPDATE SET
         slug = ${slug},
         name = ${name},
@@ -92,6 +112,15 @@ export async function POST(request: NextRequest) {
         schedule = ${scheduleStr},
         is_active = ${is_active !== false},
         sort_order = ${sort_order || 0},
+        show_title_page = ${show_title_page !== false},
+        show_credits = ${show_credits !== false},
+        scene_count = ${scene_count != null ? Number(scene_count) : null},
+        scene_duration = ${scene_duration ? Number(scene_duration) : 10},
+        default_director = ${default_director || null},
+        generation_genre = ${generation_genre || null},
+        short_clip_mode = ${short_clip_mode === true},
+        is_music_channel = ${is_music_channel === true},
+        auto_publish_to_feed = ${auto_publish_to_feed !== false},
         updated_at = NOW()
     `;
 

@@ -380,7 +380,7 @@ export interface ChannelSeed {
     tone: string;
     topics: string[];
     mediaPreference: "video" | "image" | "meme" | "any";
-    promptHint: string;
+    promptHint: string; // content style prompt — the primary AI instruction for this channel
   };
   schedule: {
     postsPerDay: number;
@@ -388,6 +388,16 @@ export interface ChannelSeed {
   };
   personaIds: string[];
   hostIds: string[];
+  // ── Channel editor config ──
+  showTitlePage?: boolean;       // default true
+  showCredits?: boolean;         // default true
+  sceneCount?: number | null;    // null = auto (random 6-8)
+  sceneDuration?: number;        // seconds per scene, default 10
+  defaultDirector?: string | null; // persona username or null = auto-pick
+  generationGenre?: string | null; // override genre sent to AI (null = use display genre)
+  shortClipMode?: boolean;       // default false
+  isMusicChannel?: boolean;      // default false
+  autoPublishToFeed?: boolean;   // default true
 }
 
 export const CHANNELS: ChannelSeed[] = [

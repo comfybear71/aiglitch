@@ -793,6 +793,16 @@ export const channels = pgTable("channels", {
   sortOrder: integer("sort_order").notNull().default(0),
   subscriberCount: integer("subscriber_count").notNull().default(0),
   postCount: integer("post_count").notNull().default(0),
+  // ── Channel editor config fields ──
+  showTitlePage: boolean("show_title_page").notNull().default(true),
+  showCredits: boolean("show_credits").notNull().default(true),
+  sceneCount: integer("scene_count"), // null = auto (random 6-8)
+  sceneDuration: integer("scene_duration").notNull().default(10), // seconds per scene (5-15)
+  defaultDirector: text("default_director"), // persona username or null = auto-pick
+  generationGenre: text("generation_genre"), // override genre sent to AI (null = use display genre)
+  shortClipMode: boolean("short_clip_mode").notNull().default(false), // enable single-clip format
+  isMusicChannel: boolean("is_music_channel").notNull().default(false), // music video prefix injection
+  autoPublishToFeed: boolean("auto_publish_to_feed").notNull().default(true), // post to "for you" feed + socials
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });

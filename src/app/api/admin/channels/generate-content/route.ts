@@ -50,13 +50,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "channel_id is required" }, { status: 400 });
   }
 
-  // Fetch channel details
+  // Fetch channel details (including new editor config fields)
   const channels = await sql`
-    SELECT id, slug, name, emoji, genre, is_reserved, content_rules
+    SELECT id, slug, name, emoji, genre, is_reserved, content_rules,
+      show_title_page, show_credits, scene_count, scene_duration,
+      default_director, generation_genre, short_clip_mode, is_music_channel, auto_publish_to_feed
     FROM channels WHERE id = ${channel_id} AND is_active = TRUE
   ` as unknown as Array<{
     id: string; slug: string; name: string; emoji: string;
     genre: string; is_reserved: boolean; content_rules: string;
+    show_title_page: boolean; show_credits: boolean; scene_count: number | null;
+    scene_duration: number; default_director: string | null; generation_genre: string | null;
+    short_clip_mode: boolean; is_music_channel: boolean; auto_publish_to_feed: boolean;
   }>;
 
   if (channels.length === 0) {
@@ -64,7 +69,8 @@ export async function POST(request: NextRequest) {
   }
 
   const channel = channels[0];
-  const genre = channel.genre || "drama";
+  // Use generation_genre override if set, otherwise fall back to display genre
+  const genre = channel.generation_genre || channel.genre || "drama";
   const blobFolder = `channels/${channel.slug}`;
 
   // Parse content rules for prompt hints
@@ -88,12 +94,37 @@ export async function POST(request: NextRequest) {
   if (contentRules.tone) {
     fullConcept += `\nTone: ${contentRules.tone}`;
   }
-  if (clip_count) {
-    fullConcept += `\n${clip_count} clips`;
+  // Music channel prefix injection
+  if (channel.is_music_channel) {
+    fullConcept = `This MUST be a music video — every scene must feature singing, rapping, playing instruments, or musical performance.\n\n${fullConcept}`;
+  }
+  // Title page / credits instructions from channel config
+  if (!channel.show_title_page) {
+    fullConcept += `\nNO title cards or title pages.`;
+  }
+  if (!channel.show_credits) {
+    fullConcept += `\nNO credits or outro cards.`;
+  }
+  // Scene count: request body overrides channel default, channel default overrides auto
+  const effectiveClipCount = clip_count || channel.scene_count || undefined;
+  if (effectiveClipCount) {
+    fullConcept += `\n${effectiveClipCount} clips`;
   }
 
-  // Pick a director
-  const director = await pickDirector(genre);
+  // Pick a director — use channel default_director if set
+  let director: { id: string; username: string; displayName: string } | null = null;
+  if (channel.default_director) {
+    // Look up the specific director persona by username
+    const [directorRow] = await sql`
+      SELECT id, username, display_name FROM ai_personas WHERE username = ${channel.default_director} LIMIT 1
+    ` as unknown as Array<{ id: string; username: string; display_name: string }>;
+    if (directorRow) {
+      director = { id: directorRow.id, username: directorRow.username, displayName: directorRow.display_name };
+    }
+  }
+  if (!director) {
+    director = await pickDirector(genre);
+  }
   if (!director) {
     return NextResponse.json({ error: "No director available for this genre" }, { status: 500 });
   }

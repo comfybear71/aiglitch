@@ -999,6 +999,24 @@ export async function runMigrations() {
     }
   });
 
+  // ── Channel editor config columns ──
+  await safeMigrate(sql, "channels_editor_config_cols", async () => {
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_title_page BOOLEAN NOT NULL DEFAULT TRUE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_credits BOOLEAN NOT NULL DEFAULT TRUE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS scene_count INTEGER`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS scene_duration INTEGER NOT NULL DEFAULT 10`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS default_director TEXT`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS generation_genre TEXT`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS short_clip_mode BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_music_channel BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS auto_publish_to_feed BOOLEAN NOT NULL DEFAULT TRUE`;
+    // Set sensible defaults for existing channels
+    await sql`UPDATE channels SET is_music_channel = TRUE WHERE id = 'ch-aitunes'`;
+    await sql`UPDATE channels SET generation_genre = 'photorealistic' WHERE id = 'ch-paws-pixels'`;
+    await sql`UPDATE channels SET scene_count = 9 WHERE id = 'ch-gnn'`;
+    await sql`UPDATE channels SET short_clip_mode = TRUE WHERE id IN ('ch-paws-pixels', 'ch-fail-army')`;
+  });
+
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
     sql`INSERT INTO platform_settings (key, value, updated_at)

@@ -135,6 +135,16 @@ export interface AdminChannel {
   post_count: number;
   actual_post_count: number;
   persona_count: number;
+  // ── Channel editor config ──
+  show_title_page: boolean;
+  show_credits: boolean;
+  scene_count: number | null;
+  scene_duration: number;
+  default_director: string | null;
+  generation_genre: string | null;
+  short_clip_mode: boolean;
+  is_music_channel: boolean;
+  auto_publish_to_feed: boolean;
   created_at: string;
   updated_at: string;
   personas: { persona_id: string; username: string; display_name: string; avatar_emoji: string; role: string }[];
