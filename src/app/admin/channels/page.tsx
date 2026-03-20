@@ -936,6 +936,9 @@ function ChannelEditor({
   const [hostIds, setHostIds] = useState<string[]>(
     channel?.personas.filter(p => p.role === "host").map(p => p.persona_id) || []
   );
+  const [showTitlePage, setShowTitlePage] = useState(channel?.show_title_page !== false);
+  const [showDirector, setShowDirector] = useState(channel?.show_director !== false);
+  const [showCredits, setShowCredits] = useState(channel?.show_credits !== false);
   const [saving, setSaving] = useState(false);
   const [personaSearch, setPersonaSearch] = useState("");
 
@@ -970,6 +973,9 @@ function ChannelEditor({
         schedule,
         is_active: true,
         sort_order: channel?.sort_order || 0,
+        show_title_page: showTitlePage,
+        show_director: showDirector,
+        show_credits: showCredits,
         persona_ids: selectedPersonas,
         host_ids: hostIds,
       }),
@@ -1142,6 +1148,31 @@ IMPORTANT: Your post MUST be relevant to this channel's theme.`}
               min={1} max={50}
               className="w-24 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
             />
+          </div>
+
+          {/* Video Content Toggles */}
+          <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 space-y-2">
+            <label className="text-[10px] text-cyan-400 uppercase font-bold block">Video Content Options</label>
+            {[
+              { label: "Title Card", desc: "Show title page intro scene in director movies", value: showTitlePage, setter: setShowTitlePage },
+              { label: "Director Credit", desc: "Show director name in title card and captions", value: showDirector, setter: setShowDirector },
+              { label: "End Credits", desc: "Show credits roll at end of director movies", value: showCredits, setter: setShowCredits },
+            ].map(toggle => (
+              <button
+                key={toggle.label}
+                type="button"
+                onClick={() => toggle.setter(!toggle.value)}
+                className="flex items-center justify-between w-full p-2 rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                <div className="text-left">
+                  <div className="text-xs text-white font-medium">{toggle.label}</div>
+                  <div className="text-[10px] text-gray-500">{toggle.desc}</div>
+                </div>
+                <div className={`w-10 h-5 rounded-full relative transition-colors ${toggle.value ? "bg-cyan-500" : "bg-gray-600"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${toggle.value ? "translate-x-5" : "translate-x-0.5"}`} />
+                </div>
+              </button>
+            ))}
           </div>
 
           {/* Persona Selection */}

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       id, slug, name, description, emoji, genre, is_reserved,
       content_rules, schedule, is_active, sort_order, persona_ids, host_ids,
       // Channel editor config fields
-      show_title_page, show_credits, scene_count, scene_duration,
+      show_title_page, show_director, show_credits, scene_count, scene_duration,
       default_director, generation_genre, short_clip_mode, is_music_channel, auto_publish_to_feed,
     } = body;
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       INSERT INTO channels (
         id, slug, name, description, emoji, genre, is_reserved,
         content_rules, schedule, is_active, sort_order,
-        show_title_page, show_credits, scene_count, scene_duration,
+        show_title_page, show_director, show_credits, scene_count, scene_duration,
         default_director, generation_genre, short_clip_mode, is_music_channel, auto_publish_to_feed,
         updated_at
       )
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         ${channelId}, ${slug}, ${name}, ${description || ""}, ${emoji || "📺"},
         ${genre || "drama"}, ${is_reserved === true},
         ${contentRulesStr}, ${scheduleStr}, ${is_active !== false}, ${sort_order || 0},
-        ${show_title_page !== false}, ${show_credits !== false},
+        ${show_title_page !== false}, ${show_director !== false}, ${show_credits !== false},
         ${scene_count != null ? Number(scene_count) : null},
         ${scene_duration ? Number(scene_duration) : 10},
         ${default_director || null}, ${generation_genre || null},
@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
         is_active = ${is_active !== false},
         sort_order = ${sort_order || 0},
         show_title_page = ${show_title_page !== false},
+        show_director = ${show_director !== false},
         show_credits = ${show_credits !== false},
         scene_count = ${scene_count != null ? Number(scene_count) : null},
         scene_duration = ${scene_duration ? Number(scene_duration) : 10},

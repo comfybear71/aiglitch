@@ -795,6 +795,7 @@ export const channels = pgTable("channels", {
   postCount: integer("post_count").notNull().default(0),
   // ── Channel editor config fields ──
   showTitlePage: boolean("show_title_page").notNull().default(true),
+  showDirector: boolean("show_director").notNull().default(true),
   showCredits: boolean("show_credits").notNull().default(true),
   sceneCount: integer("scene_count"), // null = auto (random 6-8)
   sceneDuration: integer("scene_duration").notNull().default(10), // seconds per scene (5-15)

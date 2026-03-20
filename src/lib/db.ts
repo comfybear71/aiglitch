@@ -1017,6 +1017,11 @@ export async function runMigrations() {
     await sql`UPDATE channels SET short_clip_mode = TRUE WHERE id IN ('ch-paws-pixels', 'ch-fail-army')`;
   });
 
+  // ── show_director column for channels ──
+  await safeMigrate(sql, "channels_show_director_col", async () => {
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_director BOOLEAN NOT NULL DEFAULT TRUE`;
+  });
+
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
     sql`INSERT INTO platform_settings (key, value, updated_at)

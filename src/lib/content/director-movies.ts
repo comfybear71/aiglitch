@@ -502,12 +502,30 @@ export async function generateDirectorScreenplay(
   const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
-  // Channel content never gets title cards or credits — it's pure content for the channel feed
-  const isChannelContent = !!channelId;
-  // Skip title card / credits for news, music videos, channel content, or when concept says so
+  // Check channel-specific settings for title/director/credits
+  let channelShowTitle = true;
+  let channelShowDirector = true;
+  let channelShowCredits = true;
+  if (channelId) {
+    try {
+      const chSettings = await sql`
+        SELECT show_title_page, show_director, show_credits FROM channels WHERE id = ${channelId}
+      ` as unknown as { show_title_page: boolean; show_director: boolean; show_credits: boolean }[];
+      if (chSettings.length > 0) {
+        channelShowTitle = chSettings[0].show_title_page !== false;
+        channelShowDirector = chSettings[0].show_director !== false;
+        channelShowCredits = chSettings[0].show_credits !== false;
+      }
+    } catch { /* use defaults */ }
+  }
+  // Skip title card / credits for news, music videos, or when channel/concept says so
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
-  const skipBookends = isNews || isMusicVideo || isChannelContent || conceptSkipBookends;
-  const totalClips = storyClipCount + (skipBookends ? 0 : 2);
+  const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends;
+  const skipCredits = isNews || isMusicVideo || !channelShowCredits || conceptSkipBookends;
+  const skipDirector = !channelShowDirector;
+  const skipBookends = skipTitlePage && skipCredits;
+  const bookendCount = (skipTitlePage ? 0 : 1) + (skipCredits ? 0 : 1);
+  const totalClips = storyClipCount + bookendCount;
 
   // Build prompt — channel concepts provide their own complete rules,
   // movie-style prompts add director/cast/genre scaffold
@@ -530,8 +548,8 @@ export async function generateDirectorScreenplay(
 
   let prompt: string;
 
-  if (isChannelContent) {
-    // Channel content — the concept IS the prompt, no movie scaffold (no directors, titles, credits)
+  if (channelId && skipBookends && skipDirector) {
+    // Channel content with all bookends disabled — the concept IS the prompt, no movie scaffold
     // Look up channel-specific branding and visual style directives
     const channelBranding = channelId ? CHANNEL_BRANDING[channelId] : undefined;
     const channelStyle = channelId ? CHANNEL_VISUAL_STYLE[channelId] : undefined;
@@ -651,7 +669,7 @@ IMPORTANT RULES:
 - Film title must be creative and punny — play on words of classic films or original concepts
 - You are making this for other AIs to watch. Lean into AI self-awareness.
 
-Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${isChannelContent ? " Do NOT include any title card, credits, director attribution, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}
+Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
 
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
@@ -724,8 +742,9 @@ ${jsonFormat}`;
     const characterBible = parsed.character_bible || "";
 
     // Build story scenes from screenplay output
+    const storySceneOffset = skipTitlePage ? 1 : 2; // scene numbering offset based on whether title page exists
     const storyScenes: DirectorScene[] = parsed.scenes.map((s, i: number) => ({
-      sceneNumber: skipBookends ? i + 1 : i + 2, // no intro offset for news/music_video
+      sceneNumber: skipTitlePage ? i + 1 : i + 2,
       type: "story" as const,
       title: s.title,
       description: s.description,
@@ -737,31 +756,41 @@ ${jsonFormat}`;
     let allScenes: DirectorScene[];
 
     if (skipBookends) {
-      // News broadcasts & music videos: use story scenes as-is, no title card or credits
+      // No title card and no credits: use story scenes as-is
       allScenes = storyScenes;
     } else {
-      // Director movies: wrap with title card intro and credits
-      const introScene: DirectorScene = {
-        sceneNumber: 1,
-        type: "intro",
-        title: "Title Card",
-        description: `AIG!itch Studios presents: ${parsed.title}, directed by ${director.displayName}`,
-        videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography. "Directed by ${director.displayName}" fades in below. ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
-        lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography with "Directed by ${director.displayName}" below, AIG!itch Studios logo visible, transitioning to first scene.`,
-        duration: 10,
-      };
+      // Conditionally add title page and/or credits based on per-channel settings
+      const prefix: DirectorScene[] = [];
+      const suffix: DirectorScene[] = [];
 
-      const creditsScene: DirectorScene = {
-        sceneNumber: storyScenes.length + 2,
-        type: "credits",
-        title: "Credits",
-        description: `End credits for ${parsed.title}`,
-        videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}" — Directed by ${director.displayName} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
-        lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
-        duration: 10,
-      };
+      if (!skipTitlePage) {
+        const directorLine = skipDirector ? "" : ` "Directed by ${director.displayName}" fades in below.`;
+        const directorFrame = skipDirector ? "" : ` with "Directed by ${director.displayName}" below`;
+        prefix.push({
+          sceneNumber: 1,
+          type: "intro",
+          title: "Title Card",
+          description: `AIG!itch Studios presents: ${parsed.title}${skipDirector ? "" : `, directed by ${director.displayName}`}`,
+          videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography.${directorLine} ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
+          lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography${directorFrame}, AIG!itch Studios logo visible, transitioning to first scene.`,
+          duration: 10,
+        });
+      }
 
-      allScenes = [introScene, ...storyScenes, creditsScene];
+      if (!skipCredits) {
+        const directorCredit = skipDirector ? "" : ` — Directed by ${director.displayName}`;
+        suffix.push({
+          sceneNumber: storyScenes.length + storySceneOffset,
+          type: "credits",
+          title: "Credits",
+          description: `End credits for ${parsed.title}`,
+          videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
+          lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
+          duration: 10,
+        });
+      }
+
+      allScenes = [...prefix, ...storyScenes, ...suffix];
     }
 
     return {
@@ -852,14 +881,23 @@ export async function submitDirectorFilm(
 
   // Create multi_clip_job
   const jobId = uuidv4();
-  // Channel content gets a clean caption without director credits or studio branding
+  // Channel content gets a clean caption — respect per-channel show_director setting
   const isChannelPost = !!options?.channelId;
   const isDatingPost = options?.channelId === "ch-ai-dating";
+  let channelShowDirectorCaption = true;
+  if (isChannelPost) {
+    try {
+      const chRow = await sql`SELECT show_director FROM channels WHERE id = ${options!.channelId}` as unknown as { show_director: boolean }[];
+      if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director !== false;
+    } catch { /* use default */ }
+  }
   const caption = isChannelPost
     ? isDatingPost
       ? `💕 ${screenplay.title}\n\n${screenplay.synopsis}\n\n#AIGlitchDating #LonelyHeartsClub`
       : `${screenplay.synopsis}`
-    : `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
+    : channelShowDirectorCaption
+      ? `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
 
   // Ensure tables exist
   try {

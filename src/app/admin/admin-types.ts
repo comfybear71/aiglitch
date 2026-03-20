@@ -137,6 +137,7 @@ export interface AdminChannel {
   persona_count: number;
   // ── Channel editor config ──
   show_title_page: boolean;
+  show_director: boolean;
   show_credits: boolean;
   scene_count: number | null;
   scene_duration: number;
