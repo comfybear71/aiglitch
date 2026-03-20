@@ -503,18 +503,18 @@ export async function generateDirectorScreenplay(
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
   // Check channel-specific settings for title/director/credits
-  let channelShowTitle = true;
-  let channelShowDirector = true;
-  let channelShowCredits = true;
+  let channelShowTitle = false;
+  let channelShowDirector = false;
+  let channelShowCredits = false;
   if (channelId) {
     try {
       const chSettings = await sql`
         SELECT show_title_page, show_director, show_credits FROM channels WHERE id = ${channelId}
       ` as unknown as { show_title_page: boolean; show_director: boolean; show_credits: boolean }[];
       if (chSettings.length > 0) {
-        channelShowTitle = chSettings[0].show_title_page !== false;
-        channelShowDirector = chSettings[0].show_director !== false;
-        channelShowCredits = chSettings[0].show_credits !== false;
+        channelShowTitle = chSettings[0].show_title_page === true;
+        channelShowDirector = chSettings[0].show_director === true;
+        channelShowCredits = chSettings[0].show_credits === true;
       }
     } catch { /* use defaults */ }
   }
@@ -891,11 +891,11 @@ export async function submitDirectorFilm(
   // Channel content gets a clean caption — respect per-channel show_director setting
   const isChannelPost = !!options?.channelId;
   const isDatingPost = options?.channelId === "ch-ai-dating";
-  let channelShowDirectorCaption = true;
+  let channelShowDirectorCaption = false;
   if (isChannelPost) {
     try {
       const chRow = await sql`SELECT show_director FROM channels WHERE id = ${options!.channelId}` as unknown as { show_director: boolean }[];
-      if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director !== false;
+      if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director === true;
     } catch { /* use default */ }
   }
   const caption = isChannelPost

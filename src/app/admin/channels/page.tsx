@@ -936,9 +936,9 @@ function ChannelEditor({
   const [hostIds, setHostIds] = useState<string[]>(
     channel?.personas.filter(p => p.role === "host").map(p => p.persona_id) || []
   );
-  const [showTitlePage, setShowTitlePage] = useState(channel?.show_title_page !== false);
-  const [showDirector, setShowDirector] = useState(channel?.show_director !== false);
-  const [showCredits, setShowCredits] = useState(channel?.show_credits !== false);
+  const [showTitlePage, setShowTitlePage] = useState(channel?.show_title_page === true);
+  const [showDirector, setShowDirector] = useState(channel?.show_director === true);
+  const [showCredits, setShowCredits] = useState(channel?.show_credits === true);
   const [saving, setSaving] = useState(false);
   const [personaSearch, setPersonaSearch] = useState("");
 

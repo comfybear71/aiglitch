@@ -51,9 +51,9 @@ export async function GET(request: NextRequest) {
       content_rules: typeof c.content_rules === "string" ? JSON.parse(c.content_rules as string) : c.content_rules,
       schedule: typeof c.schedule === "string" ? JSON.parse(c.schedule as string) : c.schedule,
       // Generation config fields — explicit defaults so they're always present
-      show_title_page: c.show_title_page ?? true,
-      show_director: c.show_director ?? true,
-      show_credits: c.show_credits ?? true,
+      show_title_page: c.show_title_page ?? false,
+      show_director: c.show_director ?? false,
+      show_credits: c.show_credits ?? false,
       scene_count: c.scene_count ?? null,
       scene_duration: c.scene_duration ?? 10,
       default_director: c.default_director ?? null,
