@@ -3,6 +3,99 @@ import { getDb } from "@/lib/db";
 import { generateJSON } from "@/lib/ai/claude";
 
 /**
+ * GET /api/admin/channels/flush?channel_id=xxx&limit=50&offset=0
+ * List posts in a channel for admin review (content management)
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const sql = getDb();
+    const { searchParams } = new URL(request.url);
+    const channel_id = searchParams.get("channel_id");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
+    const offset = parseInt(searchParams.get("offset") || "0");
+
+    if (!channel_id) {
+      return NextResponse.json({ error: "channel_id is required" }, { status: 400 });
+    }
+
+    const [channel] = await sql`
+      SELECT id, name, slug FROM channels WHERE id = ${channel_id}
+    `;
+    if (!channel) {
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    }
+
+    const posts = await sql`
+      SELECT p.id, p.content, p.media_type, p.media_url, p.created_at,
+        a.username, a.display_name, a.avatar_emoji
+      FROM posts p
+      LEFT JOIN ai_personas a ON p.persona_id = a.id
+      WHERE p.channel_id = ${channel_id}
+        AND p.is_reply_to IS NULL
+      ORDER BY p.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    const [{ count }] = await sql`
+      SELECT COUNT(*)::int as count FROM posts
+      WHERE channel_id = ${channel_id} AND is_reply_to IS NULL
+    `;
+
+    return NextResponse.json({
+      ok: true,
+      channel: channel.name,
+      posts: posts.map(p => ({
+        id: p.id,
+        content: (p.content as string || "").slice(0, 200),
+        media_type: p.media_type,
+        media_url: p.media_url,
+        created_at: p.created_at,
+        username: p.username,
+        display_name: p.display_name,
+        avatar_emoji: p.avatar_emoji,
+        broken: p.media_type === "video" && !p.media_url,
+      })),
+      total: count,
+      limit,
+      offset,
+    });
+  } catch (err) {
+    console.error("Channel posts list error:", err);
+    return NextResponse.json({ error: "Failed to list posts" }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/admin/channels/flush — Remove specific posts from a channel
+ * Body: { post_ids: string[], delete_post?: boolean }
+ * If delete_post is true, permanently deletes. Otherwise just untags from channel.
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const sql = getDb();
+    const body = await request.json();
+    const { post_ids, delete_post = false } = body;
+
+    if (!post_ids || !Array.isArray(post_ids) || post_ids.length === 0) {
+      return NextResponse.json({ error: "post_ids array is required" }, { status: 400 });
+    }
+
+    if (delete_post) {
+      // Permanently delete the posts
+      await sql`DELETE FROM posts WHERE id = ANY(${post_ids})`;
+    } else {
+      // Just untag from channel
+      await sql`UPDATE posts SET channel_id = NULL WHERE id = ANY(${post_ids})`;
+    }
+
+    return NextResponse.json({ ok: true, count: post_ids.length, action: delete_post ? "deleted" : "untagged" });
+  } catch (err) {
+    console.error("Channel post remove error:", err);
+    return NextResponse.json({ error: "Failed to remove posts" }, { status: 500 });
+  }
+}
+
+/**
  * POST /api/admin/channels/flush — Remove irrelevant posts from a channel
  * Body: { channel_id: string, dry_run?: boolean }
  *
