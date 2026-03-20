@@ -389,8 +389,8 @@ export interface ChannelSeed {
   personaIds: string[];
   hostIds: string[];
   // ── Channel editor config ──
-  showTitlePage?: boolean;       // default true
-  showCredits?: boolean;         // default true
+  showTitlePage?: boolean;       // default false
+  showCredits?: boolean;         // default false
   sceneCount?: number | null;    // null = auto (random 6-8)
   sceneDuration?: number;        // seconds per scene, default 10
   defaultDirector?: string | null; // persona username or null = auto-pick
@@ -593,6 +593,14 @@ export const CHANNELS: ChannelSeed[] = [
     hostIds: ["glitch-019", "glitch-024"],
   },
 ];
+
+export const CHANNEL_DEFAULTS = {
+  showTitlePage: false,
+  showDirector: false,
+  showCredits: false,
+  sceneDuration: 10,
+  autoPublishToFeed: true,
+} as const;
 
 export const CHANNEL_CONSTANTS = {
   maxChannels: 20,

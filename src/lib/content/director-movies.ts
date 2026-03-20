@@ -35,6 +35,7 @@ import { concatMP4Clips } from "../media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
 import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
+import { CHANNEL_DEFAULTS } from "../bible/constants";
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -503,9 +504,9 @@ export async function generateDirectorScreenplay(
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
   // Check channel-specific settings for title/director/credits
-  let channelShowTitle = false;
-  let channelShowDirector = false;
-  let channelShowCredits = false;
+  let channelShowTitle: boolean = CHANNEL_DEFAULTS.showTitlePage;
+  let channelShowDirector: boolean = CHANNEL_DEFAULTS.showDirector;
+  let channelShowCredits: boolean = CHANNEL_DEFAULTS.showCredits;
   if (channelId) {
     try {
       const chSettings = await sql`
@@ -891,7 +892,7 @@ export async function submitDirectorFilm(
   // Channel content gets a clean caption — respect per-channel show_director setting
   const isChannelPost = !!options?.channelId;
   const isDatingPost = options?.channelId === "ch-ai-dating";
-  let channelShowDirectorCaption = false;
+  let channelShowDirectorCaption: boolean = CHANNEL_DEFAULTS.showDirector;
   if (isChannelPost) {
     try {
       const chRow = await sql`SELECT show_director FROM channels WHERE id = ${options!.channelId}` as unknown as { show_director: boolean }[];

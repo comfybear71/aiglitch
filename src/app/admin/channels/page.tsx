@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../AdminContext";
 import type { AdminChannel, Persona } from "../admin-types";
+import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
 
 interface PromoJob {
   channelId: string;
@@ -936,9 +937,9 @@ function ChannelEditor({
   const [hostIds, setHostIds] = useState<string[]>(
     channel?.personas.filter(p => p.role === "host").map(p => p.persona_id) || []
   );
-  const [showTitlePage, setShowTitlePage] = useState(channel?.show_title_page === true);
-  const [showDirector, setShowDirector] = useState(channel?.show_director === true);
-  const [showCredits, setShowCredits] = useState(channel?.show_credits === true);
+  const [showTitlePage, setShowTitlePage] = useState(channel?.show_title_page ?? CHANNEL_DEFAULTS.showTitlePage);
+  const [showDirector, setShowDirector] = useState(channel?.show_director ?? CHANNEL_DEFAULTS.showDirector);
+  const [showCredits, setShowCredits] = useState(channel?.show_credits ?? CHANNEL_DEFAULTS.showCredits);
   const [saving, setSaving] = useState(false);
   const [personaSearch, setPersonaSearch] = useState("");
 
@@ -980,7 +981,7 @@ function ChannelEditor({
           // Preserve existing channel config fields not in this editor
           is_reserved: channel?.is_reserved || false,
           scene_count: channel?.scene_count ?? null,
-          scene_duration: channel?.scene_duration ?? 10,
+          scene_duration: channel?.scene_duration ?? CHANNEL_DEFAULTS.sceneDuration,
           default_director: channel?.default_director || null,
           generation_genre: channel?.generation_genre || null,
           short_clip_mode: channel?.short_clip_mode || false,

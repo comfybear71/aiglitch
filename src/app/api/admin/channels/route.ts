@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
 import { v4 as uuidv4 } from "uuid";
 
 /**
@@ -51,11 +52,11 @@ export async function GET(request: NextRequest) {
       content_rules: typeof c.content_rules === "string" ? JSON.parse(c.content_rules as string) : c.content_rules,
       schedule: typeof c.schedule === "string" ? JSON.parse(c.schedule as string) : c.schedule,
       // Generation config fields — explicit defaults so they're always present
-      show_title_page: c.show_title_page ?? false,
-      show_director: c.show_director ?? false,
-      show_credits: c.show_credits ?? false,
+      show_title_page: c.show_title_page ?? CHANNEL_DEFAULTS.showTitlePage,
+      show_director: c.show_director ?? CHANNEL_DEFAULTS.showDirector,
+      show_credits: c.show_credits ?? CHANNEL_DEFAULTS.showCredits,
       scene_count: c.scene_count ?? null,
-      scene_duration: c.scene_duration ?? 10,
+      scene_duration: c.scene_duration ?? CHANNEL_DEFAULTS.sceneDuration,
       default_director: c.default_director ?? null,
       generation_genre: c.generation_genre ?? null,
       short_clip_mode: c.short_clip_mode ?? false,
