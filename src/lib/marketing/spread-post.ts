@@ -156,10 +156,19 @@ export async function spreadPostToSocial(
       const failedList = failed.length > 0 ? ` | Failed: ${failed.join(", ")}` : "";
 
       const label = telegramLabel || "AD POSTED";
+      const isMovie = label === "MOVIE POSTED";
+
+      // For movie posts: just show title + link, NOT the full synopsis/director/actors
       let tgMessage = `📢 <b>${label}</b>\n`;
       tgMessage += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-      tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
-      tgMessage += `${postData.content}\n\n`;
+      if (isMovie) {
+        // Extract just the first line (movie title) from content
+        const titleLine = postData.content?.split("\n").find(l => l.trim()) || "New Movie";
+        tgMessage += `${titleLine}\n\n`;
+      } else {
+        tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
+        tgMessage += `${postData.content}\n\n`;
+      }
       if (postData.media_url) {
         tgMessage += `🎬 <a href="${postData.media_url}">View ${postData.media_type === "video" ? "Video" : "Media"}</a>\n\n`;
       }
