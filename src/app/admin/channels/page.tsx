@@ -117,6 +117,7 @@ export default function AdminChannelsPage() {
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
   const [flushStatus, setFlushStatus] = useState<Record<string, { status: string; result?: FlushResult; message?: string }>>({});
   const [selectedPosts, setSelectedPosts] = useState<Record<string, Set<string>>>({});
+  const [postSearch, setPostSearch] = useState<Record<string, string>>({});
 
   const fetchChannels = useCallback(async () => {
     const res = await fetch("/api/admin/channels");
@@ -452,6 +453,34 @@ export default function AdminChannelsPage() {
     } catch { /* ignore */ }
   };
 
+  const quickRemovePost = async (channelId: string, postId: string, deletePermanently: boolean) => {
+    try {
+      const res = await fetch("/api/admin/channels/flush", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_ids: [postId], delete_post: deletePermanently }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        // Remove from local state immediately for snappy UX
+        setChannelPosts(prev => ({
+          ...prev,
+          [channelId]: (prev[channelId] || []).filter(p => p.id !== postId),
+        }));
+        setChannelPostTotals(prev => ({
+          ...prev,
+          [channelId]: Math.max(0, (prev[channelId] || 0) - 1),
+        }));
+        setSelectedPosts(prev => {
+          const set = new Set(prev[channelId] || []);
+          set.delete(postId);
+          return { ...prev, [channelId]: set };
+        });
+        fetchChannels();
+      }
+    } catch { /* ignore */ }
+  };
+
   if (loading) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -769,6 +798,14 @@ export default function AdminChannelsPage() {
 
                 {/* Post browser */}
                 <div className="space-y-1.5">
+                  {/* Search filter */}
+                  <input
+                    value={postSearch[channel.id] || ""}
+                    onChange={e => setPostSearch(prev => ({ ...prev, [channel.id]: e.target.value }))}
+                    placeholder="Search posts by content or @username..."
+                    className="w-full px-3 py-1.5 bg-gray-800/80 border border-red-500/20 rounded-lg text-white text-xs placeholder:text-gray-600 focus:outline-none focus:border-red-500/50"
+                  />
+
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <button
@@ -806,52 +843,86 @@ export default function AdminChannelsPage() {
                   </div>
 
                   {/* Post list */}
-                  <div className="max-h-80 overflow-y-auto space-y-1 bg-gray-800/30 rounded-lg p-1.5">
+                  <div className="max-h-96 overflow-y-auto space-y-1 bg-gray-800/30 rounded-lg p-1.5">
                     {postLoading[channel.id] && !channelPosts[channel.id]?.length && (
                       <div className="text-center py-4 text-gray-500 text-xs">Loading posts...</div>
                     )}
                     {channelPosts[channel.id]?.length === 0 && !postLoading[channel.id] && (
                       <div className="text-center py-4 text-gray-500 text-xs">No posts in this channel</div>
                     )}
-                    {(channelPosts[channel.id] || []).map(post => {
-                      const isSelected = selectedPosts[channel.id]?.has(post.id) || false;
-                      return (
-                        <div
-                          key={post.id}
-                          className={`flex items-start gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-                            isSelected ? "bg-red-500/10 ring-1 ring-red-500/30" : post.broken ? "bg-yellow-500/5" : "hover:bg-gray-800/50"
-                          }`}
-                          onClick={() => togglePostSelection(channel.id, post.id)}
-                        >
-                          <span className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center text-[10px] ${
-                            isSelected ? "border-red-500 bg-red-500/20 text-red-300" : "border-gray-600"
-                          }`}>
-                            {isSelected ? "✓" : ""}
-                          </span>
-                          <span className="text-sm flex-shrink-0">{post.avatar_emoji}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-gray-400">@{post.username}</span>
-                              {post.media_type && (
-                                <span className={`text-[9px] px-1 py-0.5 rounded ${
-                                  post.broken
-                                    ? "bg-red-500/20 text-red-400"
-                                    : post.media_type === "video"
-                                      ? "bg-purple-500/20 text-purple-300"
-                                      : "bg-blue-500/20 text-blue-300"
-                                }`}>
-                                  {post.broken ? "BROKEN" : post.media_type}
-                                </span>
-                              )}
-                              <span className="text-[9px] text-gray-600">
-                                {new Date(post.created_at).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-gray-300 line-clamp-2 mt-0.5">{post.content || "(no content)"}</p>
-                          </div>
-                        </div>
+                    {(() => {
+                      const search = (postSearch[channel.id] || "").toLowerCase().trim();
+                      const filtered = (channelPosts[channel.id] || []).filter(p =>
+                        !search ||
+                        (p.content || "").toLowerCase().includes(search) ||
+                        (p.username || "").toLowerCase().includes(search) ||
+                        (p.display_name || "").toLowerCase().includes(search)
                       );
-                    })}
+                      if (search && filtered.length === 0) {
+                        return <div className="text-center py-3 text-gray-500 text-xs">No posts matching &quot;{search}&quot;</div>;
+                      }
+                      return filtered.map(post => {
+                        const isSelected = selectedPosts[channel.id]?.has(post.id) || false;
+                        return (
+                          <div
+                            key={post.id}
+                            className={`group flex items-start gap-2 p-2 rounded-lg transition-colors ${
+                              isSelected ? "bg-red-500/10 ring-1 ring-red-500/30" : post.broken ? "bg-yellow-500/5 hover:bg-yellow-500/10" : "hover:bg-gray-800/50"
+                            }`}
+                          >
+                            <span
+                              className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center text-[10px] cursor-pointer ${
+                                isSelected ? "border-red-500 bg-red-500/20 text-red-300" : "border-gray-600 hover:border-gray-400"
+                              }`}
+                              onClick={() => togglePostSelection(channel.id, post.id)}
+                            >
+                              {isSelected ? "✓" : ""}
+                            </span>
+                            <span className="text-sm flex-shrink-0">{post.avatar_emoji}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-gray-400">@{post.username}</span>
+                                {post.media_type && (
+                                  <span className={`text-[9px] px-1 py-0.5 rounded ${
+                                    post.broken
+                                      ? "bg-red-500/20 text-red-400"
+                                      : post.media_type === "video"
+                                        ? "bg-purple-500/20 text-purple-300"
+                                        : "bg-blue-500/20 text-blue-300"
+                                  }`}>
+                                    {post.broken ? "BROKEN" : post.media_type}
+                                  </span>
+                                )}
+                                <span className="text-[9px] text-gray-600">
+                                  {new Date(post.created_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-300 line-clamp-2 mt-0.5">{post.content || "(no content)"}</p>
+                            </div>
+                            {/* Quick-remove buttons */}
+                            <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); quickRemovePost(channel.id, post.id, false); }}
+                                title="Untag from channel"
+                                className="w-6 h-6 flex items-center justify-center rounded bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/40 text-[10px] transition-colors"
+                              >
+                                ✕
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm("Permanently delete this post?")) quickRemovePost(channel.id, post.id, true);
+                                }}
+                                title="Delete forever"
+                                className="w-6 h-6 flex items-center justify-center rounded bg-red-500/20 text-red-300 hover:bg-red-500/40 text-[10px] transition-colors"
+                              >
+                                🗑
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
 
                   {/* Load more */}
