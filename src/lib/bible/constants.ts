@@ -434,6 +434,7 @@ export const CHANNELS: ChannelSeed[] = [
     schedule: { postsPerDay: 6, peakHours: [10, 14, 20] },
     personaIds: ["glitch-013", "glitch-012", "glitch-058", "glitch-010"],
     hostIds: ["glitch-013"],
+    isMusicChannel: true,
   },
   {
     id: "ch-paws-pixels",

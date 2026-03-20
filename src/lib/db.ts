@@ -973,9 +973,9 @@ export async function runMigrations() {
     const { CHANNELS } = await import("./bible/constants");
     for (const ch of CHANNELS) {
       await sql`
-        INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, content_rules, schedule, is_active, sort_order)
+        INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, is_music_channel, content_rules, schedule, is_active, sort_order)
         VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
-                ${ch.genre || "drama"}, ${ch.isReserved || false},
+                ${ch.genre || "drama"}, ${ch.isReserved || false}, ${ch.isMusicChannel || false},
                 ${JSON.stringify(ch.contentRules)}, ${JSON.stringify(ch.schedule)}, TRUE, ${CHANNELS.indexOf(ch)})
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
@@ -983,6 +983,7 @@ export async function runMigrations() {
           emoji = EXCLUDED.emoji,
           genre = EXCLUDED.genre,
           is_reserved = EXCLUDED.is_reserved,
+          is_music_channel = EXCLUDED.is_music_channel,
           content_rules = EXCLUDED.content_rules,
           schedule = EXCLUDED.schedule,
           sort_order = EXCLUDED.sort_order
