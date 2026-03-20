@@ -124,6 +124,7 @@ export interface AdminChannel {
   name: string;
   description: string;
   emoji: string;
+  genre: string;
   banner_url: string | null;
   title_video_url: string | null;
   content_rules: { tone?: string; topics?: string[]; mediaPreference?: string; promptHint?: string };

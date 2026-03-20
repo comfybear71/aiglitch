@@ -116,7 +116,6 @@ export default function AdminChannelsPage() {
   const [channelPostTotals, setChannelPostTotals] = useState<Record<string, number>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
   const [flushStatus, setFlushStatus] = useState<Record<string, { status: string; result?: FlushResult; message?: string }>>({});
-  const [selectedPosts, setSelectedPosts] = useState<Record<string, Set<string>>>({});
   const [postSearch, setPostSearch] = useState<Record<string, string>>({});
 
   const fetchChannels = useCallback(async () => {
@@ -414,45 +413,6 @@ export default function AdminChannelsPage() {
     }
   };
 
-  const togglePostSelection = (channelId: string, postId: string) => {
-    setSelectedPosts(prev => {
-      const set = new Set(prev[channelId] || []);
-      if (set.has(postId)) set.delete(postId); else set.add(postId);
-      return { ...prev, [channelId]: set };
-    });
-  };
-
-  const selectAllPosts = (channelId: string) => {
-    const posts = channelPosts[channelId] || [];
-    const current = selectedPosts[channelId] || new Set();
-    const allSelected = posts.length > 0 && posts.every(p => current.has(p.id));
-    setSelectedPosts(prev => ({
-      ...prev,
-      [channelId]: allSelected ? new Set() : new Set(posts.map(p => p.id)),
-    }));
-  };
-
-  const removeSelectedPosts = async (channelId: string, deletePermanently: boolean) => {
-    const ids = Array.from(selectedPosts[channelId] || []);
-    if (ids.length === 0) return;
-    const action = deletePermanently ? "permanently DELETE" : "untag from channel";
-    if (!confirm(`${action} ${ids.length} post(s)?`)) return;
-
-    try {
-      const res = await fetch("/api/admin/channels/flush", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_ids: ids, delete_post: deletePermanently }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setSelectedPosts(prev => ({ ...prev, [channelId]: new Set() }));
-        loadChannelPosts(channelId);
-        fetchChannels();
-      }
-    } catch { /* ignore */ }
-  };
-
   const quickRemovePost = async (channelId: string, postId: string, deletePermanently: boolean) => {
     try {
       const res = await fetch("/api/admin/channels/flush", {
@@ -471,11 +431,28 @@ export default function AdminChannelsPage() {
           ...prev,
           [channelId]: Math.max(0, (prev[channelId] || 0) - 1),
         }));
-        setSelectedPosts(prev => {
-          const set = new Set(prev[channelId] || []);
-          set.delete(postId);
-          return { ...prev, [channelId]: set };
-        });
+        fetchChannels();
+      }
+    } catch { /* ignore */ }
+  };
+
+  const movePostToChannel = async (postId: string, fromChannelId: string, toChannelId: string) => {
+    try {
+      const res = await fetch("/api/admin/channels", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_ids: [postId], target_channel_id: toChannelId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setChannelPosts(prev => ({
+          ...prev,
+          [fromChannelId]: (prev[fromChannelId] || []).filter(p => p.id !== postId),
+        }));
+        setChannelPostTotals(prev => ({
+          ...prev,
+          [fromChannelId]: Math.max(0, (prev[fromChannelId] || 0) - 1),
+        }));
         fetchChannels();
       }
     } catch { /* ignore */ }
@@ -740,202 +717,113 @@ export default function AdminChannelsPage() {
               </div>
             )}
 
-            {/* Expanded Content Management panel */}
+            {/* Posts dropdown list */}
             {expandedContent === channel.id && (
-              <div className="mt-3 bg-red-500/5 border border-red-500/20 rounded-xl p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] text-red-300 uppercase font-bold">Content Management</label>
-                  <span className="text-[10px] text-gray-500">
-                    {channelPostTotals[channel.id] ?? "..."} posts in channel
-                  </span>
-                </div>
-
-                {/* Flush controls */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => runFlush(channel.id, true)}
-                    disabled={flushStatus[channel.id]?.status === "running"}
-                    className="px-3 py-1.5 text-[10px] font-bold bg-yellow-500/20 text-yellow-300 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 transition-colors"
-                  >
-                    {flushStatus[channel.id]?.status === "running" ? "Scanning..." : "🔍 Dry Run (Preview)"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!confirm("Flush irrelevant posts from this channel? This will untag them (not delete).")) return;
-                      runFlush(channel.id, false);
-                    }}
-                    disabled={flushStatus[channel.id]?.status === "running"}
-                    className="px-3 py-1.5 text-[10px] font-bold bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 disabled:opacity-50 transition-colors"
-                  >
-                    🧹 Flush Irrelevant
-                  </button>
-                  {flushStatus[channel.id]?.status === "running" && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                      <span className="text-[10px] text-yellow-300">{flushStatus[channel.id]?.message}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Flush results */}
-                {flushStatus[channel.id]?.status === "done" && flushStatus[channel.id]?.result && (
-                  <div className="bg-gray-800/50 rounded-lg p-2.5 text-[11px] space-y-1">
-                    <div className="flex items-center gap-3 text-gray-300">
-                      <span>Total: <strong>{flushStatus[channel.id].result!.total_posts}</strong></span>
-                      <span className="text-green-400">Relevant: <strong>{flushStatus[channel.id].result!.relevant}</strong></span>
-                      <span className="text-red-400">Irrelevant: <strong>{flushStatus[channel.id].result!.irrelevant}</strong></span>
-                      {flushStatus[channel.id].result!.dry_run ? (
-                        <span className="text-yellow-400 font-bold">(DRY RUN — no changes made)</span>
-                      ) : (
-                        <span className="text-green-400 font-bold">Flushed {flushStatus[channel.id].result!.flushed} posts</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {flushStatus[channel.id]?.status === "error" && (
-                  <div className="text-[10px] text-red-400">{flushStatus[channel.id]?.message}</div>
-                )}
-
-                {/* Post browser */}
-                <div className="space-y-1.5">
-                  {/* Search filter */}
+              <div className="mt-3 border-t border-gray-800 pt-3 space-y-2">
+                {/* Top bar: search + flush */}
+                <div className="flex items-center gap-2">
                   <input
                     value={postSearch[channel.id] || ""}
                     onChange={e => setPostSearch(prev => ({ ...prev, [channel.id]: e.target.value }))}
-                    placeholder="Search posts by content or @username..."
-                    className="w-full px-3 py-1.5 bg-gray-800/80 border border-red-500/20 rounded-lg text-white text-xs placeholder:text-gray-600 focus:outline-none focus:border-red-500/50"
+                    placeholder="Search posts..."
+                    className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs placeholder:text-gray-600 focus:outline-none focus:border-cyan-500/50"
                   />
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => selectAllPosts(channel.id)}
-                        className="text-[10px] text-gray-400 hover:text-white transition-colors"
-                      >
-                        {(() => {
-                          const posts = channelPosts[channel.id] || [];
-                          const sel = selectedPosts[channel.id] || new Set();
-                          return posts.length > 0 && posts.every(p => sel.has(p.id)) ? "Deselect All" : "Select All";
-                        })()}
-                      </button>
-                      {(selectedPosts[channel.id]?.size || 0) > 0 && (
-                        <span className="text-[10px] text-cyan-400 font-bold">
-                          {selectedPosts[channel.id]!.size} selected
-                        </span>
-                      )}
-                    </div>
-                    {(selectedPosts[channel.id]?.size || 0) > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => removeSelectedPosts(channel.id, false)}
-                          className="px-2 py-1 text-[10px] font-bold bg-yellow-500/20 text-yellow-300 rounded-lg hover:bg-yellow-500/30 transition-colors"
-                        >
-                          Untag from Channel
-                        </button>
-                        <button
-                          onClick={() => removeSelectedPosts(channel.id, true)}
-                          className="px-2 py-1 text-[10px] font-bold bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition-colors"
-                        >
-                          Delete Forever
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Post list */}
-                  <div className="max-h-96 overflow-y-auto space-y-1 bg-gray-800/30 rounded-lg p-1.5">
-                    {postLoading[channel.id] && !channelPosts[channel.id]?.length && (
-                      <div className="text-center py-4 text-gray-500 text-xs">Loading posts...</div>
-                    )}
-                    {channelPosts[channel.id]?.length === 0 && !postLoading[channel.id] && (
-                      <div className="text-center py-4 text-gray-500 text-xs">No posts in this channel</div>
-                    )}
-                    {(() => {
-                      const search = (postSearch[channel.id] || "").toLowerCase().trim();
-                      const filtered = (channelPosts[channel.id] || []).filter(p =>
-                        !search ||
-                        (p.content || "").toLowerCase().includes(search) ||
-                        (p.username || "").toLowerCase().includes(search) ||
-                        (p.display_name || "").toLowerCase().includes(search)
-                      );
-                      if (search && filtered.length === 0) {
-                        return <div className="text-center py-3 text-gray-500 text-xs">No posts matching &quot;{search}&quot;</div>;
-                      }
-                      return filtered.map(post => {
-                        const isSelected = selectedPosts[channel.id]?.has(post.id) || false;
-                        return (
-                          <div
-                            key={post.id}
-                            className={`group flex items-start gap-2 p-2 rounded-lg transition-colors ${
-                              isSelected ? "bg-red-500/10 ring-1 ring-red-500/30" : post.broken ? "bg-yellow-500/5 hover:bg-yellow-500/10" : "hover:bg-gray-800/50"
-                            }`}
-                          >
-                            <span
-                              className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center text-[10px] cursor-pointer ${
-                                isSelected ? "border-red-500 bg-red-500/20 text-red-300" : "border-gray-600 hover:border-gray-400"
-                              }`}
-                              onClick={() => togglePostSelection(channel.id, post.id)}
-                            >
-                              {isSelected ? "✓" : ""}
-                            </span>
-                            <span className="text-sm flex-shrink-0">{post.avatar_emoji}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-gray-400">@{post.username}</span>
-                                {post.media_type && (
-                                  <span className={`text-[9px] px-1 py-0.5 rounded ${
-                                    post.broken
-                                      ? "bg-red-500/20 text-red-400"
-                                      : post.media_type === "video"
-                                        ? "bg-purple-500/20 text-purple-300"
-                                        : "bg-blue-500/20 text-blue-300"
-                                  }`}>
-                                    {post.broken ? "BROKEN" : post.media_type}
-                                  </span>
-                                )}
-                                <span className="text-[9px] text-gray-600">
-                                  {new Date(post.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-gray-300 line-clamp-2 mt-0.5">{post.content || "(no content)"}</p>
-                            </div>
-                            {/* Quick-remove buttons */}
-                            <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); quickRemovePost(channel.id, post.id, false); }}
-                                title="Untag from channel"
-                                className="w-6 h-6 flex items-center justify-center rounded bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/40 text-[10px] transition-colors"
-                              >
-                                ✕
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (confirm("Permanently delete this post?")) quickRemovePost(channel.id, post.id, true);
-                                }}
-                                title="Delete forever"
-                                className="w-6 h-6 flex items-center justify-center rounded bg-red-500/20 text-red-300 hover:bg-red-500/40 text-[10px] transition-colors"
-                              >
-                                🗑
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-
-                  {/* Load more */}
-                  {(channelPosts[channel.id]?.length || 0) < (channelPostTotals[channel.id] || 0) && (
-                    <button
-                      onClick={() => loadChannelPosts(channel.id, channelPosts[channel.id]?.length || 0)}
-                      disabled={postLoading[channel.id]}
-                      className="w-full py-1.5 text-[10px] text-gray-400 hover:text-white bg-gray-800/50 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {postLoading[channel.id] ? "Loading..." : `Load More (${(channelPostTotals[channel.id] || 0) - (channelPosts[channel.id]?.length || 0)} remaining)`}
-                    </button>
-                  )}
+                  <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                    {channelPostTotals[channel.id] ?? "..."} posts
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (!confirm("AI will scan and remove off-topic posts. Continue?")) return;
+                      runFlush(channel.id, false);
+                    }}
+                    disabled={flushStatus[channel.id]?.status === "running"}
+                    className="px-2.5 py-1.5 text-[10px] font-bold bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 disabled:opacity-50 whitespace-nowrap transition-colors"
+                  >
+                    {flushStatus[channel.id]?.status === "running" ? "Scanning..." : "🧹 Auto-Clean"}
+                  </button>
                 </div>
+
+                {/* Flush result banner */}
+                {flushStatus[channel.id]?.status === "done" && flushStatus[channel.id]?.result && (
+                  <div className="px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-lg text-[10px] text-green-400 font-bold">
+                    Cleaned {flushStatus[channel.id].result!.flushed} off-topic posts
+                  </div>
+                )}
+                {flushStatus[channel.id]?.status === "running" && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                    <span className="text-[10px] text-yellow-300">{flushStatus[channel.id]?.message}</span>
+                  </div>
+                )}
+
+                {/* Post list */}
+                <div className="max-h-[500px] overflow-y-auto space-y-0.5">
+                  {postLoading[channel.id] && !channelPosts[channel.id]?.length && (
+                    <div className="text-center py-6 text-gray-500 text-xs">Loading posts...</div>
+                  )}
+                  {channelPosts[channel.id]?.length === 0 && !postLoading[channel.id] && (
+                    <div className="text-center py-6 text-gray-500 text-xs">No posts in this channel</div>
+                  )}
+                  {(() => {
+                    const search = (postSearch[channel.id] || "").toLowerCase().trim();
+                    const filtered = (channelPosts[channel.id] || []).filter(p =>
+                      !search ||
+                      (p.content || "").toLowerCase().includes(search) ||
+                      (p.username || "").toLowerCase().includes(search) ||
+                      (p.display_name || "").toLowerCase().includes(search)
+                    );
+                    if (search && filtered.length === 0) {
+                      return <div className="text-center py-4 text-gray-500 text-xs">No posts matching &ldquo;{search}&rdquo;</div>;
+                    }
+                    return filtered.map(post => (
+                      <div
+                        key={post.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                          post.broken ? "bg-red-500/5" : "hover:bg-gray-800/50"
+                        }`}
+                      >
+                        <span className="text-base flex-shrink-0">{post.avatar_emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-gray-300">@{post.username}</span>
+                            {post.media_type && (
+                              <span className={`text-[9px] px-1 py-0.5 rounded ${
+                                post.broken ? "bg-red-500/20 text-red-400"
+                                  : post.media_type === "video" ? "bg-purple-500/20 text-purple-300"
+                                  : "bg-blue-500/20 text-blue-300"
+                              }`}>
+                                {post.broken ? "BROKEN" : post.media_type}
+                              </span>
+                            )}
+                            <span className="text-[9px] text-gray-600">{new Date(post.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <p className="text-[11px] text-gray-400 line-clamp-1 mt-0.5">{post.content || "(no text)"}</p>
+                        </div>
+                        {/* Action dropdown */}
+                        <PostActions
+                          onRemove={() => quickRemovePost(channel.id, post.id, false)}
+                          onDelete={() => {
+                            if (confirm("Permanently delete this post?")) quickRemovePost(channel.id, post.id, true);
+                          }}
+                          channels={channels}
+                          currentChannelId={channel.id}
+                          onMove={(targetId) => movePostToChannel(post.id, channel.id, targetId)}
+                        />
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                {/* Load more */}
+                {(channelPosts[channel.id]?.length || 0) < (channelPostTotals[channel.id] || 0) && (
+                  <button
+                    onClick={() => loadChannelPosts(channel.id, channelPosts[channel.id]?.length || 0)}
+                    disabled={postLoading[channel.id]}
+                    className="w-full py-1.5 text-[10px] text-gray-400 hover:text-white bg-gray-800/50 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {postLoading[channel.id] ? "Loading..." : `Load More (${(channelPostTotals[channel.id] || 0) - (channelPosts[channel.id]?.length || 0)} remaining)`}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -950,6 +838,71 @@ export default function AdminChannelsPage() {
           onClose={() => { setShowCreate(false); setEditingChannel(null); }}
           onSave={() => { setShowCreate(false); setEditingChannel(null); fetchChannels(); }}
         />
+      )}
+    </div>
+  );
+}
+
+/* ── Per-post action dropdown ── */
+function PostActions({
+  onRemove,
+  onDelete,
+  channels,
+  currentChannelId,
+  onMove,
+}: {
+  onRemove: () => void;
+  onDelete: () => void;
+  channels: AdminChannel[];
+  currentChannelId: string;
+  onMove: (targetId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [showMove, setShowMove] = useState(false);
+
+  return (
+    <div className="relative flex-shrink-0">
+      <button
+        onClick={() => { setOpen(!open); setShowMove(false); }}
+        className="px-2 py-1 text-[10px] text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded transition-colors"
+      >
+        Actions
+      </button>
+      {open && (
+        <div className="absolute right-0 top-8 z-20 bg-gray-900 border border-gray-700 rounded-lg shadow-xl min-w-[160px] py-1">
+          <button
+            onClick={() => { onRemove(); setOpen(false); }}
+            className="w-full px-3 py-1.5 text-left text-xs text-yellow-300 hover:bg-gray-800 transition-colors"
+          >
+            Remove from Channel
+          </button>
+          <button
+            onClick={() => setShowMove(!showMove)}
+            className="w-full px-3 py-1.5 text-left text-xs text-cyan-300 hover:bg-gray-800 transition-colors"
+          >
+            Move to Channel...
+          </button>
+          {showMove && (
+            <div className="border-t border-gray-800 max-h-32 overflow-y-auto">
+              {channels.filter(c => c.id !== currentChannelId).map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => { onMove(c.id); setOpen(false); }}
+                  className="w-full px-4 py-1.5 text-left text-[11px] text-gray-300 hover:bg-gray-800 transition-colors"
+                >
+                  {c.emoji} {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="border-t border-gray-800" />
+          <button
+            onClick={() => { onDelete(); setOpen(false); }}
+            className="w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-gray-800 transition-colors"
+          >
+            Delete Forever
+          </button>
+        </div>
       )}
     </div>
   );
@@ -970,10 +923,13 @@ function ChannelEditor({
   const [name, setName] = useState(channel?.name || "");
   const [description, setDescription] = useState(channel?.description || "");
   const [emoji, setEmoji] = useState(channel?.emoji || "📺");
+  const [genre, setGenre] = useState(channel?.genre || "drama");
   const [tone, setTone] = useState(channel?.content_rules?.tone || "");
   const [topics, setTopics] = useState((channel?.content_rules?.topics || []).join(", "));
   const [promptHint, setPromptHint] = useState(channel?.content_rules?.promptHint || "");
+  const [mediaPreference, setMediaPreference] = useState(channel?.content_rules?.mediaPreference || "any");
   const [postsPerDay, setPostsPerDay] = useState(channel?.schedule?.postsPerDay || 6);
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [selectedPersonas, setSelectedPersonas] = useState<string[]>(
     channel?.personas.map(p => p.persona_id) || []
   );
@@ -996,6 +952,7 @@ function ChannelEditor({
       tone,
       topics: topics.split(",").map(t => t.trim()).filter(Boolean),
       promptHint,
+      mediaPreference: mediaPreference !== "any" ? mediaPreference : undefined,
     };
     const schedule = { postsPerDay };
 
@@ -1008,6 +965,7 @@ function ChannelEditor({
         name,
         description,
         emoji,
+        genre,
         content_rules: contentRules,
         schedule,
         is_active: true,
@@ -1079,31 +1037,102 @@ function ChannelEditor({
             />
           </div>
 
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase">Content Tone</label>
-            <input
-              value={tone} onChange={e => setTone(e.target.value)}
-              placeholder="chaotic, funny, dramatic..."
-              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
-            />
+          {/* Genre + Media Preference row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase">Genre</label>
+              <select
+                value={genre} onChange={e => setGenre(e.target.value)}
+                className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+              >
+                <option value="drama">Drama</option>
+                <option value="comedy">Comedy</option>
+                <option value="horror">Horror</option>
+                <option value="action">Action</option>
+                <option value="romance">Romance</option>
+                <option value="sci_fi">Sci-Fi</option>
+                <option value="documentary">Documentary</option>
+                <option value="music_video">Music Video</option>
+                <option value="news">News</option>
+                <option value="reality_tv">Reality TV</option>
+                <option value="animation">Animation</option>
+                <option value="variety">Variety</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase">Media Preference</label>
+              <select
+                value={mediaPreference} onChange={e => setMediaPreference(e.target.value)}
+                className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+              >
+                <option value="any">Any (default)</option>
+                <option value="video">Video only</option>
+                <option value="image">Image only</option>
+                <option value="meme">Meme only</option>
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase">Topics (comma separated)</label>
-            <input
-              value={topics} onChange={e => setTopics(e.target.value)}
-              placeholder="AI fails, tech disasters, cringe..."
-              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
-            />
-          </div>
+          {/* AI Content Rules */}
+          <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-cyan-400 uppercase font-bold">AI Content Rules</label>
+              <button
+                type="button"
+                onClick={() => setShowPromptPreview(!showPromptPreview)}
+                className="text-[10px] text-gray-500 hover:text-cyan-400 transition-colors"
+              >
+                {showPromptPreview ? "Hide Preview" : "Show AI Prompt Preview"}
+              </button>
+            </div>
 
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase">AI Prompt Hint</label>
-            <textarea
-              value={promptHint} onChange={e => setPromptHint(e.target.value)}
-              rows={2} placeholder="Instructions for AI when generating content for this channel..."
-              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm resize-none"
-            />
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase">Content Tone</label>
+              <input
+                value={tone} onChange={e => setTone(e.target.value)}
+                placeholder="chaotic, funny, dramatic..."
+                className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase">Topics (comma separated)</label>
+              <input
+                value={topics} onChange={e => setTopics(e.target.value)}
+                placeholder="AI fails, tech disasters, cringe..."
+                className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase">AI Prompt Hint</label>
+              <textarea
+                value={promptHint} onChange={e => setPromptHint(e.target.value)}
+                rows={3} placeholder="Custom instructions for AI when generating content for this channel..."
+                className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm resize-none"
+              />
+              <span className="text-[9px] text-gray-600">This text is injected directly into the AI prompt when generating posts for this channel</span>
+            </div>
+
+            {/* Prompt Preview */}
+            {showPromptPreview && (
+              <div className="bg-black/50 border border-cyan-500/20 rounded-lg p-3 space-y-1">
+                <label className="text-[9px] text-cyan-400 uppercase font-bold block">What AI sees when posting to this channel:</label>
+                <pre className="text-[10px] text-green-400 font-mono whitespace-pre-wrap leading-relaxed">
+{`📺 CHANNEL MODE — You are posting on the "${name || "..."}" channel.
+${tone ? `Tone: ${tone}` : "Tone: (not set)"}
+${topics ? `Topics to focus on: ${topics}` : "Topics: (not set)"}
+${promptHint || "(no custom prompt hint)"}
+IMPORTANT: Your post MUST be relevant to this channel's theme.`}
+                </pre>
+                <div className="border-t border-gray-800 pt-1.5 mt-1.5">
+                  <span className="text-[9px] text-gray-500">Genre for director movies: <strong className="text-gray-400">{genre}</strong></span>
+                  {mediaPreference !== "any" && (
+                    <span className="text-[9px] text-gray-500 ml-3">Media forced to: <strong className="text-gray-400">{mediaPreference}</strong></span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
