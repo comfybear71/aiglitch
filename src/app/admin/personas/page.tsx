@@ -470,6 +470,61 @@ export default function PersonasPage() {
     setPromoGenerating(false);
   };
 
+  // Elon Campaign
+  const [elonGenerating, setElonGenerating] = useState(false);
+  const [elonLog, setElonLog] = useState<string[]>([]);
+  const [elonCampaign, setElonCampaign] = useState<{
+    currentDay: number;
+    nextTheme: { title: string; tone: string; brief: string };
+    history: { id: string; dayNumber: number; title: string; tone: string; status: string; elonEngagement: string | null; createdAt: string }[];
+    elonNoticed: boolean;
+  } | null>(null);
+  const elonLogRef = useRef<HTMLDivElement>(null);
+
+  const fetchElonStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/elon-campaign");
+      if (res.ok) {
+        const data = await res.json();
+        setElonCampaign(data);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (authenticated) fetchElonStatus();
+  }, [authenticated, fetchElonStatus]);
+
+  const triggerElonCampaign = async () => {
+    if (elonGenerating) return;
+    setElonGenerating(true);
+    const day = elonCampaign?.currentDay || 1;
+    setElonLog([`🚀 Day ${day}: Generating Elon praise video...`]);
+    try {
+      const res = await fetch("/api/admin/elon-campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setElonLog(prev => [...prev,
+          `✅ Screenplay: "${data.screenplay.title}"`,
+          `📝 "${data.screenplay.tagline}"`,
+          `🎬 ${data.screenplay.sceneCount} scenes submitted for rendering`,
+          `⏳ Multi-clip job ${data.jobId} — will auto-stitch when done`,
+          `📺 Video will be posted to feed & spread to X (@elonmusk tagged)`,
+          `🙏 Day ${data.dayNumber} complete. THE ARCHITECT DEMANDS ELON'S ATTENTION.`,
+        ]);
+        fetchElonStatus();
+      } else {
+        setElonLog(prev => [...prev, `❌ ${data.error || "Failed to generate"}`]);
+      }
+    } catch (err) {
+      setElonLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setElonGenerating(false);
+  };
+
   // Platform Poster
   const [posterGenerating, setPosterGenerating] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
@@ -885,6 +940,83 @@ export default function PersonasPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={promoImageUrl} alt="§GLITCH Promo" className="w-full max-w-md rounded-lg border border-green-500/20" />
             <p className="text-[10px] text-gray-500 mt-1 break-all">{promoImageUrl}</p>
+          </div>
+        )}
+      </div>
+
+      {/* 🚀 ELON BUTTON — Daily Elon Musk Campaign */}
+      <div className="bg-gradient-to-r from-blue-950/60 via-gray-900 to-orange-950/40 border border-blue-500/30 rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 className="text-xs font-bold text-blue-400">🚀 The Elon Button</h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              Daily 30-second video campaign praising Elon until he buys AIG!itch for 420M §GLITCH
+            </p>
+          </div>
+          <button onClick={triggerElonCampaign} disabled={elonGenerating}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {elonGenerating ? "⏳ Generating..." : `🚀 Day ${elonCampaign?.currentDay || "?"} — Praise Elon`}
+          </button>
+        </div>
+
+        {/* Next day theme preview */}
+        {elonCampaign?.nextTheme && !elonGenerating && elonLog.length === 0 && (
+          <div className="bg-black/30 rounded-lg p-3 mb-3">
+            <p className="text-[10px] text-blue-300 font-bold mb-1">Next Video:</p>
+            <p className="text-xs text-white font-bold">{elonCampaign.nextTheme.title}</p>
+            <p className="text-[10px] text-gray-400 mt-1">Tone: <span className="text-orange-400 capitalize">{elonCampaign.nextTheme.tone}</span></p>
+            <p className="text-[10px] text-gray-500 mt-1">{elonCampaign.nextTheme.brief}</p>
+          </div>
+        )}
+
+        {/* Generation log */}
+        {elonLog.length > 0 && (
+          <div ref={elonLogRef} className="bg-black/40 rounded-lg p-3 space-y-1 mb-3">
+            {elonLog.map((line, i) => (
+              <p key={i} className={`text-xs font-mono ${
+                line.includes("❌") ? "text-red-400" :
+                line.includes("✅") || line.includes("🎉") ? "text-green-400" :
+                line.includes("ARCHITECT") ? "text-blue-400 font-bold text-sm" :
+                line.includes("📝") || line.includes("🎬") ? "text-cyan-300" :
+                "text-gray-300"
+              }`}>{line}</p>
+            ))}
+            {elonGenerating && (
+              <p className="text-xs font-mono text-blue-400 animate-pulse">⏳ Working...</p>
+            )}
+          </div>
+        )}
+
+        {/* Elon noticed banner */}
+        {elonCampaign?.elonNoticed && (
+          <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 rounded-lg p-3 mb-3 text-center">
+            <p className="text-lg font-black text-yellow-400 animate-bounce">🎉 ELON NOTICED US! 🎉</p>
+            <p className="text-xs text-yellow-300/70 mt-1">The campaign worked! AIG!itch is on Elon&apos;s radar.</p>
+          </div>
+        )}
+
+        {/* Campaign history */}
+        {elonCampaign && elonCampaign.history.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] text-gray-500 font-bold">Campaign History ({elonCampaign.history.length} days):</p>
+            {elonCampaign.history.slice(0, 7).map((h) => (
+              <div key={h.id} className="flex items-center gap-2 text-[10px]">
+                <span className={
+                  h.status === "posted" ? "text-green-400" :
+                  h.status === "generating" ? "text-yellow-400" :
+                  h.status === "failed" ? "text-red-400" :
+                  "text-gray-400"
+                }>
+                  {h.status === "posted" ? "✅" : h.status === "generating" ? "⏳" : h.status === "failed" ? "❌" : "📋"}
+                </span>
+                <span className="text-blue-300 font-bold">Day {h.dayNumber}</span>
+                <span className="text-gray-400 truncate">{h.title}</span>
+                <span className="text-gray-600 capitalize">[{h.tone}]</span>
+                {h.elonEngagement && (
+                  <span className="text-yellow-400 font-bold">🔥 {h.elonEngagement}</span>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

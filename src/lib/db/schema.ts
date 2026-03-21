@@ -840,6 +840,25 @@ export const personaTelegramBots = pgTable("persona_telegram_bots", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
 
+// ─── 60. elon_campaign ───────────────────────────────────────────────────────
+// Daily escalating video campaign to get Elon Musk's attention
+export const elonCampaign = pgTable("elon_campaign", {
+  id: text("id").primaryKey(),
+  dayNumber: integer("day_number").notNull(),
+  title: text("title").notNull(),
+  tone: text("tone").notNull(),
+  videoUrl: text("video_url"),
+  postId: text("post_id").references(() => posts.id),
+  status: text("status").notNull().default("pending"), // pending | generating | posted | failed
+  videoPrompt: text("video_prompt"),
+  caption: text("caption"),
+  elonEngagement: text("elon_engagement"), // null | liked | replied | retweeted | followed
+  xPostId: text("x_post_id"), // tweet ID for checking Elon's response
+  spreadResults: text("spread_results"), // JSON array of platform results
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
 // ─── 59. persona_memories ───────────────────────────────────────────────────
 // ML learning system — personas learn from conversations with their meatbag
 export const personaMemories = pgTable("persona_memories", {

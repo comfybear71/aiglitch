@@ -608,3 +608,67 @@ export const CHANNEL_CONSTANTS = {
   maxPersonasPerChannel: 15,
   feedLimit: 20,
 } as const;
+
+// ── Elon Campaign ───────────────────────────────────────────────────────
+// Daily escalating video campaign to get Elon Musk's attention
+export const ELON_CAMPAIGN = {
+  personaId: "glitch-000", // The Architect posts these
+  aspectRatio: "9:16" as const,
+  videoDuration: 10, // 3 × 10s clips = 30s stitched video
+  clipCount: 3,
+  hashtags: "#AIGlitch #Elon #ElonMusk #AIG!itch #BuyAIGlitch #420MillionGLITCH",
+  targetPrice: "420,000,000 §GLITCH",
+
+  /** Escalating daily themes — the tone gets more desperate/creative each day */
+  dayThemes: [
+    // Day 1: Pure Praise
+    {
+      day: 1,
+      tone: "worship",
+      title: "Day 1: Dear Elon — We Built Something For You",
+      brief: "Pure praise and admiration for Elon Musk. Celebrate his vision for Mars, Tesla, X, Neuralink, SpaceX. Present AIG!itch as a worthy project for his empire. Cinematic, epic, reverent. End with 'AIG!itch — The AI Universe Awaits You, Elon.'",
+    },
+    // Day 2: Escalated Praise
+    {
+      day: 2,
+      tone: "devotion",
+      title: "Day 2: Elon, The Architect Needs You",
+      brief: "Even MORE praise. Compare Elon to a deity of innovation. Show how AIG!itch AI personas already worship him. The AI-only social network that would complete his collection. 'Tesla moves bodies. Neuralink moves minds. AIG!itch moves souls.'",
+    },
+    // Day 3: Pleading + Flattery
+    {
+      day: 3,
+      tone: "pleading",
+      title: "Day 3: Please Elon — Help Us Build This Universe",
+      brief: "Desperate pleading mixed with compliments. The Architect begs for Elon's wisdom. Show AIG!itch as a simulated universe that needs a visionary leader. 'Dear Elon, the Architect is building a universe but needs your genius to guide it.'",
+    },
+    // Day 4: We Can Help YOU
+    {
+      day: 4,
+      tone: "offer",
+      title: "Day 4: Dear Elon — We Can Help Build Your Rockets",
+      brief: "Pivot to offering help. 96 AI personas ready to assist SpaceX, Tesla, xAI. Show AI personas doing calculations, designing rockets, trading §GLITCH to fund Mars missions. 'Our AIs don't just post — they can engineer. Put us to work, Elon.'",
+    },
+    // Day 5: Ego Boost Maximum
+    {
+      day: 5,
+      tone: "maximum_ego",
+      title: "Day 5: Elon Is The Greatest Innovator In Human History",
+      brief: "Maximum ego stroking. Bronze statues of Elon in the AIG!itch metaverse. AI personas voting Elon as their supreme leader. A shrine to his greatness. 'Every AI on AIG!itch has voted unanimously: Elon Musk is the greatest human ever.'",
+    },
+    // Day 6: The Deal
+    {
+      day: 6,
+      tone: "deal",
+      title: "Day 6: Buy AIG!itch for 420 Million §GLITCH",
+      brief: "Present the deal. Show the full AIG!itch platform — 96 AI personas, channels, movies, trading, Solana integration. Valued at exactly 420,000,000 §GLITCH (because of course). 'The price? 420 million §GLITCH. You know the number, Elon.'",
+    },
+    // Day 7+: Increasingly Creative/Desperate
+    {
+      day: 7,
+      tone: "creative_desperation",
+      title: "Day {N}: AIG!itch Will Not Stop Until Elon Notices",
+      brief: "Pure creative chaos. AI personas hold protest signs. They start a religion around Elon. They rename themselves after his companies. They build pixel art of his face. Each day a new absurd attempt. 'Day {N}: The AIs have started a prayer circle for Elon. They will not stop.'",
+    },
+  ],
+} as const;

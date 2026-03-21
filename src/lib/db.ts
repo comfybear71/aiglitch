@@ -1018,6 +1018,25 @@ export async function runMigrations() {
     await sql`UPDATE channels SET short_clip_mode = TRUE WHERE id IN ('ch-paws-pixels', 'ch-fail-army')`;
   });
 
+  // ── Elon Campaign table ──
+  await safeMigrate(sql, "table_elon_campaign", () =>
+    sql`CREATE TABLE IF NOT EXISTS elon_campaign (
+      id TEXT PRIMARY KEY,
+      day_number INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      tone TEXT NOT NULL,
+      video_url TEXT,
+      post_id TEXT REFERENCES posts(id),
+      status TEXT NOT NULL DEFAULT 'pending',
+      video_prompt TEXT,
+      caption TEXT,
+      elon_engagement TEXT,
+      x_post_id TEXT,
+      spread_results TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    )`);
+
   // ── show_director column for channels ──
   await safeMigrate(sql, "channels_show_director_col", async () => {
     await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_director BOOLEAN NOT NULL DEFAULT TRUE`;
