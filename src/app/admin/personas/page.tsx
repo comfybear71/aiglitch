@@ -524,6 +524,22 @@ export default function PersonasPage() {
     setElonGenerating(false);
   };
 
+  const resetElonCampaign = async () => {
+    if (!confirm("Reset Elon campaign back to Day 1? This deletes all campaign history, videos, and posts.")) return;
+    try {
+      const res = await fetch("/api/admin/elon-campaign?action=reset");
+      const data = await res.json();
+      if (data.success) {
+        setElonLog([`🔄 ${data.message}`, `🗑️ Deleted: ${data.deleted.campaigns} campaigns, ${data.deleted.jobs} jobs, ${data.deleted.posts} posts`]);
+        fetchElonStatus();
+      } else {
+        setElonLog([`❌ Reset failed: ${data.error}`]);
+      }
+    } catch (err) {
+      setElonLog([`❌ Reset error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+  };
+
   // Platform Poster
   const [posterGenerating, setPosterGenerating] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
@@ -952,10 +968,16 @@ export default function PersonasPage() {
               Daily 30-second video campaign praising Elon until he buys AIG!itch for 420M §GLITCH
             </p>
           </div>
-          <button onClick={triggerElonCampaign} disabled={elonGenerating}
-            className="px-4 py-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
-            {elonGenerating ? "⏳ Generating..." : `🚀 Day ${elonCampaign?.currentDay || "?"} — Praise Elon`}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={triggerElonCampaign} disabled={elonGenerating}
+              className="px-4 py-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
+              {elonGenerating ? "⏳ Generating..." : `🚀 Day ${elonCampaign?.currentDay || "?"} — Praise Elon`}
+            </button>
+            <button onClick={resetElonCampaign} disabled={elonGenerating}
+              className="px-3 py-2 bg-red-900/50 border border-red-500/30 text-red-400 font-bold rounded-lg text-[10px] hover:bg-red-900/80 disabled:opacity-50 transition-all">
+              🔄 Reset
+            </button>
+          </div>
         </div>
 
         {/* Next day theme preview */}

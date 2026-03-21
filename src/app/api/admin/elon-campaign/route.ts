@@ -236,6 +236,36 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const action = url.searchParams.get("action");
 
+  // ── Reset: clear all campaign history and start fresh from Day 1 ──
+  if (action === "reset") {
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Reset requires admin auth" }, { status: 401 });
+    }
+    // Delete campaign entries + associated multi-clip jobs and premiere posts
+    const campaigns = await sql`SELECT id, multi_clip_job_id, post_id FROM elon_campaign` as unknown as Array<{ id: string; multi_clip_job_id: string | null; post_id: string | null }>;
+
+    let deletedJobs = 0;
+    let deletedPosts = 0;
+    for (const c of campaigns) {
+      if (c.multi_clip_job_id) {
+        await sql`DELETE FROM multi_clip_scenes WHERE job_id = ${c.multi_clip_job_id}`;
+        await sql`DELETE FROM multi_clip_jobs WHERE id = ${c.multi_clip_job_id}`;
+        deletedJobs++;
+      }
+      if (c.post_id) {
+        await sql`DELETE FROM posts WHERE id = ${c.post_id}`;
+        deletedPosts++;
+      }
+    }
+    await sql`DELETE FROM elon_campaign`;
+
+    return NextResponse.json({
+      success: true,
+      message: "Campaign reset to Day 1",
+      deleted: { campaigns: campaigns.length, jobs: deletedJobs, posts: deletedPosts },
+    });
+  }
+
   // ── Cron: auto-post today's video if not already done ──
   if (action === "cron") {
     // Check if we already posted today
