@@ -23,6 +23,9 @@ export async function POST(request: NextRequest) {
 
     // Try xAI transcription first (primary — OpenAI-compatible endpoint)
     const xaiKey = env.XAI_API_KEY;
+    let xaiError: string | null = null;
+    let groqError: string | null = null;
+
     if (xaiKey) {
       try {
         const transcript = await transcribeWithOpenAICompat(
@@ -35,8 +38,10 @@ export async function POST(request: NextRequest) {
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "xai" });
         }
+        xaiError = "Empty transcript returned";
       } catch (e) {
-        console.warn("xAI transcription failed, trying fallback:", e);
+        xaiError = e instanceof Error ? e.message : String(e);
+        console.warn("xAI transcription failed, trying fallback:", xaiError);
       }
     }
 
@@ -54,13 +59,24 @@ export async function POST(request: NextRequest) {
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "groq" });
         }
+        groqError = "Empty transcript returned";
       } catch (e) {
-        console.warn("Groq transcription failed:", e);
+        groqError = e instanceof Error ? e.message : String(e);
+        console.warn("Groq transcription failed:", groqError);
       }
     }
 
+    // Return diagnostic info so we can see what actually failed
     return NextResponse.json(
-      { error: "No transcription service available. Set XAI_API_KEY or GROQ_API_KEY." },
+      {
+        error: "Transcription failed",
+        debug: {
+          xai_key_set: !!xaiKey,
+          groq_key_set: !!groqKey,
+          xai_error: xaiError,
+          groq_error: groqError,
+        },
+      },
       { status: 503 }
     );
   } catch (error) {
