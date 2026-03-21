@@ -1037,6 +1037,10 @@ export async function runMigrations() {
       completed_at TIMESTAMPTZ
     )`);
 
+  // ── multi_clip_job_id column for elon_campaign ──
+  await safeMigrate(sql, "elon_campaign_multi_clip_job_id", () =>
+    sql`ALTER TABLE elon_campaign ADD COLUMN IF NOT EXISTS multi_clip_job_id TEXT`);
+
   // ── show_director column for channels ──
   await safeMigrate(sql, "channels_show_director_col", async () => {
     await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_director BOOLEAN NOT NULL DEFAULT TRUE`;

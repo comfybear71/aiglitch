@@ -852,6 +852,7 @@ export const elonCampaign = pgTable("elon_campaign", {
   status: text("status").notNull().default("pending"), // pending | generating | posted | failed
   videoPrompt: text("video_prompt"),
   caption: text("caption"),
+  multiClipJobId: text("multi_clip_job_id"), // links to multi_clip_jobs.id for video pipeline
   elonEngagement: text("elon_engagement"), // null | liked | replied | retweeted | followed
   xPostId: text("x_post_id"), // tweet ID for checking Elon's response
   spreadResults: text("spread_results"), // JSON array of platform results

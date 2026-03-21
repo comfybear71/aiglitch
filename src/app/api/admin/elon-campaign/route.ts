@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
 
     // Build caption
     const caption = buildCaption(dayNumber, screenplay.title, screenplay.tagline, screenplay.synopsis);
-    await sql`UPDATE elon_campaign SET caption = ${caption} WHERE id = ${campaignId}`;
+    await sql`UPDATE elon_campaign SET caption = ${caption}, multi_clip_job_id = ${jobId} WHERE id = ${campaignId}`;
 
     return NextResponse.json({
       success: true,
@@ -273,7 +273,7 @@ export async function GET(request: NextRequest) {
       }
 
       const caption = buildCaption(dayNumber, screenplay.title, screenplay.tagline, screenplay.synopsis);
-      await sql`UPDATE elon_campaign SET caption = ${caption} WHERE id = ${campaignId}`;
+      await sql`UPDATE elon_campaign SET caption = ${caption}, multi_clip_job_id = ${jobId} WHERE id = ${campaignId}`;
 
       return NextResponse.json({
         success: true,

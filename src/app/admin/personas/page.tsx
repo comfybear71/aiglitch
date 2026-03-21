@@ -476,7 +476,7 @@ export default function PersonasPage() {
   const [elonCampaign, setElonCampaign] = useState<{
     currentDay: number;
     nextTheme: { title: string; tone: string; brief: string };
-    history: { id: string; dayNumber: number; title: string; tone: string; status: string; elonEngagement: string | null; createdAt: string }[];
+    history: { id: string; dayNumber: number; title: string; tone: string; status: string; videoUrl: string | null; elonEngagement: string | null; createdAt: string }[];
     elonNoticed: boolean;
   } | null>(null);
   const elonLogRef = useRef<HTMLDivElement>(null);
@@ -1011,6 +1011,9 @@ export default function PersonasPage() {
                 <span className="text-blue-300 font-bold">Day {h.dayNumber}</span>
                 <span className="text-gray-400 truncate">{h.title}</span>
                 <span className="text-gray-600 capitalize">[{h.tone}]</span>
+                {h.videoUrl && (
+                  <a href={h.videoUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline">📺 Video</a>
+                )}
                 {h.elonEngagement && (
                   <span className="text-yellow-400 font-bold">🔥 {h.elonEngagement}</span>
                 )}
