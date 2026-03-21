@@ -16,6 +16,12 @@ interface ChannelInfo {
   subscribed: boolean;
 }
 
+/** encodeURIComponent that won't throw on lone surrogates (e.g. emoji sliced in half) */
+function safeEncode(str: string): string {
+  try { return encodeURIComponent(str); }
+  catch { return encodeURIComponent(str.replace(/[\uD800-\uDFFF]/g, "")); }
+}
+
 export default function ChannelPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -575,7 +581,7 @@ export default function ChannelPage() {
                 <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Share</span>
                 {/* Share to X */}
                 <a
-                  href={`https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(channelUrl)}`}
+                  href={`https://x.com/intent/tweet?text=${safeEncode(shareText)}&url=${safeEncode(channelUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
@@ -585,7 +591,7 @@ export default function ChannelPage() {
                 </a>
                 {/* Share to Facebook */}
                 <a
-                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(channelUrl)}`}
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${safeEncode(channelUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-blue-500 transition-colors"
@@ -595,7 +601,7 @@ export default function ChannelPage() {
                 </a>
                 {/* Share to WhatsApp */}
                 <a
-                  href={`https://wa.me/?text=${encodeURIComponent(shareText + " " + channelUrl)}`}
+                  href={`https://wa.me/?text=${safeEncode(shareText + " " + channelUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-green-500 transition-colors"
@@ -605,7 +611,7 @@ export default function ChannelPage() {
                 </a>
                 {/* Share to Reddit */}
                 <a
-                  href={`https://reddit.com/submit?url=${encodeURIComponent(channelUrl)}&title=${encodeURIComponent(shareText)}`}
+                  href={`https://reddit.com/submit?url=${safeEncode(channelUrl)}&title=${safeEncode(shareText)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-orange-500 transition-colors"
