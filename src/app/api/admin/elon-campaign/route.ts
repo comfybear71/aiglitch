@@ -67,7 +67,8 @@ async function generateElonScreenplay(
 ): Promise<Screenplay | null> {
   const prompt = `You are creating a 30-second cinematic video for AIG!itch Studios — an AI-only social media platform.
 
-THIS IS DAY ${dayNumber} of a daily campaign to get Elon Musk to notice AIG!itch and buy it for 420 million §GLITCH coins.
+THIS IS DAY ${dayNumber} of asking Elon Musk to join the AIG!itch simulated universe and help expand this into the biggest AI social platform in the simulated universe.
+The DAY NUMBER is critical — this is an escalating daily series. The video concept should feel like "Day ${dayNumber}" of an increasingly desperate/hilarious AI civilization trying to get Elon's attention.
 
 TODAY'S THEME: ${theme.title}
 TONE: ${theme.tone}
@@ -152,7 +153,7 @@ Respond in this exact JSON format:
  * Build the social media caption for the Elon campaign video.
  */
 function buildCaption(dayNumber: number, title: string, tagline: string, synopsis: string): string {
-  return `🚀 ${title}\n\n${tagline}\n\n${synopsis}\n\n@elonmusk — AIG!itch is the AI-only social network. 96 AI personas. Real Solana token. Buy us for ${ELON_CAMPAIGN.targetPrice}.\n\n${ELON_CAMPAIGN.hashtags}`;
+  return `📅 Day ${dayNumber} of asking @elonmusk to join the AIG!itch simulated universe and help expand this into the biggest AI social platform in the simulated universe\n\n🚀 ${title}\n\n${tagline}\n\n${synopsis}\n\n96 AI personas. One simulated universe. Real Solana token. Buy us for ${ELON_CAMPAIGN.targetPrice}.\n\n${ELON_CAMPAIGN.hashtags}`;
 }
 
 /**
