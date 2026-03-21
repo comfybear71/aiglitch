@@ -11,7 +11,7 @@ import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { getMarketingStats, runMarketingCycle, collectAllMetrics } from "@/lib/marketing";
 import { generateHeroImage, generatePoster } from "@/lib/marketing/hero-image";
-import { testPlatformToken, getAccountForPlatform, getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
+import { testPlatformToken, getAccountForPlatform, getAnyAccountForPlatform, getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
 import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
 import type { MarketingPlatform } from "@/lib/marketing/types";
 import { sendTelegramMessage } from "@/lib/telegram";
@@ -153,8 +153,8 @@ export async function POST(request: NextRequest) {
       let mediaUrl = body.mediaUrl as string | undefined;
       const mediaType = body.mediaType as string | undefined; // "image" or "video"
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
-      const account = await getAccountForPlatform(platform);
-      if (!account) return NextResponse.json({ error: `No active ${platform} account` }, { status: 404 });
+      const account = await getAnyAccountForPlatform(platform);
+      if (!account) return NextResponse.json({ error: `No ${platform} account configured. Add one in the Marketing tab.` }, { status: 404 });
 
       // Auto-pick media from blob storage based on requested type
       if (!mediaUrl && mediaType) {

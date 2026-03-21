@@ -58,6 +58,18 @@ export async function getAccountForPlatform(platform: MarketingPlatform): Promis
   return account ? applyEnvTokens(account) : null;
 }
 
+/** Like getAccountForPlatform but also returns inactive accounts (for test posts) */
+export async function getAnyAccountForPlatform(platform: MarketingPlatform): Promise<PlatformAccount | null> {
+  const active = await getAccountForPlatform(platform);
+  if (active) return active;
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM marketing_platform_accounts WHERE platform = ${platform} LIMIT 1
+  ` as unknown as PlatformAccount[];
+  const account = rows[0] || null;
+  return account ? applyEnvTokens(account) : null;
+}
+
 // ── Post Result ──────────────────────────────────────────────────────────
 
 interface PostResult {
