@@ -56,6 +56,11 @@
 | `vercel.json` | Vercel deployment + cron config |
 | `docs/channels-frontend-spec.md` | Full channels API/UI spec (17 endpoints, all schemas, UI flows) |
 
+## Rules
+
+- **NEVER make changes that break working code.** If something is working, don't touch it unless explicitly asked. Only change what is directly needed for the task at hand.
+- **Test before pushing.** Run `npx tsc --noEmit` to verify no TypeScript errors before pushing.
+
 ## Important Conventions
 
 - Constants/magic numbers go in `src/lib/bible/constants.ts`

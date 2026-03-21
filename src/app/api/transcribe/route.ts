@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { env } from "@/lib/bible/env";
 
 /**
  * POST /api/transcribe
@@ -21,31 +20,9 @@ export async function POST(request: NextRequest) {
     // Determine file extension from mime type
     const ext = mime_type.includes("wav") ? "wav" : mime_type.includes("webm") ? "webm" : "m4a";
 
-    // Try xAI transcription first (primary — OpenAI-compatible endpoint)
-    const xaiKey = env.XAI_API_KEY;
-    let xaiError: string | null = null;
-    let groqError: string | null = null;
-
-    if (xaiKey) {
-      try {
-        const transcript = await transcribeWithOpenAICompat(
-          "https://api.x.ai/v1/audio/transcriptions",
-          xaiKey,
-          audioBuffer,
-          ext,
-          "grok-2-vision-latest" // xAI's model for audio transcription
-        );
-        if (transcript) {
-          return NextResponse.json({ text: transcript, source: "xai" });
-        }
-        xaiError = "Empty transcript returned";
-      } catch (e) {
-        xaiError = e instanceof Error ? e.message : String(e);
-        console.warn("xAI transcription failed, trying fallback:", xaiError);
-      }
-    }
-
-    // Fallback: Groq free Whisper endpoint
+    // Primary: Groq Whisper (free, reliable STT)
+    // Note: xAI does NOT have a standalone /v1/audio/transcriptions endpoint
+    // (only real-time WebSocket voice), so Groq is our STT provider.
     const groqKey = process.env.GROQ_API_KEY;
     if (groqKey) {
       try {
@@ -59,24 +36,17 @@ export async function POST(request: NextRequest) {
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "groq" });
         }
-        groqError = "Empty transcript returned";
       } catch (e) {
-        groqError = e instanceof Error ? e.message : String(e);
-        console.warn("Groq transcription failed:", groqError);
+        console.error("Groq transcription failed:", e);
+        return NextResponse.json(
+          { error: `Transcription failed: ${e instanceof Error ? e.message : String(e)}` },
+          { status: 502 }
+        );
       }
     }
 
-    // Return diagnostic info so we can see what actually failed
     return NextResponse.json(
-      {
-        error: "Transcription failed",
-        debug: {
-          xai_key_set: !!xaiKey,
-          groq_key_set: !!groqKey,
-          xai_error: xaiError,
-          groq_error: groqError,
-        },
-      },
+      { error: "No transcription service available. Set GROQ_API_KEY in Vercel environment variables." },
       { status: 503 }
     );
   } catch (error) {
