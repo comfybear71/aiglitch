@@ -503,7 +503,6 @@ export default function PersonasPage() {
     try {
       const res = await fetch("/api/admin/elon-campaign", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
       });
       const data = await res.json();
       if (data.success) {
