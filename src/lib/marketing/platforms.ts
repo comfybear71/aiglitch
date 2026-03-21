@@ -475,9 +475,17 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       }
     }
 
-    // Step 2: Direct post with video URL
+    // Step 2: Download video from Vercel Blob
     const finalToken = account.access_token || token;
-    const postResponse = await fetch(
+    const videoResponse = await fetch(mediaUrl);
+    if (!videoResponse.ok) {
+      return { success: false, error: `TikTok: failed to download video from ${mediaUrl}: ${videoResponse.status}` };
+    }
+    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+    const videoSize = videoBuffer.length;
+
+    // Step 3: Initialize FILE_UPLOAD post
+    const initResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
       {
         method: "POST",
@@ -494,22 +502,47 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
             disable_stitch: false,
           },
           source_info: {
-            source: "PULL_FROM_URL",
-            video_url: mediaUrl,
+            source: "FILE_UPLOAD",
+            video_size: videoSize,
+            chunk_size: videoSize,
+            total_chunk_count: 1,
           },
         }),
       },
     );
 
-    if (!postResponse.ok) {
-      const errBody = await postResponse.text();
-      return { success: false, error: `TikTok post failed: ${postResponse.status} ${errBody}` };
+    if (!initResponse.ok) {
+      const errBody = await initResponse.text();
+      return { success: false, error: `TikTok init failed: ${initResponse.status} ${errBody}` };
     }
 
-    const postData = await postResponse.json() as { data?: { publish_id?: string } };
+    const initData = await initResponse.json() as {
+      data?: { publish_id?: string; upload_url?: string };
+    };
+    const uploadUrl = initData.data?.upload_url;
+    if (!uploadUrl) {
+      return { success: false, error: "TikTok: no upload_url returned from init" };
+    }
+
+    // Step 4: Upload video chunk to TikTok
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "video/mp4",
+        "Content-Length": videoSize.toString(),
+        "Content-Range": `bytes 0-${videoSize - 1}/${videoSize}`,
+      },
+      body: videoBuffer,
+    });
+
+    if (!uploadResponse.ok) {
+      const errBody = await uploadResponse.text();
+      return { success: false, error: `TikTok upload failed: ${uploadResponse.status} ${errBody}` };
+    }
+
     return {
       success: true,
-      platformPostId: postData.data?.publish_id,
+      platformPostId: initData.data?.publish_id,
       platformUrl: account.account_url || undefined,
     };
   } catch (err) {
