@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ text: transcript, source: "xai" });
         }
       } catch (e) {
-        console.warn("xAI transcription failed, trying fallback:", e);
+        console.error("xAI transcription FAILED:", e instanceof Error ? e.message : e);
       }
     }
 
@@ -59,10 +59,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Last resort: use Anthropic Claude to process audio description
-    // (not ideal for transcription but works as emergency fallback)
+    // No service worked — return diagnostic info
+    console.error("TRANSCRIBE 503 DEBUG:", {
+      xai_key_exists: !!env.XAI_API_KEY,
+      xai_key_prefix: env.XAI_API_KEY ? env.XAI_API_KEY.slice(0, 6) + "..." : "MISSING",
+      xai_key_from_process_env: !!process.env.XAI_API_KEY,
+      groq_key_exists: !!process.env.GROQ_API_KEY,
+    });
     return NextResponse.json(
-      { error: "No transcription service available. Set XAI_API_KEY or GROQ_API_KEY." },
+      {
+        error: "No transcription service available. Set XAI_API_KEY or GROQ_API_KEY.",
+        debug: {
+          xai_key_exists: !!env.XAI_API_KEY,
+          xai_key_from_process_env: !!process.env.XAI_API_KEY,
+          groq_key_exists: !!process.env.GROQ_API_KEY,
+        },
+      },
       { status: 503 }
     );
   } catch (error) {
