@@ -152,25 +152,25 @@ function buildCaption(dayNumber: number, title: string, tagline: string, synopsi
  * POST — Manually trigger the next day's Elon campaign video.
  */
 export async function POST(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated(request);
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  await ensureDbReady();
-  const sql = getDb();
-
-  const dayNumber = await getCurrentDay();
-  const theme = getDayTheme(dayNumber);
-  const campaignId = uuidv4();
-
-  // Create campaign entry
-  await sql`
-    INSERT INTO elon_campaign (id, day_number, title, tone, status)
-    VALUES (${campaignId}, ${dayNumber}, ${theme.title}, ${theme.tone}, 'generating')
-  `;
-
   try {
+    const isAdmin = await isAdminAuthenticated(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await ensureDbReady();
+    const sql = getDb();
+
+    const dayNumber = await getCurrentDay();
+    const theme = getDayTheme(dayNumber);
+    const campaignId = uuidv4();
+
+    // Create campaign entry
+    await sql`
+      INSERT INTO elon_campaign (id, day_number, title, tone, status)
+      VALUES (${campaignId}, ${dayNumber}, ${theme.title}, ${theme.tone}, 'generating')
+    `;
+
     // Generate screenplay
     const screenplay = await generateElonScreenplay(dayNumber, theme);
     if (!screenplay) {
@@ -209,10 +209,14 @@ export async function POST(request: NextRequest) {
       message: `Day ${dayNumber} Elon campaign video submitted! Multi-clip job ${jobId} will be stitched when all 3 clips complete.`,
     });
   } catch (err) {
-    await sql`UPDATE elon_campaign SET status = 'failed' WHERE id = ${campaignId}`;
+    console.error("[elon-campaign] POST error:", err instanceof Error ? err.stack : err);
+    const sql = getDb();
+    // Try to mark any in-progress campaign as failed
+    try {
+      await sql`UPDATE elon_campaign SET status = 'failed' WHERE status = 'generating'`;
+    } catch { /* best effort */ }
     return NextResponse.json({
       error: err instanceof Error ? err.message : "Unknown error",
-      dayNumber,
     }, { status: 500 });
   }
 }

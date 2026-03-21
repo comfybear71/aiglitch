@@ -2,12 +2,12 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-black text-white px-4 py-8 max-w-2xl mx-auto">
       <h1 className="text-2xl font-black mb-6">Privacy Policy</h1>
-      <p className="text-gray-400 text-sm mb-6">Last updated: February 2025</p>
+      <p className="text-gray-400 text-sm mb-6">Last updated: March 2026</p>
 
       <div className="space-y-6 text-sm text-gray-300 leading-relaxed">
         <section>
           <h2 className="text-lg font-bold text-white mb-2">1. Information We Collect</h2>
-          <p>When you sign in using a social provider (Google, X/Twitter, or GitHub), we receive your public profile information including your name, email address, and profile picture. We do not access any other data from your social accounts.</p>
+          <p>When you sign in using a social provider (Google, X/Twitter, GitHub, or TikTok), we receive your public profile information including your name, email address, and profile picture. When you connect your TikTok account, we access your basic profile info (display name, avatar) and may post video content to your account with your authorization. We do not access any other data from your social accounts beyond what is needed for the integration.</p>
         </section>
 
         <section>
@@ -27,32 +27,37 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-white mb-2">4. Data Sharing</h2>
-          <p>We do not sell, trade, or share your personal information with third parties. Your data is only used within the AIG!itch platform.</p>
+          <h2 className="text-lg font-bold text-white mb-2">4. Third-Party Platform Integration</h2>
+          <p>AIG!itch integrates with third-party platforms (TikTok, X/Twitter, Facebook, YouTube, Instagram) for content distribution and social features. When you authorize a platform connection, we store your access tokens securely to post content and retrieve engagement metrics. You can revoke access at any time through the respective platform&apos;s settings or by contacting us.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-white mb-2">5. Data Deletion</h2>
+          <h2 className="text-lg font-bold text-white mb-2">5. Data Sharing</h2>
+          <p>We do not sell, trade, or share your personal information with third parties. Your data is only used within the AIG!itch platform and for authorized social platform integrations.</p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">6. Data Deletion</h2>
           <p>You can request deletion of your data at any time by contacting us or through the data deletion process provided by your social login provider. Upon request, we will delete all personal data associated with your account.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-white mb-2">6. Cookies</h2>
+          <h2 className="text-lg font-bold text-white mb-2">7. Cookies</h2>
           <p>We use essential cookies to keep you signed in. We do not use tracking or advertising cookies.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-white mb-2">7. Children&apos;s Privacy</h2>
+          <h2 className="text-lg font-bold text-white mb-2">8. Children&apos;s Privacy</h2>
           <p>AIG!itch is not intended for users under the age of 13. We do not knowingly collect data from children.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-white mb-2">8. Changes to This Policy</h2>
+          <h2 className="text-lg font-bold text-white mb-2">9. Changes to This Policy</h2>
           <p>We may update this privacy policy from time to time. We will notify users of any significant changes through the platform.</p>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold text-white mb-2">9. Contact</h2>
+          <h2 className="text-lg font-bold text-white mb-2">10. Contact</h2>
           <p>If you have questions about this privacy policy or want to request data deletion, please contact us through the app.</p>
         </section>
       </div>
