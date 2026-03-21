@@ -254,5 +254,99 @@ ORDER BY created_at DESC;
 
 ---
 
+## #4 — Voice Transcription 403 Error (Wrong API + Wrong Provider)
+
+**Date:** March 21-22, 2026
+**Status:** Resolved
+**Affected:** Voice chat in G!itch Bestie mobile app — all voice messages failed to transcribe
+**Impact:** Users could not use voice chat at all — every voice message returned a 403 error
+
+### Symptom
+
+Mobile app voice chat showed:
+```
+Voice transcription failed: xAI transcription failed: Transcription API 403:
+{"code":"The caller does not have permission to execute the specified operation",
+"error":"Team is not authorized to perform this action."} [503 / api/transcribe]
+```
+
+### Root Cause: Two Separate Issues
+
+#### Issue 4.1: xAI Account Doesn't Have Transcription Permissions
+
+The original `POST /api/transcribe` endpoint only used xAI (`api.x.ai/v1/audio/transcriptions`) for speech-to-text. However, the xAI account/team is **not authorized** for the audio transcription API — it returns HTTP 403. This is an account-level permission issue on xAI's side, not a code bug.
+
+#### Issue 4.2: First "Fix" Tried to Use Claude API for Audio (Impossible)
+
+The first attempted fix replaced xAI with Claude as the primary transcription service. The code sent audio as a `document` content block to Claude's Messages API:
+
+```typescript
+// BROKEN — Claude only accepts "application/pdf" for document blocks
+content: [{
+  type: "document",
+  source: {
+    type: "base64",
+    media_type: "audio/wav",  // ← TypeScript correctly rejects this
+    data: audio_base64,
+  },
+}]
+```
+
+**Claude's Messages API does NOT support audio media types.** The only accepted `media_type` for `document` blocks is `"application/pdf"`. TypeScript caught this at build time:
+```
+Type '"audio/wav"' is not assignable to type '"application/pdf"'.
+```
+
+The Vercel build failed, so the old (broken xAI) code continued running in production. The "fix" never deployed.
+
+#### Issue 4.3: Push to Wrong Branch
+
+The fix was pushed to `claude/resume-previous-session-lw43V` but Vercel was deploying from `master`. The code never reached production even if it had been correct.
+
+### The Fix
+
+Completely rewrote `/api/transcribe` to use **Groq Whisper** (`whisper-large-v3-turbo`) as the primary transcription engine:
+
+1. **Primary: Groq Whisper** — OpenAI-compatible API at `api.groq.com/openai/v1/audio/transcriptions`, uses `whisper-large-v3-turbo` model. Fast, accurate, cheap.
+2. **Fallback: xAI** — kept as fallback in case Groq is down (will still 403 until xAI permissions are fixed, but won't block the primary path)
+3. **Removed Claude audio attempt entirely** — Claude's API doesn't support audio transcription
+4. **Removed `@anthropic-ai/sdk` import** from the transcribe route (no longer needed)
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/app/api/transcribe/route.ts` | Complete rewrite: Groq Whisper primary, xAI fallback, removed Claude |
+
+### Environment Variables Required
+
+| Variable | Service | Purpose |
+|----------|---------|---------|
+| `GROQ_API_KEY` | [console.groq.com](https://console.groq.com/keys) | Whisper transcription (primary) |
+| `XAI_API_KEY` | xAI | Fallback transcription (currently 403) |
+
+**IMPORTANT:** `GROQ_API_KEY` must be added to Vercel environment variables for the fix to work in production.
+
+### Lessons Learned
+
+1. **Claude's Messages API does NOT support audio.** Don't try to send audio files as `document` content blocks — the only accepted media_type for documents is `"application/pdf"`. For audio transcription, use a dedicated speech-to-text service (Groq Whisper, OpenAI Whisper, Deepgram, etc.)
+2. **Always verify API capabilities before coding.** Check the SDK types / API docs to confirm the provider actually supports the media type you're sending. TypeScript types are your friend — if it won't compile, the API won't accept it either.
+3. **Check which branch Vercel deploys from.** Pushing to a feature branch doesn't deploy to production unless Vercel's production branch is set to that branch. Always verify the deploy target.
+4. **Test builds before pushing.** Run `npx tsc --noEmit` locally. The previous "fix" would have been caught immediately if the build was tested.
+5. **xAI audio transcription requires specific account permissions.** Not all xAI accounts/teams have access to `/v1/audio/transcriptions`. Don't assume API endpoints are available just because they exist in docs.
+6. **Use purpose-built services for specialized tasks.** Groq Whisper is purpose-built for transcription — faster, cheaper, and more reliable than trying to repurpose a general-purpose LLM API for audio processing.
+
+### Service Comparison for Voice Transcription
+
+| Service | Model | Speed | Cost | Notes |
+|---------|-------|-------|------|-------|
+| **Groq Whisper** (chosen) | whisper-large-v3-turbo | ~0.5s | Very cheap | OpenAI-compatible API, fastest Whisper host |
+| OpenAI Whisper | whisper-1 | ~2-3s | $0.006/min | Reliable but slower |
+| Claude | N/A | N/A | N/A | **Does NOT support audio** |
+| xAI | grok-2-vision | N/A | N/A | 403 — requires special account permissions |
+| Deepgram | nova-2 | ~0.3s | $0.0043/min | Very fast, WebSocket support |
+
+---
+
 <!-- APPEND NEW INCIDENTS BELOW THIS LINE -->
 <!-- Use format: ## #N — Short Title -->

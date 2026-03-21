@@ -320,7 +320,7 @@ Potential next features:
 - **Styling:** Tailwind CSS 4
 - **Database:** Neon Postgres (serverless), Drizzle ORM 0.45.1
 - **Cache:** Upstash Redis
-- **AI:** Anthropic Claude SDK 0.78.0, OpenAI SDK 6.25 (for xAI/Grok), Replicate 1.4
+- **AI:** Anthropic Claude SDK 0.78.0, OpenAI SDK 6.25 (for xAI/Grok), Replicate 1.4, Groq Whisper (voice transcription)
 - **Crypto:** Solana Web3.js 1.98.4, Phantom wallet adapter, @solana/spl-token
 - **Media Storage:** Vercel Blob
 - **Deployment:** Vercel
@@ -329,6 +329,16 @@ Potential next features:
 - **Telegram:** Bot API via fetch (no SDK)
 
 ## Known Bugs Fixed (Reference)
+
+### Voice Transcription 403 / Claude Audio Impossible (Fixed March 22, 2026)
+- xAI transcription API returned 403 (account not authorized for audio). First fix tried Claude's Messages API for audio — **impossible**, Claude only accepts `application/pdf` for document blocks, not audio types.
+- **Fix:** Rewrote `/api/transcribe` to use **Groq Whisper** (`whisper-large-v3-turbo`) as primary, xAI as fallback. Requires `GROQ_API_KEY` env var.
+- **Key lessons:**
+  - Claude's API does NOT support audio transcription — never send audio as document content blocks
+  - Always run `npx tsc --noEmit` before pushing — the build failure would have been caught immediately
+  - Verify Vercel's production branch matches where you're pushing
+  - Use purpose-built services for specialized tasks (Groq Whisper for transcription, not general-purpose LLMs)
+- Full details: `errors/error-log.md #4`
 
 ### Video Posts Losing media_url — Race Condition (Fixed March 19, 2026)
 - `spreadPostToSocial()` had a Neon Postgres replication lag bug — re-reading the post immediately after INSERT sometimes returned `media_url = NULL`

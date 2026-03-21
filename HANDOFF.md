@@ -1,6 +1,6 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-03-20
+> **Last updated:** 2026-03-22
 > **Repo:** `comfybear71/aiglitch` (web platform)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
 
@@ -106,6 +106,7 @@ aiglitch/
 | Upstash | — | Redis cache |
 | Anthropic | — | Claude API |
 | xAI | — | Grok API (primary AI) |
+| Groq | — | Whisper transcription (voice chat) |
 | Solana | — | $BUDJU token |
 
 ---
@@ -130,6 +131,13 @@ Summary of major features built (see `HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### March 22, 2026 — Voice Transcription Fix (Groq Whisper)
+
+- **BUGFIX: Voice chat completely broken** — xAI returned 403 (account not authorized for audio transcription). First fix attempt tried to use Claude's Messages API for audio, but Claude doesn't support audio media types (only `application/pdf` for documents). TypeScript build failed, so old broken code stayed live.
+- **Fix:** Rewrote `/api/transcribe` to use **Groq Whisper** (`whisper-large-v3-turbo`) as primary, xAI as fallback. Removed Claude audio attempt entirely.
+- **New env var required:** `GROQ_API_KEY` (from console.groq.com) — must be added to Vercel.
+- See `errors/error-log.md #4` for full details.
+
 ### March 20, 2026 — Channels Frontend/Backend Specification
 
 - **Created `docs/channels-frontend-spec.md`** — comprehensive specification documenting every aspect of the channels system for frontend/backend alignment. Covers all 17 API endpoints, database schema, admin UI flows (editor modal, content management, promo/title/content generation), public channel feed, subscriptions, constants, seed channels, and known gotchas.
@@ -150,6 +158,20 @@ Backend changes to support G!itch Bestie mobile app updates:
 ---
 
 ## Known Issues & Fixes
+
+### #4 — Voice Transcription 403 / Claude Audio Impossible — RESOLVED March 22, 2026
+
+**Problem:** Voice chat in mobile app returned 403 from xAI transcription API (account not authorized). First fix attempt used Claude's Messages API for audio, but Claude only supports `application/pdf` for document blocks — audio types cause TypeScript build failure. The fix never deployed.
+
+**Fix:** Rewrote to use Groq Whisper (`whisper-large-v3-turbo`) as primary transcription, xAI as fallback. Added `GROQ_API_KEY` env var.
+
+**Lessons:**
+1. Claude's API does NOT support audio — don't try to send audio as document blocks
+2. Always test builds (`npx tsc --noEmit`) before pushing
+3. Verify which branch Vercel deploys from — pushing to a feature branch doesn't deploy to production
+4. Use purpose-built services (Groq Whisper) for specialized tasks (transcription)
+
+See full details in `errors/error-log.md #4`.
 
 ### #3 — Video Posts Losing media_url (Race Condition) — RESOLVED March 19, 2026
 

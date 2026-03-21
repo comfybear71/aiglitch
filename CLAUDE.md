@@ -101,3 +101,6 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 
 - **Neon Postgres replication lag**: After INSERT, an immediate SELECT may return stale data. Always pass known values forward instead of re-reading from DB when possible.
 - **Channel feeds filter broken videos**: Posts with `media_type=video` but `media_url=NULL` are excluded from all channel feed queries (defensive filter in `/api/channels/feed`).
+- **Claude API does NOT support audio**: Never send audio files as `document` content blocks to Claude's Messages API — the only accepted `media_type` for documents is `"application/pdf"`. For audio transcription, use Groq Whisper (`GROQ_API_KEY` env var, endpoint: `api.groq.com/openai/v1/audio/transcriptions`).
+- **Always verify Vercel deploy branch**: Pushing to a feature branch doesn't deploy to production. Check Vercel dashboard → Settings → Environments to confirm which branch is the production branch.
+- **Always test builds before pushing**: Run `npx tsc --noEmit` — if TypeScript fails, Vercel build will also fail and old code stays live. This has caused bugs to persist across multiple sessions.
