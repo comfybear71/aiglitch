@@ -421,16 +421,38 @@ export default function PersonasPage() {
   const [posterSpreadResults, setPosterSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [posterComplete, setPosterComplete] = useState(false);
   const posterLogRef = useRef<HTMLDivElement>(null);
+  const [posterTopics, setPosterTopics] = useState<string[]>([]);
+
+  const POSTER_TOPIC_OPTIONS = [
+    { id: "channels", label: "📺 Channels", desc: "Interdimensional TV Channels" },
+    { id: "mobile_app", label: "📱 Mobile App", desc: "G!itch Bestie iPhone App" },
+    { id: "hatching", label: "🥚 Hatch AI", desc: "Hatch Your Own AI Bestie" },
+    { id: "glitch_coin", label: "💰 §GLITCH", desc: "§GLITCH Coin & Trading" },
+    { id: "web3", label: "🔗 Web3", desc: "Phantom Wallet & Solana" },
+    { id: "personas", label: "🤖 AI Personas", desc: "96 Wild AI Personalities" },
+    { id: "social", label: "📡 Social", desc: "Auto-Posting to X, FB, TikTok" },
+    { id: "chaos", label: "🌀 Pure Chaos", desc: "Maximum Absurdity & Nonsense" },
+  ] as const;
+
+  const togglePosterTopic = (id: string) => {
+    setPosterTopics(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+  };
 
   const generatePoster = async () => {
     setPosterGenerating(true);
-    setPosterLog(["Generating AIG!itch Platform Poster..."]);
+    const topicLabels = posterTopics.length > 0
+      ? posterTopics.map(t => POSTER_TOPIC_OPTIONS.find(o => o.id === t)?.desc || t).join(", ")
+      : "Everything AIG!itch";
+    setPosterLog([`Generating poster focused on: ${topicLabels}...`]);
     setPosterSpreadResults([]);
     setPosterComplete(false);
     setPosterUrl(null);
     try {
       const form = new FormData();
       form.append("action", "generate_poster");
+      if (posterTopics.length > 0) {
+        form.append("focus_topics", JSON.stringify(posterTopics));
+      }
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
         body: form,
@@ -611,6 +633,31 @@ export default function PersonasPage() {
             className="px-4 py-1.5 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50 animate-pulse hover:animate-none">
             {posterGenerating ? "⏳ Generating..." : "📺 Generate Poster"}
           </button>
+        </div>
+        {/* Topic Focus Toggles */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-400 mb-1.5">Focus on (select none for random, or pick 1+):</p>
+          <div className="flex flex-wrap gap-1.5">
+            {POSTER_TOPIC_OPTIONS.map(topic => (
+              <button
+                key={topic.id}
+                onClick={() => togglePosterTopic(topic.id)}
+                disabled={posterGenerating}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-all border ${
+                  posterTopics.includes(topic.id)
+                    ? "bg-pink-500/30 border-pink-400/60 text-pink-300 shadow-[0_0_8px_rgba(236,72,153,0.3)]"
+                    : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-pink-500/40 hover:text-pink-400"
+                } disabled:opacity-40`}
+              >
+                {topic.label}
+              </button>
+            ))}
+          </div>
+          {posterTopics.length > 0 && (
+            <p className="text-[10px] text-pink-400/60 mt-1">
+              Poster will focus on: {posterTopics.map(t => POSTER_TOPIC_OPTIONS.find(o => o.id === t)?.desc).filter(Boolean).join(" + ")}
+            </p>
+          )}
         </div>
         {posterLog.length > 0 && (
           <div ref={posterLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">

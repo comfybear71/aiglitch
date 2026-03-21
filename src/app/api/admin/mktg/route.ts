@@ -330,7 +330,12 @@ export async function POST(request: NextRequest) {
     // ── Generate AIG!itch Platform Poster ──────────────────────────────
     case "generate_poster": {
       const posterChannelId = body.channel_id as string | undefined;
-      const result = await generatePoster();
+      const focusTopicsRaw = body.focus_topics as string | undefined;
+      let focusTopics: string[] | undefined;
+      if (focusTopicsRaw) {
+        try { focusTopics = JSON.parse(focusTopicsRaw); } catch { /* ignore */ }
+      }
+      const result = await generatePoster(focusTopics);
       if (result.url) {
         // Save as platform setting
         await sql`
