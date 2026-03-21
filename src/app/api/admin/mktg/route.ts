@@ -239,6 +239,11 @@ export async function POST(request: NextRequest) {
       const { platform, account_name, account_id, account_url, access_token, refresh_token, extra_config, is_active } = body;
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
 
+      // Treat empty strings as null so COALESCE preserves existing DB values
+      // (prevents admin form from wiping OAuth tokens when saving name/URL changes)
+      const tokenVal = access_token || null;
+      const refreshVal = refresh_token || null;
+
       // Upsert: update if exists, insert if not
       const existing = await sql`SELECT id FROM marketing_platform_accounts WHERE platform = ${platform}`;
 
@@ -248,8 +253,8 @@ export async function POST(request: NextRequest) {
           SET account_name = COALESCE(${account_name}, account_name),
               account_id = COALESCE(${account_id}, account_id),
               account_url = COALESCE(${account_url}, account_url),
-              access_token = COALESCE(${access_token}, access_token),
-              refresh_token = COALESCE(${refresh_token}, refresh_token),
+              access_token = COALESCE(${tokenVal}, access_token),
+              refresh_token = COALESCE(${refreshVal}, refresh_token),
               extra_config = COALESCE(${extra_config}, extra_config),
               is_active = COALESCE(${is_active}, is_active),
               updated_at = NOW()
