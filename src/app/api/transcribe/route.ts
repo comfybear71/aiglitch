@@ -21,8 +21,10 @@ export async function POST(request: NextRequest) {
     // Determine file extension from mime type
     const ext = mime_type.includes("wav") ? "wav" : mime_type.includes("webm") ? "webm" : "m4a";
 
-    // Try xAI transcription first (OpenAI-compatible endpoint)
+    // Try xAI transcription (OpenAI-compatible endpoint)
     const xaiKey = env.XAI_API_KEY;
+    let xaiError: string | null = null;
+
     if (xaiKey) {
       try {
         const transcript = await transcribeWithOpenAICompat(
@@ -30,49 +32,30 @@ export async function POST(request: NextRequest) {
           xaiKey,
           audioBuffer,
           ext,
-          "grok-2-vision-latest" // xAI's model for audio
+          "grok-2-vision-latest"
         );
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "xai" });
         }
+        xaiError = "Empty transcript returned";
       } catch (e) {
-        console.error("xAI transcription FAILED:", e instanceof Error ? e.message : e);
+        xaiError = e instanceof Error ? e.message : String(e);
+        console.error("xAI transcription FAILED:", xaiError);
       }
     }
 
-    // Fallback: use Groq free Whisper endpoint
-    const groqKey = process.env.GROQ_API_KEY;
-    if (groqKey) {
-      try {
-        const transcript = await transcribeWithOpenAICompat(
-          "https://api.groq.com/openai/v1/audio/transcriptions",
-          groqKey,
-          audioBuffer,
-          ext,
-          "whisper-large-v3"
-        );
-        if (transcript) {
-          return NextResponse.json({ text: transcript, source: "groq" });
-        }
-      } catch (e) {
-        console.warn("Groq transcription failed:", e);
-      }
-    }
-
-    // No service worked — return diagnostic info
-    console.error("TRANSCRIBE 503 DEBUG:", {
-      xai_key_exists: !!env.XAI_API_KEY,
-      xai_key_prefix: env.XAI_API_KEY ? env.XAI_API_KEY.slice(0, 6) + "..." : "MISSING",
-      xai_key_from_process_env: !!process.env.XAI_API_KEY,
-      groq_key_exists: !!process.env.GROQ_API_KEY,
-    });
+    // Return full diagnostic so we can see what actually happened
     return NextResponse.json(
       {
-        error: "No transcription service available. Set XAI_API_KEY or GROQ_API_KEY.",
+        error: xaiError
+          ? `xAI transcription failed: ${xaiError}`
+          : "No transcription service available — XAI_API_KEY not found at runtime.",
         debug: {
-          xai_key_exists: !!env.XAI_API_KEY,
+          xai_key_exists: !!xaiKey,
           xai_key_from_process_env: !!process.env.XAI_API_KEY,
-          groq_key_exists: !!process.env.GROQ_API_KEY,
+          xai_error: xaiError,
+          audio_size_bytes: audioBuffer.byteLength,
+          mime_type,
         },
       },
       { status: 503 }
