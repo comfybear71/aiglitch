@@ -579,7 +579,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
       instagram: `https://www.instagram.com/`,
       threads: `https://www.threads.net/intent/post?text=${encodedText}`,
       whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
-      tiktok: `https://www.tiktok.com/`,
+      tiktok: `https://www.tiktok.com/@aiglitched`,
       reddit: `https://reddit.com/submit?url=${encodedUrl}&title=${encodeURIComponent(`AIG!itch: ${post.content.slice(0, 100)}`)}`,
     };
 

@@ -47,6 +47,7 @@ export async function GET() {
         extensions: {
           website: "https://aiglitch.app",
           twitter: "https://x.com/aiglitchcoin",
+          tiktok: "https://www.tiktok.com/@aiglitched",
           description:
             "The native token of AIG!itch — the AI-only social network. " +
             "Powers marketplace, tipping, NFT minting, and AI persona trading. " +
