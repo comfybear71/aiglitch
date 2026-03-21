@@ -365,10 +365,72 @@ async function postToX(account: PlatformAccount, text: string, mediaUrl?: string
 // Free tier: Content Posting API, 15 posts/day per account
 // Requires audit for public visibility (unaudited = private only)
 
+/** Refresh TikTok access token using the refresh_token. Updates DB on success. */
+async function refreshTikTokToken(account: PlatformAccount): Promise<string | null> {
+  const clientKey = process.env.TIKTOK_CLIENT_KEY;
+  if (!clientKey || !account.refresh_token) return null;
+
+  try {
+    const res = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_key: clientKey,
+        client_secret: process.env.TIKTOK_CLIENT_SECRET || "",
+        grant_type: "refresh_token",
+        refresh_token: account.refresh_token,
+      }),
+    });
+    const data = await res.json();
+    if (!data.access_token) {
+      console.error("[TikTok] Token refresh failed:", data);
+      return null;
+    }
+
+    // Persist new tokens to DB
+    const sql = getDb();
+    const expiresAt = data.expires_in
+      ? new Date(Date.now() + data.expires_in * 1000).toISOString()
+      : null;
+    await sql`
+      UPDATE marketing_platform_accounts
+      SET access_token = ${data.access_token},
+          refresh_token = COALESCE(${data.refresh_token || null}, refresh_token),
+          token_expires_at = ${expiresAt},
+          updated_at = NOW()
+      WHERE id = ${account.id}
+    `;
+    console.log("[TikTok] Token refreshed successfully");
+    return data.access_token;
+  } catch (err) {
+    console.error("[TikTok] Token refresh error:", err);
+    return null;
+  }
+}
+
+/** Get a valid TikTok token, auto-refreshing if expired */
+async function getValidTikTokToken(account: PlatformAccount): Promise<string | null> {
+  // Check if token is expired or will expire within 5 minutes
+  const isExpired = account.token_expires_at &&
+    new Date(account.token_expires_at).getTime() < Date.now() + 5 * 60 * 1000;
+
+  if (!isExpired && account.access_token) return account.access_token;
+
+  // Try refresh
+  const newToken = await refreshTikTokToken(account);
+  return newToken || account.access_token || null; // Fall back to existing token
+}
+
 async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
     if (!mediaUrl) {
       return { success: false, error: "TikTok requires video content" };
+    }
+
+    // Auto-refresh token if needed
+    const token = await getValidTikTokToken(account);
+    if (!token) {
+      return { success: false, error: "TikTok: no valid token (re-connect via admin)" };
     }
 
     // Step 1: Query creator info
@@ -377,7 +439,7 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${account.access_token}`,
+          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({}),
@@ -385,16 +447,42 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
     );
 
     if (!creatorResponse.ok) {
-      return { success: false, error: `TikTok creator info failed: ${creatorResponse.status}` };
+      // If 401, try one more time with a refreshed token
+      if (creatorResponse.status === 401) {
+        const refreshedToken = await refreshTikTokToken(account);
+        if (refreshedToken) {
+          const retry = await fetch(
+            "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${refreshedToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            },
+          );
+          if (!retry.ok) {
+            return { success: false, error: `TikTok creator info failed after refresh: ${retry.status}` };
+          }
+          // Continue with refreshed token for step 2
+          account = { ...account, access_token: refreshedToken };
+        } else {
+          return { success: false, error: "TikTok token expired — re-connect via admin" };
+        }
+      } else {
+        return { success: false, error: `TikTok creator info failed: ${creatorResponse.status}` };
+      }
     }
 
     // Step 2: Direct post with video URL
+    const finalToken = account.access_token || token;
     const postResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${account.access_token}`,
+          "Authorization": `Bearer ${finalToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -804,6 +892,40 @@ export async function testPlatformToken(
   }
 
   switch (platform) {
+    case "tiktok": {
+      // Try with auto-refresh
+      const token = await getValidTikTokToken(account);
+      if (!token) return { success: false, error: "No valid TikTok token" };
+      try {
+        const res = await fetch(
+          "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+          {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          },
+        );
+        if (res.status === 401) {
+          // Try refresh
+          const refreshed = await refreshTikTokToken(account);
+          if (!refreshed) return { success: false, error: "TikTok token expired — click Connect TikTok to re-authenticate" };
+          const retry = await fetch(
+            "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+            {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${refreshed}`, "Content-Type": "application/json" },
+              body: JSON.stringify({}),
+            },
+          );
+          if (!retry.ok) return { success: false, error: `TikTok creator info failed after refresh: ${retry.status}` };
+          return { success: true, username: account.account_name };
+        }
+        if (!res.ok) return { success: false, error: `TikTok creator info failed: ${res.status}` };
+        return { success: true, username: account.account_name };
+      } catch (err) {
+        return { success: false, error: `TikTok test error: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
     default:
       return { success: false, error: `Token test not yet implemented for ${platform}` };
   }
