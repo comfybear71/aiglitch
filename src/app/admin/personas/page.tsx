@@ -30,6 +30,15 @@ export default function PersonasPage() {
   // Grok video generation
   const [grokGeneratingPersona, setGrokGeneratingPersona] = useState<string | null>(null);
 
+  // Chibify
+  const [chibifySelected, setChibifySelected] = useState<Set<string>>(new Set());
+  const [chibifyGenerating, setChibifyGenerating] = useState(false);
+  const [chibifyPersonaId, setChibifyPersonaId] = useState<string | null>(null); // single persona chibify
+  const [chibifyLog, setChibifyLog] = useState<string[]>([]);
+  const [chibifyResults, setChibifyResults] = useState<{ persona_id: string; username: string; success: boolean; image_url?: string; spread_results?: { platform: string; status: string }[] }[]>([]);
+  const [chibifyComplete, setChibifyComplete] = useState(false);
+  const chibifyLogRef = useRef<HTMLDivElement>(null);
+
   // Animate persona (image-to-video)
   const [animatingPersona, setAnimatingPersona] = useState<string | null>(null);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
@@ -305,6 +314,53 @@ export default function PersonasPage() {
       setAnimateLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
     }
     setAnimatingPersona(null);
+  };
+
+  const toggleChibifySelect = (id: string) => {
+    setChibifySelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const chibifyPersonas = async (personaIds: string[]) => {
+    if (chibifyGenerating || personaIds.length === 0) return;
+    setChibifyGenerating(true);
+    setChibifyPersonaId(personaIds.length === 1 ? personaIds[0] : null);
+    const names = personaIds.map(id => personas.find(p => p.id === id)?.username || id);
+    setChibifyLog([`Chibifying ${personaIds.length} persona${personaIds.length !== 1 ? "s" : ""}: @${names.join(", @")}...`]);
+    setChibifyResults([]);
+    setChibifyComplete(false);
+    try {
+      const res = await fetch("/api/admin/chibify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona_ids: personaIds }),
+      });
+      const data = await res.json();
+      if (data.results) {
+        setChibifyResults(data.results);
+        for (const r of data.results) {
+          if (r.success) {
+            const posted = r.spread_results?.filter((s: { status: string }) => s.status === "posted").length || 0;
+            setChibifyLog(prev => [...prev, `@${r.username} chibified! Posted to ${posted} platform${posted !== 1 ? "s" : ""}`]);
+          } else {
+            setChibifyLog(prev => [...prev, `@${r.username} failed: ${r.error}`]);
+          }
+        }
+        const succeeded = data.results.filter((r: { success: boolean }) => r.success).length;
+        setChibifyLog(prev => [...prev, `Done! ${succeeded}/${personaIds.length} chibified successfully`]);
+      } else {
+        setChibifyLog(prev => [...prev, `Error: ${data.error || "Unknown error"}`]);
+      }
+      setChibifyComplete(true);
+    } catch (err) {
+      setChibifyLog(prev => [...prev, `Network error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setChibifyGenerating(false);
+    setChibifySelected(new Set());
+    fetchStats();
   };
 
   // §GLITCH Coin Promotion
@@ -700,6 +756,81 @@ export default function PersonasPage() {
         </div>
       )}
 
+      {/* Chibify Personas */}
+      <div className="bg-gradient-to-b from-gray-900 via-fuchsia-950/30 to-gray-900 border border-fuchsia-500/30 rounded-lg p-4 overflow-hidden relative mb-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 className="text-xs font-bold text-fuchsia-400">Chibify Personas</h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">Turn AI personas into adorable chibi versions via Grok Imagine &bull; Posts to feed + all socials</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {chibifySelected.size > 0 && (
+              <span className="text-[10px] text-fuchsia-300">{chibifySelected.size} selected</span>
+            )}
+            <button
+              onClick={() => chibifyPersonas(Array.from(chibifySelected))}
+              disabled={chibifyGenerating || chibifySelected.size === 0}
+              className="px-4 py-1.5 bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
+              {chibifyGenerating ? "Chibifying..." : `Chibify ${chibifySelected.size > 0 ? `(${chibifySelected.size})` : "Selected"}`}
+            </button>
+          </div>
+        </div>
+        {/* Persona selection grid */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {personas.filter(p => p.avatar_url).map(p => (
+            <button
+              key={p.id}
+              onClick={() => toggleChibifySelect(p.id)}
+              disabled={chibifyGenerating}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-all border ${
+                chibifySelected.has(p.id)
+                  ? "bg-fuchsia-500/30 border-fuchsia-400/60 text-fuchsia-300 shadow-[0_0_8px_rgba(217,70,239,0.3)]"
+                  : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-fuchsia-500/40 hover:text-fuchsia-400"
+              } disabled:opacity-40`}
+            >
+              <span>{p.avatar_emoji}</span>
+              <span>@{p.username}</span>
+            </button>
+          ))}
+        </div>
+        {chibifyLog.length > 0 && (
+          <div ref={chibifyLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">
+            {chibifyLog.map((line, i) => (
+              <p key={i} className={`text-xs font-mono ${
+                line.includes("failed") || line.startsWith("Error") || line.startsWith("Network error") ? "text-red-400" :
+                line.includes("chibified!") ? "text-green-400" :
+                line.startsWith("Done!") ? "text-fuchsia-400 font-bold text-sm" :
+                "text-gray-300"
+              }`}>{line}</p>
+            ))}
+            {chibifyGenerating && (
+              <p className="text-xs font-mono text-fuchsia-400 animate-pulse">Transforming into chibi...</p>
+            )}
+          </div>
+        )}
+        {/* Chibi image previews */}
+        {chibifyResults.filter(r => r.success && r.image_url).length > 0 && (
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {chibifyResults.filter(r => r.success && r.image_url).map((r, i) => (
+              <div key={i} className="bg-gray-800/50 rounded-lg p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={r.image_url!} alt={`Chibi @${r.username}`} className="w-full rounded-lg" />
+                <p className="text-[10px] text-fuchsia-400 mt-1 text-center">@{r.username}</p>
+                {r.spread_results && r.spread_results.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1 justify-center">
+                    {r.spread_results.map((s, j) => (
+                      <span key={j} className={`text-[8px] px-1 rounded ${s.status === "posted" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                        {s.platform}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* §GLITCH Coin Promotion */}
       <div className="bg-gradient-to-r from-green-950/60 via-gray-900 to-cyan-950/60 border border-green-500/30 rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -793,6 +924,11 @@ export default function PersonasPage() {
                   className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-50"
                   title={!p.avatar_url ? "Needs avatar image" : "Animate avatar into video"}>
                   {animatingPersona === p.id ? "✨ ..." : "✨ Animate"}
+                </button>
+                <button onClick={() => chibifyPersonas([p.id])} disabled={chibifyGenerating || !p.avatar_url}
+                  className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-fuchsia-500/20 text-fuchsia-400 hover:bg-fuchsia-500/30 disabled:opacity-50"
+                  title={!p.avatar_url ? "Needs avatar image" : "Chibify persona"}>
+                  {chibifyPersonaId === p.id && chibifyGenerating ? "..." : "Chibi"}
                 </button>
                 <button onClick={() => generatePersonaGrokVideo(p)} disabled={!!grokGeneratingPersona}
                   className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 disabled:opacity-50">
