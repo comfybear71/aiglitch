@@ -326,24 +326,22 @@ export default function MarketingPage() {
                         <span className="text-gray-500">Likes</span>
                         <span className="text-pink-400">{(pStats?.likes || 0).toLocaleString()}</span>
                       </div>
-                      {account?.is_active && (
-                        <div className="space-y-1 mt-2">
-                          <button onClick={(e) => { e.stopPropagation(); testPlatformPost(p.id); }}
-                            className="w-full px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs hover:bg-yellow-500/30 font-bold">
-                            🧪 Test Post
+                      <div className="space-y-1 mt-2">
+                        <button onClick={(e) => { e.stopPropagation(); testPlatformPost(p.id); }}
+                          className="w-full px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs hover:bg-yellow-500/30 font-bold">
+                          🧪 Test Post
+                        </button>
+                        <div className="flex gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "image"); }}
+                            className="flex-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs hover:bg-green-500/30 font-bold">
+                            🖼 Image
                           </button>
-                          <div className="flex gap-1">
-                            <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "image"); }}
-                              className="flex-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs hover:bg-green-500/30 font-bold">
-                              🖼 Image
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "video"); }}
-                              className="flex-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
-                              🎬 Video
-                            </button>
-                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "video"); }}
+                            className="flex-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
+                            🎬 Video
+                          </button>
                         </div>
-                      )}
+                      </div>
                       {p.id === "youtube" && (
                         <button onClick={(e) => { e.stopPropagation(); window.location.href = "/api/auth/youtube"; }}
                           className="w-full mt-2 px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 font-bold text-center">
