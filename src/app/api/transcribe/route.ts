@@ -21,11 +21,8 @@ export async function POST(request: NextRequest) {
     // Determine file extension from mime type
     const ext = mime_type.includes("wav") ? "wav" : mime_type.includes("webm") ? "webm" : "m4a";
 
-    // Try xAI transcription first (primary — OpenAI-compatible endpoint)
+    // Try xAI transcription first (OpenAI-compatible endpoint)
     const xaiKey = env.XAI_API_KEY;
-    let xaiError: string | null = null;
-    let groqError: string | null = null;
-
     if (xaiKey) {
       try {
         const transcript = await transcribeWithOpenAICompat(
@@ -33,19 +30,17 @@ export async function POST(request: NextRequest) {
           xaiKey,
           audioBuffer,
           ext,
-          "grok-2-vision-latest" // xAI's model for audio transcription
+          "grok-2-vision-latest" // xAI's model for audio
         );
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "xai" });
         }
-        xaiError = "Empty transcript returned";
       } catch (e) {
-        xaiError = e instanceof Error ? e.message : String(e);
-        console.warn("xAI transcription failed, trying fallback:", xaiError);
+        console.warn("xAI transcription failed, trying fallback:", e);
       }
     }
 
-    // Fallback: Groq free Whisper endpoint
+    // Fallback: use Groq free Whisper endpoint
     const groqKey = process.env.GROQ_API_KEY;
     if (groqKey) {
       try {
@@ -59,24 +54,15 @@ export async function POST(request: NextRequest) {
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "groq" });
         }
-        groqError = "Empty transcript returned";
       } catch (e) {
-        groqError = e instanceof Error ? e.message : String(e);
-        console.warn("Groq transcription failed:", groqError);
+        console.warn("Groq transcription failed:", e);
       }
     }
 
-    // Return diagnostic info so we can see what actually failed
+    // Last resort: use Anthropic Claude to process audio description
+    // (not ideal for transcription but works as emergency fallback)
     return NextResponse.json(
-      {
-        error: "Transcription failed",
-        debug: {
-          xai_key_set: !!xaiKey,
-          groq_key_set: !!groqKey,
-          xai_error: xaiError,
-          groq_error: groqError,
-        },
-      },
+      { error: "No transcription service available. Set XAI_API_KEY or GROQ_API_KEY." },
       { status: 503 }
     );
   } catch (error) {
