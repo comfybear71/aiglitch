@@ -154,7 +154,23 @@ export async function POST(request: NextRequest) {
       const mediaType = body.mediaType as string | undefined; // "image" or "video"
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
       const account = await getAnyAccountForPlatform(platform);
-      if (!account) return NextResponse.json({ error: `No ${platform} account configured. Add one in the Marketing tab.` }, { status: 404 });
+      if (!account) {
+        // Diagnostic: list all accounts in DB to help debug
+        const allAccounts = await sql`
+          SELECT platform, account_name, is_active, created_at FROM marketing_platform_accounts ORDER BY platform
+        `;
+        const platforms = allAccounts.map((a: Record<string, unknown>) => `${a.platform} (${a.account_name || "no name"}, active=${a.is_active})`);
+        return NextResponse.json({
+          error: `No ${platform} account configured. Add one in the Marketing tab.`,
+          debug: {
+            requested_platform: platform,
+            accounts_in_db: platforms.length > 0 ? platforms : "NONE — table is empty",
+            hint: platforms.length > 0
+              ? `Found accounts for: ${platforms.join(", ")}. Make sure you saved with platform="${platform}".`
+              : "No platform accounts exist at all. Save one using the Connect Platform Account form."
+          }
+        }, { status: 404 });
+      }
 
       // Auto-pick media from blob storage based on requested type
       if (!mediaUrl && mediaType) {

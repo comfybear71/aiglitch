@@ -64,7 +64,8 @@ export default function MarketingPage() {
       if (data.success) {
         alert(`${platform} test post succeeded! ${data.platformUrl || ""}`);
       } else {
-        alert(`${platform} test post failed: ${data.error || "Unknown error"}`);
+        const debugInfo = data.debug ? `\n\nDiagnostics:\n${JSON.stringify(data.debug, null, 2)}` : "";
+        alert(`${platform} test post failed: ${data.error || "Unknown error"}${debugInfo}`);
       }
     } catch (err) {
       alert(`testPlatformPost error:\n${err instanceof Error ? err.message + "\n" + err.stack : String(err)}`);
