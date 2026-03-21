@@ -7,7 +7,7 @@ import crypto from "crypto";
  * Docs: https://developers.tiktok.com/doc/oauth-user-access-token-management
  *
  * Required env vars: TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET
- * Scopes: user.info.basic + video.upload (for Content Posting API)
+ * Scopes: user.info.basic + video.publish (for Content Posting API)
  */
 export async function GET() {
   const clientKey = process.env.TIKTOK_CLIENT_KEY;
@@ -43,7 +43,7 @@ export async function GET() {
   });
 
   // TikTok OAuth 2.0 authorization URL
-  const scopes = "user.info.basic,video.upload";
+  const scopes = "user.info.basic,video.publish";
   const authUrl =
     `https://www.tiktok.com/v2/auth/authorize/` +
     `?client_key=${clientKey}` +
