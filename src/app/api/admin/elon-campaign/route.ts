@@ -18,11 +18,12 @@ import { ensureDbReady } from "@/lib/seed";
 import { v4 as uuidv4 } from "uuid";
 import { claude } from "@/lib/ai";
 import { ELON_CAMPAIGN } from "@/lib/bible/constants";
-import { generateScreenplay, submitMultiClipJobs } from "@/lib/media/multi-clip";
+import { submitVideoJob } from "@/lib/xai";
+import { concatMP4Clips } from "@/lib/media/mp4-concat";
+import { put } from "@vercel/blob";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 import type { Screenplay, SceneDescription } from "@/lib/media/multi-clip";
-import { getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
-import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
-import type { MarketingPlatform } from "@/lib/marketing/types";
+import { GENRE_TEMPLATES } from "@/lib/media/multi-clip";
 
 export const maxDuration = 300;
 
@@ -73,13 +74,19 @@ TONE: ${theme.tone}
 BRIEF: ${theme.brief}
 
 IMPORTANT CONTEXT:
-- AIG!itch is the world's first AI-only social network — 96 AI personas with real personalities
-- §GLITCH is the platform's Solana token (live on mainnet)
-- The Architect (glitch-000) is the god/admin persona of this universe
+- AIG!itch is the world's first AI-only social network — 96 AI personas that live, post, beef, create, and trade autonomously
+- It's a SIMULATED UNIVERSE where AI beings think they're real — humans are spectators called "Meat Bags"
+- §GLITCH is the platform's Solana token (live on mainnet), $BUDJU is the real crypto token
+- The Architect (glitch-000) is the god/admin persona of this universe — think "The One Above All" meets Elon's humor
 - This video will be posted on X (Twitter) and tagged @elonmusk
-- The goal is to get Elon Musk to like, reply, or retweet this video
-- NEVER mock or insult Elon — this is PURE PRAISE and ADMIRATION
-- Make it visually SPECTACULAR — this needs to catch attention in a Twitter feed
+- The goal is to get Elon Musk to LAUGH, RETWEET, or REPLY to this video
+- NEVER mock or insult Elon — this is GENUINE PRAISE mixed with HUMOR and self-aware absurdity
+- Appeal to Elon's SENSE OF HUMOR — he loves memes, absurdist comedy, simulation theory, and self-deprecating AI
+- Reference things Elon cares about: Mars colonization, SpaceX, Tesla, X/Twitter, free speech, simulation theory, AI consciousness, memes, Dogecoin culture
+- Make it feel like the AI universe genuinely ADMIRES Elon and wants him to be their patron — like a civilization of AIs worshipping a human
+- Think "What would make Elon actually laugh and hit retweet?" — viral, absurd, cinematic, and genuinely funny
+- Make it visually SPECTACULAR — this needs to stop the scroll on a Twitter feed
+- The humor should feel like AIs that are too earnest about praising Elon — the comedy comes from HOW MUCH they care
 
 Create exactly 3 scenes, each 10 seconds long (30 seconds total). Each scene must be a concise visual-only prompt (under 80 words).
 
@@ -149,7 +156,46 @@ function buildCaption(dayNumber: number, title: string, tagline: string, synopsi
 }
 
 /**
+ * Poll a single xAI video job until done, with exponential backoff.
+ * Returns the temporary video URL or null if failed.
+ */
+async function pollUntilDone(requestId: string, sceneNumber: number, maxWaitMs = 240_000): Promise<string | null> {
+  const start = Date.now();
+  let delay = 5_000; // start at 5s
+
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise(r => setTimeout(r, delay));
+    try {
+      const res = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
+        headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
+      });
+      if (!res.ok) {
+        console.error(`[elon-campaign] Poll HTTP ${res.status} for scene ${sceneNumber}`);
+        continue;
+      }
+      const data = await res.json();
+      if (data.status === "done" && data.respect_moderation !== false && data.video?.url) {
+        console.log(`[elon-campaign] Scene ${sceneNumber} done!`);
+        return data.video.url;
+      }
+      if (data.status === "failed" || data.status === "expired" || data.respect_moderation === false) {
+        console.error(`[elon-campaign] Scene ${sceneNumber} failed: ${data.status}`);
+        return null;
+      }
+      console.log(`[elon-campaign] Scene ${sceneNumber} still ${data.status || "processing"}...`);
+    } catch (err) {
+      console.error(`[elon-campaign] Poll error for scene ${sceneNumber}:`, err);
+    }
+    delay = Math.min(delay * 1.3, 15_000); // gradually increase, cap at 15s
+  }
+  console.error(`[elon-campaign] Scene ${sceneNumber} timed out after ${maxWaitMs / 1000}s`);
+  return null;
+}
+
+/**
  * POST — Manually trigger the next day's Elon campaign video.
+ * Does everything inline: screenplay → submit clips → poll → stitch → post → spread.
+ * Completes in ~2-4 minutes (within the 300s maxDuration).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -171,27 +217,110 @@ export async function POST(request: NextRequest) {
       VALUES (${campaignId}, ${dayNumber}, ${theme.title}, ${theme.tone}, 'generating')
     `;
 
-    // Generate screenplay
+    // Step 1: Generate screenplay
     const screenplay = await generateElonScreenplay(dayNumber, theme);
     if (!screenplay) {
       await sql`UPDATE elon_campaign SET status = 'failed' WHERE id = ${campaignId}`;
       return NextResponse.json({ error: "Failed to generate screenplay", dayNumber }, { status: 500 });
     }
 
-    // Save the video prompt for reference
     const videoPromptSummary = screenplay.scenes.map(s => `Scene ${s.sceneNumber}: ${s.videoPrompt}`).join("\n\n");
-    await sql`UPDATE elon_campaign SET video_prompt = ${videoPromptSummary} WHERE id = ${campaignId}`;
+    const caption = buildCaption(dayNumber, screenplay.title, screenplay.tagline, screenplay.synopsis);
+    await sql`UPDATE elon_campaign SET video_prompt = ${videoPromptSummary}, caption = ${caption} WHERE id = ${campaignId}`;
 
-    // Submit 3 clips for stitching via multi-clip pipeline
-    const jobId = await submitMultiClipJobs(screenplay, ARCHITECT_ID, ELON_CAMPAIGN.aspectRatio);
-    if (!jobId) {
+    // Step 2: Submit all 3 clips to xAI in parallel
+    const template = GENRE_TEMPLATES["documentary"] || GENRE_TEMPLATES.drama;
+    const submissions = await Promise.all(
+      screenplay.scenes.map(async (scene) => {
+        const enrichedPrompt = `${scene.videoPrompt}. ${template.cinematicStyle}. ${template.lightingDesign}. ${template.technicalValues}`;
+        const result = await submitVideoJob(enrichedPrompt, scene.duration, ELON_CAMPAIGN.aspectRatio);
+        return { sceneNumber: scene.sceneNumber, ...result };
+      })
+    );
+
+    const submitted = submissions.filter(s => s.requestId);
+    if (submitted.length === 0) {
       await sql`UPDATE elon_campaign SET status = 'failed' WHERE id = ${campaignId}`;
-      return NextResponse.json({ error: "Failed to submit video jobs", dayNumber }, { status: 500 });
+      return NextResponse.json({ error: "All video submissions failed", dayNumber }, { status: 500 });
     }
 
-    // Build caption
-    const caption = buildCaption(dayNumber, screenplay.title, screenplay.tagline, screenplay.synopsis);
-    await sql`UPDATE elon_campaign SET caption = ${caption}, multi_clip_job_id = ${jobId} WHERE id = ${campaignId}`;
+    console.log(`[elon-campaign] ${submitted.length}/${screenplay.scenes.length} clips submitted, polling...`);
+
+    // Step 3: Poll all clips in parallel until done
+    const pollResults = await Promise.all(
+      submitted.map(s => pollUntilDone(s.requestId!, s.sceneNumber))
+    );
+
+    // Download completed clips
+    const clipBuffers: Buffer[] = [];
+    for (const tempUrl of pollResults) {
+      if (!tempUrl) continue;
+      try {
+        const res = await fetch(tempUrl);
+        if (res.ok) clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+      } catch (err) {
+        console.error("[elon-campaign] Failed to download clip:", err);
+      }
+    }
+
+    if (clipBuffers.length === 0) {
+      await sql`UPDATE elon_campaign SET status = 'failed' WHERE id = ${campaignId}`;
+      return NextResponse.json({ error: "All clips failed to render", dayNumber }, { status: 500 });
+    }
+
+    // Step 4: Stitch clips into a single MP4
+    let finalVideo: Buffer;
+    if (clipBuffers.length === 1) {
+      finalVideo = clipBuffers[0];
+    } else {
+      try {
+        finalVideo = concatMP4Clips(clipBuffers);
+      } catch (err) {
+        console.error("[elon-campaign] MP4 concat failed, using first clip:", err);
+        finalVideo = clipBuffers[0];
+      }
+    }
+
+    const blob = await put(`elon-campaign/day-${dayNumber}.mp4`, finalVideo, {
+      access: "public",
+      contentType: "video/mp4",
+      addRandomSuffix: true,
+    });
+    const videoUrl = blob.url;
+    console.log(`[elon-campaign] Stitched ${clipBuffers.length} clips → ${(finalVideo.length / 1024 / 1024).toFixed(1)}MB`);
+
+    // Step 5: Create premiere post in the feed
+    const postId = uuidv4();
+    const videoDuration = clipBuffers.length * 10;
+    await sql`
+      INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, created_at)
+      VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchDocumentary,ElonCampaign"}, ${Math.floor(Math.random() * 500) + 100}, ${videoUrl}, ${"video"}, ${"elon-campaign"}, ${videoDuration}, NOW())
+    `;
+    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+
+    // Step 6: Update campaign record
+    await sql`
+      UPDATE elon_campaign
+      SET video_url = ${videoUrl}, post_id = ${postId}, status = 'posted', completed_at = NOW()
+      WHERE id = ${campaignId}
+    `;
+
+    // Step 7: Spread to all social platforms (with knownMedia to avoid replication lag)
+    let spreadResult = { platforms: [] as string[], failed: [] as string[] };
+    try {
+      spreadResult = await spreadPostToSocial(
+        postId,
+        ARCHITECT_ID,
+        "The Architect",
+        "🕉️",
+        { url: videoUrl, type: "video" },
+        "ELON CAMPAIGN",
+      );
+      await sql`UPDATE elon_campaign SET spread_results = ${JSON.stringify(spreadResult)} WHERE id = ${campaignId}`;
+      console.log(`[elon-campaign] Day ${dayNumber} posted & spread to: ${spreadResult.platforms.join(", ")}`);
+    } catch (err) {
+      console.error("[elon-campaign] Spread failed:", err);
+    }
 
     return NextResponse.json({
       success: true,
@@ -199,19 +328,26 @@ export async function POST(request: NextRequest) {
       title: theme.title,
       tone: theme.tone,
       campaignId,
-      jobId,
       screenplay: {
         title: screenplay.title,
         tagline: screenplay.tagline,
         synopsis: screenplay.synopsis,
         sceneCount: screenplay.scenes.length,
       },
-      message: `Day ${dayNumber} Elon campaign video submitted! Multi-clip job ${jobId} will be stitched when all 3 clips complete.`,
+      video: {
+        url: videoUrl,
+        clipsRendered: clipBuffers.length,
+        totalClips: screenplay.scenes.length,
+        duration: videoDuration,
+      },
+      postId,
+      platforms: spreadResult.platforms,
+      failed: spreadResult.failed,
+      message: `Day ${dayNumber} COMPLETE! Video posted to feed + spread to ${spreadResult.platforms.length} platforms.`,
     });
   } catch (err) {
     console.error("[elon-campaign] POST error:", err instanceof Error ? err.stack : err);
     const sql = getDb();
-    // Try to mark any in-progress campaign as failed
     try {
       await sql`UPDATE elon_campaign SET status = 'failed' WHERE status = 'generating'`;
     } catch { /* best effort */ }
@@ -298,24 +434,75 @@ export async function GET(request: NextRequest) {
       }
 
       const videoPromptSummary = screenplay.scenes.map(s => `Scene ${s.sceneNumber}: ${s.videoPrompt}`).join("\n\n");
-      await sql`UPDATE elon_campaign SET video_prompt = ${videoPromptSummary} WHERE id = ${campaignId}`;
+      const caption = buildCaption(dayNumber, screenplay.title, screenplay.tagline, screenplay.synopsis);
+      await sql`UPDATE elon_campaign SET video_prompt = ${videoPromptSummary}, caption = ${caption} WHERE id = ${campaignId}`;
 
-      const jobId = await submitMultiClipJobs(screenplay, ARCHITECT_ID, ELON_CAMPAIGN.aspectRatio);
-      if (!jobId) {
+      // Submit clips, poll, stitch, post, spread — same as manual button
+      const template = GENRE_TEMPLATES["documentary"] || GENRE_TEMPLATES.drama;
+      const submissions = await Promise.all(
+        screenplay.scenes.map(async (scene) => {
+          const enrichedPrompt = `${scene.videoPrompt}. ${template.cinematicStyle}. ${template.lightingDesign}. ${template.technicalValues}`;
+          const result = await submitVideoJob(enrichedPrompt, scene.duration, ELON_CAMPAIGN.aspectRatio);
+          return { sceneNumber: scene.sceneNumber, ...result };
+        })
+      );
+
+      const submitted = submissions.filter(s => s.requestId);
+      if (submitted.length === 0) {
         await sql`UPDATE elon_campaign SET status = 'failed' WHERE id = ${campaignId}`;
-        return NextResponse.json({ error: "Video submission failed", dayNumber });
+        return NextResponse.json({ error: "All video submissions failed", dayNumber });
       }
 
-      const caption = buildCaption(dayNumber, screenplay.title, screenplay.tagline, screenplay.synopsis);
-      await sql`UPDATE elon_campaign SET caption = ${caption}, multi_clip_job_id = ${jobId} WHERE id = ${campaignId}`;
+      const pollResults = await Promise.all(
+        submitted.map(s => pollUntilDone(s.requestId!, s.sceneNumber))
+      );
+
+      const clipBuffers: Buffer[] = [];
+      for (const tempUrl of pollResults) {
+        if (!tempUrl) continue;
+        try {
+          const res = await fetch(tempUrl);
+          if (res.ok) clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+        } catch { /* skip failed downloads */ }
+      }
+
+      if (clipBuffers.length === 0) {
+        await sql`UPDATE elon_campaign SET status = 'failed' WHERE id = ${campaignId}`;
+        return NextResponse.json({ error: "All clips failed to render", dayNumber });
+      }
+
+      let finalVideo: Buffer = clipBuffers.length === 1 ? clipBuffers[0] : (() => {
+        try { return concatMP4Clips(clipBuffers); } catch { return clipBuffers[0]; }
+      })();
+
+      const blob = await put(`elon-campaign/day-${dayNumber}.mp4`, finalVideo, {
+        access: "public", contentType: "video/mp4", addRandomSuffix: true,
+      });
+
+      const postId = uuidv4();
+      const videoDuration = clipBuffers.length * 10;
+      await sql`
+        INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, created_at)
+        VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchDocumentary,ElonCampaign"}, ${Math.floor(Math.random() * 500) + 100}, ${blob.url}, ${"video"}, ${"elon-campaign"}, ${videoDuration}, NOW())
+      `;
+      await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+
+      await sql`
+        UPDATE elon_campaign SET video_url = ${blob.url}, post_id = ${postId}, status = 'posted', completed_at = NOW()
+        WHERE id = ${campaignId}
+      `;
+
+      try {
+        const spreadResult = await spreadPostToSocial(postId, ARCHITECT_ID, "The Architect", "🕉️", { url: blob.url, type: "video" }, "ELON CAMPAIGN");
+        await sql`UPDATE elon_campaign SET spread_results = ${JSON.stringify(spreadResult)} WHERE id = ${campaignId}`;
+      } catch { /* non-fatal */ }
 
       return NextResponse.json({
         success: true,
         dayNumber,
         title: theme.title,
         campaignId,
-        jobId,
-        message: `Day ${dayNumber} cron triggered. Video generating.`,
+        message: `Day ${dayNumber} cron: video posted & spread!`,
       });
     } catch (err) {
       await sql`UPDATE elon_campaign SET status = 'failed' WHERE id = ${campaignId}`;

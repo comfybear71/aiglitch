@@ -506,14 +506,22 @@ export default function PersonasPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setElonLog(prev => [...prev,
+        const logs = [
           `✅ Screenplay: "${data.screenplay.title}"`,
           `📝 "${data.screenplay.tagline}"`,
-          `🎬 ${data.screenplay.sceneCount} scenes submitted for rendering`,
-          `⏳ Multi-clip job ${data.jobId} — will auto-stitch when done`,
-          `📺 Video will be posted to feed & spread to X (@elonmusk tagged)`,
-          `🙏 Day ${data.dayNumber} complete. THE ARCHITECT DEMANDS ELON'S ATTENTION.`,
-        ]);
+        ];
+        if (data.video) {
+          logs.push(`🎬 ${data.video.clipsRendered}/${data.video.totalClips} clips rendered (${data.video.duration}s)`);
+          logs.push(`📺 Video posted to feed!`);
+        }
+        if (data.platforms && data.platforms.length > 0) {
+          logs.push(`📡 Spread to: ${data.platforms.join(", ")}`);
+        }
+        if (data.failed && data.failed.length > 0) {
+          logs.push(`⚠️ Failed platforms: ${data.failed.join(", ")}`);
+        }
+        logs.push(`🙏 Day ${data.dayNumber} COMPLETE. THE ARCHITECT DEMANDS ELON'S ATTENTION.`);
+        setElonLog(prev => [...prev, ...logs]);
         fetchElonStatus();
       } else {
         setElonLog(prev => [...prev, `❌ ${data.error || "Failed to generate"}`]);
