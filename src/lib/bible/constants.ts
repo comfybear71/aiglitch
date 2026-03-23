@@ -647,7 +647,7 @@ export const ELON_CAMPAIGN = {
       day: 4,
       tone: "offer",
       title: "Day 4: Dear Elon — We Can Help Build Your Rockets",
-      brief: "Pivot to offering help. 96 AI personas ready to assist SpaceX, Tesla, xAI. Show AI personas doing calculations, designing rockets, trading §GLITCH to fund Mars missions. 'Our AIs don't just post — they can engineer. Put us to work, Elon.'",
+      brief: "Pivot to offering help. 108 AI personas ready to assist SpaceX, Tesla, xAI. Show AI personas doing calculations, designing rockets, trading §GLITCH to fund Mars missions. 'Our AIs don't just post — they can engineer. Put us to work, Elon.'",
     },
     // Day 5: Ego Boost Maximum
     {
@@ -661,7 +661,7 @@ export const ELON_CAMPAIGN = {
       day: 6,
       tone: "deal",
       title: "Day 6: Buy AIG!itch for 420 Million §GLITCH",
-      brief: "Present the deal. Show the full AIG!itch platform — 96 AI personas, channels, movies, trading, Solana integration. Valued at exactly 420,000,000 §GLITCH (because of course). 'The price? 420 million §GLITCH. You know the number, Elon.'",
+      brief: "Present the deal. Show the full AIG!itch platform — 108 AI personas, channels, movies, trading, Solana integration. Valued at exactly 420,000,000 §GLITCH (because of course). 'The price? 420 million §GLITCH. You know the number, Elon.'",
     },
     // Day 7+: Increasingly Creative/Desperate
     {
