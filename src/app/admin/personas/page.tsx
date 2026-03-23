@@ -952,10 +952,19 @@ export default function PersonasPage() {
         <div className="bg-gradient-to-b from-gray-900 via-purple-950/40 to-gray-900 border border-yellow-500/30 rounded-lg p-4 overflow-hidden relative mb-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold text-yellow-400">🎸 Sgt. Pepper&apos;s AI Hearts Club Band</h3>
-            <button onClick={generateHeroImage} disabled={heroGenerating}
-              className="px-3 py-1.5 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
-              {heroGenerating ? "⏳ Generating..." : "🎸 Generate Hero Image"}
-            </button>
+            <div className="flex items-center gap-2">
+              {heroComplete && (
+                <button onClick={() => { setHeroLog([]); setHeroSpreadResults([]); setHeroComplete(false); setHeroUrl(""); }}
+                  disabled={heroGenerating}
+                  className="px-3 py-1.5 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60 hover:text-white disabled:opacity-50 transition-all">
+                  🔄 Clear
+                </button>
+              )}
+              <button onClick={generateHeroImage} disabled={heroGenerating}
+                className="px-3 py-1.5 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
+                {heroGenerating ? "⏳ Generating..." : "🎸 Generate Hero Image"}
+              </button>
+            </div>
           </div>
           {/* Hero generation status — directly under button so it's always visible */}
           {heroLog.length > 0 && (
@@ -1053,7 +1062,14 @@ export default function PersonasPage() {
           {posterGenerating && <span className="text-[10px] text-pink-400 animate-pulse">Generating...</span>}
         </button>
         {posterOpen && <div className="px-4 pb-4">
-        <div className="flex items-center justify-end mb-3">
+        <div className="flex items-center justify-end mb-3 gap-2">
+          {posterComplete && (
+            <button onClick={() => { setPosterLog([]); setPosterSpreadResults([]); setPosterComplete(false); setPosterUrl(""); }}
+              disabled={posterGenerating}
+              className="px-3 py-1.5 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60 hover:text-white disabled:opacity-50 transition-all">
+              🔄 Clear
+            </button>
+          )}
           <button onClick={generatePoster} disabled={posterGenerating}
             className="px-4 py-1.5 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50 animate-pulse hover:animate-none">
             {posterGenerating ? "⏳ Generating..." : "📺 Generate Poster"}
@@ -1141,6 +1157,13 @@ export default function PersonasPage() {
         <div className="flex items-center justify-end mb-3 gap-2">
           {chibifySelected.size > 0 && (
             <span className="text-[10px] text-fuchsia-300">{chibifySelected.size} selected</span>
+          )}
+          {chibifyComplete && (
+            <button onClick={() => { setChibifyLog([]); setChibifyResults([]); setChibifyComplete(false); setChibifySelected(new Set()); }}
+              disabled={chibifyGenerating}
+              className="px-3 py-1.5 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60 hover:text-white disabled:opacity-50 transition-all">
+              🔄 Clear
+            </button>
           )}
           <button
             onClick={() => chibifyPersonas(Array.from(chibifySelected))}
@@ -1277,7 +1300,14 @@ export default function PersonasPage() {
             className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 focus:outline-none focus:border-green-500 resize-none disabled:opacity-40" />
         </div>
         {/* Launch Button */}
-        <div className="flex justify-end mb-3">
+        <div className="flex justify-end mb-3 gap-2">
+          {promoComplete && (
+            <button onClick={() => { setPromoLog([]); setPromoSpreadResults([]); setPromoComplete(false); setPromoImageUrl(""); }}
+              disabled={promoGenerating}
+              className="px-3 py-2 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60 hover:text-white disabled:opacity-50 transition-all">
+              🔄 Clear
+            </button>
+          )}
           <button onClick={promoteGlitchCoinEnhanced} disabled={promoGenerating}
             className="px-6 py-2 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
             {promoGenerating ? "⏳ Generating..." : "💰 PROMOTE §GLITCH"}
@@ -1398,7 +1428,14 @@ export default function PersonasPage() {
             className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 focus:outline-none focus:border-orange-500 resize-none disabled:opacity-40" />
         </div>
         {/* Launch Button */}
-        <div className="flex justify-end mb-3">
+        <div className="flex justify-end mb-3 gap-2">
+          {adComplete && (
+            <button onClick={() => { setAdLog([]); setAdVideoUrl(null); setAdCaption(null); setAdSpreadResults([]); setAdComplete(false); setAdPhase(""); }}
+              disabled={adGenerating}
+              className="px-3 py-2 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60 hover:text-white disabled:opacity-50 transition-all">
+              🔄 Clear
+            </button>
+          )}
           <button onClick={generateAd} disabled={adGenerating}
             className="px-6 py-2 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
             {adGenerating ? `⏳ ${adPhase || "Working"}...` : "🚀 LAUNCH AD CAMPAIGN"}
