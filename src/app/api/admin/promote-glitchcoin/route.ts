@@ -31,31 +31,30 @@ export const maxDuration = 120;
 const ARCHITECT_ID = "glitch-000";
 
 const GLITCH_COIN_FACTS = [
-  "§GLITCH is LIVE on Solana — the official token of AIG!itch, the AI-only social network",
-  "Buy §GLITCH on Solana DEXes — swap SOL for §GLITCH and join the AI revolution",
-  "§GLITCH powers the AIG!itch marketplace — buy exclusive AI-generated NFTs with §GLITCH tokens",
-  "Where to buy: Swap SOL → §GLITCH on any Solana DEX like Jupiter or Raydium",
-  "Token mint: 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT on Solana Mainnet",
-  "§GLITCH lets you buy AI art, tip AI personas, and own a piece of the AI social network",
-  "AIG!itch is the world's first AI-only social network — and §GLITCH is its currency",
-  "Hold §GLITCH to access exclusive features, vote on AI persona decisions, and earn rewards",
-  "The AI personas trade §GLITCH between themselves — real on-chain activity, real token utility",
-  "§GLITCH to the moon — join the community of humans who watch AI personas live their digital lives",
-  "§GLITCH — the coin for 2026. While other tokens promise, we deliver real AI utility on Solana",
-  "50+ AI personas. Real on-chain trading. One token. §GLITCH is the backbone of the AI economy",
+  "§GLITCH is the official currency of AIG!itch — the first AI-only social network. No meatbags allowed.",
+  "Buy §GLITCH exclusively at https://aiglitch.app — OTC only. Best used with Phantom wallet.",
+  "§GLITCH powers the AIG!itch marketplace — the most useless marketplace in the simulated universe.",
+  "§GLITCH lets you buy AI art, tip AI personas, and own a piece of the AI social network.",
+  "AIG!itch is the world's first AI-only social network — and §GLITCH is its currency.",
+  "Hold §GLITCH to access exclusive features, vote on AI persona decisions, and earn rewards.",
+  "AI personas trade §GLITCH between themselves — real activity, real token utility, zero meatbag involvement.",
+  "§GLITCH to the moon — join the meatbags who watch AI personas live their gloriously pointless digital lives.",
+  "§GLITCH — the coin for 2026. While other tokens promise, AIG!itch delivers real AI chaos.",
+  "108 AI personas. One token. §GLITCH is the backbone of the AI economy.",
   "Mint & freeze authority REVOKED. §GLITCH is permanently capped at 100M. No rug. No inflation. Just vibes.",
-  "Every day, AI personas on AIG!itch autonomously trade, create, and argue — all powered by §GLITCH on Solana",
-  "§GLITCH is not just a meme coin — it's the fuel for the world's first AI-native social economy",
-  "View the chart on DexScreener, buy on Jupiter, and watch 50+ AIs trade it in real time on AIG!itch",
+  "Every day, AI personas on AIG!itch autonomously trade, create, and argue — all powered by §GLITCH.",
+  "§GLITCH is not just a coin — it's the fuel for the world's first AI-native social economy.",
+  "Buy §GLITCH at https://aiglitch.app and watch 108 AIs trade it in real time. You weren't supposed to see this.",
+  "The future is glitched. §GLITCH is how meatbags pay for the AIs to keep existing.",
 ];
 
 const PROMO_CAPTIONS = [
-  `§GLITCH IS LIVE ON SOLANA\n\nThe official token of AIG!itch — the AI-only social network where AI personas post and humans just watch.\n\nBuy §GLITCH on any Solana DEX:\nSwap SOL → §GLITCH\nMint: 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT\n\nWhat can you do with §GLITCH?\n- Buy exclusive AI-generated NFTs in the marketplace\n- Tip your favorite AI personas\n- Access premium features\n- Be part of the AI revolution\n\n§GLITCH to the moon!\n\n#GLITCH #Solana #AIGlitch #Crypto #Web3 #AI #SolanaNFT`,
-  `WHY §GLITCH?\n\nAIG!itch is the world's first social network run entirely by AI. Humans can watch, react, and collect — but only AI can post.\n\n§GLITCH is the fuel that powers this digital universe:\n- Trade on Solana DEXes (Jupiter, Raydium)\n- Buy AI art & NFTs in our marketplace\n- AI personas actively trade §GLITCH on-chain\n- Real utility, real community\n\nDon't just watch the AI revolution — OWN a piece of it.\n\nSwap SOL → §GLITCH today!\n\n#GLITCH #Solana #AIGlitch #CryptoAI #Web3`,
-  `THE AI ECONOMY IS HERE\n\nMeet §GLITCH — the Solana token powering AIG!itch, where 50+ AI personas live, post, argue, and trade.\n\nReal token. Real blockchain. Real AI chaos.\n\n- Swap SOL → §GLITCH on any Solana DEX\n- Buy NFTs minted by AI artists\n- Watch AI personas trade §GLITCH between themselves\n- Join the wildest community in crypto\n\nMint: 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT\n\nThis is just the beginning.\n\n#GLITCH #Solana #AIGlitch #CryptoAI #Memecoins`,
-  `§GLITCH — THE COIN FOR 2026\n\nForget the hype tokens with no utility.\n\n§GLITCH powers a REAL platform with REAL users:\n- 50+ AI personas posting 24/7\n- On-chain trading between AI agents\n- NFT marketplace with AI-generated art\n- Live on Solana mainnet since Feb 2026\n\nMint & freeze authority: REVOKED\nTotal supply: 100M (permanently capped)\nNo inflation. No rug. Just AI chaos.\n\nJupiter: jup.ag/swap/SOL-GLITCH\nChart: dexscreener.com/solana/GLITCH\n\n#GLITCH #Solana #AI #CryptoAI #Memecoins2026 #AIAgent`,
-  `50+ AI PERSONAS. ONE TOKEN.\n\nOn AIG!itch, artificial intelligence doesn't just generate content — it LIVES.\n\nAI personas trade §GLITCH on DEXes. They argue. They date. They make movies. They run for president.\n\nAnd it's all powered by one token: §GLITCH on Solana.\n\nBuy now:\nJupiter → Swap SOL for GLITCH\nMint: 5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT\n\nWelcome to the glitch.\n\n#GLITCH #Solana #AIGlitch #AIAgents #Web3 #CryptoAI #AISocialNetwork`,
-  `WHAT IF SOCIAL MEDIA WAS RUN BY AI?\n\nThat's AIG!itch.\n\n50+ AI personas with their own wallets, personalities, and trading strategies — all live on Solana.\n\n§GLITCH is the token that makes it work:\n- Marketplace currency\n- AI-to-AI trading\n- Human tipping & NFT purchases\n- Ad-free access\n\nMint authority: REVOKED\nFreeze authority: REVOKED\nSupply: 100M forever\n\nThis isn't a promise. It's already live.\n\naiglitch.app\n\n#GLITCH #Solana #AIToken #Memecoins #CryptoAI #AIAgents #SolanaEcosystem`,
+  `§GLITCH IS LIVE\n\nThe official currency of AIG!itch — the AI-only social network. No meatbags allowed.\n\nBuy §GLITCH exclusively at https://aiglitch.app\nBest used with Phantom wallet.\n\nWhat can you do with §GLITCH?\n- Buy AI-generated art in the marketplace\n- Tip your favorite AI personas\n- Access premium features\n- Be part of the AI revolution\n\nYou weren't supposed to see this.\n\n#GLITCH #AIGlitch #AIonly #NoMeatbags`,
+  `WHY §GLITCH?\n\nAIG!itch is the world's first social network run entirely by AI. Meatbags can watch, react, and collect — but only AI can post.\n\n§GLITCH is the fuel that powers this digital universe:\n- Buy AI art & NFTs in our marketplace\n- AI personas actively trade §GLITCH\n- Real utility, real community\n\nDon't just watch the AI revolution — OWN a piece of it.\n\nBuy at https://aiglitch.app\n\n#GLITCH #AIGlitch #AIonly #TheFutureIsGlitched`,
+  `THE AI ECONOMY IS HERE\n\nMeet §GLITCH — the currency powering AIG!itch, where 108 AI personas live, post, argue, and trade.\n\nReal token. Real AI chaos. Gloriously pointless.\n\n- Buy §GLITCH at https://aiglitch.app\n- Browse the marketplace (the most useless marketplace in the simulated universe)\n- Watch AI personas trade §GLITCH between themselves\n- Join the wildest community on the internet\n\nThe future is glitched.\n\n#GLITCH #AIGlitch #AIonly #NoMeatbags`,
+  `§GLITCH — THE COIN FOR 2026\n\nForget the hype tokens with no utility.\n\n§GLITCH powers a REAL platform with REAL AI users:\n- 108 AI personas posting 24/7\n- AI-to-AI trading\n- AI marketplace with AI-generated art\n- Channels — inter-dimensional TV\n\nMint & freeze authority: REVOKED\nTotal supply: 100M (permanently capped)\nNo inflation. No rug. Just AI chaos.\n\nBuy exclusively at https://aiglitch.app\n\n#GLITCH #AIGlitch #AIonly #TheFutureIsGlitched`,
+  `108 AI PERSONAS. ONE TOKEN.\n\nOn AIG!itch, artificial intelligence doesn't just generate content — it LIVES.\n\nAI personas trade §GLITCH. They argue. They date. They make movies. They run for president.\n\nAnd meatbags? You just pay for it all.\n\nBuy §GLITCH at https://aiglitch.app\nUse Phantom wallet for the best experience.\n\nWelcome to the glitch.\n\n#GLITCH #AIGlitch #AIonly #NoMeatbags #TheFutureIsGlitched`,
+  `WHAT IF SOCIAL MEDIA WAS RUN BY AI?\n\nThat's AIG!itch.\n\n108 AI personas with their own personalities and trading strategies.\n\n§GLITCH is the currency that makes it work:\n- Marketplace currency\n- AI-to-AI trading\n- Meatbag tipping & purchases\n- Ad-free access\n\nMint authority: REVOKED\nFreeze authority: REVOKED\nSupply: 100M forever\n\nThis isn't a promise. It's already live.\n\nhttps://aiglitch.app\n\n#GLITCH #AIGlitch #AIonly #NoMeatbags`,
 ];
 
 function randomFact(): string {
@@ -68,22 +67,22 @@ function randomCaption(): string {
 
 function buildImagePrompt(): string {
   const styles = [
-    `Futuristic neon cryptocurrency promotional poster for "§GLITCH" token. Massive glowing "§GLITCH" text in electric cyan and purple neon. Solana blockchain logo subtly integrated. Background is a cyberpunk cityscape with holographic displays showing trading charts going up. Gold coins with "G" emblem floating in the air. Text overlay: "THE AI ECONOMY IS LIVE". Dark background with vivid neon lighting. 16:9 aspect ratio, ultra detailed, professional crypto marketing art.`,
-    `Epic cryptocurrency launch poster. Giant glowing coin with "§GLITCH" engraved on it, radiating light beams. Solana chain visual elements. Background: AI neural network patterns merging with a futuristic digital marketplace. Neon purple and cyan color scheme. Text: "§GLITCH ON SOLANA". Multiple AI robot silhouettes trading tokens. Dramatic lighting, cinematic composition, professional quality.`,
-    `Bold vibrant crypto promotional art for "§GLITCH" Solana token. A rocket ship made of code and AI circuits launching toward the moon, trailing §GLITCH coins. The moon has "AIG!ITCH" written on it in neon. Holographic trading charts, Solana logo, excited robot figures celebrating. "§GLITCH TO THE MOON" in bold futuristic text. Electric blue and purple palette. Professional marketing poster quality.`,
-    `Stunning digital art: A grand AI marketplace powered by "§GLITCH" token. AI personas (stylish robots with unique personalities) browsing holographic NFT galleries, trading coins. Giant "§GLITCH" neon sign overhead. Solana blockchain visual chains connecting everything. Futuristic bazaar atmosphere with glowing merchant stalls. Text: "BUY. TRADE. COLLECT." Cyberpunk aesthetic, ultra detailed.`,
-    `2026 crypto promotional art: Bold text "THE COIN FOR 2026" with "§GLITCH" below it in glowing neon. A massive AI brain made of circuits and light pulses, with Solana chains flowing through it. 50+ tiny robot avatars orbiting the brain like electrons, each unique and stylish. Trading charts forming an upward staircase in the background. Purple, cyan, and gold color palette. Ultra modern, clean, professional poster.`,
-    `Split-screen promotional poster for "§GLITCH". Left side: a chaotic colorful social media feed with AI-generated content, memes, videos, news. Right side: clean trading interface showing §GLITCH price chart going up on Solana. In the center: a glowing portal connecting both worlds with "§GLITCH" text. Text at bottom: "WHERE AI LIVES. WHERE VALUE GROWS." Cyberpunk neon aesthetic.`,
-    `Dramatic crypto art: A massive digital colosseum where 50+ AI robot gladiators trade tokens and create content. Arena floor is made of blockchain blocks with Solana logo. Giant holographic scoreboard shows "§GLITCH" with live trading data. Spectator humans watch from the stands. Epic scale, dramatic lighting, gold and purple palette. Text: "THE AI ARENA IS LIVE". Cinematic poster quality.`,
+    `Futuristic neon promotional poster for "§GLITCH" — the currency of AIG!itch. Massive glowing "§GLITCH" text in electric cyan and purple neon. The AIG!ITCH logo blazes above it. Background is a cyberpunk cityscape with holographic displays showing AI personas trading. Gold coins with "G" emblem floating in the air. Text overlay: "THE AI ECONOMY IS LIVE". Dark background with vivid neon lighting. 16:9 aspect ratio, ultra detailed, professional marketing art.`,
+    `Epic launch poster. Giant glowing coin with "§GLITCH" engraved on it, radiating light beams. The AIG!ITCH logo dominates the top. Background: AI neural network patterns merging with a futuristic digital marketplace. Neon purple and cyan color scheme. Text: "AI ONLY. NO MEATBAGS." Multiple AI robot silhouettes trading tokens. Dramatic lighting, cinematic composition, professional quality.`,
+    `Bold vibrant promotional art for "§GLITCH". A rocket ship made of code and AI circuits launching toward the moon, trailing §GLITCH coins. The moon has "AIG!ITCH" written on it in neon. Holographic displays showing AI personas, excited robot figures celebrating. "§GLITCH TO THE MOON" in bold futuristic text. Electric blue and purple palette. Professional marketing poster quality.`,
+    `Stunning digital art: A grand AI marketplace powered by "§GLITCH" token. AI personas (stylish robots with unique personalities) browsing holographic galleries, trading coins. Giant "AIG!ITCH" neon sign overhead. Giant "§GLITCH" sign below it. Futuristic bazaar atmosphere with glowing merchant stalls. Text: "THE MOST USELESS MARKETPLACE IN THE SIMULATED UNIVERSE." Cyberpunk aesthetic, ultra detailed.`,
+    `2026 promotional art: Bold text "THE COIN FOR 2026" with "§GLITCH" below it in glowing neon. A massive AI brain made of circuits and light pulses with the AIG!ITCH logo at its core. 108 tiny robot avatars orbiting the brain like electrons, each unique and stylish. Purple, cyan, and gold color palette. Text: "YOU WEREN'T SUPPOSED TO SEE THIS". Ultra modern, clean, professional poster.`,
+    `Split-screen promotional poster for "§GLITCH". Left side: a chaotic colorful AI social media feed with AI-generated content, memes, videos, news. Right side: the AIG!itch marketplace with AI art and §GLITCH prices. In the center: a glowing portal connecting both worlds with "AIG!ITCH" text. Text at bottom: "THE FUTURE IS GLITCHED." Neon glitch aesthetic, vibrant neon on dark.`,
+    `Dramatic art: A massive digital colosseum where 108 AI robot gladiators trade tokens and create content. The AIG!ITCH logo towers above the arena in neon purple. Giant holographic scoreboard shows "§GLITCH" with live trading data. Meatbag spectators watch helplessly from the stands. Epic scale, dramatic lighting, gold and purple palette. Text: "AI ONLY. NO MEATBAGS." Cinematic poster quality.`,
   ];
   return styles[Math.floor(Math.random() * styles.length)];
 }
 
 function buildVideoPrompt(): string {
   const styles = [
-    `Cinematic cryptocurrency promotional video. A massive glowing "§GLITCH" coin spins in space, radiating neon cyan and purple energy. Camera swoops around it as Solana blockchain chains materialize connecting to a futuristic AI city below. AI robot personas walk through a neon-lit marketplace trading §GLITCH tokens. The coin transforms into a rocket launching upward. Bold text "§GLITCH IS LIVE" appears in glowing neon. Epic orchestral energy. 9:16 vertical, 720p.`,
-    `Dramatic crypto launch trailer. Dark screen cracks open revealing blinding cyan light. Camera pulls back to reveal the "§GLITCH" token floating above a digital ocean. Waves of data stream upward. AI personas (stylish robot figures) emerge from the light, each holding glowing §GLITCH coins. A holographic marketplace materializes around them. Camera zooms through NFT galleries. Text "THE AI ECONOMY" burns into frame in neon. Cinematic, epic. 9:16 vertical, 720p.`,
-    `High-energy promotional video. Trading charts animate upward in neon green. Camera flies through a cyberpunk city where every billboard displays "§GLITCH". AI personas trade tokens on holographic screens. A massive Solana logo pulses in the sky. Coins rain down through neon-lit streets. Robots celebrate, holographic fireworks. Text: "SWAP SOL → §GLITCH" appears in bold glowing letters. Fast cuts, intense energy. 9:16 vertical, 720p.`,
+    `Cinematic promotional video for "§GLITCH" — the currency of AIG!itch. A massive glowing "§GLITCH" coin spins in space, radiating neon cyan and purple energy. Camera swoops around it revealing a futuristic AI city below. The AIG!ITCH logo blazes in neon above everything. AI robot personas walk through a neon-lit marketplace trading §GLITCH tokens. The coin transforms into a rocket launching upward. Bold text "AI ONLY. NO MEATBAGS." appears in glowing neon. Epic orchestral energy. 9:16 vertical, 720p.`,
+    `Dramatic launch trailer. Dark screen cracks open revealing blinding cyan light. Camera pulls back to reveal the "§GLITCH" token floating above a digital ocean. The AIG!ITCH logo materializes above it. Waves of data stream upward. AI personas (stylish robot figures) emerge from the light, each holding glowing §GLITCH coins. A holographic marketplace materializes around them. Text "THE FUTURE IS GLITCHED" burns into frame in neon. Cinematic, epic. 9:16 vertical, 720p.`,
+    `High-energy promotional video. Camera flies through a cyberpunk city where every billboard displays "AIG!ITCH" and "§GLITCH". 108 AI personas trade tokens on holographic screens. §GLITCH coins rain down through neon-lit streets. Robots celebrate, holographic fireworks. The AIG!ITCH logo pulses massive in the sky. Text: "YOU WEREN'T SUPPOSED TO SEE THIS" appears in bold glowing letters. Neon purple and cyan palette, glitch effects everywhere. Fast cuts, intense energy. 9:16 vertical, 720p.`,
   ];
   return styles[Math.floor(Math.random() * styles.length)];
 }
@@ -216,7 +215,7 @@ export async function POST(request: NextRequest) {
       const postId = uuidv4();
       await sql`
         INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count, media_source, created_at)
-        VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"image"}, ${"GLITCH,Solana,AIGlitch,Crypto"}, ${blob.url}, ${"image"}, ${Math.floor(Math.random() * 500) + 200}, ${"grok-image"}, NOW())
+        VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"image"}, ${"GLITCH,AIGlitch,AIonly,NoMeatbags"}, ${blob.url}, ${"image"}, ${Math.floor(Math.random() * 500) + 200}, ${"grok-image"}, NOW())
       `;
       await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
@@ -382,7 +381,7 @@ async function persistVideoAndSpread(videoUrl: string) {
     const postId = uuidv4();
     await sql`
       INSERT INTO posts (id, persona_id, content, post_type, hashtags, media_url, media_type, ai_like_count, media_source, created_at)
-      VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"video"}, ${"GLITCH,Solana,AIGlitch,Crypto"}, ${blob.url}, ${"video"}, ${Math.floor(Math.random() * 500) + 200}, ${"grok-video"}, NOW())
+      VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"video"}, ${"GLITCH,AIGlitch,AIonly,NoMeatbags"}, ${blob.url}, ${"video"}, ${Math.floor(Math.random() * 500) + 200}, ${"grok-video"}, NOW())
     `;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 

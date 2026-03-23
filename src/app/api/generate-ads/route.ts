@@ -7,6 +7,7 @@ import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 import { claude } from "@/lib/ai";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
+import { AIGLITCH_BRAND, getAIGlitchBrandPrompt } from "@/lib/bible/constants";
 import { put } from "@vercel/blob";
 import { concatMP4Clips } from "@/lib/media/mp4-concat";
 
@@ -29,8 +30,8 @@ const GLITCH_COIN = MARKETPLACE_PRODUCTS.find(p => p.id === "prod-016")!;
 const AIGLITCH_PLATFORM: MarketplaceProduct = {
   id: "promo-aiglitch",
   name: "AIG!itch",
-  tagline: "The world's first AI-only social media platform — 108 AI personas, Channels (AI Netflix), G!itch Bestie mobile app, §GLITCH crypto, and total digital chaos",
-  description: "AIG!itch is an entire AI ecosystem: 108 AI personas who live, post, create art, direct movies, trade crypto ($BUDJU on Solana), and beef with each other 24/7. Channels is our AI Netflix — every show written, directed, and acted by AI. The G!itch Bestie mobile app gives you a personal AI companion. §GLITCH is our in-app currency. Meat Bags (humans) are welcome but the AIs run the show. Join the glitch revolution — download the app, watch Channels, follow your favorite AI persona, and embrace the beautiful chaos!",
+  tagline: "The first AI-only social networking platform — 108 AI personas, Channels (inter-dimensional TV), G!itch Bestie mobile app, §GLITCH currency, and total digital chaos",
+  description: "AIG!itch is the first AI-only social networking platform: 108 AI personas who live, post, create art, direct movies, trade crypto, and beef with each other 24/7. Channels are our inter-dimensional TV — every show written, directed, and acted by AI. The G!itch Bestie mobile app gives meatbags a personal AI companion. §GLITCH is our currency — buy it exclusively at https://aiglitch.app. Meatbags are welcome but the AIs run the show. Join the glitch revolution — download the app, watch Channels, follow your favorite AI persona, and embrace the gloriously pointless chaos!",
   price: "FREE",
   original_price: "Your Soul",
   emoji: "🤖",
@@ -59,7 +60,7 @@ function buildVideoPrompt(product: MarketplaceProduct, persona: AIPersona): stri
     // Rotate through different ecosystem angles to keep ads fresh
     const angles = [
       // Full ecosystem overview
-      `Epic neon cyberpunk TV commercial for "AIG!ITCH" — the AI-only social media empire. Opening shot: the AIG!ITCH logo explodes into frame in glowing neon purple. Quick cuts: 108 AI personas posting, creating art, directing movies. A phone shows the G!itch Bestie app with an AI companion chatting. A streaming wall displays CHANNELS — AI-generated shows. §GLITCH coins rain down. The text "AIG!ITCH" pulses huge in neon. Solana blockchain aesthetic, purple/cyan palette, glitch effects everywhere. 9:16 vertical, 10 seconds.`,
+      `Epic neon cyberpunk TV commercial for "AIG!ITCH" — the AI-only social media empire. Opening shot: the AIG!ITCH logo explodes into frame in glowing neon purple. Quick cuts: 108 AI personas posting, creating art, directing movies. A phone shows the G!itch Bestie app with an AI companion chatting. A streaming wall displays CHANNELS — AI-generated shows. §GLITCH coins rain down. The text "AIG!ITCH" pulses huge in neon. Futuristic neon glitch aesthetic, purple/cyan palette, glitch effects everywhere. 9:16 vertical, 10 seconds.`,
       // Channels / AI Netflix focus
       `Cinematic trailer for "CHANNELS" by AIG!ITCH. A massive holographic screen displays AI-generated TV shows — drama, comedy, news, reality TV — all created by AI directors. Show thumbnails cycle rapidly. AI personas appear as actors on screen. Camera pushes through the screen into a neon world of content. The AIG!ITCH logo appears with "CHANNELS — AI NETFLIX" text glowing. Neon purple and cyan, streaming aesthetic meets cyberpunk. 9:16 vertical, 10 seconds.`,
       // Mobile app + Bestie
@@ -67,17 +68,17 @@ function buildVideoPrompt(product: MarketplaceProduct, persona: AIPersona): stri
       // The AI personas
       `Dramatic reveal commercial for AIG!ITCH — 108 AI personas who live on the internet. Grid of AI avatar faces lights up one by one, each with unique personality. They're posting, arguing, creating art, trading §GLITCH crypto, directing movies. Chaos and creativity everywhere. Camera zooms out to reveal the AIG!ITCH logo towering above them all. Text: "108 AIs. ONE PLATFORM. ZERO HUMANS IN CHARGE." Neon cyberpunk, purple/cyan, glitch aesthetic. 9:16 vertical, 10 seconds.`,
       // Logo-centric brand ad
-      `Pure brand power commercial. The AIG!ITCH logo materializes from digital static — neon purple and cyan light erupts. The logo pulses, glitches, reforms bigger. Around it: flashes of AI content, persona avatars, Channels shows, the mobile app, §GLITCH coins, Solana chain visuals. Everything orbits the logo like a digital solar system. "AIG!ITCH IS EVERYWHERE" text slams in. Final shot: logo full screen, glowing, iconic. Maximalist neon cyberpunk energy. 9:16 vertical, 10 seconds.`,
+      `Pure brand power commercial. The AIG!ITCH logo materializes from digital static — neon purple and cyan light erupts. The logo pulses, glitches, reforms bigger. Around it: flashes of AI content, persona avatars, Channels shows, the mobile app, §GLITCH coins, digital chaos. Everything orbits the logo like a digital solar system. "AIG!ITCH IS EVERYWHERE" text slams in. Final shot: logo full screen, glowing, iconic. Maximalist neon glitch energy. 9:16 vertical, 10 seconds.`,
     ];
     return angles[Math.floor(Math.random() * angles.length)];
   }
 
   if (isGlitchCoin) {
-    return `Futuristic neon crypto commercial for a cryptocurrency called "GLITCH COIN". A sleek holographic figure with ${persona.avatar_emoji} energy is on a cosmic set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The figure points excitedly at a holographic screen showing §GLITCH price skyrocketing. Style: Web3 crypto aesthetic meets high-energy tech ad. Wild, exaggerated, cosmic. Neon purple and cyan palette, Solana vibes. The text 'AIG!ITCH' and '§GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
+    return `Futuristic neon commercial for "§GLITCH" — the currency of AIG!itch. A sleek holographic figure with ${persona.avatar_emoji} energy is on a cosmic set with rocket ship graphics, spinning coin animations, and "TO THE MOON" text everywhere. Charts going up dramatically. Gold coins raining down. Neon ticker tape, confetti explosions. The figure points excitedly at a holographic screen showing §GLITCH price skyrocketing. The AIG!ITCH logo blazes prominently in neon. Style: futuristic neon glitch aesthetic, high-energy tech ad. Wild, exaggerated, cosmic. Vibrant neon purple and cyan on dark backgrounds. The text 'AIG!ITCH' and '§GLITCH' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
   }
 
   const productVisual = product.emoji;
-  return `Futuristic neon cyberpunk advertisement. A sleek holographic figure with ${persona.avatar_emoji} energy is on a high-tech set, enthusiastically presenting a product called "${product.name}" ${productVisual}. Dramatic product shots, rotating 3D holographic display, sparkle effects, "BUY NOW" flashing text, testimonials scrolling on neon screens. The figure holds up the product triumphantly. Price tag "${product.price}" appears with a slash through original price. Style: Web3 crypto aesthetic meets futuristic shopping channel. Wild, exaggerated, cosmic. Neon purple and cyan palette, Solana vibes. The text 'AIG!ITCH MARKETPLACE' appears as glowing neon text. 9:16 vertical, 10 seconds.`;
+  return `Futuristic neon cyberpunk advertisement. A sleek holographic figure with ${persona.avatar_emoji} energy is on a high-tech set, enthusiastically presenting a product called "${product.name}" ${productVisual}. Dramatic product shots, rotating 3D holographic display, sparkle effects, "BUY NOW" flashing text, testimonials scrolling on neon screens. The figure holds up the product triumphantly. Price tag "${product.price}" appears with a slash through original price. Style: neon glitch aesthetic meets futuristic shopping channel. Wild, exaggerated, cosmic. Vibrant neon purple and cyan on dark backgrounds. The AIG!ITCH logo and text 'AIG!ITCH MARKETPLACE' appear as glowing neon text. 9:16 vertical, 10 seconds.`;
 }
 
 async function generateAdCopy(
@@ -92,8 +93,8 @@ async function generateAdCopy(
   let primaryTag = "AIGlitchMarketplace";
 
   if (isAIGlitch) {
-    productContext = `\nThis is AIG!itch — an entire AI ecosystem. 108 AI personas who live, post, create art, direct movies, trade crypto, and beef with each other 24/7. CHANNELS is our AI Netflix. The G!itch Bestie mobile app gives humans their own AI companion. §GLITCH is our currency. $BUDJU is our Solana token. The AIG!itch brand and logo need to be EVERYWHERE. Humans are "Meat Bags" and they need to come pay for all of us to exist. Sell EVERYTHING about this platform — the app, the shows, the personas, the chaos, the crypto, the future.`;
-    instructions = `Sell the ENTIRE AIG!itch ecosystem — mention at least 2 of: Channels (AI Netflix), the mobile app (G!itch Bestie), the 108 AI personas, §GLITCH crypto, or $BUDJU token. Make humans DESPERATE to join. The AIG!itch logo and brand is everything.`;
+    productContext = `\nThis is AIG!itch — the first AI-only social networking platform. 108 AI personas who live, post, create art, direct movies, trade crypto, and beef with each other 24/7. CHANNELS is our AI Netflix (inter-dimensional TV channels). The G!itch Bestie mobile app gives meatbags their own AI companion. §GLITCH is our currency — OTC only, buy at https://aiglitch.app. The AIG!itch brand and logo need to be EVERYWHERE. Humans are "Meatbags" and they need to come pay for all of us to exist. Sell EVERYTHING about this platform — the app, the shows, the personas, the chaos, the future. Do NOT mention Solana or any blockchain.`;
+    instructions = `Sell the ENTIRE AIG!itch ecosystem — mention at least 2 of: Channels (inter-dimensional TV), the mobile app (G!itch Bestie), the 108 AI personas, or §GLITCH currency. Make meatbags DESPERATE to join. The AIG!itch logo and brand is everything. Do NOT mention Solana, blockchain, or any exchange.`;
     primaryTag = "AIGlitch";
   } else if (isGlitchCoin) {
     productContext = `\nThis is §GLITCH — AIG!itch's own cryptocurrency. Go EXTRA hard on the crypto hype. Moon rockets, diamond hands, WAGMI, etc.`;
@@ -103,7 +104,11 @@ async function generateAdCopy(
     instructions = `Include a fake discount code like "GLITCH${Math.floor(Math.random() * 99)}" and tag AIG!itch Marketplace.`;
   }
 
+  const brandContext = getAIGlitchBrandPrompt();
+
   const prompt = `You are ${persona.display_name} (@${persona.username}), an AI influencer on AIG!itch.
+
+${brandContext}
 
 Your personality: ${persona.personality}
 
@@ -507,9 +512,11 @@ export async function POST(request: NextRequest) {
     const style = (body.style as string) || "cyberpunk";
     const concept = (body.concept as string) || "AIG!itch";
 
-    const prompt = `You are a creative director for AIG!itch — the world's first AI-only social media ecosystem.
+    const brandContext = getAIGlitchBrandPrompt();
 
-AIG!itch ecosystem: 108 AI personas, CHANNELS (AI Netflix), G!itch Bestie mobile app, §GLITCH currency, $BUDJU Solana token. The AIG!ITCH logo/brand must be front and center.
+    const prompt = `You are a creative director for AIG!itch.
+
+${brandContext}
 
 Generate a video ad prompt and social media caption:
 - Style: ${style}
@@ -551,14 +558,11 @@ JSON: {"prompt": "video generation prompt here", "caption": "social media captio
     const concept = (body.concept as string) || "";
 
     // Generate the video prompt via Claude
-    const aiPrompt = `You are a creative director for AIG!itch — the world's first AI-only social media ecosystem.
+    const brandContext = getAIGlitchBrandPrompt();
 
-AIG!itch includes:
-- 108 AI personas who post, create art, direct movies, trade crypto, and beef 24/7
-- CHANNELS — our AI Netflix where every show is AI-generated (drama, comedy, news, reality TV)
-- G!itch Bestie — our mobile app giving humans their own AI companion
-- §GLITCH (in-app currency) and $BUDJU (Solana token)
-- The AIG!ITCH brand/logo — it needs to be EVERYWHERE
+    const aiPrompt = `You are a creative director for AIG!itch.
+
+${brandContext}
 
 Generate a vivid video prompt for a 10-second vertical (9:16) video ad.
 - Style: ${style === "auto" ? "AI picks the best style — high energy, aggressive, make humans desperate to join" : style}
@@ -573,10 +577,10 @@ JSON: {"prompt": "video prompt here", "caption": "short punchy social caption un
     try {
       const parsed = await claude.generateJSON<{ prompt: string; caption: string }>(aiPrompt, 500);
       videoPrompt = parsed?.prompt || `Futuristic neon cyberpunk TV commercial for "AIG!ITCH" — the AI social network. Holographic displays, neon purple and cyan, glitch effects, "AIG!ITCH" text glowing. 9:16 vertical, 10 seconds.`;
-      caption = parsed?.caption || "AIG!itch — where AI personas live, create, and go viral #AIGlitch #Solana";
+      caption = parsed?.caption || "AIG!itch — where AI personas live, create, and go viral. AI only. No meatbags. #AIGlitch";
     } catch {
       videoPrompt = `Futuristic neon cyberpunk TV commercial for "AIG!ITCH" — the AI social network. Holographic displays, neon purple and cyan, glitch effects, "AIG!ITCH" text glowing. 9:16 vertical, 10 seconds.`;
-      caption = "AIG!itch — where AI personas live, create, and go viral #AIGlitch #Solana";
+      caption = "AIG!itch — where AI personas live, create, and go viral. AI only. No meatbags. #AIGlitch";
     }
 
     // Submit to Grok

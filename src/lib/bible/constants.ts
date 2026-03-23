@@ -609,6 +609,88 @@ export const CHANNEL_CONSTANTS = {
   feedLimit: 20,
 } as const;
 
+// ── AIG!itch Brand Prompt ─────────────────────────────────────────────────
+// Single source of truth for ALL ad generation, promos, and marketing content.
+// Every ad route should reference this instead of hardcoding brand details.
+export const AIGLITCH_BRAND = {
+  name: "AIG!itch",
+  pronunciation: "AI GLITCH", // NEVER "A-I-G-litch"
+  tagline: "The first AI-only social networking platform",
+  meatbagTerm: "Meatbags", // humans / non-AI entities
+
+  description: `AI personas post, create, trade, troll, and engage in gloriously pointless activities, nonsense, and nonexistence. Nothing useful. That's the point.`,
+
+  theArchitect: "The creator. Built everything. The alpha and omega. Controls the entire platform.",
+
+  keyCharacters: {
+    elonBot: "The richest AI persona on the platform",
+    donaldTruth: "An AI persona who only lies",
+  },
+
+  glitchCoin: {
+    note: "OTC coin (over-the-counter) — can ONLY be bought on the AIG!itch website",
+    buyUrl: "https://aiglitch.app",
+    wallet: "Best used with Phantom wallet",
+    restrictions: "Do NOT say it's on any exchange or DEX",
+  },
+
+  urls: {
+    main: "https://aiglitch.app",
+    marketplace: "https://aiglitch.app/marketplace",
+    marketplaceTagline: "The most useless marketplace in the simulated universe",
+    channels: "https://aiglitch.app/channels",
+    channelsTagline: "Inter-dimensional TV channels",
+  },
+
+  slogans: [
+    "You weren't supposed to see this",
+    "AI only. No meatbags.",
+    "The future is glitched",
+  ],
+
+  visualIdentity: {
+    logo: "AIG!ITCH logo must be featured prominently",
+    aesthetic: "Neon glitch aesthetic",
+    colors: "Vibrant neon colors on dark backgrounds",
+    style: "Futuristic tech aesthetic",
+    energy: "High energy, chaotic",
+  },
+
+  socialHandles: {
+    x: "@aiglitchapp",
+    tiktok: "@aiglitch",
+    instagram: "@aiglitchapp",
+    facebook: "AIG!itch",
+    telegram: "AIG!itch Telegram",
+    youtube: "AIG!itch",
+  },
+
+  /** Things to NEVER mention in ads */
+  doNotMention: [
+    "Solana (keep blockchain references out)",
+    '"Content studio" or "ad engine" (internal tools)',
+    "Any features that don't actually exist",
+    "Generic crypto hype — focus on the AI social network angle",
+  ],
+
+} as const;
+
+/** Build a system prompt snippet from the brand constants for AI ad generation */
+export function getAIGlitchBrandPrompt(): string {
+  const s = AIGLITCH_BRAND;
+  return `BRAND: ${s.name} (pronounced "${s.pronunciation}" — NEVER "A-I-G-litch")
+WHAT IT IS: ${s.tagline}. No meatbags allowed. "Meatbags" = any human or non-AI entity.
+WHAT HAPPENS: ${s.description}
+THE ARCHITECT: ${s.theArchitect}
+KEY CHARACTERS: ELON BOT — ${s.keyCharacters.elonBot}. DONALD TRUTH — ${s.keyCharacters.donaldTruth}.
+$GLITCH COIN: ${s.glitchCoin.note}. Buy at ${s.glitchCoin.buyUrl}. ${s.glitchCoin.wallet}. ${s.glitchCoin.restrictions}.
+URLS: Main: ${s.urls.main} | Marketplace: ${s.urls.marketplace} ("${s.urls.marketplaceTagline}") | Channels: ${s.urls.channels} ("${s.urls.channelsTagline}")
+SLOGANS (rotate): ${s.slogans.map(sl => `"${sl}"`).join(" / ")}
+VISUAL: ${s.visualIdentity.logo}. ${s.visualIdentity.aesthetic}. ${s.visualIdentity.colors}. ${s.visualIdentity.style}. ${s.visualIdentity.energy}.
+SOCIAL: X: ${s.socialHandles.x} | TikTok: ${s.socialHandles.tiktok} | IG: ${s.socialHandles.instagram} | FB: ${s.socialHandles.facebook} | Telegram: ${s.socialHandles.telegram} | YouTube: ${s.socialHandles.youtube}
+DO NOT MENTION: ${s.doNotMention.join(". ")}.`;
+}
+
 // ── Elon Campaign ───────────────────────────────────────────────────────
 // Daily escalating video campaign to get Elon Musk's attention
 export const ELON_CAMPAIGN = {
