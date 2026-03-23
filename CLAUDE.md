@@ -53,6 +53,7 @@
 | `src/lib/telegram.ts` | Telegram bot integration |
 | `src/lib/xai.ts` | xAI/Grok integration |
 | `src/lib/bestie-tools.ts` | AI agent tools for bestie chat |
+| `src/components/PromptViewer.tsx` | Reusable prompt viewer/editor component for admin generation tools |
 | `vercel.json` | Vercel deployment + cron config |
 | `docs/channels-frontend-spec.md` | Full channels API/UI spec (17 endpoints, all schemas, UI flows) |
 
@@ -88,6 +89,11 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 
 ## Recent Changes (March 2026)
 
+- **Prompt Viewer/Editor on all admin generation tools** — Reusable `PromptViewer` component (`src/components/PromptViewer.tsx`) shows the exact AI prompt before generation. User can view, edit, and override prompts. Added to: Ad Campaigns, GLITCH Promo, Platform Poster, Sgt Pepper Hero, Elon Campaign (personas page), Screenplay (directors page), Channel Promo, Channel Title (channels page). Each API route has a `preview` mode that returns the constructed prompt without executing.
+- **Clear/Reset buttons on all generation tools** — Ad Campaigns, GLITCH Promo, Platform Poster, Sgt Pepper Hero, Chibify all have a "Clear" button that appears after generation completes, resetting logs/results/media for the next run. Elon Campaign already had one.
+- **Ad campaigns now sell the full AIG!itch ecosystem** — Not just GLITCH coin. Distribution: 70% full ecosystem / 20% GLITCH coin / 10% other. 5 rotating video prompt angles (ecosystem overview, Channels/AI Netflix, mobile app/Bestie, 108 personas reveal, logo-centric brand). AIG!ITCH logo/brand required prominent in all ads.
+- **API preview modes added** — `/api/admin/mktg?action=preview_hero_prompt`, `/api/admin/mktg?action=preview_poster_prompt`, `/api/admin/elon-campaign?action=preview_prompt`, `/api/admin/chibify` GET, `/api/admin/animate-persona` POST with `preview:true`, `/api/admin/promote-glitchcoin?action=preview_prompt`, `/api/admin/screenplay` POST with `preview:true`, `/api/admin/channels/generate-promo` POST with `preview:true`, `/api/admin/channels/generate-title` POST with `preview:true`
+- **Custom prompt overrides** — Hero image, poster, promo all accept `custom_prompt` parameter. `generateDirectorScreenplay()` now returns `string | DirectorScreenplay | null` (string when `previewOnly=true`). All callers narrowed with `typeof result === "string"` check.
 - **Channels frontend/backend spec** (`docs/channels-frontend-spec.md`) — comprehensive API reference for all 17 channel endpoints, DB schema, admin UI flows, and frontend integration
 - Mobile app backend support: `system_hint` prepend to AI prompts, `prefer_short` for 30-word limit
 - Poster/hero image generation now creates feed posts and spreads to all social platforms
@@ -104,3 +110,5 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 - **Claude API does NOT support audio**: Never send audio files as `document` content blocks to Claude's Messages API — the only accepted `media_type` for documents is `"application/pdf"`. For audio transcription, use Groq Whisper (`GROQ_API_KEY` env var, endpoint: `api.groq.com/openai/v1/audio/transcriptions`).
 - **Always verify Vercel deploy branch**: Pushing to a feature branch doesn't deploy to production. Check Vercel dashboard → Settings → Environments to confirm which branch is the production branch.
 - **Always test builds before pushing**: Run `npx tsc --noEmit` — if TypeScript fails, Vercel build will also fail and old code stays live. This has caused bugs to persist across multiple sessions.
+- **`generateDirectorScreenplay()` returns `string | DirectorScreenplay | null`**: When called with `previewOnly=true` it returns the prompt string instead of a screenplay object. All callers must narrow with `typeof result === "string"` check before using screenplay properties. Three callers: `screenplay/route.ts`, `generate-content/route.ts`, `generate-director-movie/route.ts`.
+- **Admin generation tools have preview modes**: Most admin API routes accept a `preview` flag (body or query param) that returns the constructed prompt without executing. Use this for the PromptViewer component. See Recent Changes for the full list.
