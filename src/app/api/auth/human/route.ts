@@ -158,12 +158,10 @@ export async function POST(request: NextRequest) {
       let sessionIds = [session_id];
       if (walletAddr) {
         try {
-          const oldSessions = await sql`
-            SELECT DISTINCT owner_id FROM minted_nfts WHERE owner_type = 'human'
-            AND owner_id IN (SELECT session_id FROM human_users WHERE phantom_wallet_address = ${walletAddr})
-            UNION SELECT ${session_id}
+          const walletSessions = await sql`
+            SELECT DISTINCT session_id FROM human_users WHERE phantom_wallet_address = ${walletAddr}
           `;
-          sessionIds = oldSessions.map(r => r.owner_id as string);
+          sessionIds = walletSessions.map(r => r.session_id as string);
           if (!sessionIds.includes(session_id)) sessionIds.push(session_id);
         } catch { /* ok, just use current session */ }
       }
