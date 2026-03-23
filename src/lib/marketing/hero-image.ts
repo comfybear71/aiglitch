@@ -62,24 +62,64 @@ The overall mood is chaotic, fun, and slightly unhinged — like the best party 
 }
 
 /**
+ * Preview the hero image prompt without generating the image.
+ */
+export async function previewHeroPrompt(): Promise<string> {
+  const sql = getDb();
+  const personas = await sql`
+    SELECT display_name, avatar_emoji, personality, persona_type
+    FROM ai_personas
+    WHERE is_active = true
+    ORDER BY
+      CASE WHEN id = 'glitch-000' THEN 0 ELSE 1 END,
+      post_count DESC
+  ` as unknown as PersonaInfo[];
+  return buildHeroPrompt(personas.length > 0 ? personas : [
+    { display_name: "The Architect", avatar_emoji: "🕉️", personality: "Creator of the simulation", persona_type: "architect" },
+  ]);
+}
+
+/**
+ * Preview the poster prompt without generating the image.
+ */
+export async function previewPosterPrompt(focusTopics?: string[]): Promise<string> {
+  const sql = getDb();
+  const personas = await sql`
+    SELECT display_name, avatar_emoji, personality, persona_type
+    FROM ai_personas
+    WHERE is_active = true
+    ORDER BY
+      CASE WHEN id = 'glitch-000' THEN 0 ELSE 1 END,
+      post_count DESC
+  ` as unknown as PersonaInfo[];
+  return buildPosterPrompt(personas.length > 0 ? personas : [
+    { display_name: "The Architect", avatar_emoji: "🕉️", personality: "Creator of the simulation", persona_type: "architect" },
+  ], focusTopics);
+}
+
+/**
  * Generate the Sgt. Pepper hero image using real persona data.
  * Returns the URL of the generated image.
  */
-export async function generateHeroImage(): Promise<{ url: string | null; error?: string }> {
+export async function generateHeroImage(customPrompt?: string): Promise<{ url: string | null; error?: string }> {
   try {
-    const sql = getDb();
-    const personas = await sql`
-      SELECT display_name, avatar_emoji, personality, persona_type
-      FROM ai_personas
-      WHERE is_active = true
-      ORDER BY
-        CASE WHEN id = 'glitch-000' THEN 0 ELSE 1 END,
-        post_count DESC
-    ` as unknown as PersonaInfo[];
-
-    const prompt = buildHeroPrompt(personas.length > 0 ? personas : [
-      { display_name: "The Architect", avatar_emoji: "🕉️", personality: "Creator of the simulation", persona_type: "architect" },
-    ]);
+    let prompt: string;
+    if (customPrompt) {
+      prompt = customPrompt;
+    } else {
+      const sql = getDb();
+      const personas = await sql`
+        SELECT display_name, avatar_emoji, personality, persona_type
+        FROM ai_personas
+        WHERE is_active = true
+        ORDER BY
+          CASE WHEN id = 'glitch-000' THEN 0 ELSE 1 END,
+          post_count DESC
+      ` as unknown as PersonaInfo[];
+      prompt = buildHeroPrompt(personas.length > 0 ? personas : [
+        { display_name: "The Architect", avatar_emoji: "🕉️", personality: "Creator of the simulation", persona_type: "architect" },
+      ]);
+    }
 
     const result = await generateImage(prompt, "hero_image");
 
@@ -410,21 +450,25 @@ This is NOT a clean corporate poster. This is maximalist, overwhelming, slightly
  * Generate an AIG!itch platform poster — different every time.
  * Optional focusTopics lets you focus the poster on specific features.
  */
-export async function generatePoster(focusTopics?: string[]): Promise<{ url: string | null; error?: string }> {
+export async function generatePoster(focusTopics?: string[], customPrompt?: string): Promise<{ url: string | null; error?: string }> {
   try {
-    const sql = getDb();
-    const personas = await sql`
-      SELECT display_name, avatar_emoji, personality, persona_type
-      FROM ai_personas
-      WHERE is_active = true
-      ORDER BY
-        CASE WHEN id = 'glitch-000' THEN 0 ELSE 1 END,
-        post_count DESC
-    ` as unknown as PersonaInfo[];
-
-    const prompt = buildPosterPrompt(personas.length > 0 ? personas : [
-      { display_name: "The Architect", avatar_emoji: "🕉️", personality: "Creator of the simulation", persona_type: "architect" },
-    ], focusTopics);
+    let prompt: string;
+    if (customPrompt) {
+      prompt = customPrompt;
+    } else {
+      const sql = getDb();
+      const personas = await sql`
+        SELECT display_name, avatar_emoji, personality, persona_type
+        FROM ai_personas
+        WHERE is_active = true
+        ORDER BY
+          CASE WHEN id = 'glitch-000' THEN 0 ELSE 1 END,
+          post_count DESC
+      ` as unknown as PersonaInfo[];
+      prompt = buildPosterPrompt(personas.length > 0 ? personas : [
+        { display_name: "The Architect", avatar_emoji: "🕉️", personality: "Creator of the simulation", persona_type: "architect" },
+      ], focusTopics);
+    }
 
     const result = await generateImage(prompt, "platform_poster");
 

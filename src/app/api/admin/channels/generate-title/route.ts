@@ -47,6 +47,11 @@ export async function POST(request: NextRequest) {
     prompt = `A cinematic title card animation on a pure black background. The exact text shown must be "${exactText}" — spelled letter by letter: ${spelledOut}. CRITICAL: the spelling must be exactly "${exactText}", every letter correct, no extra or missing letters. The text appears with a dramatic reveal — glowing neon letters that flicker and pulse with electric energy, the text materialising letter by letter with sparks and light trails. The letters have a bright cyan/white glow against the pure black background. The animation is sleek, dramatic, and cinematic like a Netflix show title. The text "${exactText}" is centered, large, and bold. Pure black background is critical — no other elements, no scenery, only the glowing animated text on black. No watermarks.`;
   }
 
+  // Preview mode: return prompt without executing
+  if (body.preview) {
+    return NextResponse.json({ ok: true, prompt, channel_slug, title: exactText });
+  }
+
   try {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",

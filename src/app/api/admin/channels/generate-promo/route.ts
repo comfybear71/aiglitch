@@ -89,6 +89,11 @@ export async function POST(request: NextRequest) {
     prompt = defaultScenes[0].replace(/No text or watermarks\.$/, `${brandingSuffix.trim()}`);
   }
 
+  // Preview mode: return prompt without executing
+  if (body.preview) {
+    return NextResponse.json({ ok: true, prompt, channel_slug });
+  }
+
   // Submit single 10s clip
   try {
     const res = await fetch("https://api.x.ai/v1/videos/generations", {

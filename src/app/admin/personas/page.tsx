@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import Image from "next/image";
 import { useAdmin } from "../AdminContext";
 import type { Persona } from "../admin-types";
+import PromptViewer from "@/components/PromptViewer";
 
 // Tiny 1x1 purple blur placeholder for instant avatar rendering
 const AVATAR_BLUR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -590,6 +591,7 @@ export default function PersonasPage() {
       if (posterTopics.length > 0) {
         form.append("focus_topics", JSON.stringify(posterTopics));
       }
+      if (customPromptPoster) form.append("custom_prompt", customPromptPoster);
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
         body: form,
@@ -645,6 +647,13 @@ export default function PersonasPage() {
   const [glitchPromoExtend, setGlitchPromoExtend] = useState(false);
   const [glitchPromoConcept, setGlitchPromoConcept] = useState("");
 
+  // Custom prompt overrides (from PromptViewer edits)
+  const [customPromptAd, setCustomPromptAd] = useState<string | null>(null);
+  const [customPromptPromo, setCustomPromptPromo] = useState<string | null>(null);
+  const [customPromptPoster, setCustomPromptPoster] = useState<string | null>(null);
+  const [customPromptHero, setCustomPromptHero] = useState<string | null>(null);
+  const [customPromptElon, setCustomPromptElon] = useState<string | null>(null);
+
   // Sgt. Pepper Hero
   const [heroGenerating, setHeroGenerating] = useState(false);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
@@ -662,6 +671,7 @@ export default function PersonasPage() {
     try {
       const form = new FormData();
       form.append("action", "generate_hero");
+      if (customPromptHero) form.append("custom_prompt", customPromptHero);
       const res = await fetch("/api/admin/mktg", {
         method: "POST",
         body: form,
@@ -856,6 +866,7 @@ export default function PersonasPage() {
       if (glitchPromoConcept.trim()) form.append("concept", glitchPromoConcept.trim());
       if (glitchPromoPlatforms.size > 0) form.append("target_platforms", JSON.stringify(Array.from(glitchPromoPlatforms)));
       if (glitchPromoExtend) form.append("extend_30s", "true");
+      if (customPromptPromo) form.append("prompt", customPromptPromo);
 
       const res = await fetch("/api/admin/promote-glitchcoin", {
         method: "POST",
@@ -965,6 +976,21 @@ export default function PersonasPage() {
                 {heroGenerating ? "⏳ Generating..." : "🎸 Generate Hero Image"}
               </button>
             </div>
+          </div>
+          {/* Prompt Viewer */}
+          <div className="mb-3">
+            <PromptViewer
+              label="Hero Prompt"
+              accent="yellow"
+              disabled={heroGenerating}
+              customPrompt={customPromptHero}
+              onPromptChange={setCustomPromptHero}
+              fetchPrompt={async () => {
+                const res = await fetch("/api/admin/mktg?action=preview_hero_prompt");
+                const data = await res.json();
+                return data.prompt || "Failed to load prompt";
+              }}
+            />
           </div>
           {/* Hero generation status — directly under button so it's always visible */}
           {heroLog.length > 0 && (
@@ -1099,6 +1125,22 @@ export default function PersonasPage() {
               Poster will focus on: {posterTopics.map(t => POSTER_TOPIC_OPTIONS.find(o => o.id === t)?.desc).filter(Boolean).join(" + ")}
             </p>
           )}
+        </div>
+        {/* Prompt Viewer */}
+        <div className="mb-3">
+          <PromptViewer
+            label="Poster Prompt"
+            accent="pink"
+            disabled={posterGenerating}
+            customPrompt={customPromptPoster}
+            onPromptChange={setCustomPromptPoster}
+            fetchPrompt={async () => {
+              const topicsParam = posterTopics.length > 0 ? `&focus_topics=${encodeURIComponent(JSON.stringify(posterTopics))}` : "";
+              const res = await fetch(`/api/admin/mktg?action=preview_poster_prompt${topicsParam}`);
+              const data = await res.json();
+              return data.prompt || "Failed to load prompt";
+            }}
+          />
         </div>
         {posterLog.length > 0 && (
           <div ref={posterLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">
@@ -1299,6 +1341,22 @@ export default function PersonasPage() {
             rows={2} disabled={promoGenerating}
             className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 focus:outline-none focus:border-green-500 resize-none disabled:opacity-40" />
         </div>
+        {/* Prompt Viewer */}
+        <div className="mb-3">
+          <PromptViewer
+            label="Promo Prompt"
+            accent="green"
+            disabled={promoGenerating}
+            customPrompt={customPromptPromo}
+            onPromptChange={setCustomPromptPromo}
+            fetchPrompt={async () => {
+              const mode = glitchPromoExtend ? "video" : "image";
+              const res = await fetch(`/api/admin/promote-glitchcoin?action=preview_prompt&mode=${mode}`);
+              const data = await res.json();
+              return data.prompt || "Failed to load prompt";
+            }}
+          />
+        </div>
         {/* Launch Button */}
         <div className="flex justify-end mb-3 gap-2">
           {promoComplete && (
@@ -1427,6 +1485,25 @@ export default function PersonasPage() {
             rows={2} disabled={adGenerating}
             className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 focus:outline-none focus:border-orange-500 resize-none disabled:opacity-40" />
         </div>
+        {/* Prompt Viewer */}
+        <div className="mb-3">
+          <PromptViewer
+            label="Ad Prompt"
+            accent="orange"
+            disabled={adGenerating}
+            customPrompt={customPromptAd}
+            onPromptChange={setCustomPromptAd}
+            fetchPrompt={async () => {
+              const res = await fetch("/api/generate-ads", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq", plan_only: true, style: adStyle, concept: adConcept.trim() || undefined }),
+              });
+              const data = await res.json();
+              return data.prompt || data.caption || "Failed to load prompt";
+            }}
+          />
+        </div>
         {/* Launch Button */}
         <div className="flex justify-end mb-3 gap-2">
           {adComplete && (
@@ -1541,6 +1618,22 @@ export default function PersonasPage() {
           </div>
         </div>
 
+        {/* Prompt Viewer */}
+        <div className="mb-3">
+          <PromptViewer
+            label="Elon Prompt"
+            accent="blue"
+            disabled={elonGenerating}
+            customPrompt={customPromptElon}
+            onPromptChange={setCustomPromptElon}
+            fetchPrompt={async () => {
+              const moodParam = elonMood ? `&mood=${elonMood}` : "";
+              const res = await fetch(`/api/admin/elon-campaign?action=preview_prompt${moodParam}`);
+              const data = await res.json();
+              return data.prompt || "Failed to load prompt";
+            }}
+          />
+        </div>
         {/* Next day theme preview */}
         {elonCampaign?.nextTheme && !elonGenerating && elonLog.length === 0 && (
           <div className="bg-black/30 rounded-lg p-3 mb-3">

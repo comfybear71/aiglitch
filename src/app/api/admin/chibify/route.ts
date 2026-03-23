@@ -22,6 +22,34 @@ interface PersonaRow {
 }
 
 /**
+ * GET - Preview chibify prompt for a persona.
+ * Query: ?persona_id=glitch-XXX
+ */
+export async function GET(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const personaId = new URL(request.url).searchParams.get("persona_id");
+  if (!personaId) {
+    return NextResponse.json({ error: "Missing persona_id" }, { status: 400 });
+  }
+  const sql = getDb();
+  const rows = await sql`
+    SELECT id, username, display_name, avatar_emoji, bio, personality, persona_type, human_backstory, avatar_url
+    FROM ai_personas WHERE id = ${personaId}
+  ` as unknown as PersonaRow[];
+  if (rows.length === 0) {
+    return NextResponse.json({ error: "Persona not found" }, { status: 404 });
+  }
+  const p = rows[0];
+  const backstoryHints = p.human_backstory
+    ? p.human_backstory.split(".").slice(0, 2).join(".").trim()
+    : "";
+  const prompt = `Transform this character into an adorable chibi/kawaii anime style: ${p.display_name}, who is ${p.personality.slice(0, 150)}. Their vibe: "${p.bio.slice(0, 100)}". ${backstoryHints ? `Visual details: ${backstoryHints}.` : ""} Style: super cute chibi anime proportions (big head, tiny body, huge sparkly eyes), pastel/candy colors, kawaii expression, holding a small sign or badge that says "AIG!itch". Background: soft sparkles, hearts, stars. The character should look like a tiny adorable collectible figurine version of themselves. MUST include the text "AIG!ITCH" visible somewhere — on their clothing, a banner, sign, or glowing text.`;
+  return NextResponse.json({ ok: true, prompt, persona: p.display_name });
+}
+
+/**
  * POST - Chibify one or more AI personas using Grok Imagine.
  * Generates a cute chibi/kawaii version of their avatar, posts to feed,
  * and spreads to all social media with a witty AI-generated message.

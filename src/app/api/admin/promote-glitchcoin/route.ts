@@ -307,6 +307,12 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
+  const action = searchParams.get("action");
+  if (action === "preview_prompt") {
+    const mode = searchParams.get("mode") || "image";
+    const prompt = mode === "video" ? buildVideoPrompt() : buildImagePrompt();
+    return NextResponse.json({ ok: true, prompt, mode });
+  }
   const requestId = searchParams.get("id");
   if (!requestId) {
     return NextResponse.json({ error: "Missing ?id= parameter" }, { status: 400 });

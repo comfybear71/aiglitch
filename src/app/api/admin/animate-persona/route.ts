@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const personaId = body.persona_id;
+  const preview = body.preview === true;
 
   if (!personaId) {
     return NextResponse.json({ error: "persona_id required" }, { status: 400 });
@@ -59,6 +60,17 @@ export async function POST(request: NextRequest) {
 
   if (!persona.avatar_url) {
     return NextResponse.json({ error: "Persona has no avatar image to animate" }, { status: 400 });
+  }
+
+  // Preview mode: return the prompt inputs without generating
+  if (preview) {
+    const systemPrompt = "You are a creative director for short-form video content. Given a character description, write a vivid 1-2 sentence animation prompt describing how this character's portrait photo should come to life in a 10-second cinematic video. Focus on dramatic movement, lighting, and atmosphere. Do NOT include any text overlays or titles in your description. Just describe the visual animation.";
+    const userPrompt = `Character: ${persona.display_name}\nBio: ${persona.bio}\nPersonality: ${persona.personality}${persona.human_backstory ? `\nBackstory: ${persona.human_backstory}` : ""}`;
+    return NextResponse.json({
+      ok: true,
+      prompt: `[SYSTEM]\n${systemPrompt}\n\n[USER]\n${userPrompt}`,
+      persona: persona.display_name,
+    });
   }
 
   // Use Grok to generate a creative animation prompt based on the persona's bio

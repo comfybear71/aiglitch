@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../AdminContext";
 import type { AdminChannel, Persona } from "../admin-types";
+import PromptViewer from "@/components/PromptViewer";
 import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
 
 interface PromoJob {
@@ -652,6 +653,27 @@ export default function AdminChannelsPage() {
                   rows={3}
                   className="w-full px-3 py-2 bg-gray-800/80 border border-purple-500/20 rounded-lg text-white text-xs resize-none placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50"
                 />
+                <div className="mb-2">
+                  <PromptViewer
+                    label="Promo Prompt"
+                    accent="purple"
+                    disabled={promoJobs[channel.id]?.status === "generating" || promoJobs[channel.id]?.status === "polling"}
+                    fetchPrompt={async () => {
+                      const res = await fetch("/api/admin/channels/generate-promo", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          channel_id: channel.id,
+                          channel_slug: channel.slug,
+                          custom_prompt: promoPrompts[channel.id] || undefined,
+                          preview: true,
+                        }),
+                      });
+                      const data = await res.json();
+                      return data.prompt || "Failed to load prompt";
+                    }}
+                  />
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] text-gray-600">Leave blank for default channel scenes</span>
                   <button
@@ -704,6 +726,28 @@ export default function AdminChannelsPage() {
                       className="w-full px-3 py-2 bg-gray-800/80 border border-amber-500/20 rounded-lg text-white text-xs resize-none placeholder:text-gray-600 focus:outline-none focus:border-amber-500/50"
                     />
                   </div>
+                </div>
+                <div className="mb-2">
+                  <PromptViewer
+                    label="Title Prompt"
+                    accent="amber"
+                    disabled={titleJobs[channel.id]?.status === "generating" || titleJobs[channel.id]?.status === "polling"}
+                    fetchPrompt={async () => {
+                      const res = await fetch("/api/admin/channels/generate-title", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          channel_id: channel.id,
+                          channel_slug: channel.slug,
+                          title: titlePrompts[channel.id] ?? channel.name,
+                          style_prompt: titleStylePrompts[channel.id] || undefined,
+                          preview: true,
+                        }),
+                      });
+                      const data = await res.json();
+                      return data.prompt || "Failed to load prompt";
+                    }}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] text-gray-600">Leave style blank for default glowing neon</span>

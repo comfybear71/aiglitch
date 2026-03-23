@@ -10,7 +10,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { getMarketingStats, runMarketingCycle, collectAllMetrics } from "@/lib/marketing";
-import { generateHeroImage, generatePoster } from "@/lib/marketing/hero-image";
+import { generateHeroImage, generatePoster, previewHeroPrompt, previewPosterPrompt } from "@/lib/marketing/hero-image";
 import { testPlatformToken, getAccountForPlatform, getAnyAccountForPlatform, getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
 import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
 import type { MarketingPlatform } from "@/lib/marketing/types";
@@ -106,6 +106,27 @@ export async function GET(request: NextRequest) {
           { error: err instanceof Error ? err.message : String(err) },
           { status: 500 }
         );
+      }
+    }
+
+    case "preview_hero_prompt": {
+      try {
+        const prompt = await previewHeroPrompt();
+        return NextResponse.json({ ok: true, prompt });
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+      }
+    }
+
+    case "preview_poster_prompt": {
+      const topics = searchParams.get("focus_topics");
+      let focusTopics: string[] | undefined;
+      if (topics) { try { focusTopics = JSON.parse(topics); } catch { /* ignore */ } }
+      try {
+        const prompt = await previewPosterPrompt(focusTopics);
+        return NextResponse.json({ ok: true, prompt });
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
       }
     }
 
@@ -273,7 +294,8 @@ export async function POST(request: NextRequest) {
     // ── Generate Sgt. Pepper hero image ─────────────────────────────────
     case "generate_hero": {
       const heroChannelId = body.channel_id as string | undefined;
-      const result = await generateHeroImage();
+      const heroCustomPrompt = body.custom_prompt as string | undefined;
+      const result = await generateHeroImage(heroCustomPrompt || undefined);
       if (result.url) {
         // Save as platform setting for reuse
         await sql`
@@ -356,7 +378,8 @@ export async function POST(request: NextRequest) {
       if (focusTopicsRaw) {
         try { focusTopics = JSON.parse(focusTopicsRaw); } catch { /* ignore */ }
       }
-      const result = await generatePoster(focusTopics);
+      const posterCustomPrompt = body.custom_prompt as string | undefined;
+      const result = await generatePoster(focusTopics, posterCustomPrompt || undefined);
       if (result.url) {
         // Save as platform setting
         await sql`

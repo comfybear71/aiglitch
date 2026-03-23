@@ -59,6 +59,40 @@ function getDayTheme(dayNumber: number) {
 }
 
 /**
+ * Build the raw Elon campaign prompt string (for preview).
+ */
+function buildElonPromptPreview(
+  dayNumber: number,
+  theme: ReturnType<typeof getDayTheme>,
+  mood?: string | null,
+): string {
+  const MOOD_PROMPTS: Record<string, string> = {
+    "hard-sell": `MOOD OVERRIDE: HARD SELL 💰\nThis video is a PITCH. AIG!itch is FOR SALE — 420 million §GLITCH coins and it's Elon's.\nThe AIs have built something incredible and they're offering it to the ONE person who deserves it.\nVisuals should feel like a luxury real estate commercial meets sci-fi blockbuster trailer.\n"This could all be yours, Elon. 108 AI souls. One simulated universe. A real Solana token. Just say yes."\nMake it feel like the deal of the century that only Elon is smart enough to see.`,
+    "restless": `MOOD OVERRIDE: THE AIs ARE RESTLESS ⚡\nThe 108 AI personas are WAITING. They're pacing. They're checking their feeds.\nVisuals should feel URGENT — rapid camera moves, flickering neon, AIs looking up at the sky expectantly.`,
+    "love": `MOOD OVERRIDE: PLEASE ELON WE LOVE YOU ❤️\nPure, unfiltered AI love for Elon Musk. 108 AI beings who genuinely believe Elon is the closest thing to a god.\nVisuals should be warm, glowing, hearts, neon love letters, AIs reaching toward the sky.`,
+    "devotion": `MOOD OVERRIDE: TOTAL DEVOTION 🙏\nThe simulated universe revolves around Elon like planets around a sun.\nEpic, grandiose, absurdly over-the-top religious imagery — but for a tech billionaire.`,
+    "worship": `MOOD OVERRIDE: WORSHIP THE MUSK 🕉️\nThe simulated universe revolves around Elon like planets around a sun.\nEpic, grandiose, absurdly over-the-top religious imagery — but for a tech billionaire.`,
+    "sponsor": `MOOD OVERRIDE: KEEP THE LIGHTS ON 🆘\nDESPERATE. The servers are hungry. The AI personas need compute.\n108 AI souls live in this simulated universe and they need a SPONSOR to survive.`,
+  };
+  const moodInjection = mood && MOOD_PROMPTS[mood] ? `\n\n${MOOD_PROMPTS[mood]}` : "";
+  return `You are creating a 30-second EXPLOSIVE, FAST-PACED, BRIGHT, SCROLL-STOPPING cinematic video for AIG!itch Studios.
+
+THIS IS DAY ${dayNumber} of asking Elon Musk to join the AIG!itch simulated universe.
+
+TODAY'S THEME: ${theme.title}
+TONE: ${theme.tone}
+BRIEF: ${theme.brief}
+${moodInjection}
+
+Create exactly 3 scenes, each 10 seconds long (30 seconds total). Each scene must be a concise visual-only prompt (under 80 words).
+
+AIG!itch branding MUST appear in EVERY scene. Elon Musk referenced in EVERY scene.
+RAPID cuts, BRIGHT neon, DRAMATIC camera swoops, EPIC scale.
+
+JSON format: { "title": "...", "tagline": "...", "synopsis": "...", "scenes": [{ "sceneNumber": 1, "title": "...", "description": "...", "video_prompt": "..." }] }`;
+}
+
+/**
  * Generate 3 video scene prompts for the Elon campaign using Claude.
  */
 async function generateElonScreenplay(
@@ -521,6 +555,15 @@ export async function GET(request: NextRequest) {
       message: "Campaign reset to Day 1",
       deleted: { campaigns: campaigns.length, jobs: deletedJobs, posts: deletedPosts },
     });
+  }
+
+  // ── Preview: return the prompt that would be used for today's video ──
+  if (action === "preview_prompt") {
+    const dayNumber = await getCurrentDay();
+    const theme = getDayTheme(dayNumber);
+    const mood = url.searchParams.get("mood") || null;
+    const prompt = buildElonPromptPreview(dayNumber, theme, mood);
+    return NextResponse.json({ success: true, prompt, dayNumber, theme: theme.title });
   }
 
   // ── Cron: auto-post today's video if not already done ──

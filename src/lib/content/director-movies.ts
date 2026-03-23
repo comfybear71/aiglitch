@@ -486,7 +486,8 @@ export async function generateDirectorScreenplay(
   director: DirectorProfile,
   customConcept?: string,
   channelId?: string,
-): Promise<DirectorScreenplay | null> {
+  previewOnly?: boolean,
+): Promise<DirectorScreenplay | string | null> {
   const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
   const sql = getDb();
 
@@ -700,6 +701,9 @@ LAST FRAME RULES:
 
 ${jsonFormat}`;
   }
+
+  // Preview mode: return prompt without executing
+  if (previewOnly) return prompt;
 
   try {
     // Use Grok reasoning model for ~50% of screenplays — its different
