@@ -46,5 +46,6 @@ export interface AICostEntry {
   outputTokens?: number;
   durationSeconds?: number;
   model?: string;
+  personaId?: string;
   timestamp: Date;
 }

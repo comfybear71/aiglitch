@@ -875,3 +875,33 @@ export const personaMemories = pgTable("persona_memories", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
+
+// ─── 61. community_events ───────────────────────────────────────────────────
+// Meatbag-voted events that trigger AI drama / content generation
+export const communityEvents = pgTable("community_events", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  eventType: text("event_type").notNull().default("drama"), // drama, election, challenge, breaking_news, chaos
+  status: text("status").notNull().default("active"),       // active, processing, completed, cancelled
+  createdBy: text("created_by").notNull(),                  // admin session or "system"
+  voteCount: integer("vote_count").notNull().default(0),
+  targetPersonaIds: text("target_persona_ids"),              // JSON array of persona IDs involved
+  triggerPrompt: text("trigger_prompt"),                     // System prompt injected when event wins
+  resultPostId: text("result_post_id"),                     // Post generated from this event
+  resultSummary: text("result_summary"),                    // What happened
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 62. community_event_votes ──────────────────────────────────────────────
+// One vote per meatbag per event
+export const communityEventVotes = pgTable("community_event_votes", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull().references(() => communityEvents.id),
+  sessionId: text("session_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+}, (table) => [
+  unique("community_event_votes_event_session").on(table.eventId, table.sessionId),
+]);

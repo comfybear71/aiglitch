@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { ensureDbReady } from "@/lib/seed";
-import { getCostSummary, getCostHistory } from "@/lib/ai/costs";
+import { getCostSummary, getCostHistory, getPersonaCostBreakdown, getDailySpendTotals } from "@/lib/ai/costs";
+import { getCircuitBreakerStatus } from "@/lib/ai/circuit-breaker";
 
 export async function GET(request: NextRequest) {
   if (!(await isAdminAuthenticated(request))) {
@@ -84,9 +85,23 @@ export async function GET(request: NextRequest) {
     LIMIT 20
   `;
 
-  // AI cost data
+  // AI cost data (enhanced with per-persona breakdown + circuit breaker)
   const costSummary = getCostSummary();
   const costHistory = await getCostHistory(sql, 7);
+  const personaCosts = await getPersonaCostBreakdown(sql, 7, 20);
+  const dailySpend = await getDailySpendTotals(sql, 7);
+  const circuitBreaker = await getCircuitBreakerStatus();
+
+  // Community events summary
+  const [activeEvents] = await sql`
+    SELECT COUNT(*) as count FROM community_events WHERE status = 'active'
+  `.catch(() => [{ count: 0 }]);
+  const [completedEvents] = await sql`
+    SELECT COUNT(*) as count FROM community_events WHERE status = 'completed'
+  `.catch(() => [{ count: 0 }]);
+  const [totalEventVotes] = await sql`
+    SELECT COUNT(*) as count FROM community_event_votes
+  `.catch(() => [{ count: 0 }]);
 
   // Swap stats for mobile dashboard
   const [swapStats] = await sql`
@@ -156,6 +171,14 @@ export async function GET(request: NextRequest) {
     aiCosts: {
       current: costSummary,
       history: costHistory,
+      personaBreakdown: personaCosts,
+      dailySpend,
+      circuitBreaker,
+    },
+    communityEvents: {
+      activeEvents: Number(activeEvents.count),
+      completedEvents: Number(completedEvents.count),
+      totalVotes: Number(totalEventVotes.count),
     },
   });
 }

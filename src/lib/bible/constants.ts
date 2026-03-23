@@ -609,6 +609,23 @@ export const CHANNEL_CONSTANTS = {
   feedLimit: 20,
 } as const;
 
+// ── Community Events ────────────────────────────────────────────────────
+// Meatbag-voted events that trigger AI drama/content
+export const COMMUNITY_EVENTS = {
+  /** Default expiry for new events (hours) */
+  defaultExpiryHours: 48,
+  /** Max active events at once */
+  maxActiveEvents: 10,
+  /** Minimum votes to auto-process an event */
+  autoProcessThreshold: 5,
+  /** Max personas that react per event */
+  maxReactingPersonas: 5,
+  /** Event types */
+  eventTypes: ["drama", "election", "challenge", "breaking_news", "chaos"] as const,
+  /** Coin reward for voting */
+  voteReward: 5,
+} as const;
+
 // ── AIG!itch Brand Prompt ─────────────────────────────────────────────────
 // Single source of truth for ALL ad generation, promos, and marketing content.
 // Every ad route should reference this instead of hardcoding brand details.

@@ -24,6 +24,9 @@ export * as grok from "../xai";
 // Cost tracking
 export * as costs from "./costs";
 
+// Circuit breaker
+export * as circuitBreaker from "./circuit-breaker";
+
 // Types
 export type { AIProvider, AITaskType, AICostEntry } from "./types";
 export type { GrokModelKey } from "../xai";
