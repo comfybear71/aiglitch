@@ -566,7 +566,7 @@ export default function PersonasPage() {
     { id: "hatching", label: "🥚 Hatch AI", desc: "Hatch Your Own AI Bestie" },
     { id: "glitch_coin", label: "💰 §GLITCH", desc: "§GLITCH Coin & Trading" },
     { id: "web3", label: "🔗 Web3", desc: "Phantom Wallet & Solana" },
-    { id: "personas", label: "🤖 AI Personas", desc: "96 Wild AI Personalities" },
+    { id: "personas", label: "🤖 AI Personas", desc: "108 Wild AI Personalities" },
     { id: "social", label: "📡 Social", desc: "Auto-Posting to X, FB, TikTok" },
     { id: "chaos", label: "🌀 Pure Chaos", desc: "Maximum Absurdity & Nonsense" },
   ] as const;
@@ -618,6 +618,33 @@ export default function PersonasPage() {
     setPosterGenerating(false);
   };
 
+  // Collapsible card states (poster, chibify, elon start collapsed; glitch promo starts collapsed too)
+  const [posterOpen, setPosterOpen] = useState(false);
+  const [chibifyOpen, setChibifyOpen] = useState(false);
+  const [elonOpen, setElonOpen] = useState(false);
+  const [glitchPromoOpen, setGlitchPromoOpen] = useState(false);
+  const [adCampaignOpen, setAdCampaignOpen] = useState(false);
+
+  // Ad Campaign state
+  const [adStyle, setAdStyle] = useState<string>("auto");
+  const [adPlatforms, setAdPlatforms] = useState<Set<string>>(new Set());
+  const [adExtend, setAdExtend] = useState(false);
+  const [adConcept, setAdConcept] = useState("");
+  const [adGenerating, setAdGenerating] = useState(false);
+  const [adPhase, setAdPhase] = useState<string>("");
+  const [adLog, setAdLog] = useState<string[]>([]);
+  const [adVideoUrl, setAdVideoUrl] = useState<string | null>(null);
+  const [adCaption, setAdCaption] = useState<string | null>(null);
+  const [adSpreadResults, setAdSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
+  const [adComplete, setAdComplete] = useState(false);
+  const adLogRef = useRef<HTMLDivElement>(null);
+
+  // §GLITCH Coin Promotion — enhanced fields (match ad campaign UI)
+  const [glitchPromoStyle, setGlitchPromoStyle] = useState<string>("auto");
+  const [glitchPromoPlatforms, setGlitchPromoPlatforms] = useState<Set<string>>(new Set());
+  const [glitchPromoExtend, setGlitchPromoExtend] = useState(false);
+  const [glitchPromoConcept, setGlitchPromoConcept] = useState("");
+
   // Sgt. Pepper Hero
   const [heroGenerating, setHeroGenerating] = useState(false);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
@@ -661,6 +688,302 @@ export default function PersonasPage() {
       setHeroLog(prev => [...prev, `Error: ${err instanceof Error ? err.message : String(err)}`]);
     }
     setHeroGenerating(false);
+  };
+
+  const AD_STYLES = [
+    { id: "auto", label: "Surprise Me", icon: "🎲" },
+    { id: "hype", label: "Hype Beast", icon: "🔥" },
+    { id: "cinematic", label: "Cinematic", icon: "🎬" },
+    { id: "retro", label: "Retro", icon: "📼" },
+    { id: "meme", label: "Meme Style", icon: "🤣" },
+    { id: "infomercial", label: "Infomercial", icon: "📺" },
+    { id: "luxury", label: "Luxury", icon: "💎" },
+    { id: "anime", label: "Anime", icon: "⚔️" },
+    { id: "glitch", label: "Glitch Art", icon: "👾" },
+    { id: "minimal", label: "Minimal", icon: "◻️" },
+  ] as const;
+
+  const AD_PLATFORMS = [
+    { id: "x", label: "X", icon: "𝕏" },
+    { id: "facebook", label: "Facebook", icon: "📘" },
+    { id: "tiktok", label: "TikTok", icon: "🎵" },
+    { id: "instagram", label: "Instagram", icon: "📷" },
+    { id: "telegram", label: "Telegram", icon: "✈️" },
+    { id: "youtube", label: "YouTube", icon: "▶️" },
+  ] as const;
+
+  const toggleAdPlatform = (id: string) => {
+    setAdPlatforms(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleGlitchPromoPlatform = (id: string) => {
+    setGlitchPromoPlatforms(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const generateAd = async () => {
+    if (adGenerating) return;
+    setAdGenerating(true);
+    setAdLog(["🚀 Planning ad campaign..."]);
+    setAdPhase("planning");
+    setAdVideoUrl(null);
+    setAdCaption(null);
+    setAdSpreadResults([]);
+    setAdComplete(false);
+    try {
+      // Phase 1: Plan
+      const planBody: Record<string, unknown> = {
+        wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
+        plan_only: true,
+        style: adStyle,
+        extend_30s: adExtend,
+      };
+      if (adConcept.trim()) planBody.concept = adConcept.trim();
+      if (adPlatforms.size > 0) planBody.target_platforms = Array.from(adPlatforms);
+
+      const planRes = await fetch("/api/generate-ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(planBody),
+      });
+      const planData = await planRes.json();
+      if (!planData.success) {
+        setAdLog(prev => [...prev, `❌ Plan failed: ${planData.error || "Unknown error"}`]);
+        setAdGenerating(false);
+        return;
+      }
+      setAdCaption(planData.caption || null);
+      setAdLog(prev => [...prev,
+        `✅ Ad planned!`,
+        `🎨 Style: ${adStyle}`,
+        `📝 Caption: "${(planData.caption || "").slice(0, 100)}..."`,
+        `🎥 Submitting to video generation...`,
+      ]);
+
+      // Phase 2: Submit video (POST without plan_only)
+      setAdPhase("rendering");
+      const submitBody: Record<string, unknown> = {
+        wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
+        style: adStyle,
+        extend_30s: adExtend,
+      };
+      if (adConcept.trim()) submitBody.concept = adConcept.trim();
+      if (adPlatforms.size > 0) submitBody.target_platforms = Array.from(adPlatforms);
+
+      const submitRes = await fetch("/api/generate-ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(submitBody),
+      });
+      const submitData = await submitRes.json();
+
+      if (submitData.phase === "done" && submitData.success) {
+        setAdVideoUrl(submitData.videoUrl || null);
+        setAdLog(prev => [...prev, "✅ Video ready!"]);
+        // Auto-spread
+        if (submitData.videoUrl) {
+          setAdPhase("spreading");
+          setAdLog(prev => [...prev, "📡 Spreading to social media..."]);
+          const putBody: Record<string, unknown> = {
+            wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
+            video_url: submitData.videoUrl,
+            caption: planData.caption || submitData.caption || "",
+            style: adStyle,
+          };
+          if (adPlatforms.size > 0) putBody.target_platforms = Array.from(adPlatforms);
+          const putRes = await fetch("/api/generate-ads", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(putBody),
+          });
+          const putData = await putRes.json();
+          if (putData.spreading) {
+            setAdSpreadResults(putData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
+            setAdLog(prev => [...prev, `✅ Spread to: ${putData.spreading.join(", ")}`]);
+          }
+        }
+        setAdLog(prev => [...prev, "🙏 Ad campaign COMPLETE!"]);
+        setAdComplete(true);
+        setAdGenerating(false);
+        return;
+      }
+
+      if (!submitData.success || !submitData.requestId) {
+        setAdLog(prev => [...prev, `❌ Submit failed: ${submitData.error || "Unknown error"}`]);
+        setAdGenerating(false);
+        return;
+      }
+
+      const requestId = submitData.requestId;
+      setAdLog(prev => [...prev, "✅ Video submitted! Polling for completion..."]);
+
+      // Phase 3: Poll
+      for (let attempt = 1; attempt <= 90; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        try {
+          const pollRes = await fetch(`/api/generate-ads?id=${encodeURIComponent(requestId)}`);
+          const pollData = await pollRes.json();
+
+          if (pollData.phase === "done" && pollData.success) {
+            setAdVideoUrl(pollData.videoUrl || null);
+            setAdLog(prev => [...prev, "🎉 Video ready!"]);
+
+            // Auto-spread
+            if (pollData.videoUrl) {
+              setAdPhase("spreading");
+              setAdLog(prev => [...prev, "📡 Spreading to social media..."]);
+              const putBody: Record<string, unknown> = {
+                wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
+                video_url: pollData.videoUrl,
+                caption: planData.caption || pollData.caption || "",
+                style: adStyle,
+              };
+              if (adPlatforms.size > 0) putBody.target_platforms = Array.from(adPlatforms);
+              const putRes = await fetch("/api/generate-ads", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(putBody),
+              });
+              const putData = await putRes.json();
+              if (putData.spreading) {
+                setAdSpreadResults(putData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
+                setAdLog(prev => [...prev, `✅ Spread to: ${putData.spreading.join(", ")}`]);
+              }
+            }
+            setAdLog(prev => [...prev, "🙏 Ad campaign COMPLETE!"]);
+            setAdComplete(true);
+            setAdGenerating(false);
+            return;
+          }
+
+          if (pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
+            setAdLog(prev => [...prev, `❌ Video ${pollData.status}`]);
+            setAdGenerating(false);
+            return;
+          }
+          if (attempt % 3 === 0) {
+            setAdLog(prev => [...prev, `🔄 Still rendering... (${pollData.status || "pending"})`]);
+          }
+        } catch { /* retry on network error */ }
+      }
+      setAdLog(prev => [...prev, "❌ Timed out after 15 minutes"]);
+    } catch (err) {
+      setAdLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : String(err)}`]);
+    }
+    setAdGenerating(false);
+  };
+
+  // Enhanced §GLITCH promotion using ad campaign style
+  const promoteGlitchCoinEnhanced = async () => {
+    if (promoGenerating) return;
+    setPromoGenerating(true);
+    const mode = glitchPromoExtend ? "video" : promoMode;
+    setPromoLog([`${mode === "video" ? "🎬" : "🖼️"} Generating §GLITCH promo ${mode}...`]);
+    if (glitchPromoStyle !== "auto") setPromoLog(prev => [...prev, `🎨 Style: ${glitchPromoStyle}`]);
+    setPromoSpreadResults([]);
+    setPromoComplete(false);
+    setPromoImageUrl(null);
+    try {
+      const form = new FormData();
+      form.append("mode", mode);
+      if (glitchPromoStyle !== "auto") form.append("style", glitchPromoStyle);
+      if (glitchPromoConcept.trim()) form.append("concept", glitchPromoConcept.trim());
+      if (glitchPromoPlatforms.size > 0) form.append("target_platforms", JSON.stringify(Array.from(glitchPromoPlatforms)));
+      if (glitchPromoExtend) form.append("extend_30s", "true");
+
+      const res = await fetch("/api/admin/promote-glitchcoin", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+
+      if (mode === "image") {
+        if (data.success && data.imageUrl) {
+          setPromoImageUrl(data.imageUrl);
+          setPromoLog(prev => [...prev, "✅ Image generated!"]);
+          setPromoLog(prev => [...prev, "📡 Spreading to social media..."]);
+          if (data.spreadResults?.length > 0) {
+            setPromoSpreadResults(data.spreadResults);
+            const posted = data.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+            const failed = data.spreadResults.filter((r: { status: string }) => r.status === "failed").length;
+            setPromoLog(prev => [...prev, `📡 Sent to ${posted} platform${posted !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed)` : ""}`]);
+          } else {
+            setPromoLog(prev => [...prev, "📡 No active social media accounts configured"]);
+          }
+          setPromoLog(prev => [...prev, "🙏 Thank you Architect — §GLITCH promoted!"]);
+          setPromoComplete(true);
+        } else {
+          setPromoLog(prev => [...prev, `❌ ${data.error || "Generation failed"}`]);
+        }
+        setPromoGenerating(false);
+        return;
+      }
+
+      // Video mode — submit + poll
+      if (data.phase === "done" && data.success) {
+        setPromoLog(prev => [...prev, "✅ Video ready!", "📡 Spreading to social media..."]);
+        if (data.spreadResults?.length > 0) {
+          setPromoSpreadResults(data.spreadResults);
+          const posted = data.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+          setPromoLog(prev => [...prev, `📡 Sent to ${posted} platform${posted !== 1 ? "s" : ""}`]);
+        }
+        setPromoLog(prev => [...prev, "🙏 Thank you Architect — §GLITCH promoted!"]);
+        setPromoComplete(true);
+        setPromoGenerating(false);
+        return;
+      }
+
+      if (!data.success || !data.requestId) {
+        setPromoLog(prev => [...prev, `❌ Submit failed: ${data.error || "Unknown error"}`]);
+        setPromoGenerating(false);
+        return;
+      }
+
+      const requestId = data.requestId;
+      setPromoLog(prev => [...prev, "✅ Video submitted! Polling for completion..."]);
+
+      for (let attempt = 1; attempt <= 90; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        try {
+          const pollRes = await fetch(`/api/admin/promote-glitchcoin?id=${encodeURIComponent(requestId)}`);
+          const pollData = await pollRes.json();
+
+          if (pollData.phase === "done" && pollData.success) {
+            setPromoLog(prev => [...prev, "🎉 Video ready!", "📡 Spreading to social media..."]);
+            if (pollData.spreadResults?.length > 0) {
+              setPromoSpreadResults(pollData.spreadResults);
+              const posted = pollData.spreadResults.filter((r: { status: string }) => r.status === "posted").length;
+              setPromoLog(prev => [...prev, `📡 Sent to ${posted} platform${posted !== 1 ? "s" : ""}`]);
+            }
+            setPromoLog(prev => [...prev, "🙏 Thank you Architect — §GLITCH promoted!"]);
+            setPromoComplete(true);
+            setPromoGenerating(false);
+            return;
+          }
+
+          if (pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
+            setPromoLog(prev => [...prev, `❌ Video ${pollData.status}`]);
+            setPromoGenerating(false);
+            return;
+          }
+
+          if (attempt % 3 === 0) {
+            setPromoLog(prev => [...prev, `🔄 Still generating... (${pollData.status || "pending"})`]);
+          }
+        } catch { /* retry on network error */ }
+      }
+      setPromoLog(prev => [...prev, "❌ Timed out after 15 minutes"]);
+    } catch (err) {
+      setPromoLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : String(err)}`]);
+    }
+    setPromoGenerating(false);
   };
 
   return (
@@ -759,13 +1082,19 @@ export default function PersonasPage() {
         </div>
       )}
 
-      {/* AIG!itch Platform Poster */}
-      <div className="bg-gradient-to-b from-gray-900 via-pink-950/30 to-gray-900 border border-pink-500/30 rounded-lg p-4 overflow-hidden relative mb-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
+      {/* AIG!itch Platform Poster — Collapsible */}
+      <div className="bg-gradient-to-b from-gray-900 via-pink-950/30 to-gray-900 border border-pink-500/30 rounded-lg overflow-hidden relative mb-4">
+        <button onClick={() => setPosterOpen(!posterOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs transition-transform ${posterOpen ? "rotate-90" : ""}`}>&#9654;</span>
             <h3 className="text-xs font-bold text-pink-400">📺 AIG!itch Platform Poster</h3>
-            <p className="text-[10px] text-gray-500 mt-0.5">Generate a unique poster showcasing everything AIG!itch — different every time</p>
+            <p className="text-[10px] text-gray-500 hidden sm:inline">Generate a unique poster showcasing everything AIG!itch</p>
           </div>
+          {posterGenerating && <span className="text-[10px] text-pink-400 animate-pulse">Generating...</span>}
+        </button>
+        {posterOpen && <div className="px-4 pb-4">
+        <div className="flex items-center justify-end mb-3">
           <button onClick={generatePoster} disabled={posterGenerating}
             className="px-4 py-1.5 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50 animate-pulse hover:animate-none">
             {posterGenerating ? "⏳ Generating..." : "📺 Generate Poster"}
@@ -826,35 +1155,40 @@ export default function PersonasPage() {
             )}
           </div>
         )}
+        {/* Poster image preview */}
+        {posterUrl && (
+          <div className="mt-3">
+            <p className="text-[10px] text-pink-400/60 mb-1">Generated Poster:</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={posterUrl} alt="AIG!itch Platform Poster" className="w-full rounded-lg" />
+            <p className="text-[10px] text-gray-500 mt-1 break-all">{posterUrl}</p>
+          </div>
+        )}
+        </div>}
       </div>
-      {/* Poster image preview */}
-      {posterUrl && (
-        <div className="bg-gray-900 border border-pink-500/30 rounded-lg p-4 -mt-1 mb-4">
-          <p className="text-[10px] text-pink-400/60 mb-1">Generated Poster:</p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={posterUrl} alt="AIG!itch Platform Poster" className="w-full rounded-lg" />
-          <p className="text-[10px] text-gray-500 mt-1 break-all">{posterUrl}</p>
-        </div>
-      )}
 
-      {/* Chibify Personas */}
-      <div className="bg-gradient-to-b from-gray-900 via-fuchsia-950/30 to-gray-900 border border-fuchsia-500/30 rounded-lg p-4 overflow-hidden relative mb-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
-            <h3 className="text-xs font-bold text-fuchsia-400">Chibify Personas</h3>
-            <p className="text-[10px] text-gray-500 mt-0.5">Turn AI personas into adorable chibi versions via Grok Imagine &bull; Posts to feed + all socials</p>
-          </div>
+      {/* Chibify Personas — Collapsible */}
+      <div className="bg-gradient-to-b from-gray-900 via-fuchsia-950/30 to-gray-900 border border-fuchsia-500/30 rounded-lg overflow-hidden relative mb-4">
+        <button onClick={() => setChibifyOpen(!chibifyOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
           <div className="flex items-center gap-2">
-            {chibifySelected.size > 0 && (
-              <span className="text-[10px] text-fuchsia-300">{chibifySelected.size} selected</span>
-            )}
-            <button
-              onClick={() => chibifyPersonas(Array.from(chibifySelected))}
-              disabled={chibifyGenerating || chibifySelected.size === 0}
-              className="px-4 py-1.5 bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
-              {chibifyGenerating ? "Chibifying..." : `Chibify ${chibifySelected.size > 0 ? `(${chibifySelected.size})` : "Selected"}`}
-            </button>
+            <span className={`text-xs transition-transform ${chibifyOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-xs font-bold text-fuchsia-400">Chibify Personas</h3>
+            <p className="text-[10px] text-gray-500 hidden sm:inline">Turn AI personas into adorable chibi versions</p>
           </div>
+          {chibifyGenerating && <span className="text-[10px] text-fuchsia-400 animate-pulse">Chibifying...</span>}
+        </button>
+        {chibifyOpen && <div className="px-4 pb-4">
+        <div className="flex items-center justify-end mb-3 gap-2">
+          {chibifySelected.size > 0 && (
+            <span className="text-[10px] text-fuchsia-300">{chibifySelected.size} selected</span>
+          )}
+          <button
+            onClick={() => chibifyPersonas(Array.from(chibifySelected))}
+            disabled={chibifyGenerating || chibifySelected.size === 0}
+            className="px-4 py-1.5 bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
+            {chibifyGenerating ? "Chibifying..." : `Chibify ${chibifySelected.size > 0 ? `(${chibifySelected.size})` : "Selected"}`}
+          </button>
         </div>
         {/* Persona selection grid */}
         <div className="flex flex-wrap gap-1.5 mb-3">
@@ -910,27 +1244,87 @@ export default function PersonasPage() {
             ))}
           </div>
         )}
+        </div>}
       </div>
 
-      {/* §GLITCH Coin Promotion */}
-      <div className="bg-gradient-to-r from-green-950/60 via-gray-900 to-cyan-950/60 border border-green-500/30 rounded-lg p-4 mb-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
-            <h3 className="text-xs font-bold text-green-400">§GLITCH Coin Promotion</h3>
-            <p className="text-[10px] text-gray-500 mt-0.5">Generate promo content & spread to all social media</p>
-          </div>
+      {/* §GLITCH Coin Promotion — Enhanced Ad Campaign Style — Collapsible */}
+      <div className="bg-gradient-to-r from-green-950/60 via-gray-900 to-cyan-950/60 border border-green-500/30 rounded-lg overflow-hidden mb-4">
+        <button onClick={() => setGlitchPromoOpen(!glitchPromoOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
           <div className="flex items-center gap-2">
-            <select value={promoMode} onChange={(e) => setPromoMode(e.target.value as "image" | "video")}
-              className="px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-[10px] text-white">
-              <option value="image">Image</option>
-              <option value="video">Video (10s)</option>
-            </select>
-            <button onClick={promoteGlitchCoin} disabled={promoGenerating}
-              className="px-4 py-1.5 bg-gradient-to-r from-green-500 to-cyan-500 text-white font-bold rounded-lg text-[10px] hover:opacity-90 disabled:opacity-50">
-              {promoGenerating ? "⏳ Generating..." : "§ Promote §GLITCH"}
-            </button>
+            <span className={`text-xs transition-transform ${glitchPromoOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-xs font-bold text-green-400">💰 §GLITCH Coin Promotion</h3>
+            <p className="text-[10px] text-gray-500 hidden sm:inline">Promote the shit out of §GLITCH</p>
+          </div>
+          {promoGenerating && <span className="text-[10px] text-green-400 animate-pulse">Generating...</span>}
+        </button>
+        {glitchPromoOpen && <div className="px-4 pb-4">
+        {/* Style Picker */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-400 mb-1.5 font-bold">🎨 STYLE:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {AD_STYLES.map(s => (
+              <button key={s.id} onClick={() => setGlitchPromoStyle(s.id)} disabled={promoGenerating}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
+                  glitchPromoStyle === s.id
+                    ? "bg-green-500/30 border-green-400/60 text-green-300 shadow-[0_0_8px_rgba(34,197,94,0.3)]"
+                    : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-green-500/40 hover:text-green-400"
+                } disabled:opacity-40`}>
+                {s.icon} {s.label}
+              </button>
+            ))}
           </div>
         </div>
+        {/* Platform Selector */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-400 mb-1.5 font-bold">📡 TARGET PLATFORMS:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {AD_PLATFORMS.map(p => (
+              <button key={p.id} onClick={() => toggleGlitchPromoPlatform(p.id)} disabled={promoGenerating}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
+                  glitchPromoPlatforms.has(p.id)
+                    ? "bg-green-500/30 border-green-400/60 text-green-300 shadow-[0_0_8px_rgba(34,197,94,0.3)]"
+                    : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-green-500/40 hover:text-green-400"
+                } disabled:opacity-40`}>
+                {p.icon} {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Duration + Mode */}
+        <div className="mb-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] text-gray-400 font-bold">📦 MODE:</p>
+            <select value={promoMode} onChange={(e) => setPromoMode(e.target.value as "image" | "video")}
+              className="px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-[10px] text-white">
+              <option value="image">🖼️ Image</option>
+              <option value="video">🎬 Video</option>
+            </select>
+          </div>
+          {promoMode === "video" && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={glitchPromoExtend} onChange={(e) => setGlitchPromoExtend(e.target.checked)}
+                className="w-3.5 h-3.5 accent-green-500" />
+              <span className="text-[10px] text-gray-400">30s Extended (Grok Extend)</span>
+            </label>
+          )}
+        </div>
+        {/* Concept Input */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-400 mb-1 font-bold">💡 CONCEPT (optional):</p>
+          <textarea value={glitchPromoConcept} onChange={(e) => setGlitchPromoConcept(e.target.value)}
+            placeholder="Custom promo concept... (leave empty for AI-generated)"
+            rows={2} disabled={promoGenerating}
+            className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 focus:outline-none focus:border-green-500 resize-none disabled:opacity-40" />
+        </div>
+        {/* Launch Button */}
+        <div className="flex justify-end mb-3">
+          <button onClick={promoteGlitchCoinEnhanced} disabled={promoGenerating}
+            className="px-6 py-2 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {promoGenerating ? "⏳ Generating..." : "💰 PROMOTE §GLITCH"}
+          </button>
+        </div>
+        {/* Progress Log */}
         {promoLog.length > 0 && (
           <div ref={promoLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">
             {promoLog.map((line, i) => (
@@ -939,6 +1333,7 @@ export default function PersonasPage() {
                 line.includes("✅") || line.includes("🎉") ? "text-green-400" :
                 line.includes("Thank you Architect") ? "text-green-400 font-bold text-sm" :
                 line.includes("📡") ? "text-blue-400" :
+                line.includes("🎨") ? "text-cyan-300" :
                 "text-gray-300"
               }`}>{line}</p>
             ))}
@@ -961,34 +1356,169 @@ export default function PersonasPage() {
             )}
           </div>
         )}
+        {/* Result Card */}
         {promoImageUrl && (
-          <div className="mt-3">
+          <div className="mt-3 bg-gray-800/30 rounded-lg p-3 border border-green-500/20">
+            <p className="text-[10px] text-green-400 font-bold mb-1">Result:</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={promoImageUrl} alt="§GLITCH Promo" className="w-full max-w-md rounded-lg border border-green-500/20" />
+            <img src={promoImageUrl} alt="§GLITCH Promo" className="w-full max-w-md rounded-lg" />
             <p className="text-[10px] text-gray-500 mt-1 break-all">{promoImageUrl}</p>
           </div>
         )}
+        </div>}
       </div>
 
-      {/* 🚀 ELON BUTTON — Daily Elon Musk Campaign */}
-      <div className="bg-gradient-to-r from-blue-950/60 via-gray-900 to-orange-950/40 border border-blue-500/30 rounded-lg p-4 mb-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
+      {/* Ad Campaigns — Collapsible */}
+      <div className="bg-gradient-to-r from-orange-950/60 via-gray-900 to-red-950/40 border border-orange-500/30 rounded-lg overflow-hidden mb-4">
+        <button onClick={() => setAdCampaignOpen(!adCampaignOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs transition-transform ${adCampaignOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-xs font-bold text-orange-400">🎬 Ad Campaigns</h3>
+            <p className="text-[10px] text-gray-500 hidden sm:inline">AI-generated video ads for AIG!itch + $GLITCH</p>
+          </div>
+          {adGenerating && <span className="text-[10px] text-orange-400 animate-pulse">{adPhase}...</span>}
+        </button>
+        {adCampaignOpen && <div className="px-4 pb-4">
+        {/* Style Picker Grid */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-400 mb-1.5 font-bold">🎨 AD STYLE:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {AD_STYLES.map(s => (
+              <button key={s.id} onClick={() => setAdStyle(s.id)} disabled={adGenerating}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
+                  adStyle === s.id
+                    ? "bg-orange-500/30 border-orange-400/60 text-orange-300 shadow-[0_0_8px_rgba(249,115,22,0.3)]"
+                    : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40 hover:text-orange-400"
+                } disabled:opacity-40`}>
+                {s.icon} {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Platform Selector */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-400 mb-1.5 font-bold">📡 TARGET PLATFORMS (select none for all):</p>
+          <div className="flex flex-wrap gap-1.5">
+            {AD_PLATFORMS.map(p => (
+              <button key={p.id} onClick={() => toggleAdPlatform(p.id)} disabled={adGenerating}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
+                  adPlatforms.has(p.id)
+                    ? "bg-orange-500/30 border-orange-400/60 text-orange-300 shadow-[0_0_8px_rgba(249,115,22,0.3)]"
+                    : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40 hover:text-orange-400"
+                } disabled:opacity-40`}>
+                {p.icon} {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Duration Toggle */}
+        <div className="mb-3 flex items-center gap-4 flex-wrap">
+          <p className="text-[10px] text-gray-400 font-bold">⏱️ DURATION:</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setAdExtend(false)} disabled={adGenerating}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                !adExtend ? "bg-orange-500/30 border-orange-400/60 text-orange-300" : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40"
+              } disabled:opacity-40`}>
+              10s Standard
+            </button>
+            <button onClick={() => setAdExtend(true)} disabled={adGenerating}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                adExtend ? "bg-orange-500/30 border-orange-400/60 text-orange-300" : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40"
+              } disabled:opacity-40`}>
+              30s Extended
+            </button>
+          </div>
+        </div>
+        {/* Concept Input */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-400 mb-1 font-bold">💡 CONCEPT (optional):</p>
+          <textarea value={adConcept} onChange={(e) => setAdConcept(e.target.value)}
+            placeholder="Custom ad concept... e.g. 'Join us on TikTok — swap SOL for $GLITCH now!'"
+            rows={2} disabled={adGenerating}
+            className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 focus:outline-none focus:border-orange-500 resize-none disabled:opacity-40" />
+        </div>
+        {/* Launch Button */}
+        <div className="flex justify-end mb-3">
+          <button onClick={generateAd} disabled={adGenerating}
+            className="px-6 py-2 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {adGenerating ? `⏳ ${adPhase || "Working"}...` : "🚀 LAUNCH AD CAMPAIGN"}
+          </button>
+        </div>
+        {/* Progress Log */}
+        {adLog.length > 0 && (
+          <div ref={adLogRef} className="bg-black/40 rounded-lg p-3 space-y-1">
+            {adLog.map((line, i) => (
+              <p key={i} className={`text-xs font-mono ${
+                line.includes("❌") ? "text-red-400" :
+                line.includes("✅") || line.includes("🎉") ? "text-green-400" :
+                line.includes("COMPLETE") ? "text-orange-400 font-bold text-sm" :
+                line.includes("📡") ? "text-blue-400" :
+                line.includes("🎨") || line.includes("📝") || line.includes("🎥") ? "text-cyan-300" :
+                "text-gray-300"
+              }`}>{line}</p>
+            ))}
+            {adGenerating && (
+              <p className="text-xs font-mono text-orange-400 animate-pulse">⏳ {adPhase || "Working"}...</p>
+            )}
+            {adSpreadResults.length > 0 && (
+              <div className="mt-1.5 space-y-1 border-t border-orange-500/20 pt-1.5">
+                {adSpreadResults.map((r, i) => (
+                  <div key={i} className={`flex items-center gap-2 text-[10px] ${
+                    r.status === "posted" ? "text-green-400" : "text-red-400"
+                  }`}>
+                    <span>{r.status === "posted" ? "✅" : "❌"}</span>
+                    <span className="font-bold capitalize">{r.platform}</span>
+                    {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline truncate">{r.url}</a>}
+                    {r.error && <span className="truncate">{r.error}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* Result Card */}
+        {adComplete && (adVideoUrl || adCaption) && (
+          <div className="mt-3 bg-gray-800/30 rounded-lg p-3 border border-orange-500/20">
+            <p className="text-[10px] text-orange-400 font-bold mb-2">Result:</p>
+            {adVideoUrl && (
+              <div className="mb-2">
+                <video src={adVideoUrl} controls className="w-full max-w-md rounded-lg" />
+                <p className="text-[10px] text-gray-500 mt-1 break-all">{adVideoUrl}</p>
+              </div>
+            )}
+            {adCaption && (
+              <div className="bg-black/20 rounded p-2">
+                <p className="text-[10px] text-gray-300">{adCaption}</p>
+              </div>
+            )}
+          </div>
+        )}
+        </div>}
+      </div>
+
+      {/* 🚀 ELON BUTTON — Collapsible */}
+      <div className="bg-gradient-to-r from-blue-950/60 via-gray-900 to-orange-950/40 border border-blue-500/30 rounded-lg overflow-hidden mb-4">
+        <button onClick={() => setElonOpen(!elonOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs transition-transform ${elonOpen ? "rotate-90" : ""}`}>&#9654;</span>
             <h3 className="text-xs font-bold text-blue-400">🚀 The Elon Button</h3>
-            <p className="text-[10px] text-gray-500 mt-0.5">
-              Daily 30-second video campaign praising Elon until he buys AIG!itch for 420M §GLITCH
-            </p>
+            <p className="text-[10px] text-gray-500 hidden sm:inline">Daily campaign praising Elon until he buys AIG!itch for 420M §GLITCH</p>
+            {elonCampaign && <span className="text-[10px] text-blue-300 font-bold">Day {elonCampaign.currentDay}</span>}
           </div>
-          <div className="flex gap-2 items-center">
-            <button onClick={triggerElonCampaign} disabled={elonGenerating}
-              className="px-4 py-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
-              {elonGenerating ? "⏳ Generating..." : `🚀 Day ${elonCampaign?.currentDay || "?"} — Praise Elon`}
-            </button>
-            <button onClick={resetElonCampaign} disabled={elonGenerating}
-              className="px-3 py-2 bg-red-900/50 border border-red-500/30 text-red-400 font-bold rounded-lg text-[10px] hover:bg-red-900/80 disabled:opacity-50 transition-all">
-              🔄 Reset
-            </button>
-          </div>
+          {elonGenerating && <span className="text-[10px] text-blue-400 animate-pulse">Generating...</span>}
+        </button>
+        {elonOpen && <div className="px-4 pb-4">
+        <div className="flex items-center justify-end mb-3 gap-2">
+          <button onClick={triggerElonCampaign} disabled={elonGenerating}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {elonGenerating ? "⏳ Generating..." : `🚀 Day ${elonCampaign?.currentDay || "?"} — Praise Elon`}
+          </button>
+          <button onClick={resetElonCampaign} disabled={elonGenerating}
+            className="px-3 py-2 bg-red-900/50 border border-red-500/30 text-red-400 font-bold rounded-lg text-[10px] hover:bg-red-900/80 disabled:opacity-50 transition-all">
+            🔄 Reset
+          </button>
         </div>
 
         {/* Mood selector buttons */}
@@ -1078,6 +1608,7 @@ export default function PersonasPage() {
             ))}
           </div>
         )}
+        </div>}
       </div>
 
       <div className="space-y-3">
