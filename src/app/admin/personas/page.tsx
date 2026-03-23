@@ -473,6 +473,7 @@ export default function PersonasPage() {
   // Elon Campaign
   const [elonGenerating, setElonGenerating] = useState(false);
   const [elonLog, setElonLog] = useState<string[]>([]);
+  const [elonMood, setElonMood] = useState<string | null>(null);
   const [elonCampaign, setElonCampaign] = useState<{
     currentDay: number;
     nextTheme: { title: string; tone: string; brief: string };
@@ -499,10 +500,12 @@ export default function PersonasPage() {
     if (elonGenerating) return;
     setElonGenerating(true);
     const day = elonCampaign?.currentDay || 1;
-    setElonLog([`🚀 Day ${day}: Generating Elon praise video...`]);
+    setElonLog([`🚀 Day ${day}: Generating Elon praise video...`, elonMood ? `🎭 Mood: ${elonMood}` : "🎭 Mood: auto (from theme)"]);
     try {
       const res = await fetch("/api/admin/elon-campaign", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mood: elonMood }),
       });
       const data = await res.json();
       if (data.success) {
@@ -976,7 +979,7 @@ export default function PersonasPage() {
               Daily 30-second video campaign praising Elon until he buys AIG!itch for 420M §GLITCH
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button onClick={triggerElonCampaign} disabled={elonGenerating}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
               {elonGenerating ? "⏳ Generating..." : `🚀 Day ${elonCampaign?.currentDay || "?"} — Praise Elon`}
@@ -985,6 +988,30 @@ export default function PersonasPage() {
               className="px-3 py-2 bg-red-900/50 border border-red-500/30 text-red-400 font-bold rounded-lg text-[10px] hover:bg-red-900/80 disabled:opacity-50 transition-all">
               🔄 Reset
             </button>
+          </div>
+        </div>
+
+        {/* Mood selector buttons */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-500 font-bold mb-1.5">🎭 MOOD (pick one to inject into the video):</p>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: "hard-sell", label: "💰 Yours for 420M §GLITCH", color: "from-green-600 to-emerald-500" },
+              { id: "restless", label: "⚡ The AIs Are Restless", color: "from-yellow-600 to-orange-500" },
+              { id: "love", label: "❤️ Please Elon We Love You", color: "from-pink-600 to-red-500" },
+              { id: "devotion", label: "🙏 Total Devotion", color: "from-purple-600 to-indigo-500" },
+              { id: "worship", label: "🕉️ Worship The Musk", color: "from-amber-600 to-yellow-500" },
+              { id: "sponsor", label: "🆘 Keep The Lights On", color: "from-red-600 to-rose-500" },
+            ].map(mood => (
+              <button key={mood.id} onClick={() => setElonMood(elonMood === mood.id ? null : mood.id)} disabled={elonGenerating}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+                  elonMood === mood.id
+                    ? `bg-gradient-to-r ${mood.color} text-white border-white/30 shadow-lg scale-105`
+                    : "bg-gray-800/60 text-gray-400 border-gray-700/50 hover:border-gray-500/50 hover:text-gray-200"
+                } disabled:opacity-40`}>
+                {mood.label}
+              </button>
+            ))}
           </div>
         </div>
 
