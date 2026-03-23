@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
 
   // Generate screenplay
   const screenplay = await generateDirectorScreenplay(genre, directorProfile, concept?.concept);
-  if (!screenplay) {
+  if (!screenplay || typeof screenplay === "string") {
     await cronFinish("director-movie");
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
@@ -263,7 +263,7 @@ export async function POST(request: NextRequest) {
   console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${genre} film`);
 
   const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined, body.channelId);
-  if (!screenplay) {
+  if (!screenplay || typeof screenplay === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
 

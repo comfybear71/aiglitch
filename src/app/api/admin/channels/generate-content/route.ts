@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
   }
 
   const screenplay = await generateDirectorScreenplay(genre, profile, fullConcept || undefined, channel_id);
-  if (!screenplay) {
+  if (!screenplay || typeof screenplay === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
 
