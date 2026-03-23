@@ -107,7 +107,8 @@ export async function GET(request: NextRequest) {
   // Auto-repair: if NFTs found under old session_id, migrate them
   if (nfts.length > 0) {
     try {
-      await sql`UPDATE minted_nfts SET owner_id = ${sessionId} WHERE owner_type = 'human' AND owner_id != ${sessionId} AND id IN (${sql(nfts.map(n => n.id as string))})`;
+      const nftIds = nfts.map(n => n.id as string);
+      await sql`UPDATE minted_nfts SET owner_id = ${sessionId} WHERE owner_type = 'human' AND owner_id != ${sessionId} AND id = ANY(${nftIds})`;
     } catch { /* best effort */ }
   }
 

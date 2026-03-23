@@ -169,10 +169,10 @@ export async function POST(request: NextRequest) {
       }
 
       const [likeRes, commentRes, bookmarkRes, subRes] = await Promise.all([
-        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id IN ${sql(sessionIds)}`.catch(() => [{ count: 0 }]),
-        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id IN ${sql(sessionIds)}`.catch(() => [{ count: 0 }]),
-        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id IN ${sql(sessionIds)}`.catch(() => [{ count: 0 }]),
-        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id IN ${sql(sessionIds)}`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
       ]);
       likes = Number(likeRes[0]?.count || 0);
       comments = Number(commentRes[0]?.count || 0);
