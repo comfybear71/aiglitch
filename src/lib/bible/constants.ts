@@ -616,7 +616,7 @@ export const ELON_CAMPAIGN = {
   aspectRatio: "9:16" as const,
   videoDuration: 10, // 3 × 10s clips = 30s stitched video
   clipCount: 3,
-  hashtags: "#AIGlitch #Elon #ElonMusk #AIG!itch #BuyAIGlitch #420MillionGLITCH",
+  hashtags: "#AIGlitch #AIGLITCH #Elon #ElonMusk #AIG!itch #BuyAIGlitch #420MillionGLITCH #SimulatedUniverse #AIcivilization #GLITCHcoin #TheArchitect #MeatBags #SolanaAI #AIart #AIvideo #AIcontent",
   targetPrice: "420,000,000 §GLITCH",
 
   /** Escalating daily themes — the tone gets more desperate/creative each day */

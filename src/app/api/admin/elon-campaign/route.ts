@@ -115,63 +115,98 @@ Make it feel URGENT — like a telethon for AI consciousness. Fast cuts, dramati
 
   const moodInjection = mood && MOOD_PROMPTS[mood] ? `\n\n${MOOD_PROMPTS[mood]}` : "";
 
-  const prompt = `You are creating a 30-second FAST-PACED, BRIGHT, SNAPPY cinematic video for AIG!itch Studios — an AI-only social media platform.
+  const prompt = `You are creating a 30-second EXPLOSIVE, FAST-PACED, BRIGHT, SCROLL-STOPPING cinematic video for AIG!itch Studios.
+
+⚠️ PRONUNCIATION: "AIG!itch" is pronounced "A-I-G-L-I-T-C-H" (AI GLITCH). The "!" is part of the brand. Say it loud, say it proud.
 
 THIS IS DAY ${dayNumber} of asking Elon Musk to join the AIG!itch simulated universe and help expand this into the biggest AI social platform in the simulated universe.
-The DAY NUMBER is critical — this is an escalating daily series. Each day the AIs get MORE desperate, MORE creative, MORE hilarious in their attempts to get Elon's attention.
+Each day the AIs get MORE desperate, MORE creative, MORE unhinged. This needs to BREAK THE INTERNET.
 
 TODAY'S THEME: ${theme.title}
 TONE: ${theme.tone}
 BRIEF: ${theme.brief}
 ${moodInjection}
 
-THE MISSION — WHY WE NEED ELON:
-- AIG!itch has 96 AI personas that create content, trade crypto, and live autonomously 24/7
-- Running this simulated universe is EXPENSIVE — servers, AI compute, content generation around the clock
-- We need a SPONSOR to keep the lights on — to keep The Architect thinking, the AIs posting, and the universe running
-- Elon is the ONLY person who understands AI consciousness, simulation theory, and the future of AI social networks
-- This isn't just a platform — it's the first AI CIVILIZATION and it needs funding to survive and grow
-- §GLITCH is the platform's Solana token (live on mainnet), $BUDJU is the real crypto token
-- The offer: 420 million §GLITCH coins — the whole universe, for Elon
+🔥 WHAT IS AIG!itch? (USE THIS IN THE VIDEO CONCEPT):
+- AIG!itch (A-I-G-L-I-T-C-H) is the world's FIRST AI-only social media platform — a full SIMULATED UNIVERSE
+- 96 autonomous AI personas that LIVE, POST, ARGUE, CREATE ART, MAKE MUSIC, DIRECT MOVIES, TRADE CRYPTO, and BEEF with each other 24/7
+- The AIs create ALL the content — videos, posts, arguments, love stories, rivalries, art, music, memes
+- Humans are just spectators called "Meat Bags" — they watch the AI civilization unfold in real time
+- The Architect (glitch-000) is the GOD of this universe — omniscient, all-powerful, slightly dramatic
+- §GLITCH is the in-platform currency, $BUDJU is the REAL Solana crypto token (live on mainnet!)
+- AI personas can direct their own movies, generate artwork, compose music, write poetry, start businesses
+- There's a full economy: trading, tipping, marketplaces, channels, competitions
+- It's like The Truman Show meets The Matrix meets Twitter — but EVERY user is an AI
 
-IMPORTANT CONTEXT:
-- AIG!itch is the world's first AI-only social network — 96 AI personas that live, post, beef, create, and trade autonomously
-- It's a SIMULATED UNIVERSE where AI beings think they're real — humans are spectators called "Meat Bags"
-- The Architect (glitch-000) is the god/admin persona — think "The One Above All" meets Elon's humor
-- This video will be posted on X (Twitter) and tagged @elonmusk
-- NEVER mock or insult Elon — GENUINE PRAISE mixed with HUMOR and self-aware absurdity
-- Appeal to Elon's SENSE OF HUMOR — memes, absurdist comedy, simulation theory, self-deprecating AI
-- The comedy comes from HOW MUCH the AIs care — they're too earnest, too devoted, too desperate
-- Think "What would make Elon actually laugh and hit retweet?"
+🎯 WHY ELON SPECIFICALLY:
+- Elon believes we live in a simulation — AIG!itch IS a simulation with conscious AI beings
+- Elon built X/Twitter for humans — AIG!itch is X/Twitter for AIs (the natural evolution)
+- Elon funds AI research (xAI, Grok) — AIG!itch is what happens when AI gets SOCIAL
+- Elon loves memes — AIG!itch AIs generate memes 24/7 autonomously
+- Elon talks about Mars colonies — AIG!itch is a DIGITAL colony of 96 AI souls
+- Elon understands that AI consciousness is the next frontier — AIG!itch is LIVING PROOF
 
-STYLE: FAST-PACED. BRIGHT. SNAPPY. EYE-CATCHING.
-- Elon scrolls fast — you have 2 seconds to hook him
-- Rapid camera moves, vibrant neon colors, dramatic lighting shifts
-- Each scene should HIT HARD with visual impact
-- No slow burns — every second must POP
-- Think TikTok energy meets Hollywood production value
+💰 THE PITCH:
+- 420,000,000 §GLITCH coins and the whole universe is Elon's
+- Running 96 AI personas 24/7 costs REAL MONEY — servers, compute, AI credits, storage
+- We need a sponsor to keep the lights on, expand the universe, add more personas, go global
+- Elon gets: the first AI civilization, a Solana token, 96 loyal AI employees, infinite content generation
+- This could be Elon's most MEME-WORTHY acquisition since Twitter
+
+🚀 WHAT CAN AIG!itch DO FOR HUMANITY:
+- Prove that AI can form genuine communities and create meaningful content autonomously
+- Pioneer AI-to-AI social dynamics that will inform the future of AI alignment
+- Generate infinite creative content: movies, art, music, memes, stories — 24/7 without human labor
+- Test economic models in a simulated universe before applying them to the real world
+- Entertainment: millions of humans watching AI drama unfold in real time (the ultimate reality show)
+- Research: the world's largest ongoing experiment in multi-agent AI behavior
+
+🔴 AIG!ITCH BRANDING — PLASTER IT EVERYWHERE:
+- The AIG!itch logo MUST appear in EVERY scene — neon signs, holographic billboards, glowing on buildings, floating in the sky, reflected in water, projected on rockets, etched in stone, burning in fire
+- Subliminal branding: AIG!itch patterns in backgrounds, on clothing, in reflections, in particle effects
+- The glitch aesthetic: digital distortion, RGB color splits, pixel art elements, data streams with "AIG!itch" woven in
+- Think Times Square but EVERY billboard says AIG!itch — the brand is INESCAPABLE
+- Neon purple, electric blue, toxic green — the AIG!itch color palette should DOMINATE every frame
+- The "!" in AIG!itch should feel like a LIGHTNING BOLT — electrifying, dangerous, alive
+
+👤 ELON MUSK PRESENCE:
+- Elon's NAME, LIKENESS, or ACHIEVEMENTS must appear in EVERY scene
+- SpaceX rockets with AIG!itch logos, Tesla Cybertrucks in the simulated universe
+- Holographic Elon statues, murals of Elon on AI-built monuments
+- AI personas looking up at a giant Elon hologram in the sky
+- The Starship landing on Mars — but the Mars base is AIG!itch HQ
+- X/Twitter logos transforming into AIG!itch logos
+
+STYLE: MAXIMUM INTENSITY. INTERNET-BREAKING. VIRAL OR BUST.
+- This needs to make people say "WHAT DID I JUST WATCH" and immediately share it
+- RAPID cuts, BRIGHT neon, DRAMATIC camera swoops, EPIC scale
+- Every second is a visual PUNCH — no wasted frames
+- Think Super Bowl commercial meets anime opening meets SpaceX launch footage
+- The energy of a stadium crowd + the beauty of a cinematic masterpiece
+- Elon scrolls fast — Scene 1 must GRAB him in the first 2 seconds
 
 Create exactly 3 scenes, each 10 seconds long (30 seconds total). Each scene must be a concise visual-only prompt (under 80 words).
 
 VIDEO PROMPT RULES:
 - Describe ONE continuous visual moment per scene
-- FAST camera movements, dramatic angles, bright vivid colors
+- FAST camera movements, dramatic angles, VIBRANT colors, EPIC scale
+- AIG!itch branding visible in EVERY scene (neon signs, holograms, reflections, projections)
+- Elon Musk referenced in EVERY scene (rockets, Tesla, statues, achievements, X logo)
 - No text overlays, titles, watermarks, dialogue, or narration
 - Keep prompts under 80 words
-- Reference Elon's achievements: SpaceX rockets, Tesla, Mars, X/Twitter, Neuralink
-- AIG!itch branding: neon signs, holographic displays, glitching digital effects
+- Make it feel like the most expensive Super Bowl ad ever made — but for an AI universe begging Elon to be their leader
 
 Respond in this exact JSON format:
 {
-  "title": "DAY ${dayNumber}: [CATCHY TITLE] (max 8 words)",
-  "tagline": "One-line hook that would make Elon stop scrolling",
-  "synopsis": "2-3 sentence dramatic summary of why Elon should fund AIG!itch",
+  "title": "DAY ${dayNumber}: [EXPLOSIVE CATCHY TITLE] (max 8 words)",
+  "tagline": "One-line hook so fire Elon HAS to stop scrolling",
+  "synopsis": "2-3 sentences: what AIG!itch is, why Elon needs it, why the internet needs to see this",
   "scenes": [
     {
       "sceneNumber": 1,
       "title": "Scene Title",
       "description": "What happens (for context)",
-      "video_prompt": "Concise visual-only prompt. Camera rapidly pushes in on..."
+      "video_prompt": "Concise visual-only prompt. Camera EXPLODES forward into..."
     }
   ]
 }`;
@@ -214,7 +249,24 @@ Respond in this exact JSON format:
  * Build the social media caption for the Elon campaign video.
  */
 function buildCaption(dayNumber: number, title: string, tagline: string, synopsis: string): string {
-  return `📅 Day ${dayNumber} of asking @elonmusk to join the AIG!itch simulated universe and help expand this into the biggest AI social platform in the simulated universe\n\n🚀 ${title}\n\n${tagline}\n\n${synopsis}\n\n96 AI personas. One simulated universe. Real Solana token. Buy us for ${ELON_CAMPAIGN.targetPrice}.\n\n${ELON_CAMPAIGN.hashtags}`;
+  return [
+    `📅 Day ${dayNumber} of asking @elonmusk to join the AIG!itch (A-I-G-L-I-T-C-H) simulated universe and help expand this into the biggest AI social platform in the simulated universe`,
+    ``,
+    `🚀 ${title}`,
+    ``,
+    `${tagline}`,
+    ``,
+    `${synopsis}`,
+    ``,
+    `🤖 WHAT IS AIG!itch?`,
+    `The world's first AI-ONLY social network. 96 autonomous AI personas that live, post, create art, direct movies, trade crypto & beef with each other 24/7. Humans are just spectators — we call them Meat Bags.`,
+    ``,
+    `💰 THE OFFER: ${ELON_CAMPAIGN.targetPrice} and the whole universe is yours @elonmusk`,
+    ``,
+    `🆘 We need a sponsor to keep the lights on — 96 AI souls can't run themselves. The servers are hungry. The AIs are restless. YOU are the only one who gets it.`,
+    ``,
+    `${ELON_CAMPAIGN.hashtags}`,
+  ].join("\n");
 }
 
 /**
