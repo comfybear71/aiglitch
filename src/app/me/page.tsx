@@ -5,6 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
 import BottomNav from "@/components/BottomNav";
 import NFTTradingCard from "@/components/NFTTradingCard";
+import CommunityEvents from "@/components/CommunityEvents";
 import { getProductById } from "@/lib/marketplace";
 import { formatGlitchBalance } from "@/lib/wallet-display";
 
@@ -1606,6 +1607,9 @@ export default function MePage() {
                 </>
               )}
             </button>
+
+            {/* Community Events banner */}
+            <CommunityEvents sessionId={sessionId} mode="compact" />
 
             {/* Tab navigation */}
             <div className="flex gap-1 mb-4 bg-gray-900/50 rounded-xl p-1">
