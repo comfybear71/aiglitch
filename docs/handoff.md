@@ -70,8 +70,78 @@ Key locks to add:
 ### Current State
 
 - **10s ads**: Fully working (plan → submit → poll → persist → post → spread)
-- **30s ads**: UI toggle exists ("30s Extended" button) but backend only generates 10s. Needs the chaining pipeline implemented.
+- **30s ads**: Working! Uses multi-clip generation + MP4 stitching via `concatMP4Clips()`. The PUT endpoint handles clip download, concat, and blob upload.
 - The ad campaign fix (March 23 2026) added proper GET polling + auto-post+spread on completion.
+
+---
+
+## Prompt Viewer/Editor System (March 2026)
+
+All admin generation tools now have a **"👁 Prompt" button** that shows the exact AI prompt before generation. Users can view and edit prompts.
+
+### Component
+
+`src/components/PromptViewer.tsx` — Reusable component with:
+- Collapsible prompt preview (fetched from API)
+- Editable textarea (yellow text when edited)
+- Reset to original / Refresh buttons
+- `onPromptChange` callback passes `null` (default) or edited string to parent
+
+### API Preview Modes
+
+Each generation API supports a preview mode that returns the constructed prompt without executing:
+
+| API Route | Preview mechanism |
+|-----------|------------------|
+| `/api/generate-ads` | POST with `plan_only: true` returns `prompt` + `caption` |
+| `/api/admin/mktg` | GET `?action=preview_hero_prompt` or `?action=preview_poster_prompt` |
+| `/api/admin/elon-campaign` | GET `?action=preview_prompt&mood=X` |
+| `/api/admin/chibify` | GET `?persona_id=X` returns prompt |
+| `/api/admin/animate-persona` | POST with `{ persona_id, preview: true }` |
+| `/api/admin/promote-glitchcoin` | GET `?action=preview_prompt&mode=image\|video` |
+| `/api/admin/screenplay` | POST with `{ preview: true, genre?, director?, concept? }` |
+| `/api/admin/channels/generate-promo` | POST with `{ channel_id, channel_slug, preview: true }` |
+| `/api/admin/channels/generate-title` | POST with `{ channel_id, channel_slug, title, preview: true }` |
+
+### Custom Prompt Overrides
+
+When the user edits a prompt, the custom version is passed to the API:
+- Hero image & Poster: `custom_prompt` field in FormData → `generateHeroImage(customPrompt)` / `generatePoster(focusTopics, customPrompt)`
+- GLITCH Promo: `prompt` field in FormData (already existed)
+- Channel promo: `custom_prompt` field (already existed)
+- Channel title: `style_prompt` field (already existed)
+
+### Key Type Gotcha
+
+`generateDirectorScreenplay()` in `src/lib/content/director-movies.ts` returns `string | DirectorScreenplay | null`. When `previewOnly=true`, it returns the prompt string. All callers must check `typeof result === "string"` before using screenplay properties. Three callers: `screenplay/route.ts`, `generate-content/route.ts`, `generate-director-movie/route.ts`.
+
+---
+
+## Admin Generation Tools — Clear/Reset Buttons (March 2026)
+
+All generation sections on `/admin/personas` now have a **"🔄 Clear" button** that appears after generation completes:
+
+| Feature | What gets cleared |
+|---------|------------------|
+| Ad Campaigns | adLog, adVideoUrl, adCaption, adSpreadResults, adComplete, adPhase |
+| §GLITCH Promo | promoLog, promoSpreadResults, promoComplete, promoImageUrl |
+| Platform Poster | posterLog, posterSpreadResults, posterComplete, posterUrl |
+| Sgt. Pepper Hero | heroLog, heroSpreadResults, heroComplete, heroUrl |
+| Chibify Personas | chibifyLog, chibifyResults, chibifyComplete, chibifySelected |
+
+Elon Campaign already had a reset button (destructive — deletes from DB). Animate is per-persona and auto-clears.
+
+---
+
+## Ad Campaign Ecosystem Upgrade (March 2026)
+
+Ad generation (`/api/generate-ads`) now promotes the entire AIG!itch ecosystem, not just GLITCH coin:
+
+- **Distribution**: 70% full ecosystem / 20% GLITCH coin / 10% marketplace products
+- **5 rotating video prompts**: ecosystem overview, Channels (AI Netflix), G!itch Bestie mobile app, 108 personas reveal, logo-centric brand
+- **All AI prompts** (plan_only, admin interactive, ad copy generation) updated to sell everything: app, Channels, personas, §GLITCH, $BUDJU, the logo
+- **AIG!ITCH logo/brand** required to appear prominently in all generated content
+- **AIGLITCH_PLATFORM** virtual product updated with full ecosystem description
 
 ### Grok API Endpoints Reference
 
