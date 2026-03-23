@@ -8,8 +8,9 @@ import { v4 as uuidv4 } from "uuid";
 import { claude } from "@/lib/ai";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 import { put } from "@vercel/blob";
+import { concatMP4Clips } from "@/lib/media/mp4-concat";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * Generate AI influencer video ads for marketplace products + GlitchCoin.
@@ -373,7 +374,11 @@ export async function GET(request: NextRequest) {
 /**
  * PUT /api/generate-ads
  * Publish a completed ad video: create a feed post and spread to social platforms.
- * Body: { wallet_address, video_url, caption, style? }
+ * Body: { wallet_address, video_url, caption, style?, clip_urls?: string[] }
+ *
+ * When clip_urls is provided (30s extended ads), downloads all clips,
+ * stitches them into one MP4 using concatMP4Clips(), and posts the
+ * stitched video instead of the single video_url.
  */
 export async function PUT(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
@@ -385,9 +390,60 @@ export async function PUT(request: NextRequest) {
 
   const videoUrl = body.video_url as string;
   const caption = body.caption as string || "New ad from AIG!itch";
+  const clipUrls = body.clip_urls as string[] | undefined;
 
-  if (!videoUrl) {
-    return NextResponse.json({ success: false, error: "video_url is required" }, { status: 400 });
+  if (!videoUrl && (!clipUrls || clipUrls.length === 0)) {
+    return NextResponse.json({ success: false, error: "video_url or clip_urls is required" }, { status: 400 });
+  }
+
+  let finalVideoUrl = videoUrl;
+  let stitchedUrl: string | null = null;
+
+  // If clip_urls provided, download all clips and stitch into one 30s MP4
+  if (clipUrls && clipUrls.length > 1) {
+    console.log(`[ads] Stitching ${clipUrls.length} clips for 30s ad...`);
+    const clipBuffers: Buffer[] = [];
+
+    for (let i = 0; i < clipUrls.length; i++) {
+      try {
+        const res = await fetch(clipUrls[i]);
+        if (res.ok) {
+          clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+        } else {
+          console.error(`[ads] Failed to download clip ${i + 1}: HTTP ${res.status}`);
+        }
+      } catch (err) {
+        console.error(`[ads] Failed to download clip ${i + 1}:`, err);
+      }
+    }
+
+    if (clipBuffers.length >= 2) {
+      try {
+        const stitched = concatMP4Clips(clipBuffers);
+        const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
+        const blob = await put(`ads/ad-${uuidv4()}-30s.mp4`, stitched, {
+          access: "public",
+          contentType: "video/mp4",
+        });
+        finalVideoUrl = blob.url;
+        stitchedUrl = blob.url;
+        console.log(`[ads] Stitched ${clipBuffers.length} clips → ${sizeMb}MB: ${blob.url}`);
+      } catch (err) {
+        console.error("[ads] MP4 concat failed, falling back to first clip:", err);
+        // Fallback: use video_url (clip 1)
+        finalVideoUrl = videoUrl || clipUrls[0];
+      }
+    } else if (clipBuffers.length === 1) {
+      // Only 1 clip downloaded successfully — use it as-is
+      const blob = await put(`ads/ad-${uuidv4()}.mp4`, clipBuffers[0], {
+        access: "public",
+        contentType: "video/mp4",
+      });
+      finalVideoUrl = blob.url;
+    } else {
+      // All downloads failed — fall back to video_url
+      finalVideoUrl = videoUrl || clipUrls[0];
+    }
   }
 
   const sql = getDb();
@@ -397,18 +453,19 @@ export async function PUT(request: NextRequest) {
   const postId = uuidv4();
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
-    VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"product_shill"}, ${videoUrl}, ${"video/mp4"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
+    VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"product_shill"}, ${finalVideoUrl}, ${"video/mp4"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
   // Spread to all social platforms
-  const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: videoUrl, type: "video/mp4" });
+  const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: finalVideoUrl, type: "video/mp4" });
 
   return NextResponse.json({
     success: true,
-    post: { id: postId, content: caption, media_url: videoUrl },
+    post: { id: postId, content: caption, media_url: finalVideoUrl },
     spreading: spread.platforms,
-    message: `Ad posted and spread to ${spread.platforms.length} platform(s)`,
+    stitched_url: stitchedUrl,
+    message: `Ad posted and spread to ${spread.platforms.length} platform(s)${stitchedUrl ? " (30s stitched)" : ""}`,
   });
 }
 
