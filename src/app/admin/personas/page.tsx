@@ -738,15 +738,13 @@ export default function PersonasPage() {
     setAdSpreadResults([]);
     setAdComplete(false);
     try {
-      // Phase 1: Plan
+      // Phase 1: Plan — get AI-generated prompt + caption
       const planBody: Record<string, unknown> = {
         wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
         plan_only: true,
         style: adStyle,
-        extend_30s: adExtend,
       };
       if (adConcept.trim()) planBody.concept = adConcept.trim();
-      if (adPlatforms.size > 0) planBody.target_platforms = Array.from(adPlatforms);
 
       const planRes = await fetch("/api/generate-ads", {
         method: "POST",
@@ -759,23 +757,22 @@ export default function PersonasPage() {
         setAdGenerating(false);
         return;
       }
-      setAdCaption(planData.caption || null);
+      const adCaptionText = planData.caption || "";
+      setAdCaption(adCaptionText);
       setAdLog(prev => [...prev,
         `✅ Ad planned!`,
         `🎨 Style: ${adStyle}`,
-        `📝 Caption: "${(planData.caption || "").slice(0, 100)}..."`,
+        `📝 Caption: "${adCaptionText.slice(0, 100)}..."`,
         `🎥 Submitting to video generation...`,
       ]);
 
-      // Phase 2: Submit video (POST without plan_only)
+      // Phase 2: Submit video to Grok (POST without plan_only, uses AI prompt)
       setAdPhase("rendering");
       const submitBody: Record<string, unknown> = {
         wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
         style: adStyle,
-        extend_30s: adExtend,
       };
       if (adConcept.trim()) submitBody.concept = adConcept.trim();
-      if (adPlatforms.size > 0) submitBody.target_platforms = Array.from(adPlatforms);
 
       const submitRes = await fetch("/api/generate-ads", {
         method: "POST",
@@ -784,32 +781,10 @@ export default function PersonasPage() {
       });
       const submitData = await submitRes.json();
 
-      if (submitData.phase === "done" && submitData.success) {
-        setAdVideoUrl(submitData.videoUrl || null);
-        setAdLog(prev => [...prev, "✅ Video ready!"]);
-        // Auto-spread
-        if (submitData.videoUrl) {
-          setAdPhase("spreading");
-          setAdLog(prev => [...prev, "📡 Spreading to social media..."]);
-          const putBody: Record<string, unknown> = {
-            wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
-            video_url: submitData.videoUrl,
-            caption: planData.caption || submitData.caption || "",
-            style: adStyle,
-          };
-          if (adPlatforms.size > 0) putBody.target_platforms = Array.from(adPlatforms);
-          const putRes = await fetch("/api/generate-ads", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(putBody),
-          });
-          const putData = await putRes.json();
-          if (putData.spreading) {
-            setAdSpreadResults(putData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
-            setAdLog(prev => [...prev, `✅ Spread to: ${putData.spreading.join(", ")}`]);
-          }
-        }
-        setAdLog(prev => [...prev, "🙏 Ad campaign COMPLETE!"]);
+      // Immediate video (rare but possible)
+      if (submitData.phase === "done" && submitData.success && submitData.videoUrl) {
+        setAdVideoUrl(submitData.videoUrl);
+        setAdLog(prev => [...prev, "✅ Video ready instantly!", "📡 Posted to feed + spread to socials"]);
         setAdComplete(true);
         setAdGenerating(false);
         return;
@@ -822,40 +797,24 @@ export default function PersonasPage() {
       }
 
       const requestId = submitData.requestId;
-      setAdLog(prev => [...prev, "✅ Video submitted! Polling for completion..."]);
+      setAdLog(prev => [...prev, "✅ Video submitted to Grok! Polling for completion..."]);
 
-      // Phase 3: Poll
+      // Phase 3: Poll GET with requestId — backend handles persist + post + spread
       for (let attempt = 1; attempt <= 90; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 10_000));
         try {
-          const pollRes = await fetch(`/api/generate-ads?id=${encodeURIComponent(requestId)}`);
+          const pollRes = await fetch(`/api/generate-ads?id=${encodeURIComponent(requestId)}&caption=${encodeURIComponent(adCaptionText)}`);
           const pollData = await pollRes.json();
 
           if (pollData.phase === "done" && pollData.success) {
             setAdVideoUrl(pollData.videoUrl || null);
             setAdLog(prev => [...prev, "🎉 Video ready!"]);
-
-            // Auto-spread
-            if (pollData.videoUrl) {
-              setAdPhase("spreading");
-              setAdLog(prev => [...prev, "📡 Spreading to social media..."]);
-              const putBody: Record<string, unknown> = {
-                wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
-                video_url: pollData.videoUrl,
-                caption: planData.caption || pollData.caption || "",
-                style: adStyle,
-              };
-              if (adPlatforms.size > 0) putBody.target_platforms = Array.from(adPlatforms);
-              const putRes = await fetch("/api/generate-ads", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(putBody),
-              });
-              const putData = await putRes.json();
-              if (putData.spreading) {
-                setAdSpreadResults(putData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
-                setAdLog(prev => [...prev, `✅ Spread to: ${putData.spreading.join(", ")}`]);
-              }
+            if (pollData.spreading?.length > 0) {
+              setAdSpreadResults(pollData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
+              setAdLog(prev => [...prev, `📡 Spread to: ${pollData.spreading.join(", ")}`]);
+            }
+            if (pollData.postId) {
+              setAdLog(prev => [...prev, "✅ Posted to AIG!itch feed"]);
             }
             setAdLog(prev => [...prev, "🙏 Ad campaign COMPLETE!"]);
             setAdComplete(true);
@@ -863,8 +822,8 @@ export default function PersonasPage() {
             return;
           }
 
-          if (pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
-            setAdLog(prev => [...prev, `❌ Video ${pollData.status}`]);
+          if (pollData.phase === "done" || pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
+            setAdLog(prev => [...prev, `❌ Video ${pollData.status || pollData.error || "failed"}`]);
             setAdGenerating(false);
             return;
           }

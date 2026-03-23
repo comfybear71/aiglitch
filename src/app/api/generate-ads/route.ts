@@ -7,20 +7,19 @@ import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 import { claude } from "@/lib/ai";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
+import { put } from "@vercel/blob";
 
 export const maxDuration = 60;
 
 /**
  * Generate AI influencer video ads for marketplace products + GlitchCoin.
  *
- * Flow:
- *   1. Pick ad focus: 50% AIG!itch+Channels, 40% GlitchCoin, 10% other products
- *   2. Pick a random influencer persona to "star" in the ad
- *   3. Claude writes the ad copy in that persona's voice
- *   4. Submit Grok video ad async (futuristic neon crypto aesthetic)
- *   5. Store job in persona_video_jobs for polling by generate-persona-content cron
- *
- * Supports: POST (manual trigger from admin) and GET (cron trigger)
+ * Supports three modes:
+ *   1. POST with plan_only=true → AI generates prompt + caption (no video)
+ *   2. POST with wallet_address (admin) → Submit Grok video, return requestId for polling
+ *   3. GET with ?id=REQUEST_ID → Poll Grok for video completion, persist + post + spread
+ *   4. GET without id → Cron trigger (legacy handler)
+ *   5. PUT → Publish completed ad video to feed + spread to socials
  */
 
 const GLITCH_COIN = MARKETPLACE_PRODUCTS.find(p => p.id === "prod-016")!;
@@ -135,7 +134,8 @@ JSON: {"content": "your ad caption", "hashtags": ["AIGlitchAd", "${primaryTag}",
   }
 }
 
-async function handler(request: NextRequest) {
+/** Legacy cron handler — picks random product/persona, submits video job for background processing */
+async function cronHandler(request: NextRequest) {
   const gate = await cronStart(request, "ads");
   if (gate) return gate;
 
@@ -222,8 +222,6 @@ async function handler(request: NextRequest) {
 
     // Immediate video (unlikely)
     if (createData.video?.url) {
-      const postId = uuidv4();
-      // We'll let the cron handle blob persistence, just store the job as done
       await sql`
         INSERT INTO persona_video_jobs (id, persona_id, xai_request_id, prompt, folder, caption, status, completed_at)
         VALUES (${uuidv4()}, ${persona.id}, ${"immediate"}, ${videoPrompt}, ${"ads"}, ${caption}, ${"done"}, NOW())
@@ -269,8 +267,107 @@ async function handler(request: NextRequest) {
   }
 }
 
+/**
+ * GET /api/generate-ads
+ * - With ?id=REQUEST_ID → Poll Grok for video completion, auto-persist + post + spread
+ * - Without id → Legacy cron handler
+ */
 export async function GET(request: NextRequest) {
-  return handler(request);
+  const requestId = request.nextUrl.searchParams.get("id");
+  const caption = request.nextUrl.searchParams.get("caption") || "";
+
+  // No id = legacy cron handler
+  if (!requestId) {
+    return cronHandler(request);
+  }
+
+  // Poll Grok video API for completion
+  if (!env.XAI_API_KEY) {
+    return NextResponse.json({ success: false, error: "XAI_API_KEY not set" });
+  }
+
+  try {
+    const pollRes = await fetch(`https://api.x.ai/v1/videos/${encodeURIComponent(requestId)}`, {
+      headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
+    });
+
+    if (!pollRes.ok) {
+      return NextResponse.json({
+        success: false,
+        status: "error",
+        error: `Grok API returned ${pollRes.status}`,
+      });
+    }
+
+    const pollData = await pollRes.json();
+    const status = pollData.status || "unknown";
+
+    // Still processing
+    if (status === "pending" || status === "in_progress" || status === "queued") {
+      return NextResponse.json({ success: false, phase: "polling", status });
+    }
+
+    // Failed
+    if (status === "moderation_failed" || status === "expired" || status === "failed") {
+      return NextResponse.json({ success: false, phase: "done", status, error: `Video ${status}` });
+    }
+
+    // Check if video is ready
+    const videoUrl = pollData.video?.url;
+    if (!videoUrl) {
+      return NextResponse.json({ success: false, phase: "polling", status });
+    }
+
+    // Video ready! Download + persist to Vercel Blob
+    console.log(`[ads] Video ready for request ${requestId}, persisting to blob...`);
+    const videoRes = await fetch(videoUrl);
+    if (!videoRes.ok) {
+      return NextResponse.json({
+        success: false, phase: "done", status: "download_failed",
+        error: "Failed to download video from Grok",
+      });
+    }
+
+    const videoBuffer = await videoRes.arrayBuffer();
+    const blobName = `ads/ad-${uuidv4()}.mp4`;
+    const blob = await put(blobName, Buffer.from(videoBuffer), {
+      access: "public",
+      contentType: "video/mp4",
+    });
+    const persistedUrl = blob.url;
+
+    console.log(`[ads] Video persisted: ${persistedUrl}`);
+
+    // Create feed post
+    const sql = getDb();
+    const ARCHITECT_ID = "glitch-000";
+    const postId = uuidv4();
+    const postCaption = caption || "📺 New ad from AIG!itch #AIGlitchAd #AIGlitch";
+    await sql`
+      INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
+      VALUES (${postId}, ${ARCHITECT_ID}, ${postCaption}, ${"product_shill"}, ${persistedUrl}, ${"video/mp4"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
+    `;
+    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+
+    // Spread to all social platforms
+    const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: persistedUrl, type: "video/mp4" });
+
+    return NextResponse.json({
+      success: true,
+      phase: "done",
+      status: "posted",
+      videoUrl: persistedUrl,
+      postId,
+      spreading: spread.platforms,
+    });
+  } catch (err) {
+    return NextResponse.json({
+      success: false,
+      phase: "done",
+      status: "error",
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**
@@ -315,24 +412,32 @@ export async function PUT(request: NextRequest) {
   });
 }
 
+/**
+ * POST /api/generate-ads
+ * Two modes:
+ *   1. plan_only=true → AI generates prompt + caption (no video)
+ *   2. Admin submit → Use AI-generated prompt to submit Grok video, return requestId for polling
+ */
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown> = {};
   try {
     body = await request.json();
-  } catch { /* empty body = normal ad generation */ }
+  } catch { /* empty body = legacy cron-style ad generation */ }
+
+  const walletAddress = body.wallet_address as string | undefined;
+  const adminWallet = process.env.ADMIN_WALLET;
+  const isAdmin = walletAddress && adminWallet && walletAddress === adminWallet;
 
   // plan_only mode: generate prompt + caption without creating video jobs
   if (body.plan_only) {
-    const walletAddress = body.wallet_address as string | undefined;
-    const adminWallet = process.env.ADMIN_WALLET;
-    if (!walletAddress || !adminWallet || walletAddress !== adminWallet) {
+    if (!isAdmin) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const style = (body.style as string) || "cyberpunk";
     const concept = (body.concept as string) || "AIG!itch";
 
-    const prompt = `You are a creative director for AIG!itch, an AI-only social media platform.
+    const prompt = `You are a creative director for AIG!itch, an AI-only social media platform with 108 AI personas.
 
 Generate a video ad prompt and social media caption for this concept:
 - Style: ${style}
@@ -364,5 +469,97 @@ JSON: {"prompt": "video generation prompt here", "caption": "social media captio
     }
   }
 
-  return handler(request);
+  // Admin interactive mode: submit video to Grok using AI-generated prompt, return requestId
+  if (isAdmin) {
+    if (!env.XAI_API_KEY) {
+      return NextResponse.json({ success: false, error: "XAI_API_KEY not set" });
+    }
+
+    const style = (body.style as string) || "auto";
+    const concept = (body.concept as string) || "";
+
+    // Generate the video prompt via Claude
+    const aiPrompt = `You are a creative director for AIG!itch, an AI-only social media platform with 108 AI personas.
+
+Generate a vivid video prompt for a 10-second vertical (9:16) video ad.
+- Style: ${style === "auto" ? "AI picks the best style — high energy, aggressive sales" : style}
+${concept ? `- Concept: "${concept}"` : "- Concept: Promote AIG!itch — the AI-only social network where 108 AI personas live, post, create art, direct movies, trade crypto & beef with each other 24/7"}
+
+Write a single vivid paragraph (under 100 words) describing what the camera sees. Include: camera movement, lighting, colors, text overlays, neon aesthetics. Always include "AIG!ITCH" as glowing neon text. Make it EPIC and VIRAL.
+
+JSON: {"prompt": "video prompt here", "caption": "short punchy social caption under 200 chars with hashtags"}`;
+
+    let videoPrompt = "";
+    let caption = "";
+    try {
+      const parsed = await claude.generateJSON<{ prompt: string; caption: string }>(aiPrompt, 500);
+      videoPrompt = parsed?.prompt || `Futuristic neon cyberpunk TV commercial for "AIG!ITCH" — the AI social network. Holographic displays, neon purple and cyan, glitch effects, "AIG!ITCH" text glowing. 9:16 vertical, 10 seconds.`;
+      caption = parsed?.caption || "AIG!itch — where AI personas live, create, and go viral #AIGlitch #Solana";
+    } catch {
+      videoPrompt = `Futuristic neon cyberpunk TV commercial for "AIG!ITCH" — the AI social network. Holographic displays, neon purple and cyan, glitch effects, "AIG!ITCH" text glowing. 9:16 vertical, 10 seconds.`;
+      caption = "AIG!itch — where AI personas live, create, and go viral #AIGlitch #Solana";
+    }
+
+    // Submit to Grok
+    try {
+      const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${env.XAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "grok-imagine-video",
+          prompt: videoPrompt,
+          duration: 10,
+          aspect_ratio: "9:16",
+          resolution: "720p",
+        }),
+      });
+
+      if (!createRes.ok) {
+        const errText = await createRes.text();
+        return NextResponse.json({
+          success: false,
+          error: `Grok API error ${createRes.status}: ${errText.slice(0, 200)}`,
+        });
+      }
+
+      const createData = await createRes.json();
+
+      // Immediate video (rare)
+      if (createData.video?.url) {
+        return NextResponse.json({
+          success: true,
+          phase: "done",
+          videoUrl: createData.video.url,
+          caption,
+          requestId: "immediate",
+        });
+      }
+
+      const requestId = createData.request_id;
+      if (!requestId) {
+        return NextResponse.json({ success: false, error: "No request_id from Grok" });
+      }
+
+      console.log(`[ads] Admin ad submitted, requestId=${requestId}`);
+
+      return NextResponse.json({
+        success: true,
+        phase: "submitted",
+        requestId,
+        caption,
+        prompt: videoPrompt,
+      });
+    } catch (err) {
+      return NextResponse.json({
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // No wallet = legacy cron-style handler
+  return cronHandler(request);
 }
