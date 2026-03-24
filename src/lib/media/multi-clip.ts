@@ -25,6 +25,7 @@ import { concatMP4Clips } from "./mp4-concat";
 import { getGenreBlobFolder } from "../genre-utils";
 import { submitVideoJob } from "../xai";
 import { env } from "../bible/env";
+import { spreadPostToSocial } from "../marketing/spread-post";
 
 // ─── Genre Prompt Templates ───────────────────────────────────────────────
 // Based on the PDF's 5-component prompt framework:
@@ -424,11 +425,13 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
   for (const job of readyJobs) {
     try {
       await sql`UPDATE multi_clip_jobs SET status = 'stitching' WHERE id = ${job.id}`;
-      const finalUrl = await stitchAndPost(job.id, job.persona_id, job.caption, job.genre, job.title);
-      if (finalUrl) {
-        await sql`UPDATE multi_clip_jobs SET status = 'done', final_video_url = ${finalUrl}, completed_at = NOW() WHERE id = ${job.id}`;
+      const stitchResult = await stitchAndPost(job.id, job.persona_id, job.caption, job.genre, job.title);
+      if (stitchResult) {
+        await sql`UPDATE multi_clip_jobs SET status = 'done', final_video_url = ${stitchResult.videoUrl}, completed_at = NOW() WHERE id = ${job.id}`;
         result.stitched.push(job.id);
         console.log(`[multi-clip] Job ${job.id} "${job.title}" stitched and posted!`);
+        // Update linked elon campaign (if any) with video URL + spread to social
+        await finalizeElonCampaign(job.id, stitchResult.postId, stitchResult.videoUrl);
       } else {
         await sql`UPDATE multi_clip_jobs SET status = 'failed', completed_at = NOW() WHERE id = ${job.id}`;
       }
@@ -467,10 +470,11 @@ export async function pollMultiClipJobs(): Promise<{ polled: number; completed: 
       // Enough clips done, stitch what we have
       try {
         await sql`UPDATE multi_clip_jobs SET status = 'stitching' WHERE id = ${job.id}`;
-        const finalUrl = await stitchAndPost(job.id, job.persona_id, job.caption, job.genre, job.title);
-        if (finalUrl) {
-          await sql`UPDATE multi_clip_jobs SET status = 'done', final_video_url = ${finalUrl}, completed_at = NOW() WHERE id = ${job.id}`;
+        const partialResult = await stitchAndPost(job.id, job.persona_id, job.caption, job.genre, job.title);
+        if (partialResult) {
+          await sql`UPDATE multi_clip_jobs SET status = 'done', final_video_url = ${partialResult.videoUrl}, completed_at = NOW() WHERE id = ${job.id}`;
           result.stitched.push(job.id);
+          await finalizeElonCampaign(job.id, partialResult.postId, partialResult.videoUrl);
         } else {
           await sql`UPDATE multi_clip_jobs SET status = 'failed', completed_at = NOW() WHERE id = ${job.id}`;
         }
@@ -507,6 +511,57 @@ async function persistClip(tempUrl: string, jobId: string, sceneNumber: number):
 }
 
 /**
+ * After a multi-clip job is stitched, check if it's linked to an elon_campaign entry.
+ * If so, update the campaign with video URL, post ID, status, and spread to social.
+ */
+async function finalizeElonCampaign(jobId: string, postId: string, videoUrl: string): Promise<void> {
+  const sql = getDb();
+  try {
+    const campaigns = await sql`
+      SELECT id, caption FROM elon_campaign
+      WHERE multi_clip_job_id = ${jobId} AND status = 'generating'
+      LIMIT 1
+    ` as unknown as { id: string; caption: string }[];
+
+    if (campaigns.length === 0) return; // not an elon campaign job
+    const campaign = campaigns[0];
+
+    // Update the premiere post content with the Elon campaign caption (has @elonmusk tag)
+    // The generic multi-clip caption doesn't have @elonmusk — the elon_campaign.caption does
+    if (campaign.caption) {
+      await sql`UPDATE posts SET content = ${campaign.caption} WHERE id = ${postId}`;
+      console.log(`[elon-campaign] Updated post ${postId} with @elonmusk caption`);
+    }
+
+    // Update elon_campaign with video + post info (videoUrl passed directly — no DB re-read needed)
+    await sql`
+      UPDATE elon_campaign
+      SET video_url = ${videoUrl}, post_id = ${postId}, status = 'posted', completed_at = NOW()
+      WHERE id = ${campaign.id}
+    `;
+
+    // Spread to all social platforms — pass knownMedia to avoid replication lag
+    try {
+      const result = await spreadPostToSocial(
+        postId,
+        "glitch-000", // The Architect
+        "The Architect",
+        "🕉️",
+        { url: videoUrl, type: "video" },
+        "ELON CAMPAIGN",
+      );
+      const spreadJson = JSON.stringify(result);
+      await sql`UPDATE elon_campaign SET spread_results = ${spreadJson} WHERE id = ${campaign.id}`;
+      console.log(`[elon-campaign] Day video posted & spread! Platforms: ${result.platforms.join(", ")}`);
+    } catch (err) {
+      console.error(`[elon-campaign] Social spread failed:`, err);
+    }
+  } catch (err) {
+    console.error(`[elon-campaign] finalizeElonCampaign error for job ${jobId}:`, err);
+  }
+}
+
+/**
  * Concatenate completed clips into a single video and create a premiere post.
  *
  * Since we can't use ffmpeg on Vercel serverless, we use a binary concatenation
@@ -523,7 +578,7 @@ async function stitchAndPost(
   caption: string,
   genre: string,
   title: string,
-): Promise<string | null> {
+): Promise<{ postId: string; videoUrl: string } | null> {
   const sql = getDb();
 
   // Get all completed scenes in order
@@ -537,7 +592,8 @@ async function stitchAndPost(
 
   // If only one clip, just use it directly
   if (scenes.length === 1) {
-    return createPremierePost(sql, scenes[0].video_url, personaId, caption, genre, title);
+    const postId = await createPremierePost(sql, scenes[0].video_url, personaId, caption, genre, title, 1);
+    return { postId, videoUrl: scenes[0].video_url };
   }
 
   // Download all clips
@@ -584,7 +640,8 @@ async function stitchAndPost(
     WHERE job_id = ${jobId} AND status = 'done'
   `;
 
-  return createPremierePost(sql, blob.url, personaId, stitchedCaption, genre, title);
+  const postId = await createPremierePost(sql, blob.url, personaId, stitchedCaption, genre, title, scenes.length);
+  return { postId, videoUrl: blob.url };
 }
 
 /**
@@ -597,14 +654,16 @@ async function createPremierePost(
   caption: string,
   genre: string,
   title: string,
+  clipCount: number = 3,
 ): Promise<string> {
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 100;
   const hashtags = `AIGlitchPremieres,AIGlitch${capitalize(genre)}`;
+  const videoDuration = clipCount * 10; // each clip is 10 seconds
 
   await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-    VALUES (${postId}, ${personaId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${videoUrl}, ${"video"}, ${"grok-multiclip"}, NOW())
+    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, created_at)
+    VALUES (${postId}, ${personaId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${videoUrl}, ${"video"}, ${"grok-multiclip"}, ${videoDuration}, NOW())
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
 

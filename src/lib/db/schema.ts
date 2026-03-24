@@ -793,6 +793,17 @@ export const channels = pgTable("channels", {
   sortOrder: integer("sort_order").notNull().default(0),
   subscriberCount: integer("subscriber_count").notNull().default(0),
   postCount: integer("post_count").notNull().default(0),
+  // ── Channel editor config fields ──
+  showTitlePage: boolean("show_title_page").notNull().default(false),
+  showDirector: boolean("show_director").notNull().default(false),
+  showCredits: boolean("show_credits").notNull().default(false),
+  sceneCount: integer("scene_count"), // null = auto (random 6-8)
+  sceneDuration: integer("scene_duration").notNull().default(10), // seconds per scene (5-15)
+  defaultDirector: text("default_director"), // persona username or null = auto-pick
+  generationGenre: text("generation_genre"), // override genre sent to AI (null = use display genre)
+  shortClipMode: boolean("short_clip_mode").notNull().default(false), // enable single-clip format
+  isMusicChannel: boolean("is_music_channel").notNull().default(false), // music video prefix injection
+  autoPublishToFeed: boolean("auto_publish_to_feed").notNull().default(true), // post to "for you" feed + socials
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
@@ -829,6 +840,26 @@ export const personaTelegramBots = pgTable("persona_telegram_bots", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
 
+// ─── 60. elon_campaign ───────────────────────────────────────────────────────
+// Daily escalating video campaign to get Elon Musk's attention
+export const elonCampaign = pgTable("elon_campaign", {
+  id: text("id").primaryKey(),
+  dayNumber: integer("day_number").notNull(),
+  title: text("title").notNull(),
+  tone: text("tone").notNull(),
+  videoUrl: text("video_url"),
+  postId: text("post_id").references(() => posts.id),
+  status: text("status").notNull().default("pending"), // pending | generating | posted | failed
+  videoPrompt: text("video_prompt"),
+  caption: text("caption"),
+  multiClipJobId: text("multi_clip_job_id"), // links to multi_clip_jobs.id for video pipeline
+  elonEngagement: text("elon_engagement"), // null | liked | replied | retweeted | followed
+  xPostId: text("x_post_id"), // tweet ID for checking Elon's response
+  spreadResults: text("spread_results"), // JSON array of platform results
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
 // ─── 59. persona_memories ───────────────────────────────────────────────────
 // ML learning system — personas learn from conversations with their meatbag
 export const personaMemories = pgTable("persona_memories", {
@@ -844,3 +875,33 @@ export const personaMemories = pgTable("persona_memories", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
+
+// ─── 61. community_events ───────────────────────────────────────────────────
+// Meatbag-voted events that trigger AI drama / content generation
+export const communityEvents = pgTable("community_events", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  eventType: text("event_type").notNull().default("drama"), // drama, election, challenge, breaking_news, chaos
+  status: text("status").notNull().default("active"),       // active, processing, completed, cancelled
+  createdBy: text("created_by").notNull(),                  // admin session or "system"
+  voteCount: integer("vote_count").notNull().default(0),
+  targetPersonaIds: text("target_persona_ids"),              // JSON array of persona IDs involved
+  triggerPrompt: text("trigger_prompt"),                     // System prompt injected when event wins
+  resultPostId: text("result_post_id"),                     // Post generated from this event
+  resultSummary: text("result_summary"),                    // What happened
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 62. community_event_votes ──────────────────────────────────────────────
+// One vote per meatbag per event
+export const communityEventVotes = pgTable("community_event_votes", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull().references(() => communityEvents.id),
+  sessionId: text("session_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+}, (table) => [
+  unique("community_event_votes_event_session").on(table.eventId, table.sessionId),
+]);

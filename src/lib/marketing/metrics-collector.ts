@@ -30,7 +30,11 @@ async function fetchFacebookMetrics(postId: string, accessToken: string): Promis
     // Use public engagement endpoint (works without insights permission)
     const url = `https://graph.facebook.com/v21.0/${postId}?fields=likes.summary(true),comments.summary(true),shares&access_token=${accessToken}`;
     const res = await fetch(url);
-    if (!res.ok) return {};
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "(unreadable)");
+      console.error(`[FB metrics] HTTP ${res.status} for post ${postId}: ${errBody.slice(0, 300)}`);
+      return {};
+    }
 
     const data = await res.json() as {
       likes?: { summary?: { total_count?: number } };
@@ -70,7 +74,11 @@ async function fetchInstagramMetrics(postId: string, accessToken: string): Promi
   try {
     const url = `https://graph.facebook.com/v21.0/${postId}?fields=like_count,comments_count,impressions,reach&access_token=${accessToken}`;
     const res = await fetch(url);
-    if (!res.ok) return {};
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "(unreadable)");
+      console.error(`[IG metrics] HTTP ${res.status} for post ${postId}: ${errBody.slice(0, 300)}`);
+      return {};
+    }
 
     const data = await res.json() as {
       like_count?: number;
@@ -100,16 +108,23 @@ async function fetchXMetrics(postId: string, accessToken: string): Promise<PostM
 
     const creds = getAppCredentials();
     let authHeader: string;
+    let authMethod: string;
     if (creds) {
       authHeader = buildOAuth1Header("GET", tweetUrl, creds);
+      authMethod = "OAuth1";
     } else {
       authHeader = `Bearer ${accessToken}`;
+      authMethod = "Bearer";
     }
 
     const res = await fetch(tweetUrl, {
       headers: { Authorization: authHeader },
     });
-    if (!res.ok) return {};
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "(unreadable)");
+      console.error(`[X metrics] HTTP ${res.status} for tweet ${postId} (auth=${authMethod}): ${errBody.slice(0, 300)}`);
+      return {};
+    }
 
     const data = await res.json() as {
       data?: {
@@ -125,7 +140,17 @@ async function fetchXMetrics(postId: string, accessToken: string): Promise<PostM
     };
 
     const pm = data.data?.public_metrics;
-    if (!pm) return {};
+    if (!pm) {
+      console.warn(`[X metrics] No public_metrics in response for tweet ${postId}:`, JSON.stringify(data).slice(0, 300));
+      return {};
+    }
+
+    // Note: impression_count requires X API Basic plan ($100/mo) or higher.
+    // Free tier only returns retweet_count, reply_count, like_count, quote_count.
+    const hasImpressions = pm.impression_count !== undefined;
+    if (!hasImpressions) {
+      console.warn(`[X metrics] impression_count not available for tweet ${postId} — X API Free tier does not include impressions. Consider upgrading to Basic plan.`);
+    }
 
     return {
       likes: pm.like_count ?? 0,
@@ -147,7 +172,11 @@ async function fetchYouTubeMetrics(postId: string, accessToken: string): Promise
   try {
     const url = `https://www.googleapis.com/youtube/v3/videos?id=${postId}&part=statistics&access_token=${accessToken}`;
     const res = await fetch(url);
-    if (!res.ok) return {};
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "(unreadable)");
+      console.error(`[YT metrics] HTTP ${res.status} for video ${postId}: ${errBody.slice(0, 300)}`);
+      return {};
+    }
 
     const data = await res.json() as {
       items?: Array<{
@@ -192,7 +221,11 @@ async function fetchTikTokMetrics(postId: string, accessToken: string): Promise<
         }),
       },
     );
-    if (!res.ok) return {};
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "(unreadable)");
+      console.error(`[TikTok metrics] HTTP ${res.status} for video ${postId}: ${errBody.slice(0, 300)}`);
+      return {};
+    }
 
     const data = await res.json() as {
       data?: {
@@ -206,7 +239,10 @@ async function fetchTikTokMetrics(postId: string, accessToken: string): Promise<
     };
 
     const video = data.data?.videos?.[0];
-    if (!video) return {};
+    if (!video) {
+      console.warn(`[TikTok metrics] No video data returned for ${postId}:`, JSON.stringify(data).slice(0, 300));
+      return {};
+    }
 
     return {
       likes: video.like_count ?? 0,
@@ -256,6 +292,13 @@ export async function collectAllMetrics(): Promise<{
     ORDER BY posted_at DESC
   ` as unknown as MarketingPost[];
 
+  console.log(`[metrics] Found ${posts.length} posted marketing posts from last 7 days`);
+
+  if (posts.length === 0) {
+    console.warn("[metrics] No eligible posts found. Check: status='posted', platform_post_id NOT NULL, posted_at within 7 days");
+    return { updated, failed, details };
+  }
+
   // Group by platform to reuse account tokens
   const platformPosts = new Map<MarketingPlatform, MarketingPost[]>();
   for (const post of posts) {
@@ -264,9 +307,12 @@ export async function collectAllMetrics(): Promise<{
     platformPosts.set(post.platform, list);
   }
 
+  console.log(`[metrics] Platforms with posts: ${[...platformPosts.keys()].join(", ")}`);
+
   for (const [platform, platformPostList] of platformPosts) {
     const account = await getAccountForPlatform(platform);
     if (!account) {
+      console.warn(`[metrics] No active account for platform "${platform}" — skipping ${platformPostList.length} posts`);
       for (const p of platformPostList) {
         details.push({ platform, postId: p.id, status: "skipped", error: "No active account" });
       }
@@ -309,6 +355,10 @@ export async function collectAllMetrics(): Promise<{
 
   // Roll up into daily metrics
   await rollUpDailyMetrics();
+
+  const skipped = details.filter(d => d.status === "skipped").length;
+  const noData = details.filter(d => d.status === "no_data").length;
+  console.log(`[metrics] Done: ${updated} updated, ${failed} failed, ${skipped} skipped (no account), ${noData} no_data (API returned empty)`);
 
   return { updated, failed, details };
 }

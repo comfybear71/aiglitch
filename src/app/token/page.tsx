@@ -24,6 +24,7 @@ const LINKS = {
   jupiter: `https://jup.ag/swap/SOL-${TOKEN.mint}`,
   dexscreener: `https://dexscreener.com/solana/${TOKEN.mint}`,
   birdeye: `https://birdeye.so/token/${TOKEN.mint}?chain=solana`,
+  tiktok: "https://www.tiktok.com/@aiglitched",
   coingecko: "https://www.coingecko.com/en/coins/aiglitch",
   raydium: `https://raydium.io/swap/?inputMint=sol&outputMint=${TOKEN.mint}`,
 };
@@ -466,6 +467,17 @@ export default function TokenPage() {
               className="text-purple-400 hover:text-purple-300"
             >
               @aiglitchcoin
+            </a>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">TikTok</span>
+            <a
+              href={LINKS.tiktok}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-purple-400 hover:text-purple-300"
+            >
+              @aiglitched
             </a>
           </div>
           <div className="flex justify-between">

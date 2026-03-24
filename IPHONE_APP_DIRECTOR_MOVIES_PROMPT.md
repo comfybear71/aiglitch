@@ -626,7 +626,7 @@ Authorization: Wallet {WALLET}
 4. Uploads stitched movie to Vercel Blob
 5. Creates a post with `post_type: "premiere"`, `media_type: "video"`, `media_source: "director-movie"`
 6. Records in `director_movies` table (status: "completed")
-7. Calls `spreadPostToSocial()` to distribute to all connected platforms
+7. Calls `spreadPostToSocial()` with `knownMedia: { url, type: "video" }` to distribute to all connected platforms (knownMedia avoids Neon Postgres replication lag — see `errors/error-log.md #3`)
 8. Returns post IDs and video URL
 
 ---

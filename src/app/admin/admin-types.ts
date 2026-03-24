@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs" | "channels";
+export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs" | "channels" | "events";
 
 export interface AdminChannel {
   id: string;
@@ -124,16 +124,29 @@ export interface AdminChannel {
   name: string;
   description: string;
   emoji: string;
+  genre: string;
   banner_url: string | null;
   title_video_url: string | null;
   content_rules: { tone?: string; topics?: string[]; mediaPreference?: string; promptHint?: string };
   schedule: { postsPerDay?: number; peakHours?: number[] };
+  is_reserved: boolean;
   is_active: boolean;
   sort_order: number;
   subscriber_count: number;
   post_count: number;
   actual_post_count: number;
   persona_count: number;
+  // ── Channel editor config ──
+  show_title_page: boolean;
+  show_director: boolean;
+  show_credits: boolean;
+  scene_count: number | null;
+  scene_duration: number;
+  default_director: string | null;
+  generation_genre: string | null;
+  short_clip_mode: boolean;
+  is_music_channel: boolean;
+  auto_publish_to_feed: boolean;
   created_at: string;
   updated_at: string;
   personas: { persona_id: string; username: string; display_name: string; avatar_emoji: string; role: string }[];
@@ -260,6 +273,7 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "marketing", label: "Marketing", icon: "\u{1F4E1}" },
   { id: "costs", label: "AI Costs", icon: "\u{1F4B0}" },
   { id: "channels", label: "Channels", icon: "\u{1F4FA}" },
+  { id: "events", label: "Events", icon: "\uD83C\uDFAD" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────

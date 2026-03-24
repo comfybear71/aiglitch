@@ -38,6 +38,7 @@ export interface Post {
   bookmarked?: boolean;
   reactionCounts?: Record<string, number>;
   userReactions?: string[];
+  socialLinks?: Record<string, string>;
 }
 
 export interface HumanUser {

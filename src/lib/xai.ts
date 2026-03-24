@@ -20,6 +20,7 @@ import { env } from "@/lib/bible/env";
 import { CONTENT } from "@/lib/bible/constants";
 import { trackCost, COST_TABLE } from "@/lib/ai/costs";
 import type { AIProvider } from "@/lib/ai/types";
+import { checkCircuitBreaker, recordProviderCall } from "@/lib/ai/circuit-breaker";
 
 // ── Grok 4.1 Model Slugs ───────────────────────────────────────────────
 // Current production models from xAI API.
@@ -106,6 +107,13 @@ export async function generateWithGrok(
     modelKey === "nonReasoning" ? "grok-text-nonreasoning" :
     "grok-text";
 
+  // Circuit breaker check
+  const allowed = await checkCircuitBreaker(costKey);
+  if (!allowed) {
+    console.warn(`[xai] Circuit breaker tripped for ${costKey} — skipping call`);
+    return null;
+  }
+
   // Retry transient errors (429, 5xx, network) with exponential backoff
   const MAX_RETRIES = 3;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -123,15 +131,18 @@ export async function generateWithGrok(
       const text = response.choices[0]?.message?.content ?? null;
       if (text) {
         const costTable = COST_TABLE[costKey] as { perMInputTokens: number; perMOutputTokens: number };
+        const costUsd = ((response.usage?.prompt_tokens ?? 0) / 1_000_000) * costTable.perMInputTokens
+            + ((response.usage?.completion_tokens ?? 0) / 1_000_000) * costTable.perMOutputTokens;
         trackCost({
           provider: costKey,
           task: "text-generation",
-          estimatedCostUsd: ((response.usage?.prompt_tokens ?? 0) / 1_000_000) * costTable.perMInputTokens
-            + ((response.usage?.completion_tokens ?? 0) / 1_000_000) * costTable.perMOutputTokens,
+          estimatedCostUsd: costUsd,
           inputTokens: response.usage?.prompt_tokens,
           outputTokens: response.usage?.completion_tokens,
           model,
         });
+        // Record for circuit breaker rate limiting
+        recordProviderCall(costKey, costUsd).catch(() => {});
       }
       return text;
     } catch (err) {
@@ -200,6 +211,15 @@ export async function generateImageWithAurora(
   }
 
   const model = pro ? "grok-imagine-image-pro" : "grok-imagine-image";
+  const providerKey = pro ? "grok-image-pro" : "grok-image";
+
+  // Circuit breaker check
+  const cbAllowed = await checkCircuitBreaker(providerKey);
+  if (!cbAllowed) {
+    console.warn(`[xai] Circuit breaker tripped for ${providerKey} — skipping`);
+    return null;
+  }
+
   console.log(`Attempting image generation via xAI ${model}...`);
 
   try {
@@ -235,12 +255,14 @@ export async function generateImageWithAurora(
 
     if (imageData.url) {
       console.log(`Grok image generated (${model}): ${imageData.url.slice(0, 80)}...`);
+      const imgCost = pro ? COST_TABLE["grok-image-pro"].perCall : COST_TABLE["grok-image"].perCall;
       trackCost({
-        provider: pro ? "grok-image-pro" : "grok-image",
+        provider: providerKey,
         task: "image-generation",
-        estimatedCostUsd: pro ? COST_TABLE["grok-image-pro"].perCall : COST_TABLE["grok-image"].perCall,
+        estimatedCostUsd: imgCost,
         model,
       });
+      recordProviderCall(providerKey, imgCost).catch(() => {});
       return { url: imageData.url, contentType: "image/png" };
     }
 
@@ -364,6 +386,13 @@ export async function generateVideoWithGrok(
     return null;
   }
 
+  // Circuit breaker check
+  const cbAllowed = await checkCircuitBreaker("grok-video");
+  if (!cbAllowed) {
+    console.warn("[xai] Circuit breaker tripped for grok-video — skipping");
+    return null;
+  }
+
   console.log(`Attempting video generation via xAI Grok Imagine Video (${duration}s, ${aspectRatio}, 720p)...`);
 
   try {
@@ -398,7 +427,7 @@ export async function generateVideoWithGrok(
       // If the response already contains the video URL (synchronous)
       if (createData.video?.url) {
         console.log(`Grok video generated immediately: ${createData.video.url.slice(0, 80)}...`);
-        trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: duration * COST_TABLE["grok-video"].perSecond, durationSeconds: duration, model: "grok-imagine-video" });
+        { const _vc = duration * COST_TABLE["grok-video"].perSecond; trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: _vc, durationSeconds: duration, model: "grok-imagine-video" }); recordProviderCall("grok-video", _vc).catch(() => {}); }
         return createData.video.url;
       }
       console.error("Grok video: no request_id in response:", JSON.stringify(createData).slice(0, 300));
@@ -435,7 +464,7 @@ export async function generateVideoWithGrok(
         }
         if (pollData.video?.url) {
           console.log(`Grok video generated successfully: ${pollData.video.url.slice(0, 80)}...`);
-          trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: duration * COST_TABLE["grok-video"].perSecond, durationSeconds: duration, model: "grok-imagine-video" });
+          { const _vc = duration * COST_TABLE["grok-video"].perSecond; trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: _vc, durationSeconds: duration, model: "grok-imagine-video" }); recordProviderCall("grok-video", _vc).catch(() => {}); }
           return pollData.video.url;
         }
         console.error("Grok video done but no URL:", JSON.stringify(pollData).slice(0, 300));
@@ -631,7 +660,7 @@ export async function submitVideoJob(
     // Rare: synchronous video result
     if (data.video?.url) {
       console.log(`[video-submit] Grok returned video immediately`);
-      trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: duration * COST_TABLE["grok-video"].perSecond, durationSeconds: duration, model: "grok-imagine-video" });
+      { const _vc = duration * COST_TABLE["grok-video"].perSecond; trackCost({ provider: "grok-video", task: "video-generation", estimatedCostUsd: _vc, durationSeconds: duration, model: "grok-imagine-video" }); recordProviderCall("grok-video", _vc).catch(() => {}); }
       return { requestId: null, videoUrl: data.video.url, provider: "grok", fellBack: false };
     }
 

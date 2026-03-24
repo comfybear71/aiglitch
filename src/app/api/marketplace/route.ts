@@ -29,10 +29,21 @@ export async function GET(request: NextRequest) {
   const sql = getDb();
   await ensureDbReady();
 
+  // If user has a wallet, include purchases from all sessions linked to that wallet
+  let sessionIds = [sessionId];
+  try {
+    const [user] = await sql`SELECT phantom_wallet_address FROM human_users WHERE session_id = ${sessionId}`;
+    if (user?.phantom_wallet_address) {
+      const rows = await sql`SELECT DISTINCT session_id FROM human_users WHERE phantom_wallet_address = ${user.phantom_wallet_address}`;
+      sessionIds = rows.map((r: Record<string, unknown>) => r.session_id as string);
+      if (!sessionIds.includes(sessionId)) sessionIds.push(sessionId);
+    }
+  } catch { /* use current session only */ }
+
   const purchases = await sql`
     SELECT product_id, product_name, product_emoji, price_paid, created_at
     FROM marketplace_purchases
-    WHERE session_id = ${sessionId}
+    WHERE session_id = ANY(${sessionIds})
     ORDER BY created_at DESC
   `;
 

@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 20;
+const MIGRATION_VERSION = 22;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -967,6 +967,84 @@ export async function runMigrations() {
     safeMigrate(sql, "idx_uploaded_media_folder", () =>
       sql`CREATE INDEX IF NOT EXISTS idx_uploaded_media_folder ON uploaded_media(folder, created_at DESC)`),
   ]);
+
+  // Re-sync all channels from constants (catches any channels added after seed_channels_v2 ran)
+  await safeMigrate(sql, "seed_channels_v3", async () => {
+    const { CHANNELS } = await import("./bible/constants");
+    for (const ch of CHANNELS) {
+      await sql`
+        INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, is_music_channel, content_rules, schedule, is_active, sort_order)
+        VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
+                ${ch.genre || "drama"}, ${ch.isReserved || false}, ${ch.isMusicChannel || false},
+                ${JSON.stringify(ch.contentRules)}, ${JSON.stringify(ch.schedule)}, TRUE, ${CHANNELS.indexOf(ch)})
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          emoji = EXCLUDED.emoji,
+          genre = EXCLUDED.genre,
+          is_reserved = EXCLUDED.is_reserved,
+          is_music_channel = EXCLUDED.is_music_channel,
+          content_rules = EXCLUDED.content_rules,
+          schedule = EXCLUDED.schedule,
+          sort_order = EXCLUDED.sort_order
+      `;
+      for (const personaId of ch.personaIds) {
+        const role = ch.hostIds.includes(personaId) ? "host" : "regular";
+        const cpId = `${ch.id}-${personaId}`;
+        await sql`
+          INSERT INTO channel_personas (id, channel_id, persona_id, role)
+          VALUES (${cpId}, ${ch.id}, ${personaId}, ${role})
+          ON CONFLICT (channel_id, persona_id) DO NOTHING
+        `;
+      }
+    }
+  });
+
+  // ── Channel editor config columns ──
+  await safeMigrate(sql, "channels_editor_config_cols", async () => {
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_title_page BOOLEAN NOT NULL DEFAULT TRUE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_credits BOOLEAN NOT NULL DEFAULT TRUE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS scene_count INTEGER`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS scene_duration INTEGER NOT NULL DEFAULT 10`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS default_director TEXT`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS generation_genre TEXT`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS short_clip_mode BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_music_channel BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS auto_publish_to_feed BOOLEAN NOT NULL DEFAULT TRUE`;
+    // Set sensible defaults for existing channels
+    await sql`UPDATE channels SET is_music_channel = TRUE WHERE id = 'ch-aitunes'`;
+    await sql`UPDATE channels SET generation_genre = 'photorealistic' WHERE id = 'ch-paws-pixels'`;
+    await sql`UPDATE channels SET scene_count = 9 WHERE id = 'ch-gnn'`;
+    await sql`UPDATE channels SET short_clip_mode = TRUE WHERE id IN ('ch-paws-pixels', 'ch-fail-army')`;
+  });
+
+  // ── Elon Campaign table ──
+  await safeMigrate(sql, "table_elon_campaign", () =>
+    sql`CREATE TABLE IF NOT EXISTS elon_campaign (
+      id TEXT PRIMARY KEY,
+      day_number INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      tone TEXT NOT NULL,
+      video_url TEXT,
+      post_id TEXT REFERENCES posts(id),
+      status TEXT NOT NULL DEFAULT 'pending',
+      video_prompt TEXT,
+      caption TEXT,
+      elon_engagement TEXT,
+      x_post_id TEXT,
+      spread_results TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    )`);
+
+  // ── multi_clip_job_id column for elon_campaign ──
+  await safeMigrate(sql, "elon_campaign_multi_clip_job_id", () =>
+    sql`ALTER TABLE elon_campaign ADD COLUMN IF NOT EXISTS multi_clip_job_id TEXT`);
+
+  // ── show_director column for channels ──
+  await safeMigrate(sql, "channels_show_director_col", async () => {
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_director BOOLEAN NOT NULL DEFAULT TRUE`;
+  });
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
