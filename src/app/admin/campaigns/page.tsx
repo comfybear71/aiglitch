@@ -3,6 +3,16 @@
 import { useEffect, useState } from "react";
 import { useAdmin } from "../AdminContext";
 
+// Safe JSON parsing — prevents crash on empty/non-JSON responses
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function safeJson(res: Response): Promise<any> {
+  const text = await res.text();
+  if (!text) return { error: `Empty response (${res.status})` };
+  try { return JSON.parse(text); } catch {
+    return { error: `Invalid JSON (${res.status}): ${text.slice(0, 120)}` };
+  }
+}
+
 interface Campaign {
   id: string;
   brand_name: string;
@@ -79,18 +89,7 @@ export default function CampaignsPage() {
         method: "POST",
         body: formData,
       });
-      const text = await res.text();
-      if (!text) {
-        setActionLog(`Upload failed: empty response (status ${res.status})`);
-        setUploading(false);
-        return;
-      }
-      let data;
-      try { data = JSON.parse(text); } catch {
-        setActionLog(`Upload failed: invalid response (status ${res.status}) — ${text.slice(0, 100)}`);
-        setUploading(false);
-        return;
-      }
+      const data = await safeJson(res);
       if (data.results?.[0]?.url) {
         const url = data.results[0].url;
         if (type === "logo") setLogoUrl(url);
@@ -112,8 +111,8 @@ export default function CampaignsPage() {
         fetch("/api/admin/ad-campaigns"),
         fetch("/api/admin/ad-campaigns?action=stats"),
       ]);
-      const campData = await campRes.json();
-      const statsData = await statsRes.json();
+      const campData = await safeJson(campRes);
+      const statsData = await safeJson(statsRes);
       setCampaigns(campData.campaigns || []);
       setStats(statsData.stats || null);
     } catch (err) {
@@ -152,7 +151,7 @@ export default function CampaignsPage() {
           notes: notes || undefined,
         }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setActionLog(`Campaign created: ${data.campaign_id}`);
         setShowForm(false);
@@ -175,7 +174,7 @@ export default function CampaignsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, campaign_id: campaignId }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setActionLog(`Campaign ${action}d successfully`);
         fetchCampaigns();
