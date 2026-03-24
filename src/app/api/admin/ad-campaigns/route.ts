@@ -6,6 +6,19 @@ import { expireCompletedCampaigns } from "@/lib/ad-campaigns";
 
 export const maxDuration = 30;
 
+// Auto-migrate: add product_image_url column if missing
+let _migrated = false;
+async function ensureSchema() {
+  if (_migrated) return;
+  try {
+    const sql = getDb();
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_image_url TEXT`;
+    _migrated = true;
+  } catch (err) {
+    console.warn("[ad-campaigns] Migration check failed:", err instanceof Error ? err.message : err);
+  }
+}
+
 // ── GET — List campaigns ────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -13,6 +26,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await ensureSchema();
   const sql = getDb();
   const action = request.nextUrl.searchParams.get("action");
 
@@ -59,6 +73,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await ensureSchema();
   const sql = getDb();
   const body = await request.json();
   const { action } = body;
