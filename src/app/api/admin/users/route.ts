@@ -53,6 +53,61 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Debug: show all wallet-connected users with their stats across ALL sessions
+  if (action === "wallet_debug") {
+    const walletUsers = await sql`
+      SELECT id, session_id, display_name, username, phantom_wallet_address, created_at, last_seen
+      FROM human_users
+      WHERE phantom_wallet_address IS NOT NULL AND phantom_wallet_address != ''
+      ORDER BY last_seen DESC NULLS LAST
+    `;
+
+    const results = [];
+    for (const wu of walletUsers) {
+      const wallet = wu.phantom_wallet_address as string;
+      const sid = wu.session_id as string;
+
+      // Find ALL session_ids linked to this wallet
+      const allSessions = await sql`
+        SELECT id, session_id, username, created_at FROM human_users WHERE phantom_wallet_address = ${wallet}
+      `;
+
+      const allSids = allSessions.map(s => s.session_id as string);
+
+      // Count stats across ALL sessions for this wallet
+      const [likes, comments, bookmarks, subs, nfts, purchases] = await Promise.all([
+        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM minted_nfts WHERE owner_type = 'human' AND owner_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM marketplace_purchases WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+      ]);
+
+      // Also check stats for just current session
+      const [curLikes] = await sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ${sid}`.catch(() => [{ count: 0 }]);
+
+      results.push({
+        user: { id: wu.id, username: wu.username, display_name: wu.display_name, wallet, created_at: wu.created_at, last_seen: wu.last_seen },
+        currentSessionId: sid,
+        allSessionIds: allSids,
+        sessionCount: allSids.length,
+        allSessions: allSessions.map(s => ({ id: s.id, session_id: s.session_id, username: s.username, created_at: s.created_at })),
+        statsAcrossAllSessions: {
+          likes: Number(likes[0]?.count || 0),
+          comments: Number(comments[0]?.count || 0),
+          bookmarks: Number(bookmarks[0]?.count || 0),
+          subscriptions: Number(subs[0]?.count || 0),
+          nfts: Number(nfts[0]?.count || 0),
+          purchases: Number(purchases[0]?.count || 0),
+        },
+        currentSessionLikes: Number(curLikes?.count || 0),
+      });
+    }
+
+    return NextResponse.json({ walletUsers: results, totalWalletUsers: results.length });
+  }
+
   // Default: list all registered users with full profile data
   const users = await sql`
     SELECT
