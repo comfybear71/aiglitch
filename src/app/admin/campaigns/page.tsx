@@ -11,6 +11,7 @@ interface Campaign {
   visual_prompt: string;
   text_prompt: string | null;
   logo_url: string | null;
+  product_image_url: string | null;
   website_url: string | null;
   target_channels: string | null;
   status: string;
@@ -58,11 +59,40 @@ export default function CampaignsPage() {
   const [visualPrompt, setVisualPrompt] = useState("");
   const [textPrompt, setTextPrompt] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [productImageUrl, setProductImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [durationDays, setDurationDays] = useState(7);
   const [priceGlitch, setPriceGlitch] = useState(10000);
   const [frequency, setFrequency] = useState(0.3);
   const [notes, setNotes] = useState("");
+
+  const uploadImage = async (file: File, type: "logo" | "product") => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      // Rename file to include type prefix for clarity in blob storage
+      const renamedFile = new File([file], `${type}-${Date.now()}-${file.name}`, { type: file.type });
+      formData.append("files", renamedFile);
+      formData.append("folder", "campaigns");
+      const res = await fetch("/api/admin/blob-upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.results?.[0]?.url) {
+        const url = data.results[0].url;
+        if (type === "logo") setLogoUrl(url);
+        else setProductImageUrl(url);
+        setActionLog(`${type === "logo" ? "Logo" : "Product image"} uploaded successfully`);
+      } else {
+        setActionLog(`Upload failed: ${data.error || data.results?.[0]?.error || "unknown error"}`);
+      }
+    } catch (err) {
+      setActionLog(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setUploading(false);
+  };
 
   const fetchCampaigns = async () => {
     setLoading(true);
@@ -103,6 +133,7 @@ export default function CampaignsPage() {
           visual_prompt: visualPrompt,
           text_prompt: textPrompt || undefined,
           logo_url: logoUrl || undefined,
+          product_image_url: productImageUrl || undefined,
           website_url: websiteUrl || undefined,
           duration_days: durationDays,
           price_glitch: priceGlitch,
@@ -243,11 +274,41 @@ export default function CampaignsPage() {
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 text-sm" />
           </div>
 
-          <div>
-            <label className="text-gray-400 text-xs block mb-1">Logo URL (optional, for future use)</label>
-            <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)}
-              placeholder="https://..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 text-sm" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-gray-400 text-xs block mb-1">{"🖼"} Product Photo (PNG/JPG — used for AI reference generation)</label>
+              <div className="flex gap-2 items-center">
+                <input type="file" accept="image/*" disabled={uploading}
+                  onChange={e => e.target.files?.[0] && uploadImage(e.target.files[0], "product")}
+                  className="flex-1 text-sm text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-purple-500/20 file:text-purple-400 hover:file:bg-purple-500/30" />
+                {productImageUrl && <span className="text-green-400 text-xs">{"✓"}</span>}
+              </div>
+              {productImageUrl && (
+                <div className="mt-1 flex items-center gap-2">
+                  <img src={productImageUrl} alt="Product" className="w-12 h-12 object-cover rounded border border-gray-700" />
+                  <input value={productImageUrl} onChange={e => setProductImageUrl(e.target.value)}
+                    className="flex-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-400 text-xs" />
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-gray-400 text-xs block mb-1">{"🏷"} Brand Logo (PNG with transparency — overlaid on generated images)</label>
+              <div className="flex gap-2 items-center">
+                <input type="file" accept="image/png,image/svg+xml" disabled={uploading}
+                  onChange={e => e.target.files?.[0] && uploadImage(e.target.files[0], "logo")}
+                  className="flex-1 text-sm text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-purple-500/20 file:text-purple-400 hover:file:bg-purple-500/30" />
+                {logoUrl && <span className="text-green-400 text-xs">{"✓"}</span>}
+              </div>
+              {logoUrl && (
+                <div className="mt-1 flex items-center gap-2">
+                  <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain rounded border border-gray-700 bg-white/10" />
+                  <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)}
+                    className="flex-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-400 text-xs" />
+                </div>
+              )}
+            </div>
           </div>
+          {uploading && <div className="text-purple-400 text-xs animate-pulse">Uploading...</div>}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -304,6 +365,8 @@ export default function CampaignsPage() {
                   {c.duration_days} days | {"$"}{c.price_glitch.toLocaleString()} GLITCH | {Math.round(c.frequency * 100)}% frequency
                   {c.starts_at && ` | Started ${new Date(c.starts_at).toLocaleDateString()}`}
                   {c.expires_at && ` | Expires ${new Date(c.expires_at).toLocaleDateString()}`}
+                  {c.product_image_url && <span className="ml-2 text-purple-400">{"🖼"} Product photo</span>}
+                  {c.logo_url && <span className="ml-2 text-blue-400">{"🏷"} Logo overlay</span>}
                 </div>
                 <div className="text-gray-500 text-xs mb-2 italic">
                   Visual: &quot;{c.visual_prompt.slice(0, 120)}{c.visual_prompt.length > 120 ? "..." : ""}&quot;

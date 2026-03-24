@@ -11,6 +11,7 @@ export interface AdCampaign {
   visual_prompt: string;
   text_prompt: string | null;
   logo_url: string | null;
+  product_image_url: string | null;
   website_url: string | null;
   target_channels: string | null;   // JSON array of channel IDs
   target_persona_types: string | null;

@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
   if (action === "create") {
     const {
       brand_name, product_name, product_emoji, visual_prompt, text_prompt,
-      logo_url, website_url, target_channels, target_persona_types,
+      logo_url, product_image_url, website_url, target_channels, target_persona_types,
       duration_days, price_glitch, frequency, notes,
     } = body;
 
@@ -82,12 +82,12 @@ export async function POST(request: NextRequest) {
     await sql`
       INSERT INTO ad_campaigns (
         id, brand_name, product_name, product_emoji, visual_prompt, text_prompt,
-        logo_url, website_url, target_channels, target_persona_types,
+        logo_url, product_image_url, website_url, target_channels, target_persona_types,
         status, duration_days, price_glitch, frequency, notes, created_by, created_at, updated_at
       ) VALUES (
         ${id}, ${brand_name}, ${product_name}, ${product_emoji || "📦"},
         ${visual_prompt}, ${text_prompt || null},
-        ${logo_url || null}, ${website_url || null},
+        ${logo_url || null}, ${product_image_url || null}, ${website_url || null},
         ${target_channels ? JSON.stringify(target_channels) : null},
         ${target_persona_types ? JSON.stringify(target_persona_types) : null},
         'pending_payment', ${duration_days || 7}, ${price_glitch || 10000},
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
   if (action === "update") {
     const {
       campaign_id, brand_name, product_name, product_emoji, visual_prompt, text_prompt,
-      logo_url, website_url, target_channels, target_persona_types,
+      logo_url, product_image_url, website_url, target_channels, target_persona_types,
       duration_days, price_glitch, frequency, notes,
     } = body;
 
@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
         visual_prompt = COALESCE(${visual_prompt || null}, visual_prompt),
         text_prompt = COALESCE(${text_prompt || null}, text_prompt),
         logo_url = COALESCE(${logo_url || null}, logo_url),
+        product_image_url = COALESCE(${product_image_url || null}, product_image_url),
         website_url = COALESCE(${website_url || null}, website_url),
         target_channels = ${target_channels ? JSON.stringify(target_channels) : null},
         target_persona_types = ${target_persona_types ? JSON.stringify(target_persona_types) : null},

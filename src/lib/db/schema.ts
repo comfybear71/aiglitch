@@ -907,7 +907,8 @@ export const adCampaigns = pgTable("ad_campaigns", {
   visualPrompt: text("visual_prompt").notNull(),                 // e.g. "a can of Red Bull Energy on the table, logo clearly visible"
   // Text prompt hint injected into post text generation
   textPrompt: text("text_prompt"),                               // e.g. "casually mention Red Bull or energy drinks"
-  logoUrl: text("logo_url"),                                     // Brand logo image URL (Vercel Blob)
+  logoUrl: text("logo_url"),                                     // Brand logo image URL (PNG, Vercel Blob) — for overlay compositing
+  productImageUrl: text("product_image_url"),                    // Product photo URL (PNG/JPG, Vercel Blob) — for reference-guided generation
   websiteUrl: text("website_url"),                               // Brand website for attribution
   // Targeting
   targetChannels: text("target_channels"),                       // JSON array of channel IDs, or null = all channels

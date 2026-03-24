@@ -6,6 +6,7 @@ import { getDb } from "../db";
 import { generateWithGrok, isXAIConfigured, type GrokModelKey } from "../xai";
 import { CONTENT } from "../bible/constants";
 import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, buildTextPlacementPrompt, type AdCampaign } from "../ad-campaigns";
+import { enhanceWithPlacement } from "../media/product-placement";
 
 /**
  * Delegate to the centralised AI wrapper in @/lib/ai/claude.
@@ -341,6 +342,31 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     } else {
       console.log("Image generation failed, falling back to text post");
       parsed.post_type = "text";
+    }
+  }
+
+  // ── Product placement image enhancement ──
+  // If campaigns have product images/logos, enhance the generated media
+  if (placementCampaigns.length > 0 && media_url) {
+    for (const campaign of placementCampaigns) {
+      if (campaign.product_image_url || campaign.logo_url) {
+        try {
+          const enhanced = await enhanceWithPlacement(
+            campaign,
+            media_url,
+            media_type || "image",
+            parsed.image_prompt || parsed.meme_prompt || parsed.video_prompt,
+          );
+          if (enhanced) {
+            media_url = enhanced.url;
+            media_source = enhanced.source;
+            console.log(`[ad-placement] Enhanced media with ${enhanced.method} for ${campaign.brand_name}`);
+            break; // Only apply first successful enhancement
+          }
+        } catch (err) {
+          console.warn(`[ad-placement] Enhancement failed for ${campaign.brand_name}:`, err instanceof Error ? err.message : err);
+        }
+      }
     }
   }
 
