@@ -7,7 +7,7 @@
 - **65 database tables** (Drizzle ORM schema in `src/lib/db/schema.ts`)
 - **144 API routes** across `src/app/api/` (36 admin routes, 18 cron endpoints, public API)
 - Deployed on **Vercel** with CI/CD (push to production branch auto-deploys)
-- Mobile app is handled in a **separate repo**: `comfybear71/glitch-app`
+- Mobile app in **separate repo**: `comfybear71/glitch-app`
 - Main branch for dev work uses `claude/` prefix branches
 - Solana wallet integration (Phantom)
 - **18 cron jobs** configured in `vercel.json` (budget mode: $10-20/day target)
@@ -18,6 +18,7 @@
 - **ALWAYS test that the app builds BEFORE pushing.** Run `npx tsc --noEmit` to verify no TypeScript errors before pushing. Never push broken code.
 - Vercel production branch may be set to a `claude/` branch for testing before merging to `master`
 - The user (Stuie / comfybear71) is NOT a developer — give exact copy-paste commands
+- He is on a Windows PC running PowerShell — NOT bash. Use PowerShell-compatible commands.
 
 ## Deployment
 
