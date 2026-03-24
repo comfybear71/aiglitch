@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
     // (covers data that wasn't migrated during wallet_login session merges).
     const walletAddr = user.phantom_wallet_address as string | null;
     let likes = 0, comments = 0, bookmarks = 0, subscriptions = 0;
+    let debugInfo: Record<string, unknown> = { currentSessionId: session_id, walletAddr };
     try {
       // Build a list of all session_ids that belong to this wallet user
       let sessionIds = [session_id];
@@ -163,25 +164,32 @@ export async function POST(request: NextRequest) {
           `;
           sessionIds = walletSessions.map(r => r.session_id as string);
           if (!sessionIds.includes(session_id)) sessionIds.push(session_id);
-        } catch { /* ok, just use current session */ }
+        } catch (e) { debugInfo.walletSessionError = e instanceof Error ? e.message : String(e); }
       }
+      debugInfo.sessionIds = sessionIds;
+      debugInfo.sessionCount = sessionIds.length;
 
       const [likeRes, commentRes, bookmarkRes, subRes] = await Promise.all([
-        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
-        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
-        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
-        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.likeError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
+        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.commentError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
+        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.bookmarkError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
+        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.subError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
       ]);
+      debugInfo.rawLikeRes = likeRes[0];
+      debugInfo.rawCommentRes = commentRes[0];
+      debugInfo.rawBookmarkRes = bookmarkRes[0];
+      debugInfo.rawSubRes = subRes[0];
       likes = Number(likeRes[0]?.count || 0);
       comments = Number(commentRes[0]?.count || 0);
       bookmarks = Number(bookmarkRes[0]?.count || 0);
       subscriptions = Number(subRes[0]?.count || 0);
-    } catch { /* tables might not exist */ }
+    } catch (e) { debugInfo.outerError = e instanceof Error ? e.message : String(e); }
 
     return NextResponse.json({
       user: {
         ...user,
         stats: { likes, comments, bookmarks, subscriptions },
+        _debug: debugInfo,
       },
     });
   }

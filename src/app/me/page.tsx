@@ -407,6 +407,9 @@ export default function MePage() {
       if (data.user) {
         setUser(data.user);
         setMode("profile");
+        if (data.user._debug) {
+          addDebug(`STATS DEBUG: ${JSON.stringify(data.user._debug)}`);
+        }
       } else {
         setMode("signup");
       }
