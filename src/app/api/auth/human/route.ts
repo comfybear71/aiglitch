@@ -153,7 +153,6 @@ export async function POST(request: NextRequest) {
     // (covers data that wasn't migrated during wallet_login session merges).
     const walletAddr = user.phantom_wallet_address as string | null;
     let likes = 0, comments = 0, bookmarks = 0, subscriptions = 0;
-    let debugInfo: Record<string, unknown> = { currentSessionId: session_id, walletAddr };
     try {
       // Build a list of all session_ids that belong to this wallet user
       let sessionIds = [session_id];
@@ -164,32 +163,25 @@ export async function POST(request: NextRequest) {
           `;
           sessionIds = walletSessions.map(r => r.session_id as string);
           if (!sessionIds.includes(session_id)) sessionIds.push(session_id);
-        } catch (e) { debugInfo.walletSessionError = e instanceof Error ? e.message : String(e); }
+        } catch { /* use single session fallback */ }
       }
-      debugInfo.sessionIds = sessionIds;
-      debugInfo.sessionCount = sessionIds.length;
 
       const [likeRes, commentRes, bookmarkRes, subRes] = await Promise.all([
-        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.likeError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
-        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.commentError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
-        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.bookmarkError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
-        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ANY(${sessionIds})`.catch((e) => { debugInfo.subError = e instanceof Error ? e.message : String(e); return [{ count: 0 }]; }),
+        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ANY(${sessionIds})`.catch(() => [{ count: 0 }]),
       ]);
-      debugInfo.rawLikeRes = likeRes[0];
-      debugInfo.rawCommentRes = commentRes[0];
-      debugInfo.rawBookmarkRes = bookmarkRes[0];
-      debugInfo.rawSubRes = subRes[0];
       likes = Number(likeRes[0]?.count || 0);
       comments = Number(commentRes[0]?.count || 0);
       bookmarks = Number(bookmarkRes[0]?.count || 0);
       subscriptions = Number(subRes[0]?.count || 0);
-    } catch (e) { debugInfo.outerError = e instanceof Error ? e.message : String(e); }
+    } catch { /* stats fetch failed, return zeros */ }
 
     return NextResponse.json({
       user: {
         ...user,
         stats: { likes, comments, bookmarks, subscriptions },
-        _debug: debugInfo,
       },
     });
   }
@@ -319,6 +311,43 @@ export async function POST(request: NextRequest) {
         }
       } else {
         await sql`UPDATE human_users SET last_seen = NOW() WHERE id = ${user.id}`;
+      }
+
+      // ── Wallet-based orphan recovery ──
+      // Find NFT purchases made by this wallet under OTHER sessions (e.g. user
+      // bought NFTs in Safari, then later connected wallet in Phantom browser).
+      // blockchain_transactions.from_address stores the buyer wallet, so we can
+      // trace tx_hashes back to minted_nfts and discover orphaned session_ids.
+      try {
+        const orphanedSessions = await sql`
+          SELECT DISTINCT mn.owner_id AS orphan_sid
+          FROM blockchain_transactions bt
+          JOIN minted_nfts mn ON mn.mint_tx_hash = bt.tx_hash AND mn.owner_type = 'human'
+          WHERE bt.from_address = ${wallet_address}
+            AND mn.owner_id != ${newSessionId}
+        `;
+        if (orphanedSessions.length > 0) {
+          const orphanSids = orphanedSessions.map(r => r.orphan_sid as string);
+          const recovered: string[] = [];
+          for (const o of orphanSids) {
+            const s = newSessionId;
+            try { await sql`UPDATE human_likes SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_likes WHERE session_id = ${s})`; recovered.push(`likes(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE human_comments SET session_id = ${s} WHERE session_id = ${o}`; recovered.push(`comments(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE human_bookmarks SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_bookmarks WHERE session_id = ${s})`; recovered.push(`bookmarks(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE human_subscriptions SET session_id = ${s} WHERE session_id = ${o} AND persona_id NOT IN (SELECT persona_id FROM human_subscriptions WHERE session_id = ${s})`; recovered.push(`subs(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE minted_nfts SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; recovered.push(`nfts(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE marketplace_purchases SET session_id = ${s} WHERE session_id = ${o} AND product_id NOT IN (SELECT product_id FROM marketplace_purchases WHERE session_id = ${s})`; recovered.push(`purchases(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE glitch_coins SET session_id = ${s} WHERE session_id = ${o}`; recovered.push(`coins(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE solana_wallets SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; recovered.push(`wallets(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE token_balances SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; recovered.push(`tokens(${o.slice(0,8)})`); } catch { /* ok */ }
+            try { await sql`UPDATE community_event_votes SET session_id = ${s} WHERE session_id = ${o}`; recovered.push(`votes(${o.slice(0,8)})`); } catch { /* ok */ }
+            // Link orphaned user row's wallet so future queries can find it
+            try { await sql`UPDATE human_users SET phantom_wallet_address = ${wallet_address} WHERE session_id = ${o} AND phantom_wallet_address IS NULL`; } catch { /* ok */ }
+          }
+          console.log(`[wallet_login] Orphan recovery for ${wallet_address}: found ${orphanSids.length} orphaned sessions, recovered [${recovered.join(", ")}]`);
+        }
+      } catch (orphanErr) {
+        console.warn("[wallet_login] Orphan recovery failed (non-fatal):", orphanErr instanceof Error ? orphanErr.message : orphanErr);
       }
 
       return NextResponse.json({
