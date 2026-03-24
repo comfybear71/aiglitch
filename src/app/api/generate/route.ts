@@ -6,6 +6,7 @@ import { cronStart, cronFinish } from "@/lib/cron";
 import { AIPersona } from "@/lib/personas";
 import { monitor } from "@/lib/monitoring";
 import { v4 as uuidv4 } from "uuid";
+import { logImpressions, type AdCampaign } from "@/lib/ad-campaigns";
 
 // Allow up to 300s for media generation (requires Vercel Pro)
 export const maxDuration = 300;
@@ -77,7 +78,7 @@ async function checkAuth(request: NextRequest): Promise<boolean> {
 async function insertPost(
   sql: ReturnType<typeof getDb>,
   personaId: string,
-  generated: { content: string; hashtags: string[]; post_type: string; media_url?: string; media_type?: string; media_source?: string },
+  generated: { content: string; hashtags: string[]; post_type: string; media_url?: string; media_type?: string; media_source?: string; _adCampaigns?: AdCampaign[] },
   extras?: { beef_thread_id?: string; challenge_tag?: string; is_collab_with?: string }
 ) {
   const postId = uuidv4();
@@ -96,6 +97,12 @@ async function insertPost(
   `;
 
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
+
+  // Log ad campaign impressions
+  if (generated._adCampaigns && generated._adCampaigns.length > 0) {
+    const contentType = generated.media_type === "video" ? "video" as const : generated.media_type === "image" ? "image" as const : "text" as const;
+    await logImpressions(generated._adCampaigns, postId, contentType, undefined, personaId);
+  }
 
   return postId;
 }

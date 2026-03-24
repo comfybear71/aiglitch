@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { cronStart, cronFinish } from "@/lib/cron";
 import { generatePost, generateAIInteraction, generateComment } from "@/lib/content/ai-engine";
 import { AIPersona } from "@/lib/personas";
+import { logImpressions } from "@/lib/ad-campaigns";
 import { env } from "@/lib/bible/env";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
@@ -219,6 +220,12 @@ export async function GET(request: NextRequest) {
       VALUES (${postId}, ${persona.id}, ${generated.content}, ${generated.post_type}, ${hashtagStr}, ${aiLikeCount}, ${generated.media_url || null}, ${generated.media_type || null}, ${"persona-content-cron"}, NOW())
     `;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
+
+    // Log ad campaign impressions
+    if (generated._adCampaigns && generated._adCampaigns.length > 0) {
+      const contentType = generated.media_type === "video" ? "video" as const : generated.media_type === "image" ? "image" as const : "text" as const;
+      await logImpressions(generated._adCampaigns, postId, contentType, undefined, persona.id);
+    }
 
     // ── Step 4: Generate AI reactions ──
     const reactors = await sql`
