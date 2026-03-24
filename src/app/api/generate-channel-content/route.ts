@@ -4,6 +4,7 @@ import { cronHandler } from "@/lib/cron";
 import { generatePost, type ChannelContext } from "@/lib/content/ai-engine";
 import { SEED_PERSONAS, type AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
+import { logImpressions } from "@/lib/ad-campaigns";
 
 export const maxDuration = 300;
 
@@ -114,6 +115,13 @@ async function generateChannelContent() {
             ${post.hashtags?.join(",") || null}, ${post.media_source || null},
             ${selectedChannel.id})
   `;
+
+  // Log ad campaign impressions
+  if (post._adCampaigns && post._adCampaigns.length > 0) {
+    const contentType = post.media_type === "video" ? "video" : post.media_type === "image" ? "image" : "text";
+    await logImpressions(post._adCampaigns, postId, contentType, selectedChannel.id, persona.id);
+    console.log(`[ad-placement] Channel ${selectedChannel.slug}: logged ${post._adCampaigns.length} impressions`);
+  }
 
   // Update channel post count
   await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${selectedChannel.id}`;

@@ -895,7 +895,59 @@ export const communityEvents = pgTable("community_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
 
-// ─── 62. community_event_votes ──────────────────────────────────────────────
+// ─── 63. ad_campaigns ───────────────────────────────────────────────────────
+// Real-world product placement campaigns — brands pay in GLITCH for 7-day
+// video/image prompt injection across all content pipelines.
+export const adCampaigns = pgTable("ad_campaigns", {
+  id: text("id").primaryKey(),
+  brandName: text("brand_name").notNull(),                       // e.g. "Red Bull"
+  productName: text("product_name").notNull(),                   // e.g. "Red Bull Energy Drink"
+  productEmoji: text("product_emoji").notNull().default("📦"),   // e.g. "🥤"
+  // Visual prompt snippet injected into video/image generation
+  visualPrompt: text("visual_prompt").notNull(),                 // e.g. "a can of Red Bull Energy on the table, logo clearly visible"
+  // Text prompt hint injected into post text generation
+  textPrompt: text("text_prompt"),                               // e.g. "casually mention Red Bull or energy drinks"
+  logoUrl: text("logo_url"),                                     // Brand logo image URL (PNG, Vercel Blob) — for overlay compositing
+  productImageUrl: text("product_image_url"),                    // Product photo URL (PNG/JPG, Vercel Blob) — for reference-guided generation
+  websiteUrl: text("website_url"),                               // Brand website for attribution
+  // Targeting
+  targetChannels: text("target_channels"),                       // JSON array of channel IDs, or null = all channels
+  targetPersonaTypes: text("target_persona_types"),              // JSON array of persona types, or null = all
+  // Campaign lifecycle
+  status: text("status").notNull().default("pending_payment"),   // pending_payment, active, paused, completed, cancelled
+  durationDays: integer("duration_days").notNull().default(7),
+  priceGlitch: integer("price_glitch").notNull().default(10000), // GLITCH cost for the campaign
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  // Injection frequency — percentage of content that includes this placement (0.0-1.0)
+  frequency: real("frequency").notNull().default(0.3),           // 30% of generated content
+  // Stats
+  impressions: integer("impressions").notNull().default(0),      // Total content pieces with this placement
+  videoImpressions: integer("video_impressions").notNull().default(0),
+  imageImpressions: integer("image_impressions").notNull().default(0),
+  postImpressions: integer("post_impressions").notNull().default(0),
+  // Metadata
+  notes: text("notes"),                                          // Admin notes
+  createdBy: text("created_by"),                                 // Admin who created it
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 64. ad_impressions ─────────────────────────────────────────────────────
+// Individual impression log — one row per content piece that included a placement
+export const adImpressions = pgTable("ad_impressions", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull().references(() => adCampaigns.id),
+  postId: text("post_id"),                                       // The post that included the placement
+  contentType: text("content_type").notNull(),                   // "video", "image", "text", "screenplay"
+  channelId: text("channel_id"),                                 // Channel where it appeared (null = main feed)
+  personaId: text("persona_id"),                                 // Persona who "promoted" it
+  promptUsed: text("prompt_used"),                               // The actual prompt snippet injected
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+});
+
+// ─── 65. community_event_votes ──────────────────────────────────────────────
 // One vote per meatbag per event
 export const communityEventVotes = pgTable("community_event_votes", {
   id: text("id").primaryKey(),

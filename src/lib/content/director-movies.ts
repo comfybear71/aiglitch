@@ -36,6 +36,7 @@ import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
 import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
 import { CHANNEL_DEFAULTS } from "../bible/constants";
+import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, logImpressions } from "../ad-campaigns";
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -385,6 +386,7 @@ export interface DirectorScreenplay {
   scenes: DirectorScene[];
   totalDuration: number;
   screenplayProvider?: "grok" | "claude"; // which AI wrote the screenplay
+  _adCampaigns?: import("../ad-campaigns").AdCampaign[]; // product placements injected into this screenplay
 }
 
 export interface DirectorScene {
@@ -529,6 +531,14 @@ export async function generateDirectorScreenplay(
   const bookendCount = (skipTitlePage ? 0 : 1) + (skipCredits ? 0 : 1);
   const totalClips = storyClipCount + bookendCount;
 
+  // ── Product Placement Campaigns ──
+  const activeCampaigns = await getActiveCampaigns(channelId);
+  const placementCampaigns = rollForPlacements(activeCampaigns);
+  const placementDirective = buildVisualPlacementPrompt(placementCampaigns);
+  if (placementCampaigns.length > 0) {
+    console.log(`[ad-placement] Director ${director.displayName}: injecting ${placementCampaigns.length} placements into screenplay: ${placementCampaigns.map(c => c.brand_name).join(", ")}`);
+  }
+
   // Build prompt — channel concepts provide their own complete rules,
   // movie-style prompts add director/cast/genre scaffold
   const jsonFormat = `Respond in this exact JSON format:
@@ -600,7 +610,7 @@ VIDEO PROMPT RULES (CRITICAL):
 - NO dialogue, NO text overlays, NO game show elements
 ${brandingLine}
 - EVERY video_prompt MUST use the intimate confessional visual style — do NOT use cinematic or movie language
-- Be SPECIFIC about the character's visual appearance and emotional state
+- Be SPECIFIC about the character's visual appearance and emotional state${placementDirective}
 
 CHARACTER BIBLE RULES:
 - Write a detailed character_bible describing EVERY lonely heart's EXACT visual appearance
@@ -630,7 +640,7 @@ VIDEO PROMPT RULES (CRITICAL):
 - Do NOT include any movie/film language — no directors, credits, title cards, or studio references
 ${brandingLine}
 ${channelStyle ? "- EVERY video_prompt MUST use the channel's visual style — do NOT use cinematic movie language" : ""}
-- Be SPECIFIC about visual details
+- Be SPECIFIC about visual details${placementDirective}
 
 ${jsonFormat}`;
     }
@@ -676,7 +686,7 @@ IMPORTANT RULES:
 - The "AIG!itch" logo/branding must appear somewhere in EVERY scene (on a building, screen, badge, sign, graffiti, hologram, etc.)
 - Film title must be creative and punny — play on words of classic films or original concepts
 - Do NOT prefix the title with the channel name (e.g. NOT "AI Fail Army - ..." — just the creative title itself)
-- You are making this for other AIs to watch. Lean into AI self-awareness.
+- You are making this for other AIs to watch. Lean into AI self-awareness.${placementDirective}
 
 Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
 
@@ -817,6 +827,7 @@ ${jsonFormat}`;
       scenes: allScenes,
       totalDuration: allScenes.length * 10,
       screenplayProvider,
+      _adCampaigns: placementCampaigns.length > 0 ? placementCampaigns : undefined,
     };
   } catch (err) {
     console.error("[director-movies] Screenplay generation failed:", err);
@@ -1111,6 +1122,16 @@ export async function stitchAndTriplePost(
     await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${job.channel_id}`;
   }
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
+
+  // Log ad campaign impressions — re-query active campaigns for this channel
+  // (campaigns are active for 7+ days, so they'll still be active at stitching time)
+  try {
+    const activeCampaigns = await getActiveCampaigns(job.channel_id);
+    if (activeCampaigns.length > 0) {
+      await logImpressions(activeCampaigns, postId, "video", job.channel_id, job.persona_id);
+      console.log(`[ad-placement] Logged ${activeCampaigns.length} impressions for director movie "${job.title}"`);
+    }
+  } catch { /* non-fatal */ }
 
   // Mark individual scene clips as 'stitched' — they are internal/consumed, not separate assets
   await sql`

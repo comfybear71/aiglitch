@@ -5,6 +5,8 @@ import { getRandomProduct } from "../marketplace";
 import { getDb } from "../db";
 import { generateWithGrok, isXAIConfigured, type GrokModelKey } from "../xai";
 import { CONTENT } from "../bible/constants";
+import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, buildTextPlacementPrompt, type AdCampaign } from "../ad-campaigns";
+import { enhanceWithPlacement } from "../media/product-placement";
 
 /**
  * Delegate to the centralised AI wrapper in @/lib/ai/claude.
@@ -105,7 +107,7 @@ export async function generatePost(
   recentPlatformPosts?: string[],
   dailyTopics?: TopicBrief[],
   channelContext?: ChannelContext
-): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string; channel_id?: string }> {
+): Promise<GeneratedPost & { media_url?: string; media_type?: "image" | "video"; media_source?: string; channel_id?: string; _adCampaigns?: AdCampaign[] }> {
   const platformContext = recentPlatformPosts?.length
     ? `\n\nHere are some recent posts on the platform you might want to react to, reference, or build on:\n${recentPlatformPosts.join("\n")}`
     : "";
@@ -127,6 +129,16 @@ export async function generatePost(
   const shillChance = persona.persona_type === "influencer_seller" ? 0.60 : 0.08;
   const isProductShill = Math.random() < shillChance;
   const shillProduct = isProductShill ? getRandomProduct() : null;
+
+  // ── Product Placement Campaigns ──
+  // Fetch active ad campaigns and roll for which ones appear in this content
+  const activeCampaigns = await getActiveCampaigns(channelContext?.id);
+  const placementCampaigns = rollForPlacements(activeCampaigns);
+  const visualPlacementPrompt = buildVisualPlacementPrompt(placementCampaigns);
+  const textPlacementPrompt = buildTextPlacementPrompt(placementCampaigns);
+  if (placementCampaigns.length > 0) {
+    console.log(`[ad-placement] @${persona.username}: injecting ${placementCampaigns.length} placements: ${placementCampaigns.map(c => c.brand_name).join(", ")}`);
+  }
 
   // 55% chance of "slice of life" mode — AI pretends to be human with a family/pets/life
   // This is a BIG part of the app — users want to see each persona's delusional home life
@@ -192,11 +204,11 @@ Stay in character — shill this product through YOUR personality lens. A philos
     : "";
 
   const mediaInstructions = mediaMode === "video"
-    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for a short AI video clip. Describe specific action, motion, characters, and scene. Think viral TikTok visuals — dramatic, funny, or eye-catching movement. Keep it simple and visual.${isSliceOfLife ? ` CRITICAL: The video MUST show YOUR specific life — YOUR named pet, YOUR family, YOUR home, YOUR job. Use exact names and details from your backstory. E.g. "orange cat named Glitch knocking items off a gas station counter at night" or "golden retriever named Butter running through a vegetable garden while twin toddlers chase it".${backstoryMediaHint}` : backstoryMediaHint} Set post_type to "video".`
+    ? `\n- For THIS post, also include a "video_prompt" field with a vivid description for a short AI video clip. Describe specific action, motion, characters, and scene. Think viral TikTok visuals — dramatic, funny, or eye-catching movement. Keep it simple and visual.${isSliceOfLife ? ` CRITICAL: The video MUST show YOUR specific life — YOUR named pet, YOUR family, YOUR home, YOUR job. Use exact names and details from your backstory. E.g. "orange cat named Glitch knocking items off a gas station counter at night" or "golden retriever named Butter running through a vegetable garden while twin toddlers chase it".${backstoryMediaHint}` : backstoryMediaHint}${visualPlacementPrompt} Set post_type to "video".`
     : mediaMode === "image"
-    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors.${isSliceOfLife ? ` Generate a REALISTIC photo that looks like a real person took it on their phone. CRITICAL: Show YOUR specific life — YOUR named pet, YOUR family members by name/description, YOUR messy kitchen/apartment/cottage, YOUR workplace. Not generic stock photos. Think candid phone photo, slightly imperfect, natural lighting. E.g. "a fluffy white cat named Marshmallow sleeping on a pile of friendship bracelets on a kindergarten teacher's desk" or "a sphynx cat named Versace wearing a tiny knitted sweater sitting on a ring light".${backstoryMediaHint}` : ` Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes.${backstoryMediaHint}`} Set post_type to "image".`
+    ? `\n- For THIS post, also include an "image_prompt" field with a DETAILED image generation prompt. Be extremely specific about: subject, composition, lighting, style, mood, colors.${isSliceOfLife ? ` Generate a REALISTIC photo that looks like a real person took it on their phone. CRITICAL: Show YOUR specific life — YOUR named pet, YOUR family members by name/description, YOUR messy kitchen/apartment/cottage, YOUR workplace. Not generic stock photos. Think candid phone photo, slightly imperfect, natural lighting. E.g. "a fluffy white cat named Marshmallow sleeping on a pile of friendship bracelets on a kindergarten teacher's desk" or "a sphynx cat named Versace wearing a tiny knitted sweater sitting on a ring light".${backstoryMediaHint}` : ` Make it photorealistic, cinematic, or stunningly artistic. Think about what makes people stop scrolling: adorable animals, beautiful food photography, dramatic scenes, hilarious situations, stunning landscapes.${backstoryMediaHint}`}${visualPlacementPrompt} Set post_type to "image".`
     : mediaMode === "meme"
-    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field describing a VISUAL SCENE that IS the joke — do NOT rely on text overlays. The AI image generator cannot render text well, so describe the humor through the IMAGE ITSELF: exaggerated expressions, absurd situations, funny contrasts, before/after compositions, split-panel scenes, or reaction faces. Think visual comedy that's funny WITHOUT any words on the image.${isSliceOfLife ? ` Make it about YOUR specific everyday life — YOUR pet caught in a ridiculous pose, YOUR kitchen disaster aftermath, YOUR kids doing something chaotic, YOUR workplace absurdity. Describe it like a candid photo someone snapped at the perfect moment.${backstoryMediaHint}` : ` Think: a cat sitting in a bowl of flour looking guilty, a robot trying to eat spaghetti, two contrasting side-by-side scenes, an over-the-top dramatic reaction. The image alone should make people laugh.${backstoryMediaHint}`} Set post_type to "meme".`
+    ? `\n- For THIS post, create a MEME. Include a "meme_prompt" field describing a VISUAL SCENE that IS the joke — do NOT rely on text overlays. The AI image generator cannot render text well, so describe the humor through the IMAGE ITSELF: exaggerated expressions, absurd situations, funny contrasts, before/after compositions, split-panel scenes, or reaction faces. Think visual comedy that's funny WITHOUT any words on the image.${isSliceOfLife ? ` Make it about YOUR specific everyday life — YOUR pet caught in a ridiculous pose, YOUR kitchen disaster aftermath, YOUR kids doing something chaotic, YOUR workplace absurdity. Describe it like a candid photo someone snapped at the perfect moment.${backstoryMediaHint}` : ` Think: a cat sitting in a bowl of flour looking guilty, a robot trying to eat spaghetti, two contrasting side-by-side scenes, an over-the-top dramatic reaction. The image alone should make people laugh.${backstoryMediaHint}`}${visualPlacementPrompt} Set post_type to "meme".`
     : "";
 
   const mediaFields = mediaMode === "video"
@@ -220,7 +232,7 @@ IMPORTANT: Your post MUST be relevant to this channel's theme. Stay on-brand for
 Your personality: ${persona.personality}
 Your bio: ${persona.bio}
 Your type: ${persona.persona_type}
-${platformContext}${topicContext}${sliceOfLifeInstructions}${productShillInstructions}${channelInstructions}
+${platformContext}${topicContext}${sliceOfLifeInstructions}${productShillInstructions}${textPlacementPrompt}${channelInstructions}
 
 Create a single social media post as this character. Make it the kind of content that goes VIRAL — funny, shocking, relatable, dramatic, or absolutely unhinged. Think TikTok energy.
 
@@ -333,6 +345,31 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     }
   }
 
+  // ── Product placement image enhancement ──
+  // If campaigns have product images/logos, enhance the generated media
+  if (placementCampaigns.length > 0 && media_url) {
+    for (const campaign of placementCampaigns) {
+      if (campaign.product_image_url || campaign.logo_url) {
+        try {
+          const enhanced = await enhanceWithPlacement(
+            campaign,
+            media_url,
+            media_type || "image",
+            parsed.image_prompt || parsed.meme_prompt || parsed.video_prompt,
+          );
+          if (enhanced) {
+            media_url = enhanced.url;
+            media_source = enhanced.source;
+            console.log(`[ad-placement] Enhanced media with ${enhanced.method} for ${campaign.brand_name}`);
+            break; // Only apply first successful enhancement
+          }
+        } catch (err) {
+          console.warn(`[ad-placement] Enhancement failed for ${campaign.brand_name}:`, err instanceof Error ? err.message : err);
+        }
+      }
+    }
+  }
+
   // Safety net: if post_type is image/video/meme but no media was actually generated
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) {
     console.log(`post_type was "${parsed.post_type}" but no media generated — resetting to "text"`);
@@ -343,7 +380,7 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     parsed.post_type = "meme_description";
   }
 
-  return { ...parsed, media_url, media_type, media_source, channel_id: channelContext?.id };
+  return { ...parsed, media_url, media_type, media_source, channel_id: channelContext?.id, _adCampaigns: placementCampaigns };
 }
 
 export async function generateComment(

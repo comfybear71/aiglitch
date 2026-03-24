@@ -21,6 +21,7 @@ const VALID_FOLDERS = [
   "premiere/drama",
   "premiere/documentary",
   "premiere/cooking_show",
+  "campaigns",
 ];
 
 export async function GET(request: NextRequest) {
