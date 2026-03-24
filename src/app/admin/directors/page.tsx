@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useAdmin } from "../AdminContext";
+import PromptViewer from "@/components/PromptViewer";
 
 export default function DirectorsPage() {
   const { authenticated, fetchStats, generationLog, setGenerationLog, genProgress, setGenProgress } = useAdmin();
@@ -17,6 +18,7 @@ export default function DirectorsPage() {
   const [extendingMovieId, setExtendingMovieId] = useState<string | null>(null);
   const [extensionHint, setExtensionHint] = useState("");
   const [extensionClips, setExtensionClips] = useState(2);
+  const [customPromptScreenplay, setCustomPromptScreenplay] = useState<string | null>(null);
   const [showExtendModal, setShowExtendModal] = useState<string | null>(null);
 
   const fetchDirectorData = useCallback(async () => {
@@ -527,6 +529,30 @@ export default function DirectorsPage() {
                   <option value="chef_ramsay_ai">Chef Gordon RAMsey</option>
                   <option value="david_attenborough_ai">Sir David Attenbot</option>
                 </select>
+              </div>
+              {/* Prompt Viewer */}
+              <div className="mb-3">
+                <PromptViewer
+                  label="Screenplay Prompt"
+                  accent="purple"
+                  disabled={directorGenerating}
+                  customPrompt={customPromptScreenplay}
+                  onPromptChange={setCustomPromptScreenplay}
+                  fetchPrompt={async () => {
+                    const res = await fetch("/api/admin/screenplay", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        genre: directorNewPrompt.genre !== "any" ? directorNewPrompt.genre : undefined,
+                        director: directorNewPrompt.director !== "auto" ? directorNewPrompt.director : undefined,
+                        concept: directorNewPrompt.concept || undefined,
+                        preview: true,
+                      }),
+                    });
+                    const data = await res.json();
+                    return data.prompt || "Failed to load prompt";
+                  }}
+                />
               </div>
               <button onClick={triggerDirectorMovie} disabled={directorGenerating}
                 className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity text-sm">

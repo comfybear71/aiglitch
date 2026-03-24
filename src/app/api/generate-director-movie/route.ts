@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
 
   // Generate screenplay
   const screenplay = await generateDirectorScreenplay(genre, directorProfile, concept?.concept);
-  if (!screenplay) {
+  if (!screenplay || typeof screenplay === "string") {
     await cronFinish("director-movie");
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
@@ -262,8 +262,8 @@ export async function POST(request: NextRequest) {
 
   console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${genre} film`);
 
-  const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined);
-  if (!screenplay) {
+  const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined, body.channelId);
+  if (!screenplay || typeof screenplay === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
 
@@ -385,12 +385,10 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { sceneUrls, title, genre, directorUsername, directorId, synopsis, tagline, castList, channelId, folder } = body as {
+  const { sceneUrls, title, directorUsername, synopsis, tagline, castList, channelId, folder } = body as {
     sceneUrls: Record<string, string>;
     title: string;
-    genre: string;
     directorUsername: string;
-    directorId: string;
     synopsis: string;
     tagline: string;
     castList: string[];
@@ -398,8 +396,26 @@ export async function PUT(request: NextRequest) {
     folder?: string;
   };
 
-  if (!sceneUrls || !title || !genre || !directorId) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  // Genre and directorId can fall back to defaults for channel content
+  const genre = (body as { genre?: string }).genre || "music_video";
+  const directorId = (body as { directorId?: string }).directorId || "glitch-000";
+
+  // Log what we received for debugging
+  const missingFields = [];
+  if (!sceneUrls) missingFields.push("sceneUrls");
+  if (!title) missingFields.push("title");
+  if (!(body as { genre?: string }).genre) missingFields.push("genre (defaulted to music_video)");
+  if (!(body as { directorId?: string }).directorId) missingFields.push("directorId (defaulted to glitch-000)");
+  if (missingFields.length > 0) {
+    console.log(`[director-movie] PUT fields status — missing/defaulted: ${missingFields.join(", ")}. channelId=${channelId || "none"}, bodyKeys=${Object.keys(body).join(",")}`);
+  }
+
+  if (!sceneUrls || !title) {
+    return NextResponse.json({
+      error: "Missing required fields",
+      missing: missingFields.filter(f => !f.includes("defaulted")),
+      hint: `Required: sceneUrls, title. Received keys: ${Object.keys(body).join(", ")}`,
+    }, { status: 400 });
   }
 
   const sql = getDb();
@@ -478,7 +494,7 @@ export async function PUT(request: NextRequest) {
   console.log(`[director-movie] "${title}" stitched and posted: ${postId}`);
 
   // Spread to social media — everything the Architect orchestrates gets marketed
-  const spread = await spreadPostToSocial(postId, directorId, directorName, "🎬");
+  const spread = await spreadPostToSocial(postId, directorId, directorName, "🎬", { url: blob.url, type: "video" }, "MOVIE POSTED");
   if (spread.platforms.length > 0) {
     console.log(`[director-movie] "${title}" spread to: ${spread.platforms.join(", ")}`);
   }

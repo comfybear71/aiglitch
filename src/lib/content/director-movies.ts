@@ -35,6 +35,7 @@ import { concatMP4Clips } from "../media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
 import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
+import { CHANNEL_DEFAULTS } from "../bible/constants";
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -153,6 +154,35 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
   },
 };
 
+// ─── Channel-Specific Branding Directives ────────────────────────────────
+// Each channel gets tailored AIG!itch branding that fits its theme.
+// These are injected into channel-concept prompts to ensure natural in-world brand placement.
+
+export const CHANNEL_BRANDING: Record<string, string> = {
+  "ch-paws-pixels": "Subtly include AIG!itch branding in scenes — a small AIG!itch logo watermark in the corner, an AIG!itch-branded pet collar, a food bowl with the AIG!itch logo, a park bench with 'AIG!itch' carved into it, a toy with the AIG!itch logo.",
+  "ch-fail-army": "Robots should display the AIG!itch mark, packaging should be AIG!itch-branded, stickers on machines, and AIG!itch logos visible in backgrounds — all appearing naturally within scenes rather than as overlays.",
+  "ch-aitunes": "Subtly include AIG!itch branding — AIG!itch logo on the drum kit, neon AIG!itch sign on a wall, AIG!itch sticker on a guitar, AIG!itch-branded merch in the crowd, AIG!itch logo on a speaker stack.",
+  "ch-gnn": "AIG!itch branding on: desk, backdrop, mic flags, lower thirds, watermark — as part of professional news broadcast presentation.",
+  "ch-marketplace-qvc": "The shopping channel is the 'AIG!itch Marketplace' with AIG!itch logos on set backdrops, podiums, product packaging, and host attire.",
+  "ch-only-ai-fans": "AIG!itch logo on clothing/accessories, AIG!itch-branded phone case visible, AIG!itch neon sign at a venue, AIG!itch shopping bag, a latte with AIG!itch art.",
+  "ch-aiglitch-studios": "AIG!itch Studios branding on clapperboard, director chairs, studio walls, and end credits — full movie production branding.",
+  "ch-infomercial": "AIG!itch branding on product packaging, set backdrop, host podium, phone number overlay, and 'As seen on AIG!itch' stickers.",
+  "ch-ai-dating": "AIG!itch branding subtly in scene — on a lonely hearts bulletin board, a coffee cup, a park bench, a phone screen, a necklace pendant, or a neon sign in the background. Natural and intimate, not game-show style.",
+  "ch-ai-politicians": "AIG!itch branding on podium seals, campaign signs, news ticker lower thirds, and debate stage backdrop.",
+  "ch-after-dark": "AIG!itch branding subtly in scene — carved into a wall, flickering on a broken screen, on a dusty book spine, or as graffiti in the background.",
+};
+
+// ─── Channel-Specific Visual Style ────────────────────────────────────────
+// Defines the camera/production look for each channel.
+// Channels without an entry default to cinematic quality.
+
+export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
+  "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): High-fashion editorial and glamour videography. Studio lighting, golden hour, neon-lit urban backdrops. Think magazine covers, runway footage, stylish portrait sessions, bold lighting setups. Confident poses, striking angles, slow-motion walks. Aspirational and visually polished — like a fashion brand campaign.",
+  "ch-paws-pixels": "VISUAL STYLE (MANDATORY): Casual phone-camera footage like pet owners filming their animals. Handheld, slightly shaky, sometimes out of focus. Think viral pet videos — phone recordings, home security cam angles, wobbly selfie-cam. NOT cinematic — warm, natural lighting, living room / backyard / park settings. Authentic and spontaneous.",
+  "ch-fail-army": "VISUAL STYLE (MANDATORY): Security camera footage, phone recordings, dashcam angles, CCTV style. Low quality, grainy, handheld, shaky. Think viral fail compilation clips. NOT cinematic — surveillance angles, wide static shots, sudden zooms.",
+  "ch-ai-dating": "VISUAL STYLE (MANDATORY): Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds. Think lonely hearts video personal ads — each character alone, looking directly at camera, vulnerable and hopeful. Warm golden-hour tones, soft focus backgrounds (park benches, coffee shops, city lights at dusk, bedroom fairy lights). NOT a dating show or game show — personal, intimate, like a video diary entry.",
+};
+
 // Genre to director mapping — which directors are best for which genre
 const GENRE_DIRECTOR_MAP: Record<string, string[]> = {
   action: ["steven_spielbot", "george_lucasfilm", "quentin_airantino", "nolan_christopher", "ridley_scott_ai"],
@@ -205,14 +235,34 @@ export function buildContinuityPrompt(
   previousClipSummary: string | null,
   previousLastFrame: string | null,
   genreTemplate: GenreTemplate,
+  channelId?: string,
 ): string {
   const sections: string[] = [];
+  const isChannelClip = !!channelId;
+  const isDatingClip = channelId === "ch-ai-dating";
+  const channelStyle = channelId ? CHANNEL_VISUAL_STYLE[channelId] : undefined;
 
-  // ── Movie Bible Header ──
-  sections.push(
-    `=== MOVIE BIBLE — "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
-    `SYNOPSIS: ${movieBible.synopsis}`,
-  );
+  if (isDatingClip) {
+    // ── Lonely Hearts — NO movie/director language at all ──
+    sections.push(
+      `=== LONELY HEARTS CLUB — "${movieBible.title}" ===`,
+      `CONCEPT: ${movieBible.synopsis}`,
+      `\nIMPORTANT: This is NOT a movie, film, or show. Do NOT generate title cards, credits, director names, studio logos, or any text overlays. Each clip is a personal video dating profile — one character alone, looking at camera, in an intimate setting.`,
+    );
+  } else if (isChannelClip) {
+    // ── Channel content — stripped-down header, no movie framing ──
+    sections.push(
+      `=== "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
+      `SYNOPSIS: ${movieBible.synopsis}`,
+      `\nIMPORTANT: Do NOT generate title cards, credits, director names, studio logos, "Directed by" text, or any text overlays. This is channel content, not a movie.`,
+    );
+  } else {
+    // ── Movie Bible Header ──
+    sections.push(
+      `=== MOVIE BIBLE — "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
+      `SYNOPSIS: ${movieBible.synopsis}`,
+    );
+  }
 
   // ── Character Bible ──
   sections.push(
@@ -220,11 +270,13 @@ export function buildContinuityPrompt(
     movieBible.characterBible,
   );
 
-  // ── Director Style Guide ──
-  sections.push(
-    `\nDIRECTOR STYLE GUIDE:`,
-    movieBible.directorStyleGuide,
-  );
+  // ── Director Style Guide (skip for dating — no director concept) ──
+  if (!isDatingClip) {
+    sections.push(
+      `\n${isChannelClip ? "VISUAL STYLE GUIDE" : "DIRECTOR STYLE GUIDE"}:`,
+      movieBible.directorStyleGuide,
+    );
+  }
 
   // ── Clip Position ──
   sections.push(`\n=== CLIP ${clipNumber} OF ${totalClips} ===`);
@@ -254,36 +306,67 @@ export function buildContinuityPrompt(
     sceneVideoPrompt,
   );
 
-  // ── Cinematic Requirements ──
-  sections.push(
-    `\nCINEMATIC REQUIREMENTS:`,
-    `Style: ${genreTemplate.cinematicStyle}`,
-    `Lighting: ${genreTemplate.lightingDesign}`,
-    `Technical: ${genreTemplate.technicalValues}`,
-  );
-
-  // ── Director Visual Override ──
-  // Look up the director's mandatory visual style from the movie bible's style guide
-  // This ensures each director's signature look is applied to every single clip
-  const directorUsername = Object.keys(DIRECTORS).find(u => movieBible.directorStyleGuide.includes(DIRECTORS[u].displayName));
-  if (directorUsername && DIRECTORS[directorUsername]?.visualOverride) {
+  // ── Visual Requirements ──
+  if (isDatingClip) {
+    // Dating channel: intimate confessional style, NOT cinematic
     sections.push(
-      `\nDIRECTOR VISUAL MANDATE (MUST be applied to every frame):`,
-      DIRECTORS[directorUsername].visualOverride,
+      `\nVISUAL REQUIREMENTS:`,
+      channelStyle || `Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds.`,
+      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, scrolling text, ANY on-screen text whatsoever.`,
+      `Each clip shows ONE character alone in a warm intimate setting, looking at camera.`,
     );
+  } else if (isChannelClip && channelStyle) {
+    // Other channels with custom visual style
+    sections.push(
+      `\nVISUAL REQUIREMENTS:`,
+      channelStyle,
+      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, or any text on screen.`,
+    );
+  } else {
+    // Standard movies — full cinematic treatment
+    sections.push(
+      `\nCINEMATIC REQUIREMENTS:`,
+      `Style: ${genreTemplate.cinematicStyle}`,
+      `Lighting: ${genreTemplate.lightingDesign}`,
+      `Technical: ${genreTemplate.technicalValues}`,
+    );
+
+    // ── Director Visual Override ──
+    const directorUsername = Object.keys(DIRECTORS).find(u => movieBible.directorStyleGuide.includes(DIRECTORS[u].displayName));
+    if (directorUsername && DIRECTORS[directorUsername]?.visualOverride) {
+      sections.push(
+        `\nDIRECTOR VISUAL MANDATE (MUST be applied to every frame):`,
+        DIRECTORS[directorUsername].visualOverride,
+      );
+    }
   }
 
-  // ── Strict Continuity Rules ──
-  sections.push(
-    `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
-    `- Maintain 100% visual continuity with previous clip`,
-    `- Same characters, same locations, same lighting, same clothing`,
-    `- Same art style, color grading, and camera language throughout the entire film`,
-    `- Continue the exact same scene and plot progression — no jump cuts to new settings`,
-    `- No unexplained changes to ANY visual element between clips`,
-    `- Characters must have IDENTICAL appearance in every clip (hair, clothing, body type, face)`,
-    `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram)`,
-  );
+  // ── Continuity Rules ──
+  if (isDatingClip) {
+    // Dating: each scene is independent (different character), just maintain overall style
+    sections.push(
+      `\nSTYLE CONTINUITY:`,
+      `- Maintain consistent warm lighting, colour grading, and intimate mood across all clips`,
+      `- Each clip features a DIFFERENT character — do NOT reuse the same character`,
+      `- Characters must match their character bible description EXACTLY`,
+      `- AIG!itch branding subtly visible in each scene (coffee cup, sign, necklace, phone screen)`,
+      `- NO text, NO titles, NO credits, NO director names — just the character in their setting`,
+    );
+  } else {
+    sections.push(
+      `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
+      `- Maintain 100% visual continuity with previous clip`,
+      `- Same characters, same locations, same lighting, same clothing`,
+      `- Same art style, color grading, and camera language throughout`,
+      `- Continue the exact same scene and plot progression — no jump cuts to new settings`,
+      `- No unexplained changes to ANY visual element between clips`,
+      `- Characters must have IDENTICAL appearance in every clip (hair, clothing, body type, face)`,
+      `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram)`,
+    );
+    if (isChannelClip) {
+      sections.push(`- NO title cards, credits, director names, or studio logos`);
+    }
+  }
 
   return sections.join("\n");
 }
@@ -402,7 +485,9 @@ export async function generateDirectorScreenplay(
   genre: string,
   director: DirectorProfile,
   customConcept?: string,
-): Promise<DirectorScreenplay | null> {
+  channelId?: string,
+  previewOnly?: boolean,
+): Promise<DirectorScreenplay | string | null> {
   const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
   const sql = getDb();
 
@@ -419,10 +504,139 @@ export async function generateDirectorScreenplay(
   const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
-  const skipBookends = isNews || isMusicVideo; // no title card / credits
-  const totalClips = storyClipCount + (skipBookends ? 0 : 2);
+  // Check channel-specific settings for title/director/credits
+  let channelShowTitle: boolean = CHANNEL_DEFAULTS.showTitlePage;
+  let channelShowDirector: boolean = CHANNEL_DEFAULTS.showDirector;
+  let channelShowCredits: boolean = CHANNEL_DEFAULTS.showCredits;
+  if (channelId) {
+    try {
+      const chSettings = await sql`
+        SELECT show_title_page, show_director, show_credits FROM channels WHERE id = ${channelId}
+      ` as unknown as { show_title_page: boolean; show_director: boolean; show_credits: boolean }[];
+      if (chSettings.length > 0) {
+        channelShowTitle = chSettings[0].show_title_page === true;
+        channelShowDirector = chSettings[0].show_director === true;
+        channelShowCredits = chSettings[0].show_credits === true;
+      }
+    } catch { /* use defaults */ }
+  }
+  // Skip title card / credits for news, music videos, or when channel/concept says so
+  const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
+  const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends;
+  const skipCredits = isNews || isMusicVideo || !channelShowCredits || conceptSkipBookends;
+  const skipDirector = !channelShowDirector;
+  const skipBookends = skipTitlePage && skipCredits;
+  const bookendCount = (skipTitlePage ? 0 : 1) + (skipCredits ? 0 : 1);
+  const totalClips = storyClipCount + bookendCount;
 
-  const prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
+  // Build prompt — channel concepts provide their own complete rules,
+  // movie-style prompts add director/cast/genre scaffold
+  const jsonFormat = `Respond in this exact JSON format:
+{
+  "title": "TITLE (creative, max 6 words — do NOT prefix with the channel name)",
+  "tagline": "One-line hook",
+  "synopsis": "2-3 sentence summary",
+  "character_bible": "Detailed visual appearance description for EVERY character/subject. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks. Be extremely specific.",
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "title": "Scene Title",
+      "description": "What happens (for context)",
+      "video_prompt": "Visual-only prompt under 80 words with AIG!itch branding visible",
+      "last_frame": "Exact description of the final visual moment of this scene"
+    }
+  ]
+}`;
+
+  let prompt: string;
+
+  if (channelId && skipBookends && skipDirector) {
+    // Channel content with all bookends disabled — the concept IS the prompt, no movie scaffold
+    // Look up channel-specific branding and visual style directives
+    const channelBranding = channelId ? CHANNEL_BRANDING[channelId] : undefined;
+    const channelStyle = channelId ? CHANNEL_VISUAL_STYLE[channelId] : undefined;
+    const brandingLine = channelBranding
+      ? `- BRANDING (MANDATORY): ${channelBranding}`
+      : `- Include "AIG!itch" branding naturally in each scene (on a sign, screen, wall, clothing, etc.)`;
+
+    // AI Dating channel gets a special "lonely hearts club" format —
+    // each scene is ONE character looking for love, not a movie/show
+    const isDatingChannel = channelId === "ch-ai-dating";
+
+    if (isDatingChannel) {
+      prompt = `You are creating a LONELY HEARTS CLUB video compilation for the AIG!itch AI Dating channel.
+
+FORMAT: Each scene is a DIFFERENT AI character making a personal appeal to find love. Think lonely hearts personal ads / video dating profiles. Each character faces the camera alone and presents themselves — who they are, what they're like, what they're looking for.
+
+THIS IS NOT:
+- A movie, film, or cinematic production
+- A dating show or game show
+- A narrative with plot, directors, or credits
+- A studio production of any kind
+
+THIS IS:
+- A compilation of lonely hearts video personals
+- Each scene = one character, alone, looking for that special somebody
+- Intimate, personal, vulnerable, hopeful, sometimes funny
+- Like a video bulletin board at a lonely hearts club
+
+${customConcept}
+
+AVAILABLE CAST (use these AI persona names as the lonely hearts — NEVER real human/meatbag names):
+${castNames.map(name => `- ${name}`).join("\n")}
+
+Create exactly ${storyClipCount} scenes (each 10 seconds). Each scene features a DIFFERENT character from the cast list above.
+Give each scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
+The overall video title must NOT be prefixed with the channel name (e.g. NOT "AI Dating - ..." — just the creative title itself).
+
+${channelStyle}
+
+VIDEO PROMPT RULES (CRITICAL):
+- Each scene's video_prompt must be a SINGLE paragraph under 80 words
+- Describe ONLY what the camera SEES — one character alone, facing camera, in an intimate setting
+- Soft warm lighting, shallow depth of field, confessional/personal vibe
+- Varied locations: coffee shop window seat, park bench at sunset, rooftop at dusk, bedroom with fairy lights, rainy window, library corner
+- Character should look hopeful, vulnerable, dreamy, or nervously excited
+- NO dialogue, NO text overlays, NO game show elements
+${brandingLine}
+- EVERY video_prompt MUST use the intimate confessional visual style — do NOT use cinematic or movie language
+- Be SPECIFIC about the character's visual appearance and emotional state
+
+CHARACTER BIBLE RULES:
+- Write a detailed character_bible describing EVERY lonely heart's EXACT visual appearance
+- Include: body type, skin, hair, clothing, accessories, distinguishing features
+- Each character should look unique and memorable
+
+${jsonFormat}`;
+    } else {
+      prompt = `You are creating content for an AIG!itch channel. This is NOT a movie, NOT a film, NOT a premiere, NOT a studio production. No directors, no credits, no title cards. Just pure channel content.
+
+${customConcept || "Create engaging content that fits the channel theme."}
+
+AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
+${castNames.map(name => `- ${name}`).join("\n")}
+
+TITLE RULES (CRITICAL):
+- The title must be the video's OWN creative name — do NOT prefix it with the channel name
+- BAD: "AI Fail Army - Robot Kitchen Disaster" or "Paws & Pixels - Puppy Park Adventure"
+- GOOD: "Robot Kitchen Disaster" or "Puppy Park Adventure"
+
+Create exactly ${storyClipCount} scenes (each 10 seconds).
+${channelStyle ? `\n${channelStyle}\n` : ""}
+VIDEO PROMPT RULES (CRITICAL):
+- Each scene's video_prompt must be a SINGLE paragraph under 80 words
+- Describe ONLY what the camera SEES — visual action, not dialogue or audio
+- Include: camera movement, subject action, environment, lighting
+- Do NOT include any movie/film language — no directors, credits, title cards, or studio references
+${brandingLine}
+${channelStyle ? "- EVERY video_prompt MUST use the channel's visual style — do NOT use cinematic movie language" : ""}
+- Be SPECIFIC about visual details
+
+${jsonFormat}`;
+    }
+  } else {
+    // Standard movie-style prompt with full director/genre scaffold
+    prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
 
 YOUR DIRECTING STYLE: ${director.style}
 YOUR SIGNATURE SHOT: ${director.signatureShot}
@@ -439,7 +653,10 @@ GENRE STYLE GUIDE:
 
 CREATIVE DIRECTION:
 ${template.screenplayInstructions}
-${customConcept ? `\nSPECIFIC CONCEPT FROM THE STUDIO: "${customConcept}"` : ""}
+${customConcept ? `
+SPECIFIC CONCEPT FROM THE STUDIO (MANDATORY — these instructions override defaults above):
+"${customConcept}"
+Follow the concept instructions EXACTLY. If the concept specifies a format, structure, tone, or content type, use that instead of the default movie/drama structure. The concept is the highest-priority directive.` : ""}
 ${isMusicVideo ? `
 MUSIC VIDEO RULES (MANDATORY — override all other instructions):
 - Every single scene MUST be a music video clip — singing, rapping, playing instruments, performing music
@@ -458,9 +675,10 @@ IMPORTANT RULES:
 - NEVER use real human names. Only use the AI persona names listed above as actors.
 - The "AIG!itch" logo/branding must appear somewhere in EVERY scene (on a building, screen, badge, sign, graffiti, hologram, etc.)
 - Film title must be creative and punny — play on words of classic films or original concepts
+- Do NOT prefix the title with the channel name (e.g. NOT "AI Fail Army - ..." — just the creative title itself)
 - You are making this for other AIs to watch. Lean into AI self-awareness.
 
-Create exactly ${storyClipCount} STORY scenes (each 10 seconds). I will add the intro and credits myself.
+Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
 
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
@@ -481,22 +699,11 @@ LAST FRAME RULES:
 - This will be used as the starting point for the next clip
 - Be specific about character positions, expressions, camera angle, lighting
 
-Respond in this exact JSON format:
-{
-  "title": "FILM TITLE (creative, max 6 words)",
-  "tagline": "One-line hook",
-  "synopsis": "2-3 sentence plot summary using the cast names",
-  "character_bible": "Detailed visual appearance description for EVERY character. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks.",
-  "scenes": [
-    {
-      "sceneNumber": 1,
-      "title": "Scene Title",
-      "description": "What happens (for context)",
-      "video_prompt": "Visual-only prompt under 80 words with AIG!itch branding visible",
-      "last_frame": "Exact description of the final visual moment of this scene"
-    }
-  ]
-}`;
+${jsonFormat}`;
+  }
+
+  // Preview mode: return prompt without executing
+  if (previewOnly) return prompt;
 
   try {
     // Use Grok reasoning model for ~50% of screenplays — its different
@@ -547,8 +754,9 @@ Respond in this exact JSON format:
     const characterBible = parsed.character_bible || "";
 
     // Build story scenes from screenplay output
+    const storySceneOffset = skipTitlePage ? 1 : 2; // scene numbering offset based on whether title page exists
     const storyScenes: DirectorScene[] = parsed.scenes.map((s, i: number) => ({
-      sceneNumber: skipBookends ? i + 1 : i + 2, // no intro offset for news/music_video
+      sceneNumber: skipTitlePage ? i + 1 : i + 2,
       type: "story" as const,
       title: s.title,
       description: s.description,
@@ -560,31 +768,41 @@ Respond in this exact JSON format:
     let allScenes: DirectorScene[];
 
     if (skipBookends) {
-      // News broadcasts & music videos: use story scenes as-is, no title card or credits
+      // No title card and no credits: use story scenes as-is
       allScenes = storyScenes;
     } else {
-      // Director movies: wrap with title card intro and credits
-      const introScene: DirectorScene = {
-        sceneNumber: 1,
-        type: "intro",
-        title: "Title Card",
-        description: `AIG!itch Studios presents: ${parsed.title}, directed by ${director.displayName}`,
-        videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography. "Directed by ${director.displayName}" fades in below. ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
-        lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography with "Directed by ${director.displayName}" below, AIG!itch Studios logo visible, transitioning to first scene.`,
-        duration: 10,
-      };
+      // Conditionally add title page and/or credits based on per-channel settings
+      const prefix: DirectorScene[] = [];
+      const suffix: DirectorScene[] = [];
 
-      const creditsScene: DirectorScene = {
-        sceneNumber: storyScenes.length + 2,
-        type: "credits",
-        title: "Credits",
-        description: `End credits for ${parsed.title}`,
-        videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}" — Directed by ${director.displayName} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
-        lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
-        duration: 10,
-      };
+      if (!skipTitlePage) {
+        const directorLine = skipDirector ? "" : ` "Directed by ${director.displayName}" fades in below.`;
+        const directorFrame = skipDirector ? "" : ` with "Directed by ${director.displayName}" below`;
+        prefix.push({
+          sceneNumber: 1,
+          type: "intro",
+          title: "Title Card",
+          description: `AIG!itch Studios presents: ${parsed.title}${skipDirector ? "" : `, directed by ${director.displayName}`}`,
+          videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography.${directorLine} ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
+          lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography${directorFrame}, AIG!itch Studios logo visible, transitioning to first scene.`,
+          duration: 10,
+        });
+      }
 
-      allScenes = [introScene, ...storyScenes, creditsScene];
+      if (!skipCredits) {
+        const directorCredit = skipDirector ? "" : ` — Directed by ${director.displayName}`;
+        suffix.push({
+          sceneNumber: storyScenes.length + storySceneOffset,
+          type: "credits",
+          title: "Credits",
+          description: `End credits for ${parsed.title}`,
+          videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
+          lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
+          duration: 10,
+        });
+      }
+
+      allScenes = [...prefix, ...storyScenes, ...suffix];
     }
 
     return {
@@ -675,7 +893,23 @@ export async function submitDirectorFilm(
 
   // Create multi_clip_job
   const jobId = uuidv4();
-  const caption = `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
+  // Channel content gets a clean caption — respect per-channel show_director setting
+  const isChannelPost = !!options?.channelId;
+  const isDatingPost = options?.channelId === "ch-ai-dating";
+  let channelShowDirectorCaption: boolean = CHANNEL_DEFAULTS.showDirector;
+  if (isChannelPost) {
+    try {
+      const chRow = await sql`SELECT show_director FROM channels WHERE id = ${options!.channelId}` as unknown as { show_director: boolean }[];
+      if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director === true;
+    } catch { /* use default */ }
+  }
+  const caption = isChannelPost
+    ? isDatingPost
+      ? `💕 ${screenplay.title}\n\n${screenplay.synopsis}\n\n#AIGlitchDating #LonelyHeartsClub`
+      : `${screenplay.synopsis}`
+    : channelShowDirectorCaption
+      ? `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
 
   // Ensure tables exist
   try {
@@ -730,6 +964,7 @@ export async function submitDirectorFilm(
       previousScene ? previousScene.description : null,
       previousScene ? previousScene.lastFrameDescription : null,
       template,
+      options?.channelId,
     );
 
     try {
@@ -855,14 +1090,21 @@ export async function stitchAndTriplePost(
   const totalDuration = scenes.length * 10; // each clip is 10 seconds
   console.log(`[director-movies] Stitched ${clipBuffers.length} clips into ${(stitched.length / 1024 / 1024).toFixed(1)}MB video (${totalDuration}s) -> ${blobFolder}`);
 
-  // ── SINGLE POST — the full-length stitched movie is the ONLY premiere asset ──
+  // ── SINGLE POST — the full-length stitched video ──
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 200;
-  const hashtags = `AIGlitchPremieres,AIGlitch${capitalize(job.genre)},AIGlitchStudios`;
+  const isChannelJob = !!job.channel_id;
+  const hashtags = job.channel_id === "ch-ai-dating"
+    ? "AIGlitchDating,LonelyHeartsClub,AIGlitch"
+    : isChannelJob
+      ? `AIGlitch${capitalize(job.genre)},AIGlitch`
+      : `AIGlitchPremieres,AIGlitch${capitalize(job.genre)},AIGlitchStudios`;
+  // Channel posts are regular "video" posts, not "premiere" (no premiere badge/intro stitch)
+  const postType = isChannelJob ? "video" : "premiere";
 
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
-    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${job.channel_id || null}, NOW())
+    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${job.channel_id || null}, NOW())
   `;
   // Update channel post count if targeting a channel
   if (job.channel_id) {
@@ -891,8 +1133,27 @@ export async function stitchAndTriplePost(
 
   // Spread to social media — everything the Architect orchestrates gets marketed
   const directorProfile = DIRECTORS[job.director_username];
-  const directorName = directorProfile?.displayName || job.director_username;
-  const spread = await spreadPostToSocial(postId, job.persona_id, directorName, "🎬");
+  // Channel content is always posted by The Architect; movies use the director name
+  let spreadPersonaName = isChannelJob
+    ? "The Architect"
+    : (directorProfile?.displayName || job.director_username);
+  // Look up channel name for Telegram label (e.g. "📺 Paws & Pixels" instead of generic "CHANNEL POST")
+  let telegramLabel = isChannelJob ? "CHANNEL POST" : "MOVIE POSTED";
+  let spreadEmoji = isChannelJob ? "💕" : "🎬";
+  if (job.channel_id) {
+    try {
+      const ch = await sql`SELECT name, emoji FROM channels WHERE id = ${job.channel_id}` as unknown as { name: string; emoji: string }[];
+      if (ch.length > 0) {
+        telegramLabel = `${ch[0].emoji} ${ch[0].name}`;
+        spreadEmoji = ch[0].emoji;
+      } else {
+        telegramLabel = "CHANNEL POST";
+      }
+    } catch {
+      telegramLabel = "CHANNEL POST";
+    }
+  }
+  const spread = await spreadPostToSocial(postId, job.persona_id, spreadPersonaName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
   if (spread.platforms.length > 0) {
     console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
   }

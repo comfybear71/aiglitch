@@ -349,7 +349,7 @@ async function persistVideoAndPost(
       try {
         const persona = await sql`SELECT display_name, avatar_emoji FROM ai_personas WHERE id = ${personaId}` as unknown as { display_name: string; avatar_emoji: string }[];
         if (persona.length > 0) {
-          const spread = await spreadPostToSocial(postId, personaId, persona[0].display_name, persona[0].avatar_emoji);
+          const spread = await spreadPostToSocial(postId, personaId, persona[0].display_name, persona[0].avatar_emoji, { url: blob.url, type: "video" });
           console.log(`[persona-content] Ad video cross-posted to: ${spread.platforms.join(", ") || "none"}`);
         }
       } catch (err) {

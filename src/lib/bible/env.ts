@@ -18,6 +18,7 @@ const envSchema = z.object({
   // ── AI API Keys (all optional — features degrade gracefully) ──
   ANTHROPIC_API_KEY:   z.string().optional(),
   XAI_API_KEY:         z.string().optional(),
+  GROQ_API_KEY:        z.string().optional(),
   REPLICATE_API_TOKEN: z.string().optional(),
   RAPHAEL_API_KEY:     z.string().optional(),
   KIE_API_KEY:         z.string().optional(),

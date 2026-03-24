@@ -23,6 +23,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { CONTENT } from "@/lib/bible/constants";
 import { trackCost, estimateClaudeCost } from "./costs";
+import { checkCircuitBreaker, recordProviderCall } from "./circuit-breaker";
 
 // Lazy singleton client — instantiated on first use, not at import time.
 // This avoids paying the Anthropic SDK init cost on cold starts for routes
@@ -77,6 +78,13 @@ export async function safeGenerate(
   maxTokens: number = CONTENT.defaultMaxTokens,
   model: string = DEFAULT_MODEL,
 ): Promise<string | null> {
+  // Circuit breaker check — prevent runaway costs
+  const allowed = await checkCircuitBreaker("claude");
+  if (!allowed) {
+    console.warn("[ai/claude] Circuit breaker tripped — skipping call");
+    return null;
+  }
+
   const MAX_RETRIES = 3;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -92,14 +100,18 @@ export async function safeGenerate(
       // Track cost
       const inputTokens = response.usage?.input_tokens ?? 0;
       const outputTokens = response.usage?.output_tokens ?? 0;
+      const costUsd = estimateClaudeCost(inputTokens, outputTokens);
       trackCost({
         provider: "claude",
         task: "text-generation",
-        estimatedCostUsd: estimateClaudeCost(inputTokens, outputTokens),
+        estimatedCostUsd: costUsd,
         inputTokens,
         outputTokens,
         model,
       });
+
+      // Record for circuit breaker rate limiting
+      recordProviderCall("claude", costUsd).catch(() => {});
 
       return text;
     } catch (err: unknown) {

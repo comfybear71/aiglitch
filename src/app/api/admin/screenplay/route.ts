@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; concept?: string } = {};
+  let body: { genre?: string; director?: string; concept?: string; channel_id?: string; preview?: boolean } = {};
   try {
     body = await request.json();
   } catch {
@@ -59,10 +59,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Director profile not found: " + director.username }, { status: 500 });
   }
 
-  const screenplay = await generateDirectorScreenplay(genre, profile, body.concept || undefined);
-  if (!screenplay) {
+  // Preview mode: return the prompt without executing
+  if (body.preview) {
+    const promptText = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, true);
+    return NextResponse.json({
+      ok: true,
+      prompt: promptText || "Failed to build prompt",
+      genre,
+      director: director.username,
+      directorName: profile.displayName,
+    });
+  }
+
+  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined);
+  if (!result || typeof result === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
+  const screenplay = result;
 
   return NextResponse.json({
     title: screenplay.title,

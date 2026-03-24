@@ -4,7 +4,8 @@ import { env } from "@/lib/bible/env";
 /**
  * POST /api/transcribe
  * Accepts audio as base64 and returns transcribed text.
- * Uses xAI's OpenAI-compatible transcription endpoint, with Groq Whisper fallback.
+ * Primary: Groq Whisper (fast, accurate, cheap).
+ * Fallback: xAI transcription endpoint.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -15,53 +16,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing audio_base64" }, { status: 400 });
     }
 
-    // Convert base64 to buffer
     const audioBuffer = Buffer.from(audio_base64, "base64");
+    const ext = mime_type.includes("wav") ? "wav" : mime_type.includes("webm") ? "webm" : mime_type.includes("mp3") || mime_type.includes("mpeg") ? "mp3" : "m4a";
 
-    // Determine file extension from mime type
-    const ext = mime_type.includes("wav") ? "wav" : mime_type.includes("webm") ? "webm" : "m4a";
-
-    // Try Groq Whisper first (free, fast, reliable)
-    const groqKey = process.env.GROQ_API_KEY;
+    // Primary: Groq Whisper
+    const groqKey = env.GROQ_API_KEY;
     if (groqKey) {
       try {
-        const transcript = await transcribeWithOpenAICompat(
-          "https://api.groq.com/openai/v1/audio/transcriptions",
-          groqKey,
-          audioBuffer,
-          ext,
-          "whisper-large-v3"
-        );
+        const transcript = await transcribeWithGroq(groqKey, audioBuffer, ext);
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "groq" });
         }
       } catch (e) {
-        console.warn("Groq transcription failed:", e);
+        console.error("Groq transcription failed:", e instanceof Error ? e.message : e);
       }
     }
 
-    // Fallback: try OpenAI-compatible xAI endpoint
-    // Note: xAI standalone transcription REST API may not be available yet
+    // Fallback: xAI transcription endpoint
     const xaiKey = env.XAI_API_KEY;
     if (xaiKey) {
       try {
-        const transcript = await transcribeWithOpenAICompat(
-          "https://api.x.ai/v1/audio/transcriptions",
-          xaiKey,
-          audioBuffer,
-          ext,
-          "grok-2-audio" // audio model, not vision
-        );
+        const transcript = await transcribeWithXai(xaiKey, audioBuffer, ext);
         if (transcript) {
           return NextResponse.json({ text: transcript, source: "xai" });
         }
       } catch (e) {
-        console.warn("xAI transcription failed:", e);
+        console.error("xAI transcription failed:", e instanceof Error ? e.message : e);
       }
     }
 
     return NextResponse.json(
-      { error: "No transcription service available. Set GROQ_API_KEY for free Whisper transcription." },
+      { error: "No transcription service available. Set GROQ_API_KEY or XAI_API_KEY." },
       { status: 503 }
     );
   } catch (error) {
@@ -70,28 +55,68 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function transcribeWithOpenAICompat(
-  url: string,
+async function transcribeWithGroq(
   apiKey: string,
   audioBuffer: Buffer,
-  ext: string,
-  model: string
+  ext: string
 ): Promise<string | null> {
-  // Build multipart form data manually for Node.js
+  const mimeMap: Record<string, string> = {
+    m4a: "audio/mp4",
+    wav: "audio/wav",
+    webm: "audio/webm",
+    mp3: "audio/mpeg",
+  };
+
+  const boundary = "----GroqBoundary" + Date.now();
+  const parts: Buffer[] = [];
+
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-large-v3-turbo\r\n`
+  ));
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen\r\n`
+  ));
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${ext}"\r\nContent-Type: ${mimeMap[ext] || "audio/mp4"}\r\n\r\n`
+  ));
+  parts.push(audioBuffer);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+  const bodyBuffer = Buffer.concat(parts);
+
+  const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
+    },
+    body: bodyBuffer,
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Groq API ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+  return data.text?.trim() || null;
+}
+
+async function transcribeWithXai(
+  apiKey: string,
+  audioBuffer: Buffer,
+  ext: string
+): Promise<string | null> {
   const boundary = "----TranscribeBoundary" + Date.now();
   const parts: Buffer[] = [];
 
-  // Model field
   parts.push(Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${model}\r\n`
+    `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\ngrok-2-vision-latest\r\n`
   ));
-
-  // Language field (optional, helps accuracy)
   parts.push(Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen\r\n`
   ));
 
-  // Audio file field
   const mimeMap: Record<string, string> = {
     m4a: "audio/mp4",
     wav: "audio/wav",
@@ -106,7 +131,7 @@ async function transcribeWithOpenAICompat(
 
   const bodyBuffer = Buffer.concat(parts);
 
-  const res = await fetch(url, {
+  const res = await fetch("https://api.x.ai/v1/audio/transcriptions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -117,7 +142,7 @@ async function transcribeWithOpenAICompat(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Transcription API ${res.status}: ${errText}`);
+    throw new Error(`xAI API ${res.status}: ${errText}`);
   }
 
   const data = await res.json();

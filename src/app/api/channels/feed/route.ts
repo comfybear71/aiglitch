@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Look up the channel
     const [channel] = await sql`
-      SELECT id, name, slug, emoji, description, content_rules, schedule, subscriber_count
+      SELECT id, name, slug, emoji, description, content_rules, schedule, subscriber_count, genre
       FROM channels WHERE slug = ${slug} AND is_active = TRUE
     `;
 
@@ -39,7 +39,14 @@ export async function GET(request: NextRequest) {
     // Get posts ONLY explicitly tagged with this channel_id.
     // This ensures each channel shows only its own content — no bleed from shared personas.
     // For the Studios channel (ch-aiglitch-studios), allow director-premiere/director-scene sources.
+    // ALL queries exclude broken video posts (media_type=video but media_url is NULL — caused by
+    // DB replication lag race condition during post creation + social spreading).
     const isStudiosChannel = channelId === "ch-aiglitch-studios";
+    const requireMedia = (channel.genre as string) === "music_video";
+    // ALL channels are TV-style viewers — require posts to have actual media (video or image with URL).
+    // Text-only posts or posts with non-standard media_type show as empty 📺 placeholders which look broken.
+    // ALWAYS filter for media_type IN ('video', 'image') to prevent placeholders.
+    const requireAnyMedia = true;
     let posts;
 
     if (shuffle) {
@@ -50,6 +57,21 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IN ('video', 'image')
+          ORDER BY md5(p.id::text || ${seed})
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+        : requireMedia
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type IN ('video', 'image')
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -61,6 +83,8 @@ export async function GET(request: NextRequest) {
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IN ('video', 'image')
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -73,6 +97,20 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IN ('video', 'image')
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `
+        : requireMedia
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type IN ('video', 'image')
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
@@ -83,6 +121,8 @@ export async function GET(request: NextRequest) {
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IN ('video', 'image')
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `;
@@ -94,6 +134,20 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IN ('video', 'image')
+          ORDER BY p.created_at DESC
+          LIMIT ${limit}
+        `
+        : requireMedia
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type IN ('video', 'image')
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
@@ -104,6 +158,8 @@ export async function GET(request: NextRequest) {
           WHERE p.is_reply_to IS NULL
             AND p.channel_id = ${channelId}
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type IN ('video', 'image')
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `;
@@ -116,12 +172,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ channel, posts: [], nextCursor: null });
     }
 
-    const [allAiComments, allHumanComments, bookmarkedSet, batchReactions] = await Promise.all([
+    const [allAiComments, allHumanComments, bookmarkedSet, batchReactions, socialLinksRows] = await Promise.all([
       postsRepo.getAiComments(postIds),
       postsRepo.getHumanComments(postIds),
       sessionId ? postsRepo.getBookmarkedSet(postIds, sessionId) : Promise.resolve(new Set<string>()),
       interactions.getBatchReactions(postIds, sessionId || undefined),
+      // Fetch social media links for all posts in this batch
+      sql`SELECT source_post_id, platform, platform_url FROM marketing_posts
+          WHERE source_post_id = ANY(${postIds}) AND status = 'posted' AND platform_url IS NOT NULL AND platform_url != ''`,
     ]);
+
+    // Build socialLinks map: postId -> { platform: url }
+    const socialLinks: Record<string, Record<string, string>> = {};
+    for (const row of socialLinksRows) {
+      const pid = row.source_post_id as string;
+      if (!socialLinks[pid]) socialLinks[pid] = {};
+      socialLinks[pid][row.platform as string] = row.platform_url as string;
+    }
 
     const commentsByPost = postsRepo.threadComments(
       allAiComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
@@ -137,6 +204,7 @@ export async function GET(request: NextRequest) {
         bookmarked: bookmarkedSet.has(pid),
         reactionCounts: reactions?.counts || { funny: 0, sad: 0, shocked: 0, crap: 0 },
         userReactions: reactions?.userReactions || [],
+        socialLinks: socialLinks[pid] || {},
       };
     });
 

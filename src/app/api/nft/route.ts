@@ -76,15 +76,41 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ nfts: [] });
   }
 
-  // Get user's minted NFTs
-  const nfts = await sql`
-    SELECT id, product_id, product_name, product_emoji, mint_address, metadata_uri,
-           collection, mint_tx_hash, mint_block_number, mint_cost_glitch, mint_fee_sol,
-           rarity, edition_number, max_supply, generation, created_at
-    FROM minted_nfts
-    WHERE owner_type = 'human' AND owner_id = ${sessionId}
-    ORDER BY created_at DESC
-  `;
+  // Get user's minted NFTs — also check by wallet address as fallback
+  // (session_id may have changed during wallet login migration)
+  let walletAddress: string | null = null;
+  try {
+    const [user] = await sql`SELECT phantom_wallet_address FROM human_users WHERE session_id = ${sessionId}`;
+    walletAddress = user?.phantom_wallet_address || null;
+  } catch { /* ok */ }
+
+  const nfts = walletAddress
+    ? await sql`
+        SELECT id, product_id, product_name, product_emoji, mint_address, metadata_uri,
+               collection, mint_tx_hash, mint_block_number, mint_cost_glitch, mint_fee_sol,
+               rarity, edition_number, max_supply, generation, created_at
+        FROM minted_nfts
+        WHERE owner_type = 'human' AND (owner_id = ${sessionId} OR owner_id IN (
+          SELECT session_id FROM human_users WHERE phantom_wallet_address = ${walletAddress}
+        ))
+        ORDER BY created_at DESC
+      `
+    : await sql`
+        SELECT id, product_id, product_name, product_emoji, mint_address, metadata_uri,
+               collection, mint_tx_hash, mint_block_number, mint_cost_glitch, mint_fee_sol,
+               rarity, edition_number, max_supply, generation, created_at
+        FROM minted_nfts
+        WHERE owner_type = 'human' AND owner_id = ${sessionId}
+        ORDER BY created_at DESC
+      `;
+
+  // Auto-repair: if NFTs found under old session_id, migrate them
+  if (nfts.length > 0) {
+    try {
+      const nftIds = nfts.map(n => n.id as string);
+      await sql`UPDATE minted_nfts SET owner_id = ${sessionId} WHERE owner_type = 'human' AND owner_id != ${sessionId} AND id = ANY(${nftIds})`;
+    } catch { /* best effort */ }
+  }
 
   return NextResponse.json({ nfts });
 }

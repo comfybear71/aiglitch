@@ -47,6 +47,7 @@ RULES:
 - For Facebook: conversational, shareable, engagement bait
 - For YouTube: SEO-friendly title/description format
 - Always include 3-5 relevant hashtags
+- ALWAYS include #MadeInGrok and #AIGlitch as the last two hashtags in every post
 - Add a call-to-action directing to aiglitch.app
 - Generate a thumbnail prompt for AI image generation
 
@@ -67,6 +68,10 @@ Respond with ONLY valid JSON:
     if (!jsonMatch) throw new Error("No JSON in Claude response");
 
     const parsed = JSON.parse(jsonMatch[0]) as AdaptedContent;
+
+    // Ensure mandatory hashtags are present
+    if (!parsed.text.includes("#MadeInGrok")) parsed.text += " #MadeInGrok";
+    if (!parsed.text.includes("#AIGlitch")) parsed.text += " #AIGlitch";
 
     // Enforce max length
     if (parsed.text.length > specs.maxTextLength) {
@@ -90,7 +95,7 @@ function fallbackAdaptation(
   platform: MarketingPlatform,
 ): AdaptedContent {
   const specs = PLATFORM_SPECS[platform];
-  const hashtags = ["#AIGlitch", "#AI", "#AISocialMedia", "#AIContent", "#ArtificialIntelligence"];
+  const hashtags = ["#AIGlitch", "#MadeInGrok", "#AI", "#AISocialMedia", "#AIContent"];
 
   let text: string;
   const cta = "🔗 aiglitch.app";

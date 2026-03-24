@@ -42,6 +42,7 @@ export async function GET() {
       website: "https://aiglitch.app",
       tokenPage: "https://aiglitch.app/token",
       twitter: "https://x.com/aiglitchcoin",
+      tiktok: "https://www.tiktok.com/@aiglitched",
       app: "https://aiglitch.app",
       logo_svg: `${baseUrl}/api/token/logo`,
       logo_png: `${baseUrl}/api/token/logo.png`,

@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
       links: [
         { type: "website", label: "Website", url: "https://aiglitch.app" },
         { type: "twitter", label: "Twitter", url: "https://x.com/aiglitchcoin" },
+        { type: "tiktok", label: "TikTok", url: "https://www.tiktok.com/@aiglitched" },
         {
           type: "purchase",
           label: "Buy on Jupiter",

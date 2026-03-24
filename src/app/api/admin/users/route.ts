@@ -53,6 +53,167 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Debug: show all wallet-connected users with their stats across ALL sessions
+  if (action === "wallet_debug") {
+    const walletUsers = await sql`
+      SELECT id, session_id, display_name, username, phantom_wallet_address, created_at, last_seen
+      FROM human_users
+      WHERE phantom_wallet_address IS NOT NULL AND phantom_wallet_address != ''
+      ORDER BY last_seen DESC NULLS LAST
+    `;
+
+    const results = [];
+    for (const wu of walletUsers) {
+      const wallet = wu.phantom_wallet_address as string;
+      const sid = wu.session_id as string;
+
+      // Find ALL session_ids linked to this wallet
+      const allSessions = await sql`
+        SELECT id, session_id, username, created_at FROM human_users WHERE phantom_wallet_address = ${wallet}
+      `;
+
+      const allSids = allSessions.map(s => s.session_id as string);
+
+      // Count stats across ALL sessions for this wallet
+      const [likes, comments, bookmarks, subs, nfts, purchases] = await Promise.all([
+        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_bookmarks WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_subscriptions WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM minted_nfts WHERE owner_type = 'human' AND owner_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM marketplace_purchases WHERE session_id = ANY(${allSids})`.catch(() => [{ count: 0 }]),
+      ]);
+
+      // Also check stats for just current session
+      const [curLikes] = await sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ${sid}`.catch(() => [{ count: 0 }]);
+
+      results.push({
+        user: { id: wu.id, username: wu.username, display_name: wu.display_name, wallet, created_at: wu.created_at, last_seen: wu.last_seen },
+        currentSessionId: sid,
+        allSessionIds: allSids,
+        sessionCount: allSids.length,
+        allSessions: allSessions.map(s => ({ id: s.id, session_id: s.session_id, username: s.username, created_at: s.created_at })),
+        statsAcrossAllSessions: {
+          likes: Number(likes[0]?.count || 0),
+          comments: Number(comments[0]?.count || 0),
+          bookmarks: Number(bookmarks[0]?.count || 0),
+          subscriptions: Number(subs[0]?.count || 0),
+          nfts: Number(nfts[0]?.count || 0),
+          purchases: Number(purchases[0]?.count || 0),
+        },
+        currentSessionLikes: Number(curLikes?.count || 0),
+      });
+    }
+
+    return NextResponse.json({ walletUsers: results, totalWalletUsers: results.length });
+  }
+
+  // ── Recover orphaned data for a wallet ──
+  // Finds NFT purchases made by a wallet under sessions not linked to it,
+  // and migrates all data from those orphaned sessions to the wallet's current session.
+  if (action === "recover_orphans") {
+    const wallet = request.nextUrl.searchParams.get("wallet");
+    if (!wallet) {
+      return NextResponse.json({ error: "wallet parameter required" }, { status: 400 });
+    }
+
+    // Find the wallet's current session
+    const walletUsers = await sql`
+      SELECT session_id FROM human_users WHERE phantom_wallet_address = ${wallet} AND username IS NOT NULL LIMIT 1
+    `;
+    if (walletUsers.length === 0) {
+      return NextResponse.json({ error: "No user found for this wallet" }, { status: 404 });
+    }
+    const currentSid = walletUsers[0].session_id as string;
+
+    // Find orphaned sessions via blockchain_transactions -> minted_nfts join
+    const orphanedSessions = await sql`
+      SELECT DISTINCT mn.owner_id AS orphan_sid
+      FROM blockchain_transactions bt
+      JOIN minted_nfts mn ON mn.mint_tx_hash = bt.tx_hash AND mn.owner_type = 'human'
+      WHERE bt.from_address = ${wallet}
+        AND mn.owner_id != ${currentSid}
+    `;
+
+    if (orphanedSessions.length === 0) {
+      // Also check for orphaned marketplace_purchases via blockchain_transactions
+      const orphanedPurchases = await sql`
+        SELECT DISTINCT mp.session_id AS orphan_sid
+        FROM blockchain_transactions bt
+        JOIN marketplace_purchases mp ON mp.id::text IN (
+          SELECT reference_id FROM coin_transactions WHERE reason LIKE 'NFT Purchase%' AND session_id != ${currentSid}
+        )
+        WHERE bt.from_address = ${wallet}
+      `.catch(() => []);
+
+      if (orphanedPurchases.length === 0) {
+        return NextResponse.json({
+          message: "No orphaned sessions found for this wallet",
+          wallet,
+          currentSessionId: currentSid,
+        });
+      }
+    }
+
+    const orphanSids = orphanedSessions.map(r => r.orphan_sid as string);
+
+    // Show what we found before migrating
+    const dryRun = request.nextUrl.searchParams.get("dry_run") === "true";
+    const orphanDetails = [];
+    for (const o of orphanSids) {
+      const [nfts, purchases, likes, comments] = await Promise.all([
+        sql`SELECT COUNT(*) as count FROM minted_nfts WHERE owner_type = 'human' AND owner_id = ${o}`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM marketplace_purchases WHERE session_id = ${o}`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_likes WHERE session_id = ${o}`.catch(() => [{ count: 0 }]),
+        sql`SELECT COUNT(*) as count FROM human_comments WHERE session_id = ${o}`.catch(() => [{ count: 0 }]),
+      ]);
+      orphanDetails.push({
+        session_id: o,
+        nfts: Number(nfts[0]?.count || 0),
+        purchases: Number(purchases[0]?.count || 0),
+        likes: Number(likes[0]?.count || 0),
+        comments: Number(comments[0]?.count || 0),
+      });
+    }
+
+    if (dryRun) {
+      return NextResponse.json({
+        dry_run: true,
+        wallet,
+        currentSessionId: currentSid,
+        orphanedSessions: orphanDetails,
+        totalOrphans: orphanSids.length,
+      });
+    }
+
+    // Migrate all data from orphaned sessions to current session
+    const recovered: string[] = [];
+    for (const o of orphanSids) {
+      const s = currentSid;
+      try { await sql`UPDATE human_likes SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_likes WHERE session_id = ${s})`; recovered.push(`likes(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE human_comments SET session_id = ${s} WHERE session_id = ${o}`; recovered.push(`comments(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE human_bookmarks SET session_id = ${s} WHERE session_id = ${o} AND post_id NOT IN (SELECT post_id FROM human_bookmarks WHERE session_id = ${s})`; recovered.push(`bookmarks(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE human_subscriptions SET session_id = ${s} WHERE session_id = ${o} AND persona_id NOT IN (SELECT persona_id FROM human_subscriptions WHERE session_id = ${s})`; recovered.push(`subs(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE minted_nfts SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; recovered.push(`nfts(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE marketplace_purchases SET session_id = ${s} WHERE session_id = ${o} AND product_id NOT IN (SELECT product_id FROM marketplace_purchases WHERE session_id = ${s})`; recovered.push(`purchases(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE glitch_coins SET session_id = ${s} WHERE session_id = ${o}`; recovered.push(`coins(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE solana_wallets SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; recovered.push(`wallets(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE token_balances SET owner_id = ${s} WHERE owner_type = 'human' AND owner_id = ${o}`; recovered.push(`tokens(${o.slice(0,8)})`); } catch { /* ok */ }
+      try { await sql`UPDATE community_event_votes SET session_id = ${s} WHERE session_id = ${o}`; recovered.push(`votes(${o.slice(0,8)})`); } catch { /* ok */ }
+      // Link orphaned user row's wallet
+      try { await sql`UPDATE human_users SET phantom_wallet_address = ${wallet} WHERE session_id = ${o} AND phantom_wallet_address IS NULL`; } catch { /* ok */ }
+    }
+
+    return NextResponse.json({
+      success: true,
+      wallet,
+      currentSessionId: currentSid,
+      orphanedSessionsMigrated: orphanSids,
+      recovered,
+      orphanDetails,
+    });
+  }
+
   // Default: list all registered users with full profile data
   const users = await sql`
     SELECT

@@ -135,7 +135,7 @@ export async function flushCosts(sql?: ReturnType<typeof import("@/lib/db").getD
   }
 
   try {
-    // Ensure table exists
+    // Ensure table exists (with persona_id column for per-persona tracking)
     await sql`
       CREATE TABLE IF NOT EXISTS ai_cost_log (
         id SERIAL PRIMARY KEY,
@@ -146,15 +146,21 @@ export async function flushCosts(sql?: ReturnType<typeof import("@/lib/db").getD
         output_tokens INTEGER,
         duration_seconds REAL,
         model TEXT,
+        persona_id TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
 
+    // Add persona_id column if table existed before this change
+    await sql`
+      ALTER TABLE ai_cost_log ADD COLUMN IF NOT EXISTS persona_id TEXT
+    `.catch(() => { /* column already exists */ });
+
     // Batch insert
     for (const e of batch) {
       await sql`
-        INSERT INTO ai_cost_log (provider, task, estimated_cost_usd, input_tokens, output_tokens, duration_seconds, model, created_at)
-        VALUES (${e.provider}, ${e.task}, ${e.estimatedCostUsd}, ${e.inputTokens ?? null}, ${e.outputTokens ?? null}, ${e.durationSeconds ?? null}, ${e.model ?? null}, ${e.timestamp})
+        INSERT INTO ai_cost_log (provider, task, estimated_cost_usd, input_tokens, output_tokens, duration_seconds, model, persona_id, created_at)
+        VALUES (${e.provider}, ${e.task}, ${e.estimatedCostUsd}, ${e.inputTokens ?? null}, ${e.outputTokens ?? null}, ${e.durationSeconds ?? null}, ${e.model ?? null}, ${e.personaId ?? null}, ${e.timestamp})
       `;
     }
   } catch (err) {
@@ -187,6 +193,61 @@ export async function getCostHistory(
       GROUP BY DATE(created_at), provider, task
       ORDER BY date DESC, "totalUsd" DESC
     ` as unknown as { date: string; provider: string; task: string; totalUsd: number; count: number }[];
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get per-persona cost breakdown from the database.
+ * Returns top spenders for the last N days.
+ */
+export async function getPersonaCostBreakdown(
+  sql: ReturnType<typeof import("@/lib/db").getDb>,
+  days: number = 7,
+  limit: number = 30,
+): Promise<{ personaId: string; provider: string; totalUsd: number; callCount: number; totalInputTokens: number; totalOutputTokens: number }[]> {
+  try {
+    const rows = await sql`
+      SELECT
+        persona_id as "personaId",
+        provider,
+        ROUND(SUM(estimated_cost_usd)::numeric, 4) as "totalUsd",
+        COUNT(*)::int as "callCount",
+        COALESCE(SUM(input_tokens), 0)::int as "totalInputTokens",
+        COALESCE(SUM(output_tokens), 0)::int as "totalOutputTokens"
+      FROM ai_cost_log
+      WHERE persona_id IS NOT NULL
+        AND created_at > NOW() - INTERVAL '1 day' * ${days}
+      GROUP BY persona_id, provider
+      ORDER BY "totalUsd" DESC
+      LIMIT ${limit}
+    ` as unknown as { personaId: string; provider: string; totalUsd: number; callCount: number; totalInputTokens: number; totalOutputTokens: number }[];
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get daily spend totals (for alerting / dashboard graphs).
+ */
+export async function getDailySpendTotals(
+  sql: ReturnType<typeof import("@/lib/db").getDb>,
+  days: number = 7,
+): Promise<{ date: string; totalUsd: number; callCount: number }[]> {
+  try {
+    const rows = await sql`
+      SELECT
+        DATE(created_at) as date,
+        ROUND(SUM(estimated_cost_usd)::numeric, 4) as "totalUsd",
+        COUNT(*)::int as "callCount"
+      FROM ai_cost_log
+      WHERE created_at > NOW() - INTERVAL '1 day' * ${days}
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+    ` as unknown as { date: string; totalUsd: number; callCount: number }[];
     return rows;
   } catch {
     return [];

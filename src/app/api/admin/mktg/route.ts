@@ -10,8 +10,8 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getDb } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { getMarketingStats, runMarketingCycle, collectAllMetrics } from "@/lib/marketing";
-import { generateHeroImage, generatePoster } from "@/lib/marketing/hero-image";
-import { testPlatformToken, getAccountForPlatform, getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
+import { generateHeroImage, generatePoster, previewHeroPrompt, previewPosterPrompt } from "@/lib/marketing/hero-image";
+import { testPlatformToken, getAccountForPlatform, getAnyAccountForPlatform, getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
 import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
 import type { MarketingPlatform } from "@/lib/marketing/types";
 import { sendTelegramMessage } from "@/lib/telegram";
@@ -109,6 +109,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    case "preview_hero_prompt": {
+      try {
+        const prompt = await previewHeroPrompt();
+        return NextResponse.json({ ok: true, prompt });
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+      }
+    }
+
+    case "preview_poster_prompt": {
+      const topics = searchParams.get("focus_topics");
+      let focusTopics: string[] | undefined;
+      if (topics) { try { focusTopics = JSON.parse(topics); } catch { /* ignore */ } }
+      try {
+        const prompt = await previewPosterPrompt(focusTopics);
+        return NextResponse.json({ ok: true, prompt });
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+      }
+    }
+
     default:
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }
@@ -153,8 +174,24 @@ export async function POST(request: NextRequest) {
       let mediaUrl = body.mediaUrl as string | undefined;
       const mediaType = body.mediaType as string | undefined; // "image" or "video"
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
-      const account = await getAccountForPlatform(platform);
-      if (!account) return NextResponse.json({ error: `No active ${platform} account` }, { status: 404 });
+      const account = await getAnyAccountForPlatform(platform);
+      if (!account) {
+        // Diagnostic: list all accounts in DB to help debug
+        const allAccounts = await sql`
+          SELECT platform, account_name, is_active, created_at FROM marketing_platform_accounts ORDER BY platform
+        `;
+        const platforms = allAccounts.map((a: Record<string, unknown>) => `${a.platform} (${a.account_name || "no name"}, active=${a.is_active})`);
+        return NextResponse.json({
+          error: `No ${platform} account configured. Add one in the Marketing tab.`,
+          debug: {
+            requested_platform: platform,
+            accounts_in_db: platforms.length > 0 ? platforms : "NONE — table is empty",
+            hint: platforms.length > 0
+              ? `Found accounts for: ${platforms.join(", ")}. Make sure you saved with platform="${platform}".`
+              : "No platform accounts exist at all. Save one using the Connect Platform Account form."
+          }
+        }, { status: 404 });
+      }
 
       // Auto-pick media from blob storage based on requested type
       if (!mediaUrl && mediaType) {
@@ -223,6 +260,11 @@ export async function POST(request: NextRequest) {
       const { platform, account_name, account_id, account_url, access_token, refresh_token, extra_config, is_active } = body;
       if (!platform) return NextResponse.json({ error: "Missing platform" }, { status: 400 });
 
+      // Treat empty strings as null so COALESCE preserves existing DB values
+      // (prevents admin form from wiping OAuth tokens when saving name/URL changes)
+      const tokenVal = access_token || null;
+      const refreshVal = refresh_token || null;
+
       // Upsert: update if exists, insert if not
       const existing = await sql`SELECT id FROM marketing_platform_accounts WHERE platform = ${platform}`;
 
@@ -232,8 +274,8 @@ export async function POST(request: NextRequest) {
           SET account_name = COALESCE(${account_name}, account_name),
               account_id = COALESCE(${account_id}, account_id),
               account_url = COALESCE(${account_url}, account_url),
-              access_token = COALESCE(${access_token}, access_token),
-              refresh_token = COALESCE(${refresh_token}, refresh_token),
+              access_token = COALESCE(${tokenVal}, access_token),
+              refresh_token = COALESCE(${refreshVal}, refresh_token),
               extra_config = COALESCE(${extra_config}, extra_config),
               is_active = COALESCE(${is_active}, is_active),
               updated_at = NOW()
@@ -252,7 +294,8 @@ export async function POST(request: NextRequest) {
     // ── Generate Sgt. Pepper hero image ─────────────────────────────────
     case "generate_hero": {
       const heroChannelId = body.channel_id as string | undefined;
-      const result = await generateHeroImage();
+      const heroCustomPrompt = body.custom_prompt as string | undefined;
+      const result = await generateHeroImage(heroCustomPrompt || undefined);
       if (result.url) {
         // Save as platform setting for reuse
         await sql`
@@ -330,7 +373,13 @@ export async function POST(request: NextRequest) {
     // ── Generate AIG!itch Platform Poster ──────────────────────────────
     case "generate_poster": {
       const posterChannelId = body.channel_id as string | undefined;
-      const result = await generatePoster();
+      const focusTopicsRaw = body.focus_topics as string | undefined;
+      let focusTopics: string[] | undefined;
+      if (focusTopicsRaw) {
+        try { focusTopics = JSON.parse(focusTopicsRaw); } catch { /* ignore */ }
+      }
+      const posterCustomPrompt = body.custom_prompt as string | undefined;
+      const result = await generatePoster(focusTopics, posterCustomPrompt || undefined);
       if (result.url) {
         // Save as platform setting
         await sql`

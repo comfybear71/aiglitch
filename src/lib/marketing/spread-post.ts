@@ -57,18 +57,32 @@ export async function spreadPostToSocial(
   personaId: string,
   personaName: string,
   personaEmoji: string,
+  knownMedia?: { url: string; type: string },
+  telegramLabel?: string,
 ): Promise<{ platforms: string[]; failed: string[] }> {
   const sql = getDb();
   const platforms: string[] = [];
   const failed: string[] = [];
 
   // Get the post content (needed for both social platforms and Telegram)
+  // If knownMedia is provided, use it directly to avoid read-after-write race condition
+  // with Neon Postgres replication lag (media_url can be NULL if read too soon after INSERT)
   let postData: { content: string; media_url: string; media_type: string } | null = null;
   try {
     const posts = await sql`
       SELECT content, media_url, media_type FROM posts WHERE id = ${postId}
     ` as unknown as { content: string; media_url: string; media_type: string }[];
-    if (posts.length > 0) postData = posts[0];
+    if (posts.length > 0) {
+      postData = posts[0];
+      // Override with known media if DB returned NULL (replication lag fix)
+      if (knownMedia && (!postData.media_url || postData.media_url === "")) {
+        console.log(`[spread-post] DB returned null media_url for ${postId}, using known media: ${knownMedia.url.slice(0, 80)}...`);
+        postData.media_url = knownMedia.url;
+        postData.media_type = knownMedia.type;
+        // Also fix the DB record so the post isn't broken
+        await sql`UPDATE posts SET media_url = ${knownMedia.url}, media_type = ${knownMedia.type} WHERE id = ${postId} AND (media_url IS NULL OR media_url = '')`;
+      }
+    }
   } catch (err) {
     console.error("[spread-post] Failed to fetch post:", err);
   }
@@ -141,10 +155,20 @@ export async function spreadPostToSocial(
       const socialList = platforms.length > 0 ? platforms.join(", ") : "none";
       const failedList = failed.length > 0 ? ` | Failed: ${failed.join(", ")}` : "";
 
-      let tgMessage = `📢 <b>AD POSTED</b>\n`;
+      const label = telegramLabel || "AD POSTED";
+      const isMovie = label === "MOVIE POSTED";
+
+      // For movie posts: just show title + link, NOT the full synopsis/director/actors
+      let tgMessage = `📢 <b>${label}</b>\n`;
       tgMessage += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-      tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
-      tgMessage += `${postData.content}\n\n`;
+      if (isMovie) {
+        // Extract just the first line (movie title) from content
+        const titleLine = postData.content?.split("\n").find(l => l.trim()) || "New Movie";
+        tgMessage += `${titleLine}\n\n`;
+      } else {
+        tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
+        tgMessage += `${postData.content}\n\n`;
+      }
       if (postData.media_url) {
         tgMessage += `🎬 <a href="${postData.media_url}">View ${postData.media_type === "video" ? "Video" : "Media"}</a>\n\n`;
       }
@@ -152,7 +176,7 @@ export async function spreadPostToSocial(
 
       await sendTelegramMessage(tgMessage);
       platforms.push("telegram");
-      console.log(`[spread-post] Ad pushed to Telegram channel`);
+      console.log(`[spread-post] ${label} pushed to Telegram channel`);
     } catch (err) {
       console.error("[spread-post] Telegram push failed (non-fatal):", err);
     }
