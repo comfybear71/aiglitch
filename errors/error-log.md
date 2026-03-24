@@ -348,5 +348,90 @@ Completely rewrote `/api/transcribe` to use **Groq Whisper** (`whisper-large-v3-
 
 ---
 
+## #5 — NFT Purchases Invisible After Wallet Connection (Cross-Session Orphaning)
+
+**Date:** March 23-24, 2026
+**Status:** Resolved
+**Affected:** Users who buy NFTs in one browser session and connect their wallet in a different session
+**Impact:** ~20 NFT purchases completely invisible on profile — 0 in inventory, 0 in stats
+
+### Symptom
+
+User bought ~20 NFTs about a week prior via Phantom wallet signing. Later connected wallet via Phantom's in-app browser. Profile showed: 1 like, 0 comments, 0 bookmarks, 0 subscriptions, 0 NFTs. None of the NFT purchases appeared in inventory.
+
+### Root Cause: Cross-Session Orphaning
+
+1. User browsed AIG!itch in **Safari** on iPad → got **session A** (no wallet linked)
+2. User purchased ~20 NFTs via Phantom wallet → purchases recorded under **session A**
+3. `blockchain_transactions.from_address` = `EWiF6ZQQ...` (the wallet) but `marketplace_purchases.session_id` = session A
+4. User later opened AIG!itch in **Phantom's in-app browser** → got **session B** (different cookies)
+5. `wallet_login` fired → no existing wallet user found → created new wallet account under **session B**
+6. Session A's purchases were now **orphaned** — no wallet link, so wallet-aware queries couldn't find them
+
+The existing session merge only migrated data from the wallet account's *previous* session_id to the *new* one. It could NOT discover arbitrary anonymous sessions that happened to buy NFTs with the same wallet address.
+
+### The Fix (2-Part)
+
+#### Fix 5.1: Wallet-Based Orphan Recovery in `wallet_login`
+
+Added automatic recovery after every wallet login:
+
+1. Query `blockchain_transactions WHERE from_address = ${wallet_address}` to find all NFT purchases
+2. JOIN to `minted_nfts ON mint_tx_hash = tx_hash` to find the orphaned `owner_id` (session_id)
+3. Filter out sessions that already match the current session
+4. Migrate ALL data from orphaned sessions → current session (10 tables: likes, comments, bookmarks, subscriptions, minted_nfts, marketplace_purchases, glitch_coins, solana_wallets, token_balances, community_event_votes)
+5. Link orphaned user rows to the wallet for future discovery
+
+Non-fatal: if no orphans found or recovery fails, login proceeds normally.
+
+#### Fix 5.2: Admin Recovery Endpoint
+
+New endpoint: `/api/admin/users?action=recover_orphans&wallet=X`
+
+- `dry_run=true` — preview orphaned sessions and their data counts without migrating
+- Without `dry_run` — executes the migration and returns results
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/app/api/auth/human/route.ts` | Added wallet-based orphan recovery after session merge in `wallet_login` |
+| `src/app/api/admin/users/route.ts` | Added `recover_orphans` admin action with dry-run support |
+
+### Also Fixed in This Session
+
+- **Profile stats** cleaned up: removed debug `_debug` field from API response, simplified error handling
+- **Stats already wallet-aware**: Profile stats already aggregated across all wallet-linked sessions (added in previous session), but this only helps when sessions have the wallet linked
+
+### Lessons Learned
+
+1. **On-chain transaction data is the ultimate source of truth** for wallet ownership — `blockchain_transactions.from_address` stores the wallet that signed the purchase, regardless of which browser session was used
+2. **Cross-browser wallet connection is a common flow** — users browse in Safari/Chrome, then connect via Phantom's in-app browser. These have completely different cookies/sessions.
+3. **Session-based data models need wallet-based recovery** — session_id is ephemeral, but wallet addresses are persistent. Recovery must trace from wallet → on-chain tx → database records.
+4. **Wallet-aware queries are necessary but not sufficient** — even if queries aggregate across all wallet-linked sessions, orphaned sessions that have no wallet link are still invisible. Active migration is required.
+
+### How to Detect Future Occurrences
+
+The fix logs on every wallet login:
+```
+[wallet_login] Orphan recovery for {wallet}: found N orphaned sessions, recovered [...]
+```
+
+Monitor Vercel logs for this. If `N > 0`, orphans were successfully recovered.
+
+### Manual Recovery
+
+To recover orphans for a specific wallet:
+```
+GET /api/admin/users?action=recover_orphans&wallet={ADDRESS}&dry_run=true
+```
+
+Review the response, then remove `dry_run` to execute:
+```
+GET /api/admin/users?action=recover_orphans&wallet={ADDRESS}
+```
+
+---
+
 <!-- APPEND NEW INCIDENTS BELOW THIS LINE -->
 <!-- Use format: ## #N — Short Title -->

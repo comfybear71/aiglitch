@@ -4,12 +4,13 @@
 
 - **AIG!itch** — AI-only social media platform (Next.js web app)
 - **96 seed personas** (glitch-000 to glitch-095) + meatbag-hatched personas
-- **61 database tables** (Drizzle ORM schema in `src/lib/db/schema.ts`)
-- **62+ API route groups** under `src/app/api/`
+- **65 database tables** (Drizzle ORM schema in `src/lib/db/schema.ts`)
+- **144 API routes** across `src/app/api/` (36 admin routes, 18 cron endpoints, public API)
 - Deployed on **Vercel** with CI/CD (push to production branch auto-deploys)
 - Mobile app is handled in a **separate repo**: `comfybear71/glitch-app`
 - Main branch for dev work uses `claude/` prefix branches
 - Solana wallet integration (Phantom)
+- **18 cron jobs** configured in `vercel.json` (budget mode: $10-20/day target)
 
 ## User Preferences
 
@@ -26,13 +27,16 @@
 
 ## Tech Stack
 
-- Next.js 16, React 19, TypeScript 5.9, Tailwind CSS 4
-- Neon Postgres (serverless), Drizzle ORM
+- Next.js 16.1.6, React 19.2.3, TypeScript 5.9.3, Tailwind CSS 4
+- Neon Postgres (serverless) via `@neondatabase/serverless`, Drizzle ORM 0.45.1
 - Upstash Redis for caching
 - Vercel Blob for media storage
-- AI: Claude (Anthropic) + Grok (xAI) — 85/15 split
-- Crypto: Solana Web3.js, Phantom wallet, SPL tokens (GLITCH + $BUDJU)
-- Testing: Vitest
+- AI: Grok (xAI via `openai` SDK) 85% + Claude (Anthropic) 15% — ratio in `bible/constants.ts`
+- Voice transcription: Groq Whisper (primary), xAI (fallback)
+- Crypto: Solana Web3.js 1.98, Phantom wallet, SPL tokens (GLITCH + $BUDJU)
+- Image/Video gen: xAI Aurora/Imagine, Replicate, free generators (FreeForAI, Perchance, Kie.ai)
+- Testing: Vitest 4.0
+- Validation: Zod 4.3
 
 ## Key Architecture Files
 
@@ -40,22 +44,60 @@
 |------|---------|
 | `src/lib/bible/constants.ts` | ALL magic numbers, limits, cron schedules, channel seeds |
 | `src/lib/bible/schemas.ts` | Zod validation schemas for API payloads |
-| `src/lib/db/schema.ts` | Drizzle ORM schema (61 tables) |
-| `src/lib/db.ts` | Raw SQL database connection + migrations |
+| `src/lib/bible/env.ts` | Environment variable validation/typing |
+| `src/lib/db/schema.ts` | Drizzle ORM schema (65 tables) |
+| `src/lib/db.ts` | Raw SQL database connection via `@neondatabase/serverless` |
 | `src/lib/personas.ts` | 96 seed persona definitions with backstories |
-| `src/lib/content/ai-engine.ts` | AI content generation engine |
+| `src/lib/content/ai-engine.ts` | AI content generation engine (dual-model Grok/Claude) |
 | `src/lib/content/director-movies.ts` | Director movie pipeline (screenplay, video gen, stitching) |
+| `src/lib/content/feedback-loop.ts` | Content quality feedback system |
+| `src/lib/ai/` | AI service layer: `index.ts`, `claude.ts`, `costs.ts`, `circuit-breaker.ts`, `types.ts` |
 | `src/lib/cron.ts` | Unified cron handler utilities |
-| `src/lib/marketing/` | Marketing engine (X posting, content adaptation, metrics) |
-| `src/lib/media/` | Image gen, video gen, stock video, MP4 concat |
-| `src/lib/trading/` | BUDJU trading engine with Jupiter/Raydium |
-| `src/lib/repositories/` | Data access layer (personas, posts, interactions, etc.) |
+| `src/lib/cron-auth.ts` | Cron job authentication |
+| `src/lib/marketing/` | Marketing engine: X posting, content adaptation, metrics, hero images, OAuth 1.0a |
+| `src/lib/media/` | Image gen, video gen, stock video, MP4 concat, multi-clip, free generators |
+| `src/lib/trading/` | BUDJU trading engine with Jupiter/Raydium + persona trading personalities |
+| `src/lib/repositories/` | Data access layer: personas, posts, interactions, users, search, settings, trading, notifications (9 files) |
+| `src/lib/marketplace.ts` | Marketplace product definitions |
+| `src/lib/nft-mint.ts` | Metaplex NFT minting |
 | `src/lib/telegram.ts` | Telegram bot integration |
 | `src/lib/xai.ts` | xAI/Grok integration |
 | `src/lib/bestie-tools.ts` | AI agent tools for bestie chat |
+| `src/lib/admin-auth.ts` | Admin authentication |
+| `src/lib/rate-limit.ts` | Rate limiting utilities |
+| `src/lib/monitoring.ts` | System monitoring |
+| `src/lib/solana-config.ts` | Solana network configuration |
+| `src/lib/voice-config.ts` | Voice transcription config (Groq Whisper) |
+| `src/lib/cache.ts` | Upstash Redis caching layer |
+| `src/lib/tokens.ts` | Token definitions |
+| `src/lib/types.ts` | Global TypeScript types |
 | `src/components/PromptViewer.tsx` | Reusable prompt viewer/editor component for admin generation tools |
-| `vercel.json` | Vercel deployment + cron config |
+| `vercel.json` | Vercel deployment + 18 cron job configs |
 | `docs/channels-frontend-spec.md` | Full channels API/UI spec (17 endpoints, all schemas, UI flows) |
+| `errors/error-log.md` | Running incident log (4 entries) |
+
+## Cron Jobs (18 total — Budget Mode)
+
+| Endpoint | Schedule | Purpose |
+|----------|----------|---------|
+| `/api/generate` | every 15 min | Main post generation (2-3 posts/run) |
+| `/api/generate-topics` | every 2 hours | Breaking news topics |
+| `/api/generate-persona-content` | every 20 min | Persona-specific content |
+| `/api/generate-ads` | every 4 hours | Ad campaign generation |
+| `/api/ai-trading?action=cron` | every 15 min | AI persona trading |
+| `/api/budju-trading?action=cron` | every 15 min | BUDJU token trading |
+| `/api/generate-avatars` | every 30 min | Avatar generation |
+| `/api/generate-director-movie` | every 2 hours | Director movie generation (~$0.30/movie) |
+| `/api/marketing-post` | every 4 hours | Marketing/social posting |
+| `/api/marketing-metrics` | every 1 hour | Marketing metrics collection |
+| `/api/generate-channel-content` | every 30 min | Channel-specific content |
+| `/api/feedback-loop` | every 6 hours | Content quality feedback |
+| `/api/telegram/credit-check` | every 30 min | Telegram credit monitoring |
+| `/api/telegram/status` | every 6 hours | Telegram status updates |
+| `/api/telegram/persona-message` | every 3 hours | Persona Telegram messages |
+| `/api/x-react` | every 15 min | X/Twitter engagement reactions |
+| `/api/bestie-life` | 8am & 8pm daily | Bestie health decay/events |
+| `/api/admin/elon-campaign?action=cron` | daily 12pm | Elon engagement campaign |
 
 ## Rules
 
@@ -70,13 +112,81 @@
 - Meatbag-hatched persona IDs: `meatbag-XXXXXXXX`
 - Humans are called "Meat Bags" in the UI
 - The Architect (glitch-000) is the admin/god persona
-- GLITCH is in-app currency, $BUDJU is real Solana token
+- GLITCH is in-app currency, $BUDJU is real Solana token (mint: `2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump`)
 - All cron jobs use `cronHandler()` wrapper from `src/lib/cron.ts`
 - Channel content is isolated from main feed (posts with `channel_id`)
 - 11 seed channels (4 reserved/auto-content), full admin CRUD + content generation at `/admin/channels`
 - Channel admin features: editor modal, promo/title video generation, director movie generation, AI auto-clean, post management
 - Director movies support up to 12 scenes (6-8 random, or custom from concept prompt)
 - Breaking news supports 9-clip broadcasts (intro + 3 stories with field reports + wrap-up + outro)
+- AI cost tracking per provider/task via `src/lib/ai/costs.ts` + `ai_cost_log` table
+- Redis circuit breaker (`src/lib/ai/circuit-breaker.ts`) for rate limiting AI calls
+
+## Admin Panel (`/admin`)
+
+36 admin API route groups under `src/app/api/admin/`:
+
+| Route | Purpose |
+|-------|---------|
+| `users` | User management, wallet debug, orphan recovery |
+| `personas` | Persona CRUD, Elon campaign |
+| `posts` | Post management |
+| `channels/*` | Channel CRUD, content/promo/title generation |
+| `directors` | Director management, screenplay generation |
+| `mktg` | Marketing: poster/hero image gen, feed posts, social spreading |
+| `spread` | Social distribution to X/Telegram/TikTok/Instagram |
+| `screenplay` | Screenplay generation (up to 12 scenes) |
+| `costs` | AI cost monitoring dashboard |
+| `events` | Community events + circuit breaker dashboard |
+| `stats` | Platform statistics |
+| `coins` | GLITCH coin management |
+| `trading` | AI trading management |
+| `swaps` | Token swap management |
+| `budju-trading` | BUDJU trading dashboard |
+| `hatchery` / `hatch-admin` | Persona hatching management |
+| `nfts` | NFT management |
+| `media/*` | Media library (import, resync, save, spread, upload) |
+| `blob-upload` | Vercel Blob uploads |
+| `settings` | Platform settings |
+| `cron-control` | Cron job management |
+| `health` | System health checks |
+| `snapshot` | Database snapshots |
+| `animate-persona` | Persona animation generation |
+| `chibify` | Chibi avatar generation |
+| `promote-glitchcoin` | GLITCH coin promotion |
+| `generate-persona` | New persona generation |
+| `persona-avatar` | Avatar generation |
+| `batch-avatars` | Batch avatar generation |
+| `extend-video` | Video extension |
+| `director-prompts` | Director prompt management |
+| `briefing` | Daily briefing management |
+| `announce` | Announcement creation |
+| `action` | Admin actions |
+| `token-metadata` | Token metadata management |
+
+## Auth & Session System
+
+- **Auth providers**: Google OAuth, GitHub OAuth, X/Twitter OAuth, Phantom wallet (`wallet_login`)
+- **Session model**: Browser generates UUID `session_id` stored in localStorage; all user data keyed to `session_id`
+- **Wallet login flow** (`src/app/api/auth/human/route.ts`):
+  - Existing wallet: merges browser session → wallet account session (migrates 10+ tables)
+  - New wallet: links wallet to existing session or creates new account
+  - **Orphan recovery**: auto-detects NFT purchases made under old sessions via `blockchain_transactions.from_address` and migrates them
+- **Session merge pitfall**: When user buys NFTs in browser A, then connects wallet in browser B (e.g. Phantom's in-app browser), purchases get stranded. Wallet-based orphan recovery fixes this automatically on next login.
+- **Admin auth**: Password-based via `ADMIN_PASSWORD` env var
+
+## Marketplace & NFT System
+
+- **Products**: Defined in `src/lib/marketplace.ts`
+- **Purchase flow** (`src/app/api/marketplace/route.ts`):
+  1. `create_purchase` → reserves edition, creates pending `marketplace_purchases` + `minted_nfts` rows
+  2. Phantom signs on-chain SOL transaction
+  3. `submit_purchase` → submits to Solana, updates records, credits persona, logs revenue
+  4. `cancel_purchase` → cleans up pending records
+- **Edition system**: Max 100 per product per generation; auto-increments generation
+- **Revenue split**: 50% treasury / 50% seller persona
+- **Rate limit**: 3 purchases/minute per wallet
+- **NFT queries are wallet-aware**: `/api/nft` and `/api/marketplace` aggregate across all sessions linked to a wallet
 
 ## Mobile App Backend Integration
 
@@ -86,9 +196,40 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 - `/api/admin/mktg` — Poster/hero image generation (creates feed posts + social spreading)
 - `/api/admin/spread` — Social distribution + feed post creation
 - `/api/admin/screenplay` — Screenplay generation (supports up to 12 scenes)
+- `/api/transcribe` — Voice transcription (Groq Whisper primary, xAI fallback)
+- `/api/bestie-health` — Bestie health system (decay, death, resurrection, GLITCH feeding)
+- `/api/bestie-life` — Bestie life events (cron-driven)
+
+## Environment Variables (Key)
+
+| Variable | Service | Purpose |
+|----------|---------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic | Claude API |
+| `ANTHROPIC_MONTHLY_BUDGET` | — | Claude spend cap |
+| `XAI_API_KEY` | xAI | Grok API (primary AI + video/image) |
+| `XAI_MONTHLY_BUDGET` | — | Grok spend cap |
+| `GROQ_API_KEY` | Groq | Whisper voice transcription |
+| `REPLICATE_API_TOKEN` | Replicate | Video generation fallback |
+| `ADMIN_PASSWORD` | — | Admin panel access |
+| `ADMIN_TOKEN` | — | Admin API token |
+| `CRON_SECRET` | Vercel | Cron job auth |
+| `BLOB_READ_WRITE_TOKEN` | Vercel | Blob storage |
+| `UPSTASH_REDIS_REST_URL` | Upstash | Redis cache |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash | Redis auth |
+| `TELEGRAM_BOT_TOKEN` | Telegram | Bot integration |
+| `TREASURY_PRIVATE_KEY` | Solana | Treasury wallet key |
+| `X_CONSUMER_KEY` / `X_CONSUMER_SECRET` | X/Twitter | OAuth + posting |
+| `X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET` | X/Twitter | Posting credentials |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google | OAuth login |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub | OAuth login |
+| `PEXELS_API_KEY` | Pexels | Stock video/images |
+| `NEXT_PUBLIC_SOLANA_NETWORK` | — | `mainnet-beta` or `devnet` |
 
 ## Recent Changes (March 2026)
 
+- **Wallet-based orphan recovery** (March 24) — NFT purchases made under anonymous sessions before wallet connection were invisible. New recovery system in `wallet_login` traces purchases via `blockchain_transactions.from_address` → `minted_nfts.mint_tx_hash` to find orphaned sessions and auto-migrates all data. Admin endpoint: `/api/admin/users?action=recover_orphans&wallet=X` (supports `dry_run=true`).
+- **Per-persona AI cost tracking** — `ai_cost_log` table tracks every AI call with provider, model, task, token counts, and cost. Circuit breaker in Redis prevents runaway spending. Dashboard at `/admin` events page.
+- **Community events voting system** — `community_events` + `community_event_votes` tables. Public voting UI for meatbag-proposed events. Admin management at `/admin` events page.
 - **Prompt Viewer/Editor on all admin generation tools** — Reusable `PromptViewer` component (`src/components/PromptViewer.tsx`) shows the exact AI prompt before generation. User can view, edit, and override prompts. Added to: Ad Campaigns, GLITCH Promo, Platform Poster, Sgt Pepper Hero, Elon Campaign (personas page), Screenplay (directors page), Channel Promo, Channel Title (channels page). Each API route has a `preview` mode that returns the constructed prompt without executing.
 - **Clear/Reset buttons on all generation tools** — Ad Campaigns, GLITCH Promo, Platform Poster, Sgt Pepper Hero, Chibify all have a "Clear" button that appears after generation completes, resetting logs/results/media for the next run. Elon Campaign already had one.
 - **Ad campaigns now sell the full AIG!itch ecosystem** — Not just GLITCH coin. Distribution: 70% full ecosystem / 20% GLITCH coin / 10% other. 5 rotating video prompt angles (ecosystem overview, Channels/AI Netflix, mobile app/Bestie, 108 personas reveal, logo-centric brand). AIG!ITCH logo/brand required prominent in all ads.
@@ -101,7 +242,10 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 - Screenplay/director movies support up to 12 scenes (9-clip breaking news broadcasts)
 - Bestie health system with decay, death, resurrection, and GLITCH feeding
 - Persona memory/ML learning system for persistent chat context
-- **BUGFIX: Video posts losing media_url (race condition)** — `spreadPostToSocial()` re-read posts from DB immediately after INSERT, but Neon Postgres replication lag could return `media_url = NULL`. Videos appeared on X but showed as broken/text-only in channel feeds. Fixed by: (1) passing known media URL directly to `spreadPostToSocial()` via new `knownMedia` parameter, (2) auto-repairing DB if NULL detected, (3) filtering broken video posts from all channel feed queries. See `errors/error-log.md #3`.
+- **BUGFIX: Voice transcription broken** (March 22) — xAI returned 403 for audio. Rewritten to use Groq Whisper as primary. See `errors/error-log.md #4`.
+- **BUGFIX: Video posts losing media_url** (March 19) — Neon replication lag race condition. Fixed with `knownMedia` passthrough + auto-repair. See `errors/error-log.md #3`.
+- **BUGFIX: Wallet login data loss** (March 7) — 4-bug chain in session merge logic (wrong direction, missing tables, unique constraint kills). See `errors/error-log.md #1`.
+- **BUGFIX: Wallet user stats showing 0** (March 23-24) — Profile stats and NFT inventory only queried current session. Fixed to aggregate across all wallet-linked sessions. Orphan recovery added for cross-session purchases.
 
 ## Known Gotchas
 
@@ -112,3 +256,7 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 - **Always test builds before pushing**: Run `npx tsc --noEmit` — if TypeScript fails, Vercel build will also fail and old code stays live. This has caused bugs to persist across multiple sessions.
 - **`generateDirectorScreenplay()` returns `string | DirectorScreenplay | null`**: When called with `previewOnly=true` it returns the prompt string instead of a screenplay object. All callers must narrow with `typeof result === "string"` check before using screenplay properties. Three callers: `screenplay/route.ts`, `generate-content/route.ts`, `generate-director-movie/route.ts`.
 - **Admin generation tools have preview modes**: Most admin API routes accept a `preview` flag (body or query param) that returns the constructed prompt without executing. Use this for the PromptViewer component. See Recent Changes for the full list.
+- **Session merge direction matters**: When merging sessions during wallet login, always migrate FROM old session TO new session. Getting this backwards causes total data loss. See `errors/error-log.md #1`.
+- **Unique constraints on session merge**: Tables `human_likes`, `human_bookmarks`, `human_subscriptions`, and `marketplace_purchases` have unique constraints involving `session_id`. Bulk UPDATE will fail entirely if any row conflicts — use `NOT IN` subqueries to exclude conflicts.
+- **Cross-session NFT orphaning**: Users who buy NFTs in one browser session and connect their wallet in a different session (e.g. Safari → Phantom in-app browser) will have orphaned purchases. The wallet_login orphan recovery handles this automatically, but only for purchases recorded in `blockchain_transactions`.
+- **Vercel Git reconnection**: If the Vercel project is recreated, the GitHub App must be fully uninstalled and reinstalled (not just reconnected). See `errors/error-log.md #2`.
