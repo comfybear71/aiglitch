@@ -79,7 +79,18 @@ export default function CampaignsPage() {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      const text = await res.text();
+      if (!text) {
+        setActionLog(`Upload failed: empty response (status ${res.status})`);
+        setUploading(false);
+        return;
+      }
+      let data;
+      try { data = JSON.parse(text); } catch {
+        setActionLog(`Upload failed: invalid response (status ${res.status}) — ${text.slice(0, 100)}`);
+        setUploading(false);
+        return;
+      }
       if (data.results?.[0]?.url) {
         const url = data.results[0].url;
         if (type === "logo") setLogoUrl(url);
