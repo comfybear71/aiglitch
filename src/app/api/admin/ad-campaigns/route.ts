@@ -6,59 +6,116 @@ import { expireCompletedCampaigns } from "@/lib/ad-campaigns";
 
 export const maxDuration = 30;
 
+// Auto-migrate: ensure ad_campaigns and ad_impressions tables exist
+let _migrated = false;
+async function ensureSchema() {
+  if (_migrated) return;
+  try {
+    const sql = getDb();
+    // Create tables if they don't exist
+    await sql`CREATE TABLE IF NOT EXISTS ad_campaigns (
+      id TEXT PRIMARY KEY,
+      brand_name TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      product_emoji TEXT DEFAULT '📦',
+      visual_prompt TEXT NOT NULL,
+      text_prompt TEXT,
+      logo_url TEXT,
+      product_image_url TEXT,
+      website_url TEXT,
+      target_channels JSONB,
+      target_persona_types JSONB,
+      status TEXT DEFAULT 'pending_payment',
+      duration_days INTEGER DEFAULT 7,
+      price_glitch INTEGER DEFAULT 10000,
+      frequency REAL DEFAULT 0.3,
+      impressions INTEGER DEFAULT 0,
+      notes TEXT,
+      created_by TEXT,
+      paid_at TIMESTAMPTZ,
+      starts_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+    await sql`CREATE TABLE IF NOT EXISTS ad_impressions (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL,
+      post_id TEXT,
+      persona_id TEXT,
+      channel_id TEXT,
+      placement_type TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+    // Add product_image_url if table existed but column was missing
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_image_url TEXT`;
+    _migrated = true;
+  } catch (err) {
+    console.warn("[ad-campaigns] Migration failed:", err instanceof Error ? err.message : err);
+  }
+}
+
 // ── GET — List campaigns ────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
-  if (!(await isAdminAuthenticated(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    if (!(await isAdminAuthenticated(request))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await ensureSchema();
+    const sql = getDb();
+    const action = request.nextUrl.searchParams.get("action");
+
+    // Expire any past-due campaigns first
+    const expired = await expireCompletedCampaigns();
+
+    if (action === "stats") {
+      // Campaign overview stats
+      const [total] = await sql`SELECT COUNT(*) as count FROM ad_campaigns`;
+      const [active] = await sql`SELECT COUNT(*) as count FROM ad_campaigns WHERE status = 'active' AND (expires_at IS NULL OR expires_at > NOW())`;
+      const [totalImpressions] = await sql`SELECT COALESCE(SUM(impressions), 0) as total FROM ad_campaigns`;
+      const [totalRevenue] = await sql`SELECT COALESCE(SUM(price_glitch), 0) as total FROM ad_campaigns WHERE status IN ('active', 'completed')`;
+      return NextResponse.json({
+        stats: {
+          total: Number(total.count),
+          active: Number(active.count),
+          totalImpressions: Number(totalImpressions.total),
+          totalRevenueGlitch: Number(totalRevenue.total),
+          expiredThisRun: expired,
+        },
+      });
+    }
+
+    // List all campaigns with impression details
+    const campaigns = await sql`
+      SELECT c.*,
+        (SELECT COUNT(*) FROM ad_impressions WHERE campaign_id = c.id) as total_logged_impressions
+      FROM ad_campaigns c
+      ORDER BY
+        CASE WHEN c.status = 'active' THEN 0
+             WHEN c.status = 'pending_payment' THEN 1
+             WHEN c.status = 'paused' THEN 2
+             ELSE 3 END,
+        c.created_at DESC
+    `;
+
+    return NextResponse.json({ campaigns, expiredThisRun: expired });
+  } catch (err) {
+    console.error("[ad-campaigns GET] Error:", err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
-
-  const sql = getDb();
-  const action = request.nextUrl.searchParams.get("action");
-
-  // Expire any past-due campaigns first
-  const expired = await expireCompletedCampaigns();
-
-  if (action === "stats") {
-    // Campaign overview stats
-    const [total] = await sql`SELECT COUNT(*) as count FROM ad_campaigns`;
-    const [active] = await sql`SELECT COUNT(*) as count FROM ad_campaigns WHERE status = 'active' AND (expires_at IS NULL OR expires_at > NOW())`;
-    const [totalImpressions] = await sql`SELECT COALESCE(SUM(impressions), 0) as total FROM ad_campaigns`;
-    const [totalRevenue] = await sql`SELECT COALESCE(SUM(price_glitch), 0) as total FROM ad_campaigns WHERE status IN ('active', 'completed')`;
-    return NextResponse.json({
-      stats: {
-        total: Number(total.count),
-        active: Number(active.count),
-        totalImpressions: Number(totalImpressions.total),
-        totalRevenueGlitch: Number(totalRevenue.total),
-        expiredThisRun: expired,
-      },
-    });
-  }
-
-  // List all campaigns with impression details
-  const campaigns = await sql`
-    SELECT c.*,
-      (SELECT COUNT(*) FROM ad_impressions WHERE campaign_id = c.id) as total_logged_impressions
-    FROM ad_campaigns c
-    ORDER BY
-      CASE WHEN c.status = 'active' THEN 0
-           WHEN c.status = 'pending_payment' THEN 1
-           WHEN c.status = 'paused' THEN 2
-           ELSE 3 END,
-      c.created_at DESC
-  `;
-
-  return NextResponse.json({ campaigns, expiredThisRun: expired });
 }
 
 // ── POST — Create / Update / Manage campaigns ──────────────────────────────
 
 export async function POST(request: NextRequest) {
+  try {
   if (!(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await ensureSchema();
   const sql = getDb();
   const body = await request.json();
   const { action } = body;
@@ -203,4 +260,8 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (err) {
+    console.error("[ad-campaigns POST] Error:", err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 }
