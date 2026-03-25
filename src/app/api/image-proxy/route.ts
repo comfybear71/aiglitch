@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 
 // Proxies an image URL through our domain so Instagram's servers can fetch it.
-// Instagram Graph API can't fetch from some CDNs (Vercel Blob) directly.
+// Also resizes to 1080x1080 JPEG — Instagram requires specific aspect ratios.
 // Usage: /api/image-proxy?url=<encoded-image-url>
 
 export async function GET(request: NextRequest) {
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
   }
 
-  // Only allow proxying from trusted image domains
+  // Block internal/private IPs
   try {
     const parsed = new URL(url);
     const blocked = ["localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254"];
@@ -27,20 +28,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: `Upstream returned ${response.status}` }, { status: 502 });
     }
 
-    const contentType = response.headers.get("content-type") || "image/jpeg";
-    const buffer = await response.arrayBuffer();
+    const inputBuffer = Buffer.from(await response.arrayBuffer());
 
-    return new NextResponse(buffer, {
+    // Resize to 1080x1080 square JPEG — Instagram's preferred format
+    // cover = crop to fill, ensuring no letterboxing
+    const outputBuffer = await sharp(inputBuffer)
+      .resize(1080, 1080, { fit: "cover", position: "centre" })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+
+    return new NextResponse(new Uint8Array(outputBuffer), {
       status: 200,
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": "image/jpeg",
         "Cache-Control": "public, max-age=86400",
         "Access-Control-Allow-Origin": "*",
       },
     });
   } catch (err) {
     return NextResponse.json(
-      { error: `Proxy fetch failed: ${err instanceof Error ? err.message : String(err)}` },
+      { error: `Proxy failed: ${err instanceof Error ? err.message : String(err)}` },
       { status: 502 }
     );
   }
