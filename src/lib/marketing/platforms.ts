@@ -600,7 +600,7 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
         body: JSON.stringify({
           post_info: {
             title: text.slice(0, 150),
-            privacy_level: "PUBLIC_TO_EVERYONE",
+            privacy_level: "SELF_ONLY", // TODO: Change to PUBLIC_TO_EVERYONE once TikTok Direct Post audit is approved
             disable_duet: false,
             disable_comment: false,
             disable_stitch: false,
