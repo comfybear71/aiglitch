@@ -90,8 +90,10 @@ export async function spreadPostToSocial(
   // Post to social media platforms (X, Facebook, TikTok, YouTube, Instagram)
   if (postData) {
     try {
+      console.log(`[spread-post] === START === postId=${postId}, media_type="${postData.media_type}", media_url=${postData.media_url?.slice(0, 80)}`);
       const accounts = await getActiveAccounts();
       const isVideo = postData.media_type === "video" || postData.media_type?.startsWith("video/") || postData.media_url?.includes(".mp4");
+      console.log(`[spread-post] accounts=${accounts.length} (${accounts.map(a => a.platform).join(",")}), isVideo=${isVideo}`);
 
       // If post has no media, pick a fallback image so we don't show the generic OG card
       let mediaUrlToSpread = postData.media_url;

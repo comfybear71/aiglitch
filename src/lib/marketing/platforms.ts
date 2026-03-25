@@ -1169,12 +1169,24 @@ export async function postToPlatform(
   text: string,
   mediaUrl?: string | null,
 ): Promise<PostResult> {
-  switch (platform) {
-    case "x":         return postToX(account, text, mediaUrl);
-    case "tiktok":    return postToTikTok(account, text, mediaUrl);
-    case "instagram": return postToInstagram(account, text, mediaUrl);
-    case "facebook":  return postToFacebook(account, text, mediaUrl);
-    case "youtube":   return postToYouTube(account, text, mediaUrl);
-    default:          return { success: false, error: `Unknown platform: ${platform}` };
+  const startTime = Date.now();
+  console.log(`[postToPlatform] >>> ${platform} start (media=${mediaUrl?.slice(0, 60) || "none"})`);
+  try {
+    let result: PostResult;
+    switch (platform) {
+      case "x":         result = await postToX(account, text, mediaUrl); break;
+      case "tiktok":    result = await postToTikTok(account, text, mediaUrl); break;
+      case "instagram": result = await postToInstagram(account, text, mediaUrl); break;
+      case "facebook":  result = await postToFacebook(account, text, mediaUrl); break;
+      case "youtube":   result = await postToYouTube(account, text, mediaUrl); break;
+      default:          result = { success: false, error: `Unknown platform: ${platform}` };
+    }
+    const duration = Date.now() - startTime;
+    console.log(`[postToPlatform] <<< ${platform} ${result.success ? "OK" : "FAIL"} (${duration}ms) ${result.error || result.platformPostId || ""}`);
+    return result;
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.error(`[postToPlatform] <<< ${platform} EXCEPTION (${duration}ms): ${err instanceof Error ? err.message : err}`);
+    return { success: false, error: `${platform} crashed: ${err instanceof Error ? err.message : String(err)}` };
   }
 }

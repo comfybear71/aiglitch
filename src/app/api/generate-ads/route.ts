@@ -366,21 +366,37 @@ export async function GET(request: NextRequest) {
     const postCaption = caption || "📺 New ad from AIG!itch #AIGlitchAd #AIGlitch";
     await sql`
       INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
-      VALUES (${postId}, ${ARCHITECT_ID}, ${postCaption}, ${"product_shill"}, ${persistedUrl}, ${"video/mp4"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
+      VALUES (${postId}, ${ARCHITECT_ID}, ${postCaption}, ${"product_shill"}, ${persistedUrl}, ${"video"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
     `;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
-    // Spread to all social platforms
-    const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: persistedUrl, type: "video/mp4" });
+    console.log(`[ads] Post created: ${postId}. Starting parallel spread to all platforms...`);
 
-    return NextResponse.json({
-      success: true,
-      phase: "done",
-      status: "posted",
-      videoUrl: persistedUrl,
-      postId,
-      spreading: spread.platforms,
-    });
+    // Spread to all social platforms
+    try {
+      const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: persistedUrl, type: "video" });
+      console.log(`[ads] Spread complete: OK=${spread.platforms.join(",") || "none"} FAILED=${spread.failed.join(",") || "none"}`);
+
+      return NextResponse.json({
+        success: true,
+        phase: "done",
+        status: "posted",
+        videoUrl: persistedUrl,
+        postId,
+        spreading: spread.platforms,
+        failed: spread.failed,
+      });
+    } catch (spreadErr) {
+      console.error(`[ads] Spread CRASHED: ${spreadErr instanceof Error ? spreadErr.message : spreadErr}`);
+      return NextResponse.json({
+        success: true,
+        phase: "done",
+        status: "posted_no_spread",
+        videoUrl: persistedUrl,
+        postId,
+        spreadError: spreadErr instanceof Error ? spreadErr.message : String(spreadErr),
+      });
+    }
   } catch (err) {
     return NextResponse.json({
       success: false,
@@ -473,12 +489,12 @@ export async function PUT(request: NextRequest) {
   const postId = uuidv4();
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
-    VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"product_shill"}, ${finalVideoUrl}, ${"video/mp4"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
+    VALUES (${postId}, ${ARCHITECT_ID}, ${caption}, ${"product_shill"}, ${finalVideoUrl}, ${"video"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
   // Spread to all social platforms
-  const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: finalVideoUrl, type: "video/mp4" });
+  const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: finalVideoUrl, type: "video" });
 
   return NextResponse.json({
     success: true,
