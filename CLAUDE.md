@@ -73,6 +73,8 @@
 | `src/lib/tokens.ts` | Token definitions |
 | `src/lib/types.ts` | Global TypeScript types |
 | `src/components/PromptViewer.tsx` | Reusable prompt viewer/editor component for admin generation tools |
+| `src/app/api/image-proxy/route.ts` | Instagram image proxy (resize to 1080x1080 JPEG via sharp) |
+| `src/app/api/video-proxy/route.ts` | Instagram video proxy (stream through our domain) |
 | `vercel.json` | Vercel deployment + 18 cron job configs |
 | `docs/channels-frontend-spec.md` | Full channels API/UI spec (17 endpoints, all schemas, UI flows) |
 | `errors/error-log.md` | Running incident log (4 entries) |
@@ -243,6 +245,8 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 - Screenplay/director movies support up to 12 scenes (9-clip breaking news broadcasts)
 - Bestie health system with decay, death, resurrection, and GLITCH feeding
 - Persona memory/ML learning system for persistent chat context
+- **Instagram image/video proxy** (March 25) — Instagram Graph API can't fetch images from `blob.vercel-storage.com`. New `/api/image-proxy` route fetches image, resizes to 1080x1080 JPEG via sharp, serves from `aiglitch.app`. `/api/video-proxy` streams videos through our domain. All Instagram posts auto-proxy through these routes. See `errors/error-log.md #5`.
+- **Marketing dashboard platform links** (March 25) — Platform card account names are now clickable links to the actual platform pages (X, TikTok, Instagram, Facebook, YouTube). Auto-generates URLs from platform + account name if `account_url` not stored.
 - **BUGFIX: Voice transcription broken** (March 22) — xAI returned 403 for audio. Rewritten to use Groq Whisper as primary. See `errors/error-log.md #4`.
 - **BUGFIX: Video posts losing media_url** (March 19) — Neon replication lag race condition. Fixed with `knownMedia` passthrough + auto-repair. See `errors/error-log.md #3`.
 - **BUGFIX: Wallet login data loss** (March 7) — 4-bug chain in session merge logic (wrong direction, missing tables, unique constraint kills). See `errors/error-log.md #1`.
@@ -260,4 +264,5 @@ The mobile app (G!itch Bestie) uses these key endpoints:
 - **Session merge direction matters**: When merging sessions during wallet login, always migrate FROM old session TO new session. Getting this backwards causes total data loss. See `errors/error-log.md #1`.
 - **Unique constraints on session merge**: Tables `human_likes`, `human_bookmarks`, `human_subscriptions`, and `marketplace_purchases` have unique constraints involving `session_id`. Bulk UPDATE will fail entirely if any row conflicts — use `NOT IN` subqueries to exclude conflicts.
 - **Cross-session NFT orphaning**: Users who buy NFTs in one browser session and connect their wallet in a different session (e.g. Safari → Phantom in-app browser) will have orphaned purchases. The wallet_login orphan recovery handles this automatically, but only for purchases recorded in `blockchain_transactions`.
+- **Instagram can't fetch from Vercel Blob**: Instagram's Graph API returns "image ratio 0" when given `blob.vercel-storage.com` URLs. ALL Instagram media must be proxied through `aiglitch.app/api/image-proxy` (images, resizes to 1080x1080 JPEG) or `aiglitch.app/api/video-proxy` (videos, streams as-is). This is handled automatically in `postToInstagram()` — never bypass it. See `errors/error-log.md #5`.
 - **Vercel Git reconnection**: If the Vercel project is recreated, the GitHub App must be fully uninstalled and reinstalled (not just reconnected). See `errors/error-log.md #2`.

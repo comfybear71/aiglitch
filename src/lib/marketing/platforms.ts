@@ -613,8 +613,43 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
       return { success: false, error: "Instagram requires media content" };
     }
 
+    // Instagram only supports JPEG/PNG for images — reject unsupported formats
+    const lowerUrl = mediaUrl.toLowerCase();
+    const unsupportedFormats = [".webp", ".svg", ".gif", ".bmp", ".tiff"];
+    if (unsupportedFormats.some(fmt => lowerUrl.includes(fmt))) {
+      return { success: false, error: `Instagram does not support this image format. URL: ${mediaUrl}` };
+    }
+
+    // Verify the image URL is accessible before sending to Instagram
+    try {
+      const headRes = await fetch(mediaUrl, { method: "HEAD" });
+      if (!headRes.ok) {
+        return { success: false, error: `Image URL returned ${headRes.status}: ${mediaUrl}` };
+      }
+      const contentType = headRes.headers.get("content-type") || "";
+      console.log(`[instagram] Image content-type: ${contentType}, url: ${mediaUrl}`);
+      if (contentType.includes("webp") || contentType.includes("svg") || contentType.includes("html")) {
+        return { success: false, error: `Instagram unsupported content-type "${contentType}" for: ${mediaUrl}` };
+      }
+    } catch (headErr) {
+      console.warn(`[instagram] HEAD check failed for ${mediaUrl}:`, headErr);
+      // Continue anyway — the URL might still work
+    }
+
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
+
+    // Proxy ALL external URLs through our domain — Instagram can't fetch from many CDNs
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+    let igMediaUrl = mediaUrl;
+    if (!mediaUrl.startsWith(appUrl)) {
+      if (isVideo) {
+        igMediaUrl = `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
+      } else {
+        igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
+      }
+      console.log(`[instagram] Proxying ${isVideo ? "video" : "image"} through: ${igMediaUrl}`);
+    }
 
     // Step 1: Create media container
     const containerParams: Record<string, string> = {
@@ -624,18 +659,22 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
 
     if (isVideo) {
       containerParams.media_type = "REELS";
-      containerParams.video_url = mediaUrl;
+      containerParams.video_url = igMediaUrl;
     } else {
-      containerParams.image_url = mediaUrl;
+      containerParams.image_url = igMediaUrl;
     }
 
-    const containerUrl = new URL(`https://graph.facebook.com/v21.0/${igUserId}/media`);
-    Object.entries(containerParams).forEach(([k, v]) => containerUrl.searchParams.set(k, v));
-
-    const containerResponse = await fetch(containerUrl.toString(), { method: "POST" });
+    // Use POST body (not query params) to avoid URL-encoding issues with image URLs
+    const sentUrl = isVideo ? mediaUrl : igMediaUrl;
+    console.log(`[instagram] Creating container with ${isVideo ? "video_url" : "image_url"}: ${sentUrl}`);
+    const containerResponse = await fetch(`https://graph.facebook.com/v21.0/${igUserId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(containerParams),
+    });
     if (!containerResponse.ok) {
       const errBody = await containerResponse.text();
-      return { success: false, error: `IG container failed: ${containerResponse.status} ${errBody}` };
+      return { success: false, error: `IG container failed: ${containerResponse.status} ${errBody} | sent_url: ${sentUrl} | original: ${mediaUrl}` };
     }
 
     const containerData = await containerResponse.json() as { id?: string };
