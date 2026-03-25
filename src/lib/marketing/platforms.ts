@@ -583,20 +583,10 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       }
     }
 
-    // Step 2: Download video from Vercel Blob
-    console.log(`[tiktok] Step 1 OK. Step 2: Downloading video...`);
+    // Step 2: Use PULL_FROM_URL — TikTok fetches the video directly (no download/upload needed)
     const finalToken = account.access_token || token;
-    const videoResponse = await fetch(mediaUrl);
-    if (!videoResponse.ok) {
-      console.error(`[tiktok] Video download FAILED: ${videoResponse.status}`);
-      return { success: false, error: `TikTok: failed to download video from ${mediaUrl}: ${videoResponse.status}` };
-    }
-    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-    const videoSize = videoBuffer.length;
-    console.log(`[tiktok] Video downloaded: ${(videoSize / 1024 / 1024).toFixed(1)}MB`);
+    console.log(`[tiktok] Step 2: Init with PULL_FROM_URL: ${mediaUrl.slice(0, 100)}`);
 
-    // Step 3: Initialize FILE_UPLOAD post
-    console.log(`[tiktok] Step 3: Init upload (PUBLIC_TO_EVERYONE)...`);
     const initResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
       {
@@ -614,10 +604,8 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
             disable_stitch: false,
           },
           source_info: {
-            source: "FILE_UPLOAD",
-            video_size: videoSize,
-            chunk_size: videoSize,
-            total_chunk_count: 1,
+            source: "PULL_FROM_URL",
+            video_url: mediaUrl,
           },
         }),
       },
@@ -625,37 +613,21 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
 
     if (!initResponse.ok) {
       const errBody = await initResponse.text();
-      console.error(`[tiktok] Init FAILED: ${initResponse.status} ${errBody.slice(0, 300)}`);
+      console.error(`[tiktok] Init FAILED: ${initResponse.status} ${errBody.slice(0, 500)}`);
       return { success: false, error: `TikTok init failed: ${initResponse.status} ${errBody}` };
     }
 
     const initData = await initResponse.json() as {
-      data?: { publish_id?: string; upload_url?: string };
+      data?: { publish_id?: string };
+      error?: { code?: string; message?: string };
     };
-    const uploadUrl = initData.data?.upload_url;
-    console.log(`[tiktok] Init OK. publish_id=${initData.data?.publish_id}, upload_url=${uploadUrl ? "YES" : "NO"}`);
-    if (!uploadUrl) {
-      console.error(`[tiktok] No upload_url! Full response: ${JSON.stringify(initData).slice(0, 500)}`);
-      return { success: false, error: "TikTok: no upload_url returned from init" };
+
+    if (initData.error) {
+      console.error(`[tiktok] Init error: ${JSON.stringify(initData.error)}`);
+      return { success: false, error: `TikTok: ${initData.error.message || initData.error.code}` };
     }
 
-    // Step 4: Upload video chunk to TikTok
-    console.log(`[tiktok] Step 4: Uploading ${(videoSize / 1024 / 1024).toFixed(1)}MB to TikTok...`);
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "video/mp4",
-        "Content-Length": videoSize.toString(),
-        "Content-Range": `bytes 0-${videoSize - 1}/${videoSize}`,
-      },
-      body: videoBuffer,
-    });
-
-    if (!uploadResponse.ok) {
-      const errBody = await uploadResponse.text();
-      return { success: false, error: `TikTok upload failed: ${uploadResponse.status} ${errBody}` };
-    }
-
+    console.log(`[tiktok] === SUCCESS === publish_id=${initData.data?.publish_id}`);
     return {
       success: true,
       platformPostId: initData.data?.publish_id,
@@ -846,37 +818,16 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
     if (mediaUrl) {
       const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
       if (isVideo) {
+        // Pass Blob URL directly via file_url — Facebook can fetch from Vercel Blob for videos
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/videos`;
+        console.log(`[facebook] Posting video via file_url: ${mediaUrl.slice(0, 100)}`);
 
-        // Re-upload video to Blob with a clean short URL (same approach as Instagram images)
-        // Facebook sometimes can't fetch from long Vercel Blob URLs
-        let fbVideoUrl = mediaUrl;
-        try {
-          const { put } = await import("@vercel/blob");
-          const { v4: uuidv4 } = await import("uuid");
-          console.log(`[facebook] Re-uploading video for clean URL: ${mediaUrl.slice(0, 100)}`);
-          const vidRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30000) });
-          if (vidRes.ok) {
-            const buffer = Buffer.from(await vidRes.arrayBuffer());
-            const blob = await put(`facebook/${uuidv4()}.mp4`, buffer, {
-              access: "public",
-              contentType: "video/mp4",
-              addRandomSuffix: false,
-            });
-            fbVideoUrl = blob.url;
-            console.log(`[facebook] Re-uploaded: ${fbVideoUrl}`);
-          }
-        } catch (reupErr) {
-          console.warn(`[facebook] Re-upload failed, using original URL: ${reupErr instanceof Error ? reupErr.message : reupErr}`);
-        }
-
-        console.log(`[facebook] Posting video via file_url: ${fbVideoUrl.slice(0, 100)}`);
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             access_token: account.access_token,
-            file_url: fbVideoUrl,
+            file_url: mediaUrl,
             description: text,
           }),
         });
@@ -888,9 +839,8 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
         }
         const data = await response.json() as { id?: string; post_id?: string };
         const fbPostId = data.post_id || data.id;
-        const platformUrl = fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined;
         console.log(`[facebook] Video posted OK: ${fbPostId}`);
-        return { success: true, platformPostId: fbPostId, platformUrl };
+        return { success: true, platformPostId: fbPostId, platformUrl: fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined };
       } else {
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/photos`;
         params.url = mediaUrl;
