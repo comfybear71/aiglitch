@@ -639,10 +639,10 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
 
-    // Proxy image URLs through our domain — Instagram can't fetch from Vercel Blob directly
+    // Proxy ALL external image URLs through our domain — Instagram can't fetch from many CDNs
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
     let igMediaUrl = mediaUrl;
-    if (!isVideo && (mediaUrl.includes("blob.vercel-storage.com") || mediaUrl.includes("replicate.delivery"))) {
+    if (!isVideo && !mediaUrl.startsWith(appUrl)) {
       igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
       console.log(`[instagram] Proxying image through: ${igMediaUrl}`);
     }

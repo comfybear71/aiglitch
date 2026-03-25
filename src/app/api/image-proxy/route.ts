@@ -10,11 +10,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
   }
 
-  // Only allow proxying from trusted domains
-  const allowed = ["blob.vercel-storage.com", "aiglitch.app", "replicate.delivery"];
-  const parsed = new URL(url);
-  if (!allowed.some(d => parsed.hostname.endsWith(d))) {
-    return NextResponse.json({ error: "Domain not allowed" }, { status: 403 });
+  // Only allow proxying from trusted image domains
+  try {
+    const parsed = new URL(url);
+    const blocked = ["localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254"];
+    if (blocked.some(d => parsed.hostname.includes(d))) {
+      return NextResponse.json({ error: "Domain not allowed" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
 
   try {

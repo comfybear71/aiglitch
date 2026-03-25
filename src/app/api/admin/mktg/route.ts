@@ -233,10 +233,22 @@ export async function POST(request: NextRequest) {
         }
       }
       if (!mediaUrl && platform === "instagram") {
-        // Use site logo as test image — guaranteed JPEG, correct aspect ratio, on our domain
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
-        mediaUrl = `${appUrl}/aiglitch.jpg`;
-        console.log(`[test_post] Using site logo for Instagram test: ${mediaUrl}`);
+        // Pick a random image — the Instagram poster will proxy blob URLs through our domain
+        const images = await sql`
+          SELECT media_url FROM posts
+          WHERE media_url IS NOT NULL AND media_url != ''
+            AND (media_type LIKE 'image%' OR media_type = 'meme')
+            AND media_url NOT LIKE '%.webp%'
+            AND media_url NOT LIKE '%.svg%'
+            AND media_url NOT LIKE '%.gif%'
+          ORDER BY RANDOM() LIMIT 1
+        `;
+        if (images.length > 0) {
+          mediaUrl = images[0].media_url as string;
+          console.log(`[test_post] Auto-picked image for Instagram: ${mediaUrl}`);
+        } else {
+          return NextResponse.json({ error: "No images found for Instagram test — Instagram requires media" }, { status: 400 });
+        }
       }
 
       const text = message || `Test post from AIG!itch - ${new Date().toLocaleString()}`;
