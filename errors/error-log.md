@@ -433,5 +433,71 @@ GET /api/admin/users?action=recover_orphans&wallet={ADDRESS}
 
 ---
 
+## #5 — Instagram Posting: "Invalid Aspect Ratio" / "Image Ratio 0"
+
+**Date:** March 25, 2026
+**Status:** Resolved
+**Affected:** All Instagram posting (test posts, cron marketing, admin spread, bestie shares)
+**Impact:** Instagram posts failed with "The aspect ratio is not supported... image ratio 0"
+
+### Symptoms
+
+1. Instagram showed "Active" and `@sfrench71` account connected correctly
+2. Permission error fixed (added `instagram_content_publish` scope to access token)
+3. All posts failed with: `IG container failed: 400 {"error":{"message":"The aspect ratio is not supported","type":"OAuthException","code":36003,"error_subcode":2207009}}`
+4. Facebook posting worked fine with identical Vercel Blob URLs (706+ posts)
+
+### Root Cause (TWO issues)
+
+**Issue 1: Instagram can't fetch from Vercel Blob storage**
+Instagram's Graph API container creation requires a publicly accessible `image_url`. When given a Vercel Blob URL (`https://xxx.public.blob.vercel-storage.com/...`), Instagram's servers return 0 bytes, causing "image ratio 0". Facebook's `/photos` API handles the same URLs fine — this is Instagram-specific.
+
+**Issue 2: Random image dimensions**
+Even if Instagram could fetch the images, many DB images have arbitrary dimensions outside Instagram's supported aspect ratio range (4:5 to 1.91:1).
+
+### Fix
+
+**1. Image proxy route** (`src/app/api/image-proxy/route.ts`):
+- Fetches the image from Vercel Blob (or any external URL)
+- Resizes to 1080x1080 square JPEG using `sharp` (crop-to-fill, centered)
+- Serves from `aiglitch.app` domain with proper headers
+- Instagram fetches from `aiglitch.app/api/image-proxy?url=<encoded-blob-url>` instead
+
+**2. Video proxy route** (`src/app/api/video-proxy/route.ts`):
+- Streams video through `aiglitch.app` domain (no processing)
+- Same domain-proxy fix for Instagram Reels
+
+**3. Instagram poster updated** (`src/lib/marketing/platforms.ts:postToInstagram()`):
+- All external image URLs proxied through `/api/image-proxy` (line ~645)
+- All external video URLs proxied through `/api/video-proxy`
+- Condition: `if (!mediaUrl.startsWith(appUrl))` — proxies everything not already on our domain
+- POST body used instead of query params for container creation
+
+### Debugging Steps Taken
+
+1. Fixed missing `instagram_content_publish` permission → new error: aspect ratio
+2. Added format filtering (exclude WebP/SVG/GIF) → same error
+3. Added HEAD request validation → images passed but Instagram still failed
+4. Switched from query params to POST body for container creation → same error
+5. Added `media_url` to error response → revealed Vercel Blob URLs
+6. Tried proxying through our domain → still failed (no resizing)
+7. Added sharp resize to 1080x1080 JPEG → **SUCCESS**
+
+### Key Insight
+
+The error "image ratio 0" does NOT mean wrong aspect ratio. It means Instagram **could not determine the image dimensions at all** — because it couldn't fetch the image from Vercel Blob's CDN. The fix required BOTH proxying (domain) AND resizing (format/dimensions).
+
+### Verification
+
+All 6 Instagram posting entry points go through `postToPlatform()` → `postToInstagram()` → proxy:
+1. `/api/marketing-post` (cron, every 4h)
+2. `/api/admin/spread` (admin manual)
+3. `/api/admin/media/spread` (admin media)
+4. `shareBestieMediaToSocials()` (auto-share)
+5. `/api/admin/mktg?action=test_post` (admin test)
+6. `/api/admin/mktg?action=run_cycle` (admin manual)
+
+---
+
 <!-- APPEND NEW INCIDENTS BELOW THIS LINE -->
 <!-- Use format: ## #N — Short Title -->

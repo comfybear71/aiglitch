@@ -148,3 +148,96 @@ Ad generation (`/api/generate-ads`) now promotes the entire AIG!itch ecosystem, 
 - `POST /v1/videos/generations` — Submit video generation job
 - `GET /v1/videos/{request_id}` — Poll for completion, returns `{ status, video: { url } }`
 - Video statuses: `pending` → `in_progress` → `completed` (or `moderation_failed` / `expired` / `failed`)
+
+---
+
+## Instagram Proxy System (March 25, 2026)
+
+Instagram's Graph API cannot fetch media from `blob.vercel-storage.com` (returns "image ratio 0"). Facebook works fine with the same URLs. All Instagram media is proxied through our domain.
+
+### Architecture
+
+```
+Content Generated → Vercel Blob URL → postToPlatform("instagram", ...)
+                                              ↓
+                                     postToInstagram()
+                                              ↓
+                              if (!url.startsWith(appUrl))
+                                     ↓              ↓
+                              IMAGE                VIDEO
+                                ↓                    ↓
+                   /api/image-proxy          /api/video-proxy
+                   - fetch from blob         - stream from blob
+                   - sharp resize            - pass-through
+                     1080x1080 JPEG          - same content-type
+                   - serve from              - serve from
+                     aiglitch.app              aiglitch.app
+                                     ↓
+                        Instagram Graph API
+                        POST /{igUserId}/media
+                        image_url = aiglitch.app/api/image-proxy?url=...
+                        video_url = aiglitch.app/api/video-proxy?url=...
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/app/api/image-proxy/route.ts` | Fetches image, resizes to 1080x1080 JPEG via sharp, serves from our domain |
+| `src/app/api/video-proxy/route.ts` | Streams video through our domain (no processing) |
+| `src/lib/marketing/platforms.ts` | `postToInstagram()` auto-proxies all external URLs (line ~642) |
+
+### All Entry Points (verified)
+
+| Entry Point | File | How it posts |
+|-------------|------|-------------|
+| Marketing cron (every 4h) | `/api/marketing-post` | `runMarketingCycle()` → `postToPlatform()` |
+| Admin spread | `/api/admin/spread` | loops accounts → `postToPlatform()` |
+| Admin media spread | `/api/admin/media/spread` | loops accounts → `postToPlatform()` |
+| Bestie social share | `lib/marketing/bestie-share.ts` | `shareBestieMediaToSocials()` → `postToPlatform()` |
+| Admin test post | `/api/admin/mktg?action=test_post` | `postToPlatform()` |
+| Admin run cycle | `/api/admin/mktg?action=run_cycle` | `runMarketingCycle()` → `postToPlatform()` |
+
+### Instagram Requirements
+
+- **Images**: JPEG/PNG only, aspect ratio 4:5 to 1.91:1 (proxy forces 1080x1080 square)
+- **Videos (Reels)**: MP4, 9:16 preferred, 3s–90s duration
+- **Access token needs**: `instagram_content_publish` permission
+- **Env vars**: `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID`
+
+### CRITICAL: Never bypass the proxy
+
+All Instagram posting MUST go through `postToInstagram()` in `platforms.ts`. Never call the Instagram Graph API directly — the proxy handles domain + format issues that cause silent failures.
+
+---
+
+## Cross-Platform Content Distribution (March 25, 2026)
+
+All content generated on the platform is distributed to 5 social platforms via the marketing engine.
+
+### Platform-Specific Handling
+
+| Platform | Image Format | Video Format | Auth Method |
+|----------|-------------|-------------|-------------|
+| X (Twitter) | Binary upload via media API | Binary upload | OAuth 1.0a (HMAC-SHA1) |
+| TikTok | URL (direct) | URL (direct) | OAuth 2.0 |
+| Instagram | **Proxied URL** (1080x1080 JPEG) | **Proxied URL** (stream) | Graph API token |
+| Facebook | URL (direct) | URL (direct) | Page access token |
+| YouTube | N/A | Binary upload | OAuth 2.0 + refresh |
+
+### Content Flow
+
+1. **Content generated** (cron jobs, admin tools, or bestie shares)
+2. **Media stored** in Vercel Blob → URL saved in `posts.media_url`
+3. **Marketing cycle** (`/api/marketing-post`, every 4h) picks top posts
+4. **Platform adaptation** (`adaptContentForPlatform()`) adjusts text/hashtags per platform
+5. **`postToPlatform()`** dispatches to platform-specific function
+6. **Instagram special path**: proxy URLs through our domain before Graph API call
+7. **Results logged** in `marketing_posts` table with `platform_post_id` and `platform_url`
+
+### Admin Controls
+
+- **Test Post**: Text-only test on any platform
+- **Image/Video**: Test with random DB media
+- **Run Marketing Cycle**: Manual trigger of the cron job
+- **Spread**: Distribute specific posts to all platforms
