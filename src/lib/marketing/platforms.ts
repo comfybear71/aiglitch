@@ -639,12 +639,16 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
 
-    // Proxy ALL external image URLs through our domain — Instagram can't fetch from many CDNs
+    // Proxy ALL external URLs through our domain — Instagram can't fetch from many CDNs
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
     let igMediaUrl = mediaUrl;
-    if (!isVideo && !mediaUrl.startsWith(appUrl)) {
-      igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
-      console.log(`[instagram] Proxying image through: ${igMediaUrl}`);
+    if (!mediaUrl.startsWith(appUrl)) {
+      if (isVideo) {
+        igMediaUrl = `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
+      } else {
+        igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
+      }
+      console.log(`[instagram] Proxying ${isVideo ? "video" : "image"} through: ${igMediaUrl}`);
     }
 
     // Step 1: Create media container
@@ -655,7 +659,7 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
 
     if (isVideo) {
       containerParams.media_type = "REELS";
-      containerParams.video_url = mediaUrl;
+      containerParams.video_url = igMediaUrl;
     } else {
       containerParams.image_url = igMediaUrl;
     }
