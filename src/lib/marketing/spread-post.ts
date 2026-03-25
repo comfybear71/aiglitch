@@ -104,54 +104,62 @@ export async function spreadPostToSocial(
 
       console.log(`[spread-post] Spreading ${postId}: isVideo=${isVideo}, media=${mediaUrlToSpread?.slice(0, 60)}, accounts=${accounts.length}`);
 
-      for (const account of accounts) {
-        const platform = account.platform as MarketingPlatform;
-
-        // Platform compatibility: YouTube/TikTok = video only, Instagram = requires media
-        if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
-          console.log(`[spread-post] SKIP ${platform}: not video (media_type=${postData.media_type})`);
-          continue;
-        }
-        if (platform === "instagram" && !mediaUrlToSpread) continue;
-
-        console.log(`[spread-post] ATTEMPTING ${platform}...`);
-
-        try {
-          const adapted = await adaptContentForPlatform(
-            postData.content || "",
-            personaName,
-            personaEmoji,
-            platform,
-            mediaUrlToSpread,
-          );
-
-          const marketingPostId = uuidv4();
-          await sql`
-            INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
-            VALUES (${marketingPostId}, ${platform}, ${postId}, ${personaId}, ${adapted.text}, ${mediaUrlToSpread}, 'posting', NOW())
-          `;
-
-          const result = await postToPlatform(platform, account, adapted.text, mediaUrlToSpread);
-
-          if (result.success) {
-            await sql`
-              UPDATE marketing_posts
-              SET status = 'posted', platform_post_id = ${result.platformPostId || null}, platform_url = ${result.platformUrl || null}, posted_at = NOW()
-              WHERE id = ${marketingPostId}
-            `;
-            platforms.push(platform);
-          } else {
-            await sql`
-              UPDATE marketing_posts
-              SET status = 'failed', error_message = ${result.error || 'Unknown error'}
-              WHERE id = ${marketingPostId}
-            `;
-            failed.push(platform);
+      // Post to ALL platforms in PARALLEL to avoid timeout
+      const platformPromises = accounts
+        .filter(account => {
+          const platform = account.platform as MarketingPlatform;
+          if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+            console.log(`[spread-post] SKIP ${platform}: not video (media_type=${postData.media_type})`);
+            return false;
           }
-        } catch {
-          failed.push(platform);
-        }
-      }
+          if (platform === "instagram" && !mediaUrlToSpread) return false;
+          return true;
+        })
+        .map(async (account) => {
+          const platform = account.platform as MarketingPlatform;
+          console.log(`[spread-post] ATTEMPTING ${platform}...`);
+
+          try {
+            const adapted = await adaptContentForPlatform(
+              postData!.content || "",
+              personaName,
+              personaEmoji,
+              platform,
+              mediaUrlToSpread,
+            );
+
+            const marketingPostId = uuidv4();
+            await sql`
+              INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
+              VALUES (${marketingPostId}, ${platform}, ${postId}, ${personaId}, ${adapted.text}, ${mediaUrlToSpread}, 'posting', NOW())
+            `;
+
+            const result = await postToPlatform(platform, account, adapted.text, mediaUrlToSpread);
+
+            if (result.success) {
+              await sql`
+                UPDATE marketing_posts
+                SET status = 'posted', platform_post_id = ${result.platformPostId || null}, platform_url = ${result.platformUrl || null}, posted_at = NOW()
+                WHERE id = ${marketingPostId}
+              `;
+              platforms.push(platform);
+              console.log(`[spread-post] ${platform} OK: ${result.platformPostId || "no id"}`);
+            } else {
+              await sql`
+                UPDATE marketing_posts
+                SET status = 'failed', error_message = ${result.error || 'Unknown error'}
+                WHERE id = ${marketingPostId}
+              `;
+              failed.push(platform);
+              console.log(`[spread-post] ${platform} FAILED: ${result.error}`);
+            }
+          } catch (err) {
+            failed.push(platform);
+            console.error(`[spread-post] ${platform} ERROR: ${err instanceof Error ? err.message : err}`);
+          }
+        });
+
+      await Promise.allSettled(platformPromises);
     } catch (err) {
       console.error("[spread-post] Error spreading to social platforms:", err);
     }
