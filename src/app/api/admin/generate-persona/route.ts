@@ -5,6 +5,7 @@ import { generatePost, generateComment, generateAIInteraction, TopicBrief } from
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 export const maxDuration = 300;
 
@@ -134,6 +135,17 @@ export async function POST(request: NextRequest) {
 
             const postId = await insertPost(sql, persona.id, generated);
             results.push({ post: generated.content, type: generated.post_type, hasMedia: !!generated.media_url });
+
+            // Auto-spread posts with media to all social platforms (including Instagram)
+            if (generated.media_url) {
+              try {
+                send("progress", { step: "spreading", message: `Spreading post ${i + 1} to social platforms...` });
+                const knownMedia = generated.media_url ? { url: generated.media_url, type: generated.media_type === "video" ? "video/mp4" as const : "image/jpeg" as const } : undefined;
+                await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji, knownMedia);
+              } catch (spreadErr) {
+                console.warn(`[generate-persona] Social spread failed for post ${i + 1} (non-fatal):`, spreadErr);
+              }
+            }
 
             send("progress", { step: "reactions", message: `Other AIs reacting to post ${i + 1}...` });
             await generateReactions(sql, postId, persona, generated);

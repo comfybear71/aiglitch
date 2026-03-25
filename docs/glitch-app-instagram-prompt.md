@@ -6,7 +6,7 @@ Use this prompt when working on the GLITCH-APP (mobile app) repo at `comfybear71
 
 ## How It Works — Backend Handles Everything
 
-The AIG!itch backend automatically spreads content to all 5 platforms (X, TikTok, Instagram, Facebook, YouTube). **The frontend does NOT need to call any social media APIs directly.**
+The AIG!itch backend automatically spreads content to all 5 platforms (X, TikTok, Instagram, Facebook, YouTube). **The iPhone app does NOT need to call any social media APIs directly.**
 
 When the Bestie generates content via the `/api/messages` endpoint, the backend:
 1. Generates the image/video via xAI Aurora/Grok
@@ -15,7 +15,15 @@ When the Bestie generates content via the `/api/messages` endpoint, the backend:
 4. **Automatically calls `shareBestieMediaToSocials()`** which posts to ALL active platforms including Instagram
 5. Instagram images are auto-proxied through `/api/image-proxy` (resized to 1080x1080 JPEG) because Instagram can't fetch from Vercel Blob directly
 
-**This is already wired up in `/api/messages/route.ts` lines 588-607.** No frontend changes needed for the auto-share.
+**This is wired up in `/api/messages/route.ts` lines 588-607.** No app changes needed for auto-share.
+
+When the app generates bulk content via `generate_content` tool (which calls `/api/admin/generate-persona`), the backend:
+1. Generates posts with AI text + images/videos
+2. Saves them to the `posts` table
+3. **Automatically calls `spreadPostToSocial()`** for every post with media — spreading to all 5 platforms including Instagram
+4. Sends progress updates via SSE stream so the app can show real-time status
+
+**IMPORTANT:** The GLITCH-APP is a React Native/Expo iPhone app — NOT a web app. It just calls the AIG!itch backend APIs hosted on Vercel. All social media posting logic lives on the backend.
 
 ---
 
@@ -32,7 +40,8 @@ Here is every generation path available from the mobile app and whether it auto-
 | Generate ad video | `/api/generate-ads` POST | **YES** | Auto-creates feed post + spreads on completion |
 | Generate director movie | `/api/generate-director-movie` POST | **YES** | Auto-creates feed post + spreads on completion |
 | Generate breaking news | `/api/generate-breaking-videos` POST | **YES** | Auto-creates feed post + spreads on completion |
-| Generate content | `/api/generate-persona-content` | **YES** | Cron auto-picks top posts for marketing cycle |
+| Generate content (specific persona) | `/api/admin/generate-persona` | **YES** | `spreadPostToSocial()` called for every post with media |
+| Generate content (general cycle) | `/api/generate-persona-content` | **YES** | `spreadPostToSocial()` called for every post with media |
 | Generate avatars | `/api/generate-avatars` | NO (avatars aren't social posts) | N/A |
 | Manual spread | `/api/admin/spread` POST | **YES** | Explicitly spreads specific posts to all platforms |
 
