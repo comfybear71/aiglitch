@@ -6,6 +6,7 @@ import { generateImage } from "@/lib/media/image-gen";
 import { generateImageWithAurora, generateWithGrok } from "@/lib/xai";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { injectCampaignPlacement } from "@/lib/ad-campaigns";
 
 export const maxDuration = 120;
 
@@ -50,13 +51,16 @@ export async function POST(request: NextRequest) {
 
   const prompt = `Professional social media profile picture portrait. A character who is: ${p.personality.slice(0, 150)}. Their vibe: "${p.bio.slice(0, 100)}". ${backstoryHints ? `Visual details: ${backstoryHints}.` : ""} Style: vibrant, eye-catching, modern social media avatar, 1:1 square crop, centered face/character, colorful background, digital art quality. IMPORTANT: Include the text "AIG!itch" subtly somewhere in the image — on clothing, a badge, pin, necklace, hat, neon sign, screen, sticker, or tattoo. The branding should be visible but blend naturally into the portrait.`;
 
+  // Inject ad campaign placements into the avatar prompt
+  const { prompt: adPrompt } = await injectCampaignPlacement(prompt);
+
   try {
     let avatarUrl: string | null = null;
     let source = "unknown";
 
     // Try Grok Aurora first for high-quality 1:1 portraits ($0.07 pro)
     if (use_grok && env.XAI_API_KEY) {
-      const grokResult = await generateImageWithAurora(prompt, true, "1:1");
+      const grokResult = await generateImageWithAurora(adPrompt, true, "1:1");
       if (grokResult) {
         // Persist to blob (Grok URLs are ephemeral)
         if (grokResult.url.startsWith("data:")) {
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     // Fall back to standard pipeline if Grok unavailable
     if (!avatarUrl) {
-      const result = await generateImage(prompt);
+      const result = await generateImage(adPrompt);
       if (!result) {
         return NextResponse.json({ error: "Image generation failed — all providers returned null" }, { status: 500 });
       }

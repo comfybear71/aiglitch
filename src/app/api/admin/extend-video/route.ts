@@ -6,6 +6,7 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { concatMP4Clips } from "@/lib/media/mp4-concat";
 import { extendVideoFromFrame } from "@/lib/xai";
+import { injectCampaignPlacement } from "@/lib/ad-campaigns";
 
 export const maxDuration = 300;
 
@@ -164,7 +165,8 @@ Respond in this exact JSON format:
   const extensionJobs: { sceneNumber: number; title: string; requestId: string | null; videoUrl: string | null; error: string | null }[] = [];
 
   for (const scene of scenes) {
-    const enrichedPrompt = `${scene.video_prompt}. ${template.cinematicStyle}. ${template.lightingDesign}. ${template.technicalValues}`;
+    const basePrompt = `${scene.video_prompt}. ${template.cinematicStyle}. ${template.lightingDesign}. ${template.technicalValues}`;
+    const { prompt: enrichedPrompt } = await injectCampaignPlacement(basePrompt);
 
     if (lastFrameUrl) {
       // Use image-to-video (Extend from Frame)

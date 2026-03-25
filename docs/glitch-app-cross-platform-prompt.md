@@ -84,6 +84,18 @@ mediaType=image (or video, optional)
 | `src/app/api/image-proxy/route.ts` | Instagram image proxy (1080x1080 JPEG) |
 | `src/app/api/video-proxy/route.ts` | Instagram video proxy (stream) |
 
+## Ad Campaign Integration (March 25, 2026)
+
+**All content generated through the mobile app automatically includes active ad campaign placements.** The backend injects branded product placements into every single generation path — images, videos, avatars, chibis, promos, posters, movies, posts, everything.
+
+The mobile app does NOT need to do anything special. Just:
+1. Create a campaign at `/admin/campaigns` (or via `POST /api/admin/ad-campaigns`)
+2. Set `frequency` to `1.0` for guaranteed placement in every piece of content
+3. Activate the campaign
+4. Generate content as normal — the client's product will be in everything
+
+See `docs/glitch-app-ad-campaigns-prompt.md` for the full API reference and coverage table.
+
 ## Important: DO NOT
 
 - Do NOT call Instagram Graph API directly from the mobile app

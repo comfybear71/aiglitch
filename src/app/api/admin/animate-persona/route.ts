@@ -7,6 +7,7 @@ import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { generateWithGrok } from "@/lib/xai";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
+import { injectCampaignPlacement } from "@/lib/ad-campaigns";
 
 export const maxDuration = 60;
 
@@ -86,6 +87,9 @@ export async function POST(request: NextRequest) {
     animationPrompt = `Cinematic portrait animation. The character comes to life with dramatic lighting, subtle movement, and atmospheric effects. Camera slowly pushes in. 10 seconds, cinematic, high quality.`;
   }
 
+  // Inject ad campaign placements into the animation prompt
+  const { prompt: adPrompt } = await injectCampaignPlacement(animationPrompt);
+
   // Submit image-to-video generation to xAI
   try {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
@@ -96,7 +100,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "grok-imagine-video",
-        prompt: animationPrompt,
+        prompt: adPrompt,
         image_url: persona.avatar_url,
         duration: 10,
         aspect_ratio: "9:16",

@@ -8,6 +8,7 @@
 import { getDb } from "@/lib/db";
 import { createHmac } from "crypto";
 import { MARKETPLACE_PRODUCTS, getFeaturedProducts, getProductsByCategory, getRandomProduct } from "@/lib/marketplace";
+import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, buildTextPlacementPrompt, logImpressions } from "@/lib/ad-campaigns";
 
 // Generate admin auth cookie for internal API calls
 function getAdminCookie(): string {
@@ -583,6 +584,23 @@ export async function generateImage(prompt: string): Promise<string> {
     }
     console.log(`[GENERATE-IMAGE] XAI_API_KEY present (${xaiKey.slice(0, 8)}...)`);
 
+    // Inject active ad campaign placements into the image prompt
+    let finalPrompt = prompt;
+    let placedCampaigns: Awaited<ReturnType<typeof getActiveCampaigns>> = [];
+    try {
+      const campaigns = await getActiveCampaigns();
+      placedCampaigns = rollForPlacements(campaigns);
+      if (placedCampaigns.length > 0) {
+        const visualPlacement = buildVisualPlacementPrompt(placedCampaigns);
+        if (visualPlacement) {
+          finalPrompt = `${prompt}\n\n${visualPlacement}`;
+          console.log(`[GENERATE-IMAGE] Injected ${placedCampaigns.length} ad campaign(s) into prompt`);
+        }
+      }
+    } catch (adErr: any) {
+      console.warn(`[GENERATE-IMAGE] Ad campaign lookup failed (non-fatal): ${adErr?.message}`);
+    }
+
     const startTime = Date.now();
     const res = await fetch("https://api.x.ai/v1/images/generations", {
       method: "POST",
@@ -592,7 +610,7 @@ export async function generateImage(prompt: string): Promise<string> {
       },
       body: JSON.stringify({
         model: "grok-imagine-image",
-        prompt: prompt,
+        prompt: finalPrompt,
         n: 1,
         response_format: "url",
       }),
@@ -616,6 +634,17 @@ export async function generateImage(prompt: string): Promise<string> {
       return "Image was generated but no URL was returned";
     }
     console.log(`[GENERATE-IMAGE] Success! URL: ${url.slice(0, 120)}`);
+
+    // Log ad impressions for successful generation
+    if (placedCampaigns.length > 0) {
+      try {
+        await logImpressions(placedCampaigns, null, "image", null, null);
+        console.log(`[GENERATE-IMAGE] Logged ${placedCampaigns.length} ad impression(s)`);
+      } catch (impErr: any) {
+        console.warn(`[GENERATE-IMAGE] Impression logging failed (non-fatal): ${impErr?.message}`);
+      }
+    }
+
     return `IMAGE_GENERATED|${url}|${prompt}`;
   } catch (e: any) {
     console.error(`[GENERATE-IMAGE] Exception: ${e?.message}`, e?.stack?.slice(0, 300));

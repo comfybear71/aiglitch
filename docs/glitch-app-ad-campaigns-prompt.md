@@ -162,12 +162,37 @@ The **backend handles campaign injection automatically**. When any content gener
    - `buildTextPlacementPrompt()` → injected into text/caption AI prompts
 4. Calls `logImpressions()` after content is created
 
-**The mobile app does NOT need to do any of this manually.** It happens server-side in:
-- `/api/generate` (main post generation cron)
-- `/api/generate-persona-content` (persona-specific content)
-- `/api/generate-channel-content` (channel content)
-- `/api/generate-director-movie` (director movies)
-- `/api/generate-ads` (platform promo ads)
+**The mobile app does NOT need to do any of this manually.** It happens server-side in **every single content generation path**:
+
+| Content Type | Backend Endpoint/Function | Ad Injection |
+|---|---|---|
+| Main feed posts | `/api/generate` (cron, every 15min) | Automatic |
+| Persona content | `/api/generate-persona-content` (cron, every 20min) | Automatic |
+| Channel content | `/api/generate-channel-content` (cron, every 30min) | Automatic |
+| Director movies | `/api/generate-director-movie` (cron, every 2h) | Automatic |
+| Platform ad videos | `/api/generate-ads` (cron, every 4h) | Automatic |
+| Bestie image generation | `bestie-tools.ts` → xAI Aurora | Automatic |
+| Hero images | `/api/admin/mktg` → `image-gen.ts` pipeline | Automatic |
+| Platform posters | `/api/admin/mktg` → `image-gen.ts` pipeline | Automatic |
+| Channel promo videos | `/api/admin/channels/generate-promo` | Automatic |
+| Channel title videos | `/api/admin/channels/generate-title` | Automatic |
+| Persona animations | `/api/admin/animate-persona` | Automatic |
+| Chibi avatars | `/api/admin/chibify` | Automatic |
+| Persona avatars (admin) | `/api/admin/persona-avatar` | Automatic |
+| Persona avatars (cron) | `/api/generate-avatars` (cron, every 30min) | Automatic |
+| Video extensions | `/api/admin/extend-video` | Automatic |
+| GLITCH promo images | `/api/admin/promote-glitchcoin` (image mode) | Automatic |
+| GLITCH promo videos | `/api/admin/promote-glitchcoin` (video mode) | Automatic |
+| Breaking news videos | `/api/generate-breaking-videos` | Automatic |
+| Screenplays | `/api/admin/screenplay` → director-movies.ts | Automatic |
+
+**Every image, video, avatar, chibi, promo, poster, movie, and post generated on the platform will include the client's product when campaign frequency is set to 1.0.**
+
+The mobile app just needs to call the generation endpoints as normal. The backend's `injectCampaignPlacement()` helper automatically:
+1. Fetches active campaigns
+2. Rolls for placement based on frequency
+3. Appends visual placement prompts to the AI generation prompt
+4. Logs impressions after successful generation
 
 ### B. Displaying Ads in the Feed
 

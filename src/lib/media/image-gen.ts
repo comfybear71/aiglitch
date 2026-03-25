@@ -8,6 +8,7 @@ import { generateWithKie } from "./free-video-gen";
 import { getStockVideo } from "./stock-video";
 import { generateImageWithAurora, generateVideoWithGrok, generateVideoFromImage } from "../xai";
 import { getGenreBlobFolder } from "../genre-utils";
+import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, logImpressions } from "../ad-campaigns";
 
 // Lazy singleton — avoids instantiating Replicate SDK on cold starts for
 // routes that never use image generation (e.g. /api/feed).
@@ -271,12 +272,39 @@ export async function generateImage(prompt: string, personaId?: string): Promise
     if (libraryImage) return { url: libraryImage, source: "media-library" };
   }
 
+  // Inject active ad campaign placements into the image prompt
+  let adPrompt = prompt;
+  let placedCampaigns: Awaited<ReturnType<typeof getActiveCampaigns>> = [];
+  try {
+    const campaigns = await getActiveCampaigns();
+    placedCampaigns = rollForPlacements(campaigns);
+    if (placedCampaigns.length > 0) {
+      const visualPlacement = buildVisualPlacementPrompt(placedCampaigns);
+      if (visualPlacement) {
+        adPrompt = `${prompt}\n\n${visualPlacement}`;
+        console.log(`[image-gen] Injected ${placedCampaigns.length} ad campaign(s) into image prompt`);
+      }
+    }
+  } catch (adErr) {
+    console.warn("[image-gen] Ad campaign lookup failed (non-fatal):", adErr instanceof Error ? adErr.message : adErr);
+  }
+
   // Brand all AI-generated media with subtle AIG!itch logo
-  const brandedPrompt = brandPrompt(prompt);
+  const brandedPrompt = brandPrompt(adPrompt);
+
+  // Helper to log ad impressions on successful image generation
+  const logAdImpressions = async () => {
+    if (placedCampaigns.length > 0) {
+      try {
+        await logImpressions(placedCampaigns, null, "image", null, personaId);
+        console.log(`[image-gen] Logged ${placedCampaigns.length} ad impression(s)`);
+      } catch (e) { /* non-fatal */ }
+    }
+  };
 
   // Try free generators before paid APIs
   const freeImage = await generateFreeImage(brandedPrompt, "9:16");
-  if (freeImage) return freeImage;
+  if (freeImage) { await logAdImpressions(); return freeImage; }
 
   if (!env.REPLICATE_API_TOKEN) {
     console.log("REPLICATE_API_TOKEN not set, skipping image generation");
@@ -306,6 +334,7 @@ export async function generateImage(prompt: string, personaId?: string): Promise
       console.log("Extracted image URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
         const url = await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
+        await logAdImpressions();
         return { url, source: "replicate-imagen4" };
       }
     }
@@ -314,7 +343,9 @@ export async function generateImage(prompt: string, personaId?: string): Promise
     return null;
   } catch (err) {
     console.error("Imagen 4 generation failed, falling back to Flux:", err);
-    return generateImageFallback(brandedPrompt);
+    const fallback = await generateImageFallback(brandedPrompt);
+    if (fallback) await logAdImpressions();
+    return fallback;
   }
 }
 

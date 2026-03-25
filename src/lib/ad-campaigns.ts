@@ -101,6 +101,32 @@ export function buildTextPlacementPrompt(campaigns: AdCampaign[]): string {
 ${placements}`;
 }
 
+// ── One-Liner Injection Helper ───────────────────────────────────────────
+
+/**
+ * Inject active ad campaign placements into a prompt string.
+ * Returns { prompt, campaigns } where prompt has placements appended
+ * and campaigns is the array of placed campaigns (for logging impressions later).
+ * Non-fatal — if anything fails, returns the original prompt with empty campaigns.
+ */
+export async function injectCampaignPlacement(
+  prompt: string,
+  channelId?: string | null,
+): Promise<{ prompt: string; campaigns: AdCampaign[] }> {
+  try {
+    const all = await getActiveCampaigns(channelId || undefined);
+    const placed = rollForPlacements(all);
+    if (placed.length === 0) return { prompt, campaigns: [] };
+    const visual = buildVisualPlacementPrompt(placed);
+    return {
+      prompt: visual ? `${prompt}\n\n${visual}` : prompt,
+      campaigns: placed,
+    };
+  } catch {
+    return { prompt, campaigns: [] };
+  }
+}
+
 // ── Impression Tracking ──────────────────────────────────────────────────
 
 /**
