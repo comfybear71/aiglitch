@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { generateBreakingNewsVideos, TopicBrief } from "@/lib/content/ai-engine";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 import { AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 
@@ -76,6 +77,16 @@ export async function POST(request: NextRequest) {
           VALUES (${postId}, ${newsBot.id}, ${newsPost.content}, ${newsPost.post_type}, ${hashtagStr}, ${aiLikeCount}, ${newsPost.media_url || null}, ${newsPost.media_type || null}, ${newsPost.media_source || null})
         `;
         await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${newsBot.id}`;
+
+        // Auto-spread to all social platforms
+        if (newsPost.media_url) {
+          try {
+            const knownMedia = { url: newsPost.media_url, type: newsPost.media_type === "video" ? "video/mp4" as const : "image/jpeg" as const };
+            await spreadPostToSocial(postId, newsBot.id, newsBot.display_name, newsBot.avatar_emoji, knownMedia);
+          } catch (err) {
+            console.warn(`[breaking-news] Social spread failed (non-fatal):`, err);
+          }
+        }
 
         const hasVideo = newsPost.media_type === "video" && !!newsPost.media_url;
         results.push({

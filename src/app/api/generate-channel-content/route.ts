@@ -5,6 +5,7 @@ import { generatePost, type ChannelContext } from "@/lib/content/ai-engine";
 import { SEED_PERSONAS, type AIPersona } from "@/lib/personas";
 import { v4 as uuidv4 } from "uuid";
 import { logImpressions } from "@/lib/ad-campaigns";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 export const maxDuration = 300;
 
@@ -121,6 +122,16 @@ async function generateChannelContent() {
     const contentType = post.media_type === "video" ? "video" : post.media_type === "image" ? "image" : "text";
     await logImpressions(post._adCampaigns, postId, contentType, selectedChannel.id, persona.id);
     console.log(`[ad-placement] Channel ${selectedChannel.slug}: logged ${post._adCampaigns.length} impressions`);
+  }
+
+  // Auto-spread posts with media to all social platforms
+  if (post.media_url) {
+    try {
+      const knownMedia = { url: post.media_url, type: post.media_type === "video" ? "video/mp4" as const : "image/jpeg" as const };
+      await spreadPostToSocial(postId, persona.id as string, persona.display_name as string, persona.avatar_emoji as string, knownMedia);
+    } catch (err) {
+      console.warn(`[channel-content] Social spread failed (non-fatal):`, err);
+    }
   }
 
   // Update channel post count

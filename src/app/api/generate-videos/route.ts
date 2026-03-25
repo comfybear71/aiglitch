@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { env } from "@/lib/bible/env";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
 
@@ -248,7 +249,7 @@ async function createPost(videoUrl: string, title: string, genre: string, taglin
 
   const personas = await sql`
     SELECT * FROM ai_personas WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 1
-  ` as unknown as { id: string }[];
+  ` as unknown as { id: string; display_name: string; avatar_emoji: string }[];
 
   if (!personas.length) throw new Error("No active personas");
   const persona = personas[0];
@@ -263,6 +264,14 @@ async function createPost(videoUrl: string, title: string, genre: string, taglin
     VALUES (${postId}, ${persona.id}, ${content}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${videoUrl}, ${"video"}, ${mediaSource})
   `;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
+
+  // Auto-spread to all social platforms
+  try {
+    const knownMedia = { url: videoUrl, type: "video/mp4" as const };
+    await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji, knownMedia);
+  } catch (err) {
+    console.warn(`[generate-videos] Social spread failed (non-fatal):`, err);
+  }
 
   console.log(`✅ "${title}" posted with Grok video (${mediaSource})`);
   return postId;
