@@ -583,29 +583,18 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       }
     }
 
-    // Step 2: Use PULL_FROM_URL with video proxied through our verified domain
+    // Use Upload to Inbox API — does NOT require Direct Post audit
+    // Videos go to creator's draft inbox for publishing from TikTok app
     const finalToken = account.access_token || token;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
     const ttVideoUrl = mediaUrl.startsWith(appUrl)
       ? mediaUrl
       : `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
-    // Parse creator info to get allowed privacy levels
-    let privacyLevel = "SELF_ONLY"; // default for unaudited
-    try {
-      const creatorData = JSON.parse(creatorBody);
-      const options = creatorData?.data?.privacy_level_options;
-      console.error(`[tiktok] >>> privacy_level_options: ${JSON.stringify(options)}`);
-      if (Array.isArray(options) && options.length > 0) {
-        // Use SELF_ONLY if available, otherwise use first option
-        privacyLevel = options.includes("SELF_ONLY") ? "SELF_ONLY" : options[0];
-      }
-    } catch { /* use default */ }
-    console.error(`[tiktok] >>> Using privacy_level: ${privacyLevel}`);
 
-    console.error(`[tiktok] >>> Step 2: PULL_FROM_URL via proxy: ${ttVideoUrl.slice(0, 120)}`);
+    console.error(`[tiktok] >>> Step 2: Upload to Inbox via PULL_FROM_URL: ${ttVideoUrl.slice(0, 120)}`);
 
     const initResponse = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/video/init/",
+      "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
       {
         method: "POST",
         headers: {
@@ -613,13 +602,6 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          post_info: {
-            title: text.slice(0, 150),
-            privacy_level: privacyLevel,
-            disable_duet: false,
-            disable_comment: false,
-            disable_stitch: false,
-          },
           source_info: {
             source: "PULL_FROM_URL",
             video_url: ttVideoUrl,
