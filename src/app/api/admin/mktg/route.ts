@@ -41,12 +41,23 @@ export async function GET(request: NextRequest) {
     }
 
     case "accounts": {
-      const accounts = await sql`
+      const dbAccounts = await sql`
         SELECT id, platform, account_name, account_id, account_url, is_active,
                last_posted_at, created_at, updated_at,
                CASE WHEN access_token != '' THEN true ELSE false END AS has_token
         FROM marketing_platform_accounts ORDER BY platform
       `;
+      const accounts = [...dbAccounts];
+      // Inject env-var-only platforms not in DB (per TheMaster: env vars are sole source of truth)
+      const dbPlatforms = new Set(accounts.map(a => a.platform));
+      if (!dbPlatforms.has("instagram") && process.env.INSTAGRAM_ACCESS_TOKEN && process.env.INSTAGRAM_USER_ID) {
+        accounts.push({
+          id: "env-instagram", platform: "instagram", account_name: "sfrench71",
+          account_id: process.env.INSTAGRAM_USER_ID, account_url: "https://www.instagram.com/sfrench71/",
+          is_active: true, has_token: true, last_posted_at: null,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        });
+      }
       return NextResponse.json({ accounts });
     }
 
@@ -210,7 +221,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Fallback: auto-pick video for video-only platforms
+      // Fallback: auto-pick media for platforms that require it
       if (!mediaUrl && (platform === "youtube" || platform === "tiktok")) {
         const videos = await sql`
           SELECT media_url FROM posts WHERE media_url IS NOT NULL AND media_type LIKE 'video%' ORDER BY RANDOM() LIMIT 1
@@ -219,6 +230,17 @@ export async function POST(request: NextRequest) {
           mediaUrl = videos[0].media_url as string;
         } else {
           return NextResponse.json({ error: `No videos found for ${platform} test` }, { status: 400 });
+        }
+      }
+      if (!mediaUrl && platform === "instagram") {
+        const images = await sql`
+          SELECT media_url FROM posts WHERE media_url IS NOT NULL AND media_url != '' AND (media_type LIKE 'image%' OR media_type = 'meme') ORDER BY RANDOM() LIMIT 1
+        `;
+        if (images.length > 0) {
+          mediaUrl = images[0].media_url as string;
+          console.log(`[test_post] Auto-picked image for Instagram: ${mediaUrl}`);
+        } else {
+          return NextResponse.json({ error: "No images found for Instagram test — Instagram requires media" }, { status: 400 });
         }
       }
 
