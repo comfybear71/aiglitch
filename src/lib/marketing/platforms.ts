@@ -609,7 +609,10 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     const config = JSON.parse(account.extra_config || "{}");
     const igUserId = process.env.INSTAGRAM_USER_ID || config.instagram_user_id || account.account_id;
 
+    console.log(`[instagram] === POSTING START === igUserId=${igUserId}, mediaUrl=${mediaUrl?.slice(0, 100)}, text=${text.slice(0, 50)}`);
+
     if (!mediaUrl) {
+      console.error(`[instagram] REJECTED: no media URL`);
       return { success: false, error: "Instagram requires media content" };
     }
 
@@ -638,6 +641,8 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
         return { success: false, error: `Instagram does not support this image format. URL: ${mediaUrl}` };
       }
     }
+
+    console.log(`[instagram] Sending to Graph API: igUserId=${igUserId}, igMediaUrl=${igMediaUrl.slice(0, 150)}, isVideo=${isVideo}`);
 
     // Step 1: Create media container
     const containerParams: Record<string, string> = {
@@ -720,12 +725,14 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     }
 
     const publishData = await publishResponse.json() as { id?: string };
+    console.log(`[instagram] === SUCCESS === Published! ID: ${publishData.id}`);
     return {
       success: true,
       platformPostId: publishData.id,
       platformUrl: `https://www.instagram.com/p/${publishData.id}/`,
     };
   } catch (err) {
+    console.error(`[instagram] === EXCEPTION === ${err instanceof Error ? err.message : String(err)}`);
     return { success: false, error: `Instagram error: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
