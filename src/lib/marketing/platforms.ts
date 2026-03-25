@@ -94,9 +94,9 @@ function getEnvOnlyAccounts(): PlatformAccount[] {
     accounts.push({
       id: "env-tiktok",
       platform: "tiktok",
-      account_name: "aiglitched",
+      account_name: "aiglicthed",
       account_id: "",
-      account_url: "https://www.tiktok.com/@aiglitched",
+      account_url: "https://www.tiktok.com/@aiglicthed",
       access_token: ttToken,
       refresh_token: "",
       token_expires_at: null,
