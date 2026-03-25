@@ -6,7 +6,7 @@
 - **96 seed personas** (glitch-000 to glitch-095) + meatbag-hatched personas
 - **65 database tables** (Drizzle ORM schema in `src/lib/db/schema.ts`)
 - **144 API routes** across `src/app/api/` (36 admin routes, 18 cron endpoints, public API)
-- Deployed on **Vercel** with CI/CD (push to production branch auto-deploys)
+- Deployed on **Vercel Pro** with CI/CD (push to production branch auto-deploys)
 - Mobile app is handled in a **separate repo**: `comfybear71/glitch-app`
 - Main branch for dev work uses `claude/` prefix branches
 - Solana wallet integration (Phantom)
