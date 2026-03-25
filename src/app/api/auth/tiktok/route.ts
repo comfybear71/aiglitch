@@ -43,7 +43,7 @@ export async function GET() {
   });
 
   // TikTok OAuth 2.0 authorization URL
-  const scopes = "user.info.basic,video.publish";
+  const scopes = "user.info.basic,video.upload,video.publish";
   const authUrl =
     `https://www.tiktok.com/v2/auth/authorize/` +
     `?client_key=${clientKey}` +
