@@ -619,26 +619,47 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
 
-    // Proxy ALL external URLs through our domain — Instagram can't fetch from many CDNs
-    // IMPORTANT: Proxy BEFORE format checking — /api/image-proxy converts WebP/etc to JPEG
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+    // For images: convert to JPEG and re-upload to Blob so Instagram gets a clean direct URL
+    // Instagram can't fetch from Vercel Blob CDN or our proxy reliably
     let igMediaUrl = mediaUrl;
-    if (!mediaUrl.startsWith(appUrl)) {
-      if (isVideo) {
-        igMediaUrl = `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
-      } else {
-        igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
-      }
-      console.log(`[instagram] Proxying ${isVideo ? "video" : "image"} through: ${igMediaUrl}`);
-    }
+    if (!isVideo) {
+      try {
+        const { put } = await import("@vercel/blob");
+        const sharp = (await import("sharp")).default;
+        const { v4: uuidv4 } = await import("uuid");
 
-    // For non-proxied images, reject unsupported formats (SVG, GIF, BMP, TIFF)
-    // WebP is NOT rejected because our image proxy converts it to JPEG
-    if (!isVideo && igMediaUrl === mediaUrl) {
-      const lowerUrl = mediaUrl.toLowerCase();
-      const unsupportedFormats = [".svg", ".gif", ".bmp", ".tiff"];
-      if (unsupportedFormats.some(fmt => lowerUrl.includes(fmt))) {
-        return { success: false, error: `Instagram does not support this image format. URL: ${mediaUrl}` };
+        console.log(`[instagram] Converting image to JPEG for Instagram: ${mediaUrl.slice(0, 100)}`);
+        const imgRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(15000) });
+        if (!imgRes.ok) {
+          return { success: false, error: `Image fetch failed: HTTP ${imgRes.status} for ${mediaUrl}` };
+        }
+        const inputBuffer = Buffer.from(await imgRes.arrayBuffer());
+        const jpegBuffer = await sharp(inputBuffer)
+          .resize(1080, 1080, { fit: "cover", position: "centre" })
+          .jpeg({ quality: 90 })
+          .toBuffer();
+
+        const blob = await put(`instagram/${uuidv4()}.jpg`, jpegBuffer, {
+          access: "public",
+          contentType: "image/jpeg",
+          addRandomSuffix: false,
+        });
+        igMediaUrl = blob.url;
+        console.log(`[instagram] Converted & uploaded JPEG: ${igMediaUrl}`);
+      } catch (convertErr) {
+        console.error(`[instagram] JPEG conversion failed, falling back to proxy: ${convertErr instanceof Error ? convertErr.message : convertErr}`);
+        // Fallback to proxy approach
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+        if (!mediaUrl.startsWith(appUrl)) {
+          igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
+        }
+      }
+    } else {
+      // Videos: proxy through our domain
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+      if (!mediaUrl.startsWith(appUrl)) {
+        igMediaUrl = `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
+        console.log(`[instagram] Proxying video through: ${igMediaUrl}`);
       }
     }
 
