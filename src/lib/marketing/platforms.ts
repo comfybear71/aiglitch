@@ -129,7 +129,7 @@ export async function getActiveAccounts(): Promise<PlatformAccount[]> {
   }
 
   // Log active accounts for debugging
-  console.log(`[getActiveAccounts] ${accounts.length} accounts: ${accounts.map(a => `${a.platform}(${a.id.startsWith("env-") ? "env" : "db"})`).join(", ")}`);
+  console.error(`[getActiveAccounts] ${accounts.length} accounts: ${accounts.map(a => `${a.platform}(${a.id.startsWith("env-") ? "env" : "db"})`).join(", ")}`);
 
   return accounts;
 }
@@ -516,30 +516,28 @@ async function getValidTikTokToken(account: PlatformAccount): Promise<string | n
 
 async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
-    console.log(`[tiktok] === POSTING START === mediaUrl=${mediaUrl?.slice(0, 100)}, text=${text.slice(0, 50)}, token=${account.access_token ? "YES" : "NO"}`);
+    console.error(`[tiktok] >>> START: mediaUrl=${mediaUrl?.slice(0, 100)}, hasToken=${!!account.access_token}`);
 
     if (!mediaUrl) {
-      console.log(`[tiktok] SKIPPED: no media URL`);
+      console.error(`[tiktok] >>> SKIP: no media URL`);
       return { success: false, error: "TikTok requires video content" };
     }
 
-    // TikTok only supports video
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
     if (!isVideo) {
-      console.log(`[tiktok] SKIPPED: not a video URL: ${mediaUrl.slice(0, 100)}`);
+      console.error(`[tiktok] >>> SKIP: not video: ${mediaUrl.slice(0, 80)}`);
       return { success: false, error: "TikTok only supports video content" };
     }
 
-    // Auto-refresh token if needed
     const token = await getValidTikTokToken(account);
     if (!token) {
-      console.error(`[tiktok] FAILED: no valid token`);
-      return { success: false, error: "TikTok: no valid token (re-connect via admin)" };
+      console.error(`[tiktok] >>> FAIL: no token`);
+      return { success: false, error: "TikTok: no valid token" };
     }
-    console.log(`[tiktok] Token: ${token.slice(0, 20)}...`);
+    console.error(`[tiktok] >>> Token OK: ${token.slice(0, 15)}...`);
 
     // Step 1: Query creator info
-    console.log(`[tiktok] Step 1: Querying creator info...`);
+    console.error(`[tiktok] >>> Step 1: creator_info query...`);
     const creatorResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
       {
@@ -585,7 +583,7 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
 
     // Step 2: Use PULL_FROM_URL — TikTok fetches the video directly (no download/upload needed)
     const finalToken = account.access_token || token;
-    console.log(`[tiktok] Step 2: Init with PULL_FROM_URL: ${mediaUrl.slice(0, 100)}`);
+    console.error(`[tiktok] >>> Step 1 OK. Step 2: PULL_FROM_URL init: ${mediaUrl.slice(0, 80)}`);
 
     const initResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
@@ -627,13 +625,14 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       return { success: false, error: `TikTok: ${initData.error.message || initData.error.code}` };
     }
 
-    console.log(`[tiktok] === SUCCESS === publish_id=${initData.data?.publish_id}`);
+    console.error(`[tiktok] >>> SUCCESS: publish_id=${initData.data?.publish_id}`);
     return {
       success: true,
       platformPostId: initData.data?.publish_id,
       platformUrl: account.account_url || undefined,
     };
   } catch (err) {
+    console.error(`[tiktok] >>> EXCEPTION: ${err instanceof Error ? err.message : String(err)}`);
     return { success: false, error: `TikTok error: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
@@ -820,27 +819,35 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
       if (isVideo) {
         // Pass Blob URL directly via file_url — Facebook can fetch from Vercel Blob for videos
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/videos`;
-        console.log(`[facebook] Posting video via file_url: ${mediaUrl.slice(0, 100)}`);
+        console.error(`[facebook] >>> VIDEO POST START: file_url=${mediaUrl.slice(0, 100)}, pageId=${pageId}, hasToken=${!!account.access_token}`);
 
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            access_token: account.access_token,
-            file_url: mediaUrl,
-            description: text,
-          }),
-        });
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              access_token: account.access_token,
+              file_url: mediaUrl,
+              description: text,
+            }),
+            signal: AbortSignal.timeout(60000), // 60s timeout
+          });
 
-        if (!response.ok) {
-          const errBody = await response.text();
-          console.error(`[facebook] Video post FAILED: ${response.status} ${errBody.slice(0, 300)}`);
-          return { success: false, error: `FB ${response.status}: ${errBody}` };
+          console.error(`[facebook] >>> VIDEO RESPONSE: status=${response.status}`);
+
+          if (!response.ok) {
+            const errBody = await response.text();
+            console.error(`[facebook] >>> VIDEO FAILED: ${response.status} ${errBody.slice(0, 500)}`);
+            return { success: false, error: `FB ${response.status}: ${errBody}` };
+          }
+          const data = await response.json() as { id?: string; post_id?: string };
+          const fbPostId = data.post_id || data.id;
+          console.error(`[facebook] >>> VIDEO SUCCESS: id=${fbPostId}`);
+          return { success: true, platformPostId: fbPostId, platformUrl: fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined };
+        } catch (fbErr) {
+          console.error(`[facebook] >>> VIDEO EXCEPTION: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`);
+          return { success: false, error: `FB video error: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}` };
         }
-        const data = await response.json() as { id?: string; post_id?: string };
-        const fbPostId = data.post_id || data.id;
-        console.log(`[facebook] Video posted OK: ${fbPostId}`);
-        return { success: true, platformPostId: fbPostId, platformUrl: fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined };
       } else {
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/photos`;
         params.url = mediaUrl;

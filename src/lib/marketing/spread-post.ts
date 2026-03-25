@@ -76,7 +76,7 @@ export async function spreadPostToSocial(
       postData = posts[0];
       // Override with known media if DB returned NULL (replication lag fix)
       if (knownMedia && (!postData.media_url || postData.media_url === "")) {
-        console.log(`[spread-post] DB returned null media_url for ${postId}, using known media: ${knownMedia.url.slice(0, 80)}...`);
+        console.error(`[spread-post] DB returned null media_url for ${postId}, using known media: ${knownMedia.url.slice(0, 80)}...`);
         postData.media_url = knownMedia.url;
         postData.media_type = knownMedia.type.startsWith("video") ? "video" : "image";
         // Also fix the DB record so the post isn't broken
@@ -90,28 +90,28 @@ export async function spreadPostToSocial(
   // Post to social media platforms (X, Facebook, TikTok, YouTube, Instagram)
   if (postData) {
     try {
-      console.log(`[spread-post] === START === postId=${postId}, media_type="${postData.media_type}", media_url=${postData.media_url?.slice(0, 80)}`);
+      console.error(`[spread-post] === START === postId=${postId}, media_type="${postData.media_type}", media_url=${postData.media_url?.slice(0, 80)}`);
       const accounts = await getActiveAccounts();
       const isVideo = postData.media_type === "video" || postData.media_type?.startsWith("video/") || postData.media_url?.includes(".mp4");
-      console.log(`[spread-post] accounts=${accounts.length} (${accounts.map(a => a.platform).join(",")}), isVideo=${isVideo}`);
+      console.error(`[spread-post] accounts=${accounts.length} (${accounts.map(a => a.platform).join(",")}), isVideo=${isVideo}`);
 
       // If post has no media, pick a fallback image so we don't show the generic OG card
       let mediaUrlToSpread = postData.media_url;
       if (!mediaUrlToSpread) {
         mediaUrlToSpread = await pickFallbackMedia() || "";
         if (mediaUrlToSpread) {
-          console.log(`[spread-post] No media on post ${postId}, using fallback: ${mediaUrlToSpread}`);
+          console.error(`[spread-post] No media on post ${postId}, using fallback: ${mediaUrlToSpread}`);
         }
       }
 
-      console.log(`[spread-post] Spreading ${postId}: isVideo=${isVideo}, media=${mediaUrlToSpread?.slice(0, 60)}, accounts=${accounts.length}`);
+      console.error(`[spread-post] Spreading ${postId}: isVideo=${isVideo}, media=${mediaUrlToSpread?.slice(0, 60)}, accounts=${accounts.length}`);
 
       // Post to ALL platforms in PARALLEL to avoid timeout
       const platformPromises = accounts
         .filter(account => {
           const platform = account.platform as MarketingPlatform;
           if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
-            console.log(`[spread-post] SKIP ${platform}: not video (media_type=${postData.media_type})`);
+            console.error(`[spread-post] SKIP ${platform}: not video (media_type=${postData.media_type})`);
             return false;
           }
           if (platform === "instagram" && !mediaUrlToSpread) return false;
@@ -119,7 +119,7 @@ export async function spreadPostToSocial(
         })
         .map(async (account) => {
           const platform = account.platform as MarketingPlatform;
-          console.log(`[spread-post] ATTEMPTING ${platform}...`);
+          console.error(`[spread-post] ATTEMPTING ${platform}...`);
 
           try {
             const adapted = await adaptContentForPlatform(
@@ -145,7 +145,7 @@ export async function spreadPostToSocial(
                 WHERE id = ${marketingPostId}
               `;
               platforms.push(platform);
-              console.log(`[spread-post] ${platform} OK: ${result.platformPostId || "no id"}`);
+              console.error(`[spread-post] ${platform} OK: ${result.platformPostId || "no id"}`);
             } else {
               await sql`
                 UPDATE marketing_posts
@@ -153,7 +153,7 @@ export async function spreadPostToSocial(
                 WHERE id = ${marketingPostId}
               `;
               failed.push(platform);
-              console.log(`[spread-post] ${platform} FAILED: ${result.error}`);
+              console.error(`[spread-post] ${platform} FAILED: ${result.error}`);
             }
           } catch (err) {
             failed.push(platform);
@@ -194,7 +194,7 @@ export async function spreadPostToSocial(
 
       await sendTelegramMessage(tgMessage);
       platforms.push("telegram");
-      console.log(`[spread-post] ${label} pushed to Telegram channel`);
+      console.error(`[spread-post] ${label} pushed to Telegram channel`);
     } catch (err) {
       console.error("[spread-post] Telegram push failed (non-fatal):", err);
     }
