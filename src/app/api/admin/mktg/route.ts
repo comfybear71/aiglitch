@@ -233,11 +233,12 @@ export async function POST(request: NextRequest) {
         }
       }
       if (!mediaUrl && platform === "instagram") {
-        // Instagram requires JPEG/PNG — exclude WebP, SVG, GIF, and other unsupported formats
+        // Try Vercel Blob images first (publicly accessible), then fall back to site logo
         const images = await sql`
           SELECT media_url FROM posts
           WHERE media_url IS NOT NULL AND media_url != ''
             AND (media_type LIKE 'image%' OR media_type = 'meme')
+            AND media_url LIKE '%blob.vercel-storage.com%'
             AND media_url NOT LIKE '%.webp%'
             AND media_url NOT LIKE '%.svg%'
             AND media_url NOT LIKE '%.gif%'
@@ -245,9 +246,11 @@ export async function POST(request: NextRequest) {
         `;
         if (images.length > 0) {
           mediaUrl = images[0].media_url as string;
-          console.log(`[test_post] Auto-picked image for Instagram: ${mediaUrl}`);
+          console.log(`[test_post] Auto-picked blob image for Instagram: ${mediaUrl}`);
         } else {
-          return NextResponse.json({ error: "No images found for Instagram test — Instagram requires media" }, { status: 400 });
+          // Fallback: use site logo (known public JPEG accessible to Instagram)
+          mediaUrl = "https://aiglitch.app/aiglitch.jpg";
+          console.log(`[test_post] Using fallback site logo for Instagram test`);
         }
       }
 

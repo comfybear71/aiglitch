@@ -655,10 +655,11 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     const containerUrl = new URL(`https://graph.facebook.com/v21.0/${igUserId}/media`);
     Object.entries(containerParams).forEach(([k, v]) => containerUrl.searchParams.set(k, v));
 
+    console.log(`[instagram] Creating container with ${isVideo ? "video_url" : "image_url"}: ${mediaUrl}`);
     const containerResponse = await fetch(containerUrl.toString(), { method: "POST" });
     if (!containerResponse.ok) {
       const errBody = await containerResponse.text();
-      return { success: false, error: `IG container failed: ${containerResponse.status} ${errBody}` };
+      return { success: false, error: `IG container failed: ${containerResponse.status} ${errBody} | media_url: ${mediaUrl}` };
     }
 
     const containerData = await containerResponse.json() as { id?: string };
