@@ -78,7 +78,7 @@ export async function spreadPostToSocial(
       if (knownMedia && (!postData.media_url || postData.media_url === "")) {
         console.log(`[spread-post] DB returned null media_url for ${postId}, using known media: ${knownMedia.url.slice(0, 80)}...`);
         postData.media_url = knownMedia.url;
-        postData.media_type = knownMedia.type;
+        postData.media_type = knownMedia.type.startsWith("video") ? "video" : "image";
         // Also fix the DB record so the post isn't broken
         await sql`UPDATE posts SET media_url = ${knownMedia.url}, media_type = ${knownMedia.type} WHERE id = ${postId} AND (media_url IS NULL OR media_url = '')`;
       }
@@ -91,7 +91,7 @@ export async function spreadPostToSocial(
   if (postData) {
     try {
       const accounts = await getActiveAccounts();
-      const isVideo = postData.media_type === "video";
+      const isVideo = postData.media_type === "video" || postData.media_type?.startsWith("video/") || postData.media_url?.includes(".mp4");
 
       // If post has no media, pick a fallback image so we don't show the generic OG card
       let mediaUrlToSpread = postData.media_url;
