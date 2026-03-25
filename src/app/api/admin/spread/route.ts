@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
   const details: { postId: string; platform: string; status: string; error?: string }[] = [];
 
   for (const post of posts) {
-    const isVideo = post.media_type === "video";
+    const isVideo = post.media_type === "video" || post.media_type?.startsWith("video/") || post.media_url?.includes(".mp4");
 
     // If post has no media, pick a fallback image so social cards are unique
     if (!post.media_url) {
