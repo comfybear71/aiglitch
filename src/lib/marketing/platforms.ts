@@ -595,9 +595,42 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
       return { success: false, error: "IG container creation returned no ID" };
     }
 
-    // Step 2: Wait for container to be ready (video processing)
+    // Step 2: Wait for container to be ready (poll status for videos, brief wait for images)
     if (isVideo) {
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      // Poll container status — videos need processing time
+      const maxWait = 60000; // 60 seconds max
+      const pollInterval = 5000; // check every 5 seconds
+      const start = Date.now();
+      let ready = false;
+
+      while (Date.now() - start < maxWait) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        try {
+          const statusRes = await fetch(
+            `https://graph.facebook.com/v21.0/${containerId}?fields=status_code&access_token=${account.access_token}`
+          );
+          if (statusRes.ok) {
+            const statusData = await statusRes.json() as { status_code?: string };
+            console.log(`[instagram] Container ${containerId} status: ${statusData.status_code}`);
+            if (statusData.status_code === "FINISHED") {
+              ready = true;
+              break;
+            }
+            if (statusData.status_code === "ERROR") {
+              return { success: false, error: "IG video processing failed (status: ERROR)" };
+            }
+          }
+        } catch {
+          // Keep polling on fetch errors
+        }
+      }
+
+      if (!ready) {
+        return { success: false, error: `IG video processing timed out after ${maxWait / 1000}s` };
+      }
+    } else {
+      // Images are usually ready instantly, but give it a moment
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     // Step 3: Publish

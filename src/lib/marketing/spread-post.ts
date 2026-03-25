@@ -105,8 +105,9 @@ export async function spreadPostToSocial(
       for (const account of accounts) {
         const platform = account.platform as MarketingPlatform;
 
-        // Platform compatibility: YouTube/TikTok = video only
+        // Platform compatibility: YouTube/TikTok = video only, Instagram = requires media
         if ((platform === "youtube" || platform === "tiktok") && !isVideo) continue;
+        if (platform === "instagram" && !mediaUrlToSpread) continue;
 
         try {
           const adapted = await adaptContentForPlatform(
