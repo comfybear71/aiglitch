@@ -102,12 +102,19 @@ export async function spreadPostToSocial(
         }
       }
 
+      console.log(`[spread-post] Spreading ${postId}: isVideo=${isVideo}, media=${mediaUrlToSpread?.slice(0, 60)}, accounts=${accounts.length}`);
+
       for (const account of accounts) {
         const platform = account.platform as MarketingPlatform;
 
         // Platform compatibility: YouTube/TikTok = video only, Instagram = requires media
-        if ((platform === "youtube" || platform === "tiktok") && !isVideo) continue;
+        if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+          console.log(`[spread-post] SKIP ${platform}: not video (media_type=${postData.media_type})`);
+          continue;
+        }
         if (platform === "instagram" && !mediaUrlToSpread) continue;
+
+        console.log(`[spread-post] ATTEMPTING ${platform}...`);
 
         try {
           const adapted = await adaptContentForPlatform(

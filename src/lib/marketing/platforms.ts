@@ -128,6 +128,9 @@ export async function getActiveAccounts(): Promise<PlatformAccount[]> {
     }
   }
 
+  // Log active accounts for debugging
+  console.log(`[getActiveAccounts] ${accounts.length} accounts: ${accounts.map(a => `${a.platform}(${a.id.startsWith("env-") ? "env" : "db"})`).join(", ")}`);
+
   return accounts;
 }
 
