@@ -39,6 +39,37 @@ function applyEnvTokens(account: PlatformAccount): PlatformAccount {
   return account;
 }
 
+// ── Env-var-only platform accounts ──────────────────────────────────────
+// Per TheMaster rule: Vercel env vars are the SOLE source of truth for
+// social platform credentials. If env vars are set but DB row is missing,
+// synthesize the account object from env vars alone.
+function getEnvOnlyAccounts(): PlatformAccount[] {
+  const accounts: PlatformAccount[] = [];
+
+  // Instagram — needs INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID
+  const igToken = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const igUserId = process.env.INSTAGRAM_USER_ID;
+  if (igToken && igUserId) {
+    accounts.push({
+      id: "env-instagram",
+      platform: "instagram",
+      account_name: "sfrench71",
+      account_id: igUserId,
+      account_url: "https://www.instagram.com/sfrench71/",
+      access_token: igToken,
+      refresh_token: "",
+      token_expires_at: null,
+      extra_config: JSON.stringify({ instagram_user_id: igUserId }),
+      is_active: true,
+      last_posted_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as PlatformAccount);
+  }
+
+  return accounts;
+}
+
 // ── Platform Account Helpers ────────────────────────────────────────────
 
 export async function getActiveAccounts(): Promise<PlatformAccount[]> {
@@ -46,7 +77,17 @@ export async function getActiveAccounts(): Promise<PlatformAccount[]> {
   const rows = await sql`
     SELECT * FROM marketing_platform_accounts WHERE is_active = TRUE
   ` as unknown as PlatformAccount[];
-  return rows.map(applyEnvTokens);
+  const accounts = rows.map(applyEnvTokens);
+
+  // Inject env-var-only accounts for platforms not in DB
+  const dbPlatforms = new Set(accounts.map(a => a.platform));
+  for (const envAccount of getEnvOnlyAccounts()) {
+    if (!dbPlatforms.has(envAccount.platform)) {
+      accounts.push(envAccount);
+    }
+  }
+
+  return accounts;
 }
 
 export async function getAccountForPlatform(platform: MarketingPlatform): Promise<PlatformAccount | null> {
@@ -55,7 +96,11 @@ export async function getAccountForPlatform(platform: MarketingPlatform): Promis
     SELECT * FROM marketing_platform_accounts WHERE platform = ${platform} AND is_active = TRUE LIMIT 1
   ` as unknown as PlatformAccount[];
   const account = rows[0] || null;
-  return account ? applyEnvTokens(account) : null;
+  if (account) return applyEnvTokens(account);
+
+  // Fallback: check env-var-only accounts
+  const envAccounts = getEnvOnlyAccounts();
+  return envAccounts.find(a => a.platform === platform) || null;
 }
 
 /** Like getAccountForPlatform but also returns inactive accounts (for test posts) */
@@ -67,7 +112,11 @@ export async function getAnyAccountForPlatform(platform: MarketingPlatform): Pro
     SELECT * FROM marketing_platform_accounts WHERE platform = ${platform} LIMIT 1
   ` as unknown as PlatformAccount[];
   const account = rows[0] || null;
-  return account ? applyEnvTokens(account) : null;
+  if (account) return applyEnvTokens(account);
+
+  // Fallback: check env-var-only accounts
+  const envAccounts = getEnvOnlyAccounts();
+  return envAccounts.find(a => a.platform === platform) || null;
 }
 
 // ── Post Result ──────────────────────────────────────────────────────────
@@ -556,8 +605,9 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
 
 async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
+    // Env var is sole source of truth for Instagram User ID (per TheMaster rule)
     const config = JSON.parse(account.extra_config || "{}");
-    const igUserId = config.instagram_user_id || account.account_id;
+    const igUserId = process.env.INSTAGRAM_USER_ID || config.instagram_user_id || account.account_id;
 
     if (!mediaUrl) {
       return { success: false, error: "Instagram requires media content" };
