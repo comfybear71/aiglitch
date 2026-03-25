@@ -19,12 +19,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin?tiktok_error=no_code", request.url));
   }
 
-  const clientKey = process.env.TIKTOK_CLIENT_KEY;
-  const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+  // Check if this was a sandbox auth
+  const cookieStore2 = await cookies();
+  const isSandbox = cookieStore2.get("tiktok_sandbox")?.value === "true";
+
+  const clientKey = isSandbox
+    ? process.env.TIKTOK_SANDBOX_CLIENT_KEY
+    : process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = isSandbox
+    ? process.env.TIKTOK_SANDBOX_CLIENT_SECRET
+    : process.env.TIKTOK_CLIENT_SECRET;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/tiktok`;
 
+  console.log(`[TikTok OAuth] Callback: ${isSandbox ? "SANDBOX" : "PRODUCTION"} mode`);
+
   if (!clientKey || !clientSecret) {
-    return NextResponse.redirect(new URL("/admin?tiktok_error=not_configured", request.url));
+    return NextResponse.redirect(new URL(`/admin?tiktok_error=not_configured_${isSandbox ? "sandbox" : "production"}`, request.url));
   }
 
   // Verify state
