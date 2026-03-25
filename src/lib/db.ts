@@ -515,7 +515,7 @@ export async function runMigrations() {
     { key: "seed_mktg_x", platform: "x", envCheck: "X_CONSUMER_KEY" },
     { key: "seed_mktg_facebook", platform: "facebook", envCheck: "FACEBOOK_ACCESS_TOKEN", extraConfig: JSON.stringify({ page_id: process.env.FACEBOOK_PAGE_ID || "" }) },
     { key: "seed_mktg_youtube", platform: "youtube", envCheck: "YOUTUBE_CLIENT_ID", extraConfig: JSON.stringify({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN || "" }) },
-    { key: "seed_mktg_instagram", platform: "instagram", envCheck: "INSTAGRAM_ACCESS_TOKEN" },
+    { key: "seed_mktg_instagram", platform: "instagram", envCheck: "INSTAGRAM_ACCESS_TOKEN", extraConfig: JSON.stringify({ instagram_user_id: process.env.INSTAGRAM_USER_ID || "" }) },
     { key: "seed_mktg_tiktok", platform: "tiktok", envCheck: "TIKTOK_ACCESS_TOKEN" },
   ];
 
@@ -530,6 +530,25 @@ export async function runMigrations() {
         `)
       )
   );
+
+  // ── Batch 4C: Fix Instagram account — set user ID + account name from env vars ──
+  const igUserId = process.env.INSTAGRAM_USER_ID || "";
+  const igToken = process.env.INSTAGRAM_ACCESS_TOKEN || "";
+  if (igUserId || igToken) {
+    await Promise.allSettled([
+      safeMigrate(sql, "fix_instagram_account_v3", () => sql`
+        INSERT INTO marketing_platform_accounts (id, platform, account_name, account_id, account_url, access_token, extra_config, is_active, created_at, updated_at)
+        VALUES ('instagram', 'instagram', 'AIGlitched', ${igUserId}, 'https://www.instagram.com/aiglitched/', ${igToken}, ${JSON.stringify({ instagram_user_id: igUserId })}, TRUE, NOW(), NOW())
+        ON CONFLICT (platform) DO UPDATE SET
+          account_id = ${igUserId},
+          account_name = 'AIGlitched',
+          account_url = 'https://www.instagram.com/aiglitched/',
+          extra_config = ${JSON.stringify({ instagram_user_id: igUserId })},
+          is_active = TRUE,
+          updated_at = NOW()
+      `),
+    ]);
+  }
 
   // ── Batch 5: Activity level updates + director tables + composite indexes (all independent) ──
   await Promise.allSettled([
