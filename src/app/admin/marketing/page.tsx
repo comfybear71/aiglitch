@@ -309,12 +309,26 @@ export default function MarketingPage() {
                           {account?.is_active ? "🟢 Active" : "⚫ Not Connected"}
                         </span>
                       </div>
-                      {account?.account_name && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Account</span>
-                          <span className="text-gray-300">@{account.account_name}</span>
-                        </div>
-                      )}
+                      {account?.account_name && (() => {
+                        const platformUrls: Record<string, (name: string) => string> = {
+                          x: (n) => `https://x.com/${n}`,
+                          tiktok: (n) => `https://www.tiktok.com/@${n}`,
+                          instagram: (n) => `https://www.instagram.com/${n}/`,
+                          facebook: (n) => `https://www.facebook.com/${n}`,
+                          youtube: (n) => `https://www.youtube.com/@${n}`,
+                        };
+                        const url = account.account_url || platformUrls[p.id]?.(account.account_name);
+                        return (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Account</span>
+                            {url ? (
+                              <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-cyan-400 hover:text-cyan-300 hover:underline">@{account.account_name}</a>
+                            ) : (
+                              <span className="text-gray-300">@{account.account_name}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="flex justify-between">
                         <span className="text-gray-500">Posted</span>
                         <span className="text-green-400 font-bold">{pStats?.posted || 0}</span>
