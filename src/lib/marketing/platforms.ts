@@ -661,7 +661,8 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     }
 
     // Use POST body (not query params) to avoid URL-encoding issues with image URLs
-    console.log(`[instagram] Creating container with ${isVideo ? "video_url" : "image_url"}: ${mediaUrl}`);
+    const sentUrl = isVideo ? mediaUrl : igMediaUrl;
+    console.log(`[instagram] Creating container with ${isVideo ? "video_url" : "image_url"}: ${sentUrl}`);
     const containerResponse = await fetch(`https://graph.facebook.com/v21.0/${igUserId}/media`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -669,7 +670,7 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     });
     if (!containerResponse.ok) {
       const errBody = await containerResponse.text();
-      return { success: false, error: `IG container failed: ${containerResponse.status} ${errBody} | media_url: ${mediaUrl}` };
+      return { success: false, error: `IG container failed: ${containerResponse.status} ${errBody} | sent_url: ${sentUrl} | original: ${mediaUrl}` };
     }
 
     const containerData = await containerResponse.json() as { id?: string };
