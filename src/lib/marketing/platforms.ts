@@ -586,7 +586,7 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
         body: JSON.stringify({
           post_info: {
             title: text.slice(0, 150),
-            privacy_level: "SELF_ONLY",
+            privacy_level: "PUBLIC_TO_EVERYONE",
             disable_duet: false,
             disable_comment: false,
             disable_stitch: false,
@@ -820,9 +820,27 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
     if (mediaUrl) {
       const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
       if (isVideo) {
+        // Videos: use POST body to avoid URL length issues with file_url
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/videos`;
         params.file_url = mediaUrl;
         params.description = text;
+
+        console.log(`[facebook] Posting video to ${endpoint}, file_url=${mediaUrl.slice(0, 100)}`);
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(params),
+        });
+        if (!response.ok) {
+          const errBody = await response.text();
+          console.error(`[facebook] Video post FAILED: ${response.status} ${errBody.slice(0, 300)}`);
+          return { success: false, error: `FB ${response.status}: ${errBody}` };
+        }
+        const data = await response.json() as { id?: string; post_id?: string };
+        const fbPostId = data.post_id || data.id;
+        const platformUrl = fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined;
+        console.log(`[facebook] Video posted OK: ${fbPostId}`);
+        return { success: true, platformPostId: fbPostId, platformUrl };
       } else {
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/photos`;
         params.url = mediaUrl;
