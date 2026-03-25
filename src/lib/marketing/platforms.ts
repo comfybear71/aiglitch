@@ -513,17 +513,30 @@ async function getValidTikTokToken(account: PlatformAccount): Promise<string | n
 
 async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
+    console.log(`[tiktok] === POSTING START === mediaUrl=${mediaUrl?.slice(0, 100)}, text=${text.slice(0, 50)}, token=${account.access_token ? "YES" : "NO"}`);
+
     if (!mediaUrl) {
+      console.log(`[tiktok] SKIPPED: no media URL`);
       return { success: false, error: "TikTok requires video content" };
+    }
+
+    // TikTok only supports video
+    const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
+    if (!isVideo) {
+      console.log(`[tiktok] SKIPPED: not a video URL: ${mediaUrl.slice(0, 100)}`);
+      return { success: false, error: "TikTok only supports video content" };
     }
 
     // Auto-refresh token if needed
     const token = await getValidTikTokToken(account);
     if (!token) {
+      console.error(`[tiktok] FAILED: no valid token`);
       return { success: false, error: "TikTok: no valid token (re-connect via admin)" };
     }
+    console.log(`[tiktok] Token: ${token.slice(0, 20)}...`);
 
     // Step 1: Query creator info
+    console.log(`[tiktok] Step 1: Querying creator info...`);
     const creatorResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
       {
@@ -537,6 +550,8 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
     );
 
     if (!creatorResponse.ok) {
+      const errBody = await creatorResponse.text().catch(() => "");
+      console.error(`[tiktok] Creator info FAILED: ${creatorResponse.status} ${errBody.slice(0, 300)}`);
       // If 401, try one more time with a refreshed token
       if (creatorResponse.status === 401) {
         const refreshedToken = await refreshTikTokToken(account);
@@ -566,15 +581,19 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
     }
 
     // Step 2: Download video from Vercel Blob
+    console.log(`[tiktok] Step 1 OK. Step 2: Downloading video...`);
     const finalToken = account.access_token || token;
     const videoResponse = await fetch(mediaUrl);
     if (!videoResponse.ok) {
+      console.error(`[tiktok] Video download FAILED: ${videoResponse.status}`);
       return { success: false, error: `TikTok: failed to download video from ${mediaUrl}: ${videoResponse.status}` };
     }
     const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
     const videoSize = videoBuffer.length;
+    console.log(`[tiktok] Video downloaded: ${(videoSize / 1024 / 1024).toFixed(1)}MB`);
 
     // Step 3: Initialize FILE_UPLOAD post
+    console.log(`[tiktok] Step 3: Init upload (PUBLIC_TO_EVERYONE)...`);
     const initResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
       {
@@ -603,6 +622,7 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
 
     if (!initResponse.ok) {
       const errBody = await initResponse.text();
+      console.error(`[tiktok] Init FAILED: ${initResponse.status} ${errBody.slice(0, 300)}`);
       return { success: false, error: `TikTok init failed: ${initResponse.status} ${errBody}` };
     }
 
@@ -610,11 +630,14 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       data?: { publish_id?: string; upload_url?: string };
     };
     const uploadUrl = initData.data?.upload_url;
+    console.log(`[tiktok] Init OK. publish_id=${initData.data?.publish_id}, upload_url=${uploadUrl ? "YES" : "NO"}`);
     if (!uploadUrl) {
+      console.error(`[tiktok] No upload_url! Full response: ${JSON.stringify(initData).slice(0, 500)}`);
       return { success: false, error: "TikTok: no upload_url returned from init" };
     }
 
     // Step 4: Upload video chunk to TikTok
+    console.log(`[tiktok] Step 4: Uploading ${(videoSize / 1024 / 1024).toFixed(1)}MB to TikTok...`);
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
