@@ -639,6 +639,14 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
 
+    // Proxy image URLs through our domain — Instagram can't fetch from Vercel Blob directly
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+    let igMediaUrl = mediaUrl;
+    if (!isVideo && (mediaUrl.includes("blob.vercel-storage.com") || mediaUrl.includes("replicate.delivery"))) {
+      igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
+      console.log(`[instagram] Proxying image through: ${igMediaUrl}`);
+    }
+
     // Step 1: Create media container
     const containerParams: Record<string, string> = {
       caption: text,
@@ -649,7 +657,7 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
       containerParams.media_type = "REELS";
       containerParams.video_url = mediaUrl;
     } else {
-      containerParams.image_url = mediaUrl;
+      containerParams.image_url = igMediaUrl;
     }
 
     // Use POST body (not query params) to avoid URL-encoding issues with image URLs
