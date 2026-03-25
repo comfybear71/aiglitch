@@ -581,9 +581,13 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       }
     }
 
-    // Step 2: Use PULL_FROM_URL — TikTok fetches the video directly (no download/upload needed)
+    // Step 2: Use PULL_FROM_URL with video proxied through our verified domain
     const finalToken = account.access_token || token;
-    console.error(`[tiktok] >>> Step 1 OK. Step 2: PULL_FROM_URL init: ${mediaUrl.slice(0, 80)}`);
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+    const ttVideoUrl = mediaUrl.startsWith(appUrl)
+      ? mediaUrl
+      : `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
+    console.error(`[tiktok] >>> Step 2: PULL_FROM_URL via proxy: ${ttVideoUrl.slice(0, 120)}`);
 
     const initResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
@@ -603,7 +607,7 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
           },
           source_info: {
             source: "PULL_FROM_URL",
-            video_url: mediaUrl,
+            video_url: ttVideoUrl,
           },
         }),
       },
