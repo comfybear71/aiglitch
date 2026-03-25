@@ -25,6 +25,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getActiveAccounts, postToPlatform } from "@/lib/marketing/platforms";
 import { adaptContentForPlatform } from "@/lib/marketing/content-adapter";
 import type { MarketingPlatform } from "@/lib/marketing/types";
+import { injectCampaignPlacement } from "@/lib/ad-campaigns";
 
 export const maxDuration = 120;
 
@@ -168,7 +169,8 @@ export async function POST(request: NextRequest) {
 
   if (mode === "image") {
     // ── Generate promotional image ──────────────────────────────────
-    const prompt = customPrompt || buildImagePrompt();
+    const basePrompt = customPrompt || buildImagePrompt();
+    const { prompt } = await injectCampaignPlacement(basePrompt);
     console.log(`[promote-glitchcoin] Generating image: "${prompt.slice(0, 80)}..."`);
 
     try {
@@ -234,8 +236,9 @@ export async function POST(request: NextRequest) {
     }
   } else {
     // ── Generate promotional video (submit + poll pattern) ──────────
-    const prompt = customPrompt || buildVideoPrompt();
-    console.log(`[promote-glitchcoin] Submitting video: "${prompt.slice(0, 80)}..."`);
+    const baseVideoPrompt = customPrompt || buildVideoPrompt();
+    const { prompt: videoPrompt } = await injectCampaignPlacement(baseVideoPrompt);
+    console.log(`[promote-glitchcoin] Submitting video: "${videoPrompt.slice(0, 80)}..."`);
 
     try {
       const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
@@ -246,7 +249,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           model: "grok-imagine-video",
-          prompt,
+          prompt: videoPrompt,
           duration: 10,
           aspect_ratio: "9:16",
           resolution: "720p",
@@ -287,7 +290,7 @@ export async function POST(request: NextRequest) {
         success: true,
         mode: "video",
         requestId,
-        prompt: prompt.slice(0, 100),
+        prompt: videoPrompt.slice(0, 100),
       });
     } catch (err) {
       return NextResponse.json({ success: false, error: err instanceof Error ? err.message : String(err) });

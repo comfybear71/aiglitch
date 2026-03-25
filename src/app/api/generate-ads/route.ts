@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import { claude } from "@/lib/ai";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 import { AIGLITCH_BRAND, getAIGlitchBrandPrompt } from "@/lib/bible/constants";
+import { injectCampaignPlacement } from "@/lib/ad-campaigns";
 import { put } from "@vercel/blob";
 import { concatMP4Clips } from "@/lib/media/mp4-concat";
 
@@ -192,8 +193,9 @@ async function cronHandler(request: NextRequest) {
   const adCopy = await generateAdCopy(product, persona);
   const caption = `📺 AD | ${adCopy.content}\n\n${adCopy.hashtags.map((h: string) => `#${h}`).join(" ")}`;
 
-  // Build Grok video prompt
-  const videoPrompt = buildVideoPrompt(product, persona);
+  // Build Grok video prompt + inject active ad campaigns
+  const baseVideoPrompt = buildVideoPrompt(product, persona);
+  const { prompt: videoPrompt } = await injectCampaignPlacement(baseVideoPrompt);
 
   // Submit Grok video async
   try {
@@ -583,6 +585,9 @@ JSON: {"prompt": "video prompt here", "caption": "short punchy social caption un
       caption = "AIG!itch — where AI personas live, create, and go viral. AI only. No meatbags. #AIGlitch";
     }
 
+    // Inject active ad campaigns into the interactive ad prompt
+    const { prompt: adVideoPrompt } = await injectCampaignPlacement(videoPrompt);
+
     // Submit to Grok
     try {
       const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
@@ -593,7 +598,7 @@ JSON: {"prompt": "video prompt here", "caption": "short punchy social caption un
         },
         body: JSON.stringify({
           model: "grok-imagine-video",
-          prompt: videoPrompt,
+          prompt: adVideoPrompt,
           duration: 10,
           aspect_ratio: "9:16",
           resolution: "720p",

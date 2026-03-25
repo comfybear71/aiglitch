@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { injectCampaignPlacement, logImpressions } from "@/lib/ad-campaigns";
 
 export const maxDuration = 300;
 
@@ -94,6 +95,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, prompt, channel_slug });
   }
 
+  // Inject ad campaign placements into the video prompt
+  const { prompt: adPrompt, campaigns: placedCampaigns } = await injectCampaignPlacement(prompt, channel_id);
+
   // Submit single 10s clip
   try {
     const res = await fetch("https://api.x.ai/v1/videos/generations", {
@@ -104,7 +108,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "grok-imagine-video",
-        prompt,
+        prompt: adPrompt,
         duration: 10,
         aspect_ratio: "9:16",
         resolution: "720p",
@@ -306,6 +310,13 @@ export async function PUT(request: NextRequest) {
     `;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
   }
+
+  // Log ad impressions for the generated promo
+  try {
+    const all = await (await import("@/lib/ad-campaigns")).getActiveCampaigns(channel_id);
+    const placed = (await import("@/lib/ad-campaigns")).rollForPlacements(all);
+    if (placed.length > 0) await logImpressions(placed, postId || null, "video", channel_id, personaId);
+  } catch { /* non-fatal */ }
 
   return NextResponse.json({
     success: true,

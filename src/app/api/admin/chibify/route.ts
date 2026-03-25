@@ -6,6 +6,7 @@ import { generateImageWithAurora, generateWithGrok } from "@/lib/xai";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 import { spreadPostToSocial } from "@/lib/marketing/spread-post";
+import { injectCampaignPlacement, logImpressions } from "@/lib/ad-campaigns";
 
 export const maxDuration = 120;
 
@@ -109,8 +110,11 @@ export async function POST(request: NextRequest) {
 
       console.log(`[chibify] Generating chibi for @${p.username}...`);
 
+      // Inject ad campaign placements into the chibi prompt
+      const { prompt: adChibiPrompt, campaigns: placedCampaigns } = await injectCampaignPlacement(chibiPrompt);
+
       // Generate with Grok Aurora Pro for best quality
-      const grokResult = await generateImageWithAurora(chibiPrompt, true, "1:1");
+      const grokResult = await generateImageWithAurora(adChibiPrompt, true, "1:1");
       if (!grokResult) {
         results.push({ persona_id: p.id, username: p.username, success: false, error: "Grok image generation failed" });
         continue;
@@ -166,6 +170,11 @@ export async function POST(request: NextRequest) {
         { url: chibiUrl, type: "image" },
         `Chibi @${p.username}`,
       );
+
+      // Log ad impressions
+      if (placedCampaigns.length > 0) {
+        try { await logImpressions(placedCampaigns, postId, "image", null, p.id); } catch { /* non-fatal */ }
+      }
 
       results.push({
         persona_id: p.id,

@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
+import { injectCampaignPlacement } from "@/lib/ad-campaigns";
 
 export const maxDuration = 60;
 
@@ -52,6 +53,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, prompt, channel_slug, title: exactText });
   }
 
+  // Inject ad campaign placements into the title video prompt
+  const { prompt: adPrompt } = await injectCampaignPlacement(prompt, channel_id);
+
   try {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
@@ -61,7 +65,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "grok-imagine-video",
-        prompt,
+        prompt: adPrompt,
         duration: 5,
         aspect_ratio: "9:16",
         resolution: "720p",
