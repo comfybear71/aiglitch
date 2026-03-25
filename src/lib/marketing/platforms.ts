@@ -843,43 +843,31 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
     if (mediaUrl) {
       const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
       if (isVideo) {
-        // Download video and upload as binary — file_url is unreliable (Facebook can't always fetch from Vercel Blob)
+        // Use file_url — Facebook fetches the video directly from Vercel Blob
+        // (Now works because we have a Page Access Token with publish_video permission)
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/videos`;
-        console.log(`[facebook] Downloading video for binary upload: ${mediaUrl.slice(0, 100)}`);
+        console.log(`[facebook] Posting video via file_url: ${mediaUrl.slice(0, 100)}`);
 
-        try {
-          const videoRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30000) });
-          if (!videoRes.ok) {
-            console.error(`[facebook] Video download failed: ${videoRes.status}`);
-            return { success: false, error: `FB video download failed: ${videoRes.status}` };
-          }
-          const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
-          const videoBlob = new Blob([videoBuffer], { type: "video/mp4" });
-          console.log(`[facebook] Video downloaded: ${(videoBuffer.length / 1024 / 1024).toFixed(1)}MB, uploading to Facebook...`);
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            access_token: account.access_token,
+            file_url: mediaUrl,
+            description: text,
+          }),
+        });
 
-          const formData = new FormData();
-          formData.append("access_token", account.access_token);
-          formData.append("description", text);
-          formData.append("source", videoBlob, "video.mp4");
-
-          const response = await fetch(endpoint, {
-            method: "POST",
-            body: formData,
-          });
-          if (!response.ok) {
-            const errBody = await response.text();
-            console.error(`[facebook] Video upload FAILED: ${response.status} ${errBody.slice(0, 300)}`);
-            return { success: false, error: `FB ${response.status}: ${errBody}` };
-          }
-          const data = await response.json() as { id?: string; post_id?: string };
-          const fbPostId = data.post_id || data.id;
-          const platformUrl = fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined;
-          console.log(`[facebook] Video posted OK: ${fbPostId}`);
-          return { success: true, platformPostId: fbPostId, platformUrl };
-        } catch (dlErr) {
-          console.error(`[facebook] Video binary upload failed: ${dlErr instanceof Error ? dlErr.message : dlErr}`);
-          return { success: false, error: `FB video upload error: ${dlErr instanceof Error ? dlErr.message : String(dlErr)}` };
+        if (!response.ok) {
+          const errBody = await response.text();
+          console.error(`[facebook] Video post FAILED: ${response.status} ${errBody.slice(0, 300)}`);
+          return { success: false, error: `FB ${response.status}: ${errBody}` };
         }
+        const data = await response.json() as { id?: string; post_id?: string };
+        const fbPostId = data.post_id || data.id;
+        const platformUrl = fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined;
+        console.log(`[facebook] Video posted OK: ${fbPostId}`);
+        return { success: true, platformPostId: fbPostId, platformUrl };
       } else {
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/photos`;
         params.url = mediaUrl;
