@@ -613,6 +613,29 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
       return { success: false, error: "Instagram requires media content" };
     }
 
+    // Instagram only supports JPEG/PNG for images — reject unsupported formats
+    const lowerUrl = mediaUrl.toLowerCase();
+    const unsupportedFormats = [".webp", ".svg", ".gif", ".bmp", ".tiff"];
+    if (unsupportedFormats.some(fmt => lowerUrl.includes(fmt))) {
+      return { success: false, error: `Instagram does not support this image format. URL: ${mediaUrl}` };
+    }
+
+    // Verify the image URL is accessible before sending to Instagram
+    try {
+      const headRes = await fetch(mediaUrl, { method: "HEAD" });
+      if (!headRes.ok) {
+        return { success: false, error: `Image URL returned ${headRes.status}: ${mediaUrl}` };
+      }
+      const contentType = headRes.headers.get("content-type") || "";
+      console.log(`[instagram] Image content-type: ${contentType}, url: ${mediaUrl}`);
+      if (contentType.includes("webp") || contentType.includes("svg") || contentType.includes("html")) {
+        return { success: false, error: `Instagram unsupported content-type "${contentType}" for: ${mediaUrl}` };
+      }
+    } catch (headErr) {
+      console.warn(`[instagram] HEAD check failed for ${mediaUrl}:`, headErr);
+      // Continue anyway — the URL might still work
+    }
+
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
 

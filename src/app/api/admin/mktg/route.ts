@@ -233,8 +233,15 @@ export async function POST(request: NextRequest) {
         }
       }
       if (!mediaUrl && platform === "instagram") {
+        // Instagram requires JPEG/PNG — exclude WebP, SVG, GIF, and other unsupported formats
         const images = await sql`
-          SELECT media_url FROM posts WHERE media_url IS NOT NULL AND media_url != '' AND (media_type LIKE 'image%' OR media_type = 'meme') ORDER BY RANDOM() LIMIT 1
+          SELECT media_url FROM posts
+          WHERE media_url IS NOT NULL AND media_url != ''
+            AND (media_type LIKE 'image%' OR media_type = 'meme')
+            AND media_url NOT LIKE '%.webp%'
+            AND media_url NOT LIKE '%.svg%'
+            AND media_url NOT LIKE '%.gif%'
+          ORDER BY RANDOM() LIMIT 1
         `;
         if (images.length > 0) {
           mediaUrl = images[0].media_url as string;
