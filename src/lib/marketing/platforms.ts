@@ -843,17 +843,37 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
     if (mediaUrl) {
       const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
       if (isVideo) {
-        // Use file_url — Facebook fetches the video directly from Vercel Blob
-        // (Now works because we have a Page Access Token with publish_video permission)
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/videos`;
-        console.log(`[facebook] Posting video via file_url: ${mediaUrl.slice(0, 100)}`);
 
+        // Re-upload video to Blob with a clean short URL (same approach as Instagram images)
+        // Facebook sometimes can't fetch from long Vercel Blob URLs
+        let fbVideoUrl = mediaUrl;
+        try {
+          const { put } = await import("@vercel/blob");
+          const { v4: uuidv4 } = await import("uuid");
+          console.log(`[facebook] Re-uploading video for clean URL: ${mediaUrl.slice(0, 100)}`);
+          const vidRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30000) });
+          if (vidRes.ok) {
+            const buffer = Buffer.from(await vidRes.arrayBuffer());
+            const blob = await put(`facebook/${uuidv4()}.mp4`, buffer, {
+              access: "public",
+              contentType: "video/mp4",
+              addRandomSuffix: false,
+            });
+            fbVideoUrl = blob.url;
+            console.log(`[facebook] Re-uploaded: ${fbVideoUrl}`);
+          }
+        } catch (reupErr) {
+          console.warn(`[facebook] Re-upload failed, using original URL: ${reupErr instanceof Error ? reupErr.message : reupErr}`);
+        }
+
+        console.log(`[facebook] Posting video via file_url: ${fbVideoUrl.slice(0, 100)}`);
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             access_token: account.access_token,
-            file_url: mediaUrl,
+            file_url: fbVideoUrl,
             description: text,
           }),
         });
