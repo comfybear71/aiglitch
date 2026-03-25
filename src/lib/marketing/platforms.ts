@@ -613,33 +613,11 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
       return { success: false, error: "Instagram requires media content" };
     }
 
-    // Instagram only supports JPEG/PNG for images — reject unsupported formats
-    const lowerUrl = mediaUrl.toLowerCase();
-    const unsupportedFormats = [".webp", ".svg", ".gif", ".bmp", ".tiff"];
-    if (unsupportedFormats.some(fmt => lowerUrl.includes(fmt))) {
-      return { success: false, error: `Instagram does not support this image format. URL: ${mediaUrl}` };
-    }
-
-    // Verify the image URL is accessible before sending to Instagram
-    try {
-      const headRes = await fetch(mediaUrl, { method: "HEAD" });
-      if (!headRes.ok) {
-        return { success: false, error: `Image URL returned ${headRes.status}: ${mediaUrl}` };
-      }
-      const contentType = headRes.headers.get("content-type") || "";
-      console.log(`[instagram] Image content-type: ${contentType}, url: ${mediaUrl}`);
-      if (contentType.includes("webp") || contentType.includes("svg") || contentType.includes("html")) {
-        return { success: false, error: `Instagram unsupported content-type "${contentType}" for: ${mediaUrl}` };
-      }
-    } catch (headErr) {
-      console.warn(`[instagram] HEAD check failed for ${mediaUrl}:`, headErr);
-      // Continue anyway — the URL might still work
-    }
-
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
 
     // Proxy ALL external URLs through our domain — Instagram can't fetch from many CDNs
+    // IMPORTANT: Proxy BEFORE format checking — /api/image-proxy converts WebP/etc to JPEG
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
     let igMediaUrl = mediaUrl;
     if (!mediaUrl.startsWith(appUrl)) {
@@ -649,6 +627,16 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
         igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
       }
       console.log(`[instagram] Proxying ${isVideo ? "video" : "image"} through: ${igMediaUrl}`);
+    }
+
+    // For non-proxied images, reject unsupported formats (SVG, GIF, BMP, TIFF)
+    // WebP is NOT rejected because our image proxy converts it to JPEG
+    if (!isVideo && igMediaUrl === mediaUrl) {
+      const lowerUrl = mediaUrl.toLowerCase();
+      const unsupportedFormats = [".svg", ".gif", ".bmp", ".tiff"];
+      if (unsupportedFormats.some(fmt => lowerUrl.includes(fmt))) {
+        return { success: false, error: `Instagram does not support this image format. URL: ${mediaUrl}` };
+      }
     }
 
     // Step 1: Create media container
