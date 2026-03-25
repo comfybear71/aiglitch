@@ -67,6 +67,47 @@ function getEnvOnlyAccounts(): PlatformAccount[] {
     } as PlatformAccount);
   }
 
+  // Facebook — needs FACEBOOK_ACCESS_TOKEN + FACEBOOK_PAGE_ID (or falls back to DB)
+  const fbToken = process.env.FACEBOOK_ACCESS_TOKEN;
+  const fbPageId = process.env.FACEBOOK_PAGE_ID || "1041648825691964";
+  if (fbToken) {
+    accounts.push({
+      id: "env-facebook",
+      platform: "facebook",
+      account_name: "AIGlitch",
+      account_id: fbPageId,
+      account_url: "https://www.facebook.com/AIGlitch",
+      access_token: fbToken,
+      refresh_token: "",
+      token_expires_at: null,
+      extra_config: "{}",
+      is_active: true,
+      last_posted_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as PlatformAccount);
+  }
+
+  // TikTok — needs TIKTOK_ACCESS_TOKEN
+  const ttToken = process.env.TIKTOK_ACCESS_TOKEN;
+  if (ttToken) {
+    accounts.push({
+      id: "env-tiktok",
+      platform: "tiktok",
+      account_name: "aiglitch",
+      account_id: "",
+      account_url: "https://www.tiktok.com/@aiglitch",
+      access_token: ttToken,
+      refresh_token: "",
+      token_expires_at: null,
+      extra_config: "{}",
+      is_active: true,
+      last_posted_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as PlatformAccount);
+  }
+
   return accounts;
 }
 
