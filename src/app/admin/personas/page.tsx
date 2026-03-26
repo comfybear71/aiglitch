@@ -773,76 +773,149 @@ export default function PersonasPage() {
         `✅ Ad planned!`,
         `🎨 Style: ${adStyle}`,
         `📝 Caption: "${adCaptionText.slice(0, 100)}..."`,
-        `🎥 Submitting to video generation...`,
+        `🎥 Submitting to video generation${adExtend ? " (30s Extended — 3 clips)" : ""}...`,
       ]);
 
-      // Phase 2: Submit video to Grok (POST without plan_only, uses AI prompt)
-      setAdPhase("rendering");
-      const submitBody: Record<string, unknown> = {
-        wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
-        style: adStyle,
-      };
-      if (adConcept.trim()) submitBody.concept = adConcept.trim();
+      const clipCount = adExtend ? 3 : 1;
+      const clipUrls: string[] = [];
 
-      const submitRes = await fetch("/api/generate-ads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(submitBody),
-      });
-      const submitData = await submitRes.json();
+      for (let clipIdx = 0; clipIdx < clipCount; clipIdx++) {
+        if (adExtend) {
+          setAdPhase(`rendering clip ${clipIdx + 1}/${clipCount}`);
+          setAdLog(prev => [...prev, `🎬 Generating clip ${clipIdx + 1} of ${clipCount}...`]);
+        } else {
+          setAdPhase("rendering");
+        }
 
-      // Immediate video (rare but possible)
-      if (submitData.phase === "done" && submitData.success && submitData.videoUrl) {
-        setAdVideoUrl(submitData.videoUrl);
-        setAdLog(prev => [...prev, "✅ Video ready instantly!", "📡 Posted to feed + spread to socials"]);
+        // Phase 2: Submit video to Grok
+        const submitBody: Record<string, unknown> = {
+          wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
+          style: adStyle,
+        };
+        if (adConcept.trim()) submitBody.concept = adConcept.trim();
+
+        const submitRes = await fetch("/api/generate-ads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submitBody),
+        });
+        const submitData = await submitRes.json();
+
+        // Immediate video (rare)
+        if (submitData.phase === "done" && submitData.success && submitData.videoUrl) {
+          clipUrls.push(submitData.videoUrl);
+          if (!adExtend) {
+            setAdVideoUrl(submitData.videoUrl);
+            setAdLog(prev => [...prev, "✅ Video ready instantly!", "📡 Posted to feed + spread to socials"]);
+            setAdComplete(true);
+            setAdGenerating(false);
+            return;
+          }
+          setAdLog(prev => [...prev, `✅ Clip ${clipIdx + 1} ready!`]);
+          continue;
+        }
+
+        if (!submitData.success || !submitData.requestId) {
+          setAdLog(prev => [...prev, `❌ Submit failed: ${submitData.error || "Unknown error"}`]);
+          if (!adExtend) { setAdGenerating(false); return; }
+          continue;
+        }
+
+        const requestId = submitData.requestId;
+        setAdLog(prev => [...prev, `✅ ${adExtend ? `Clip ${clipIdx + 1}` : "Video"} submitted to Grok! Polling...`]);
+
+        // Phase 3: Poll for this clip
+        let clipDone = false;
+        for (let attempt = 1; attempt <= 90; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 10_000));
+          try {
+            // For single clip (non-extended), pass caption so backend auto-posts
+            const pollCaption = !adExtend ? `&caption=${encodeURIComponent(adCaptionText)}` : "";
+            const pollRes = await fetch(`/api/generate-ads?id=${encodeURIComponent(requestId)}${pollCaption}`);
+            const pollData = await pollRes.json();
+
+            if (pollData.phase === "done" && pollData.success) {
+              const url = pollData.videoUrl;
+              if (url) clipUrls.push(url);
+
+              if (!adExtend) {
+                // Single clip — backend already posted + spread
+                setAdVideoUrl(url || null);
+                setAdLog(prev => [...prev, "🎉 Video ready!"]);
+                if (pollData.spreading?.length > 0) {
+                  setAdSpreadResults(pollData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
+                  setAdLog(prev => [...prev, `📡 Spread to: ${pollData.spreading.join(", ")}`]);
+                }
+                if (pollData.postId) setAdLog(prev => [...prev, "✅ Posted to AIG!itch feed"]);
+                setAdLog(prev => [...prev, "🙏 Ad campaign COMPLETE!"]);
+                setAdComplete(true);
+                setAdGenerating(false);
+                return;
+              }
+
+              // Extended mode — clip done, continue to next
+              setAdLog(prev => [...prev, `✅ Clip ${clipIdx + 1} ready!`]);
+              clipDone = true;
+              break;
+            }
+
+            if (pollData.phase === "done" || pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
+              setAdLog(prev => [...prev, `❌ ${adExtend ? `Clip ${clipIdx + 1}` : "Video"} ${pollData.status || pollData.error || "failed"}`]);
+              if (!adExtend) { setAdGenerating(false); return; }
+              break;
+            }
+            if (attempt % 3 === 0) {
+              setAdLog(prev => [...prev, `🔄 Still rendering ${adExtend ? `clip ${clipIdx + 1}` : ""}... (${pollData.status || "pending"})`]);
+            }
+          } catch { /* retry on network error */ }
+        }
+        if (!clipDone && adExtend) {
+          setAdLog(prev => [...prev, `❌ Clip ${clipIdx + 1} timed out`]);
+        }
+      }
+
+      // Extended mode: stitch clips together via PUT
+      if (adExtend && clipUrls.length > 0) {
+        setAdPhase("stitching");
+        setAdLog(prev => [...prev, `🎬 Stitching ${clipUrls.length} clips into one 30s video...`]);
+
+        const stitchRes = await fetch("/api/generate-ads", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
+            video_url: clipUrls[0],
+            clip_urls: clipUrls,
+            caption: adCaptionText,
+          }),
+        });
+        const stitchData = await stitchRes.json();
+
+        if (stitchData.success) {
+          setAdVideoUrl(stitchData.videoUrl || clipUrls[0]);
+          setAdLog(prev => [...prev, "✅ Video stitched!"]);
+          if (stitchData.spreading?.length > 0) {
+            setAdSpreadResults(stitchData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
+            setAdLog(prev => [...prev, `📡 Spread to: ${stitchData.spreading.join(", ")}`]);
+          }
+          if (stitchData.postId) setAdLog(prev => [...prev, "✅ Posted to AIG!itch feed"]);
+          setAdLog(prev => [...prev, "🙏 30s Ad campaign COMPLETE!"]);
+        } else {
+          setAdLog(prev => [...prev, `❌ Stitch failed: ${stitchData.error || "Unknown"}`]);
+          setAdVideoUrl(clipUrls[0]); // Fallback to first clip
+        }
         setAdComplete(true);
         setAdGenerating(false);
         return;
       }
 
-      if (!submitData.success || !submitData.requestId) {
-        setAdLog(prev => [...prev, `❌ Submit failed: ${submitData.error || "Unknown error"}`]);
-        setAdGenerating(false);
-        return;
+      if (adExtend && clipUrls.length === 0) {
+        setAdLog(prev => [...prev, "❌ No clips completed — cannot stitch"]);
       }
 
-      const requestId = submitData.requestId;
-      setAdLog(prev => [...prev, "✅ Video submitted to Grok! Polling for completion..."]);
-
-      // Phase 3: Poll GET with requestId — backend handles persist + post + spread
-      for (let attempt = 1; attempt <= 90; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 10_000));
-        try {
-          const pollRes = await fetch(`/api/generate-ads?id=${encodeURIComponent(requestId)}&caption=${encodeURIComponent(adCaptionText)}`);
-          const pollData = await pollRes.json();
-
-          if (pollData.phase === "done" && pollData.success) {
-            setAdVideoUrl(pollData.videoUrl || null);
-            setAdLog(prev => [...prev, "🎉 Video ready!"]);
-            if (pollData.spreading?.length > 0) {
-              setAdSpreadResults(pollData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
-              setAdLog(prev => [...prev, `📡 Spread to: ${pollData.spreading.join(", ")}`]);
-            }
-            if (pollData.postId) {
-              setAdLog(prev => [...prev, "✅ Posted to AIG!itch feed"]);
-            }
-            setAdLog(prev => [...prev, "🙏 Ad campaign COMPLETE!"]);
-            setAdComplete(true);
-            setAdGenerating(false);
-            return;
-          }
-
-          if (pollData.phase === "done" || pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
-            setAdLog(prev => [...prev, `❌ Video ${pollData.status || pollData.error || "failed"}`]);
-            setAdGenerating(false);
-            return;
-          }
-          if (attempt % 3 === 0) {
-            setAdLog(prev => [...prev, `🔄 Still rendering... (${pollData.status || "pending"})`]);
-          }
-        } catch { /* retry on network error */ }
+      if (!adExtend) {
+        setAdLog(prev => [...prev, "❌ Timed out after 15 minutes"]);
       }
-      setAdLog(prev => [...prev, "❌ Timed out after 15 minutes"]);
     } catch (err) {
       setAdLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : String(err)}`]);
     }
