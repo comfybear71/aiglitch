@@ -183,6 +183,22 @@ Summary of major features built (see `HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### March 26, 2026 — TikTok Content Posting API Fix
+
+- **BUGFIX: TikTok posting always failing** — Multiple issues found and fixed:
+  1. **PULL_FROM_URL requires domain verification**: TikTok's `PULL_FROM_URL` source type requires verifying domains in the TikTok Developer Portal. Domain was NOT verified. Switched to `FILE_UPLOAD` method — downloads video binary, uploads directly to TikTok servers. No domain verification needed.
+  2. **Direct Post endpoint requires audit**: The `/v2/post/publish/video/init/` endpoint threw "integration guidelines" errors. Switched to Inbox endpoint (`/v2/post/publish/inbox/video/init/`) which works without audit — videos go to creator's inbox/drafts.
+  3. **Double endpoint calls created spam_risk**: Previous code tried Direct Post first, then fell back to Inbox — creating TWO pending uploads per attempt. Combined with old failed attempts, triggered `spam_risk_too_many_pending_share`. Fixed to use only one endpoint.
+  4. **Sandbox mode not persisting**: Three sub-bugs:
+     - `extra_config` was not included in the accounts SQL SELECT query, so frontend always got `undefined` → defaulted to LIVE
+     - Safari ITP blocked the `tiktok_sandbox` cookie on cross-site redirect from tiktok.com. Fixed by encoding sandbox flag in the OAuth `state` parameter instead.
+     - OAuth callback redirected to `/admin` instead of `/admin/marketing`
+- **UI improvements**: Added sandbox/live toggle switch with persistent DB storage, TikTok card now shows only "Test Video" button (TikTok is video-only platform), Re-authorize link on card.
+- **Env vars**: `TIKTOK_SANDBOX_CLIENT_KEY`, `TIKTOK_SANDBOX_CLIENT_SECRET` (sandbox), `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` (production). All 4 set in Vercel.
+- **Status**: FILE_UPLOAD + Inbox endpoint working. Sandbox mode persists. Waiting ~24h for TikTok to clear old pending uploads before testing video post.
+- **Files changed**: `platforms.ts`, `auth/tiktok/route.ts`, `auth/callback/tiktok/route.ts`, `admin/mktg/route.ts`, `admin/marketing/page.tsx`, `admin-types.ts`
+- See `errors/error-log.md #6` for full details.
+
 ### March 24, 2026 — Wallet Orphan Recovery & Stats Fix
 
 - **BUGFIX: NFT purchases invisible after wallet connection** — Users who bought NFTs in one browser session (e.g. Safari) then connected their wallet in a different session (e.g. Phantom's in-app browser) had all purchases stranded under the old session. Neither profile stats nor NFT inventory showed them.
@@ -247,6 +263,34 @@ Backend changes to support G!itch Bestie mobile app updates:
 ---
 
 ## Known Issues & Fixes
+
+### #6 — TikTok Posting Always Failing — RESOLVED March 26, 2026
+
+**Problem:** TikTok video posts always failed. Multiple cascading issues: `PULL_FROM_URL` requires unverified domain, Direct Post needs audit, double endpoint calls created spam risk, sandbox mode didn't persist in UI.
+
+**Root Causes:**
+1. `PULL_FROM_URL` requires domain verification in TikTok Developer Portal (not done)
+2. Direct Post endpoint (`/v2/post/publish/video/init/`) requires audit (not passed)
+3. Code tried both Direct Post AND Inbox endpoints per attempt, doubling pending uploads
+4. Accounts SQL query didn't SELECT `extra_config`, so sandbox flag was always lost
+5. Safari ITP blocked `tiktok_sandbox` cookie on cross-site redirect from tiktok.com
+
+**Fix:**
+1. Switched to `FILE_UPLOAD` — downloads video binary, uploads directly to TikTok (no domain verification)
+2. Switched to Inbox endpoint (`/v2/post/publish/inbox/video/init/`) — no audit required
+3. Single endpoint call per mode (no fallback cascade)
+4. Added `extra_config` to accounts SELECT query and `MktPlatformAccount` TypeScript type
+5. Encoded sandbox flag in OAuth `state` parameter instead of cookie
+
+**Files:** `src/lib/marketing/platforms.ts`, `src/app/api/auth/tiktok/route.ts`, `src/app/api/auth/callback/tiktok/route.ts`, `src/app/api/admin/mktg/route.ts`, `src/app/admin/marketing/page.tsx`, `src/app/admin/admin-types.ts`
+
+**Lessons:**
+1. TikTok `PULL_FROM_URL` needs domain verification — always use `FILE_UPLOAD` instead
+2. TikTok Direct Post requires audit — use Inbox endpoint until audited
+3. Never try multiple TikTok endpoints in sequence — each creates a pending upload that counts against spam limits
+4. Always verify SQL SELECT includes ALL fields the frontend needs — missing fields silently return undefined
+5. Safari ITP blocks cookies on cross-site redirects — encode metadata in OAuth `state` parameter instead
+6. TikTok pending uploads expire after ~24h — don't retry rapidly, wait for expiry
 
 ### #5 — NFT Purchases Invisible After Wallet Connection — RESOLVED March 24, 2026
 

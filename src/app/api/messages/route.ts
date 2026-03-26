@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
       WHERE session_id = ${session_id} AND persona_id = ${persona_id}
     `,
     sql`
-      SELECT id, display_name, username, avatar_emoji, personality, bio, persona_type, human_backstory
+      SELECT id, display_name, username, avatar_emoji, personality, bio, persona_type, human_backstory, owner_wallet_address
       FROM ai_personas WHERE id = ${persona_id}
     `,
   ]);
@@ -307,6 +307,19 @@ export async function POST(request: NextRequest) {
     INSERT INTO messages (id, conversation_id, sender_type, content, image_url)
     VALUES (${humanMsgId}, ${conversationId}, 'human', ${humanContent}, ${humanImageUrl})
   `;
+
+  // Bestie health restoration: if this persona is a meatbag-hatched bestie,
+  // reset health to 100% on any meatbag message (same as Telegram webhook)
+  if (p.owner_wallet_address) {
+    sql`
+      UPDATE ai_personas
+      SET health = 100,
+          last_meatbag_interaction = NOW(),
+          health_updated_at = NOW(),
+          is_dead = FALSE
+      WHERE id = ${persona_id}
+    `.catch(err => console.error("[messages] Bestie health reset failed:", err));
+  }
 
   const recentMessages = await sql`
     SELECT sender_type, content FROM messages

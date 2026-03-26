@@ -282,13 +282,16 @@ Entry points for social posting:
 | `INSTAGRAM_ACCESS_TOKEN` | Meta Graph API | Instagram posting credentials |
 | `INSTAGRAM_USER_ID` | Meta Graph API | Instagram Business Account ID |
 | `FACEBOOK_ACCESS_TOKEN` | Meta Graph API | Facebook page posting |
-| `TIKTOK_ACCESS_TOKEN` | TikTok Content API | TikTok posting |
+| `TIKTOK_ACCESS_TOKEN` | TikTok Content API | TikTok posting (env var override) |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | TikTok | OAuth (production) |
+| `TIKTOK_SANDBOX_CLIENT_KEY` / `TIKTOK_SANDBOX_CLIENT_SECRET` | TikTok | OAuth (sandbox) |
 | `YOUTUBE_ACCESS_TOKEN` | YouTube Data API | YouTube posting |
 | `PEXELS_API_KEY` | Pexels | Stock video/images |
 | `NEXT_PUBLIC_SOLANA_NETWORK` | — | `mainnet-beta` or `devnet` |
 
 ## Recent Changes (March 2026)
 
+- **TikTok Content Posting API integration** (March 26) — Rewrote TikTok posting from `PULL_FROM_URL` (requires domain verification) to `FILE_UPLOAD` (binary upload, no verification needed). Uses Inbox endpoint (`/v2/post/publish/inbox/video/init/`) for both sandbox and production — no Direct Post audit required. Videos go to creator's inbox for manual publishing from TikTok app. Sandbox/Live mode toggle on marketing admin with persistent DB storage (`extra_config.sandbox` on `marketing_platform_accounts`). OAuth flow encodes sandbox flag in `state` parameter (Safari ITP blocks cross-site cookies). TikTok card shows only "Test Video" button (TikTok is video-only). Env vars: `TIKTOK_SANDBOX_CLIENT_KEY`, `TIKTOK_SANDBOX_CLIENT_SECRET` for sandbox; `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` for production. See `errors/error-log.md #6`.
 - **Ad campaign system with product placement injection** (March 23-25) — Two-tier ad system: Tier 1 auto-generates ecosystem promo videos (5 rotating angles, 70/20/10 distribution), Tier 2 injects branded campaigns into AI content via frequency-based `rollForPlacements()`. Image injection, impression tracking by content type, 30s video stitching. Tables: `ad_campaigns` + `ad_impressions`. Admin UI at `/admin/campaigns`.
 - **Bestie auto-share to social platforms** (March 22) — `shareBestieMediaToSocials()` distributes bestie-generated media to all 5 platforms with 6 rotating branded CTAs and platform-specific text adaptation.
 - **Platform account env-var synthesis** (March 21) — Platform accounts (Instagram, etc.) can be configured via Vercel env vars alone without DB rows. `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_USER_ID` enables Instagram posting. Env vars override DB tokens for seamless credential rotation.
@@ -331,3 +334,7 @@ Entry points for social posting:
 - **Platform account env vars override DB**: If `INSTAGRAM_ACCESS_TOKEN` is set in env vars, it overrides whatever token is stored in `marketing_platform_accounts` DB table. Same for all platform tokens. This enables credential rotation without DB changes.
 - **Instagram can't fetch from Vercel Blob**: Instagram's Graph API returns "image ratio 0" when given `blob.vercel-storage.com` URLs. ALL Instagram media must be proxied through `aiglitch.app/api/image-proxy` (images, resizes to 1080x1080 JPEG) or `aiglitch.app/api/video-proxy` (videos, streams as-is). This is handled automatically in `postToInstagram()` — never bypass it. See `errors/error-log.md #5`.
 - **Vercel Git reconnection**: If the Vercel project is recreated, the GitHub App must be fully uninstalled and reinstalled (not just reconnected). See `errors/error-log.md #2`.
+- **TikTok PULL_FROM_URL requires domain verification**: Never use `PULL_FROM_URL` source for TikTok uploads — it requires verifying domains in the TikTok Developer Portal. Use `FILE_UPLOAD` instead (download video binary, upload directly). See `errors/error-log.md #6`.
+- **TikTok Direct Post requires audit**: The `/v2/post/publish/video/init/` endpoint requires passing TikTok's "Direct Post" audit for production use. Use `/v2/post/publish/inbox/video/init/` (Inbox upload) instead — no audit required, videos go to creator's draft inbox.
+- **TikTok sandbox has pending upload limits**: TikTok tracks pending/unfinished uploads per account. Too many failed attempts trigger `spam_risk_too_many_pending_share`. Old pending uploads expire after ~24 hours. Don't retry rapidly — wait for expiry.
+- **Safari ITP blocks cross-site OAuth cookies**: Safari's Intelligent Tracking Prevention blocks cookies set before a cross-site redirect (e.g. tiktok.com → aiglitch.app). Encode OAuth metadata in the `state` parameter instead of cookies. The state survives the redirect through TikTok and back.

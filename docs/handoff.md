@@ -446,3 +446,62 @@ Two new documentation files for the GLITCH-APP mobile app repo (`comfybear71/gli
 3. **Ad posts in feed**: `post_type === "product_shill"` — badge as "Promoted"
 4. **Spread endpoint**: `POST /api/admin/spread` with `post_ids` array distributes to all platforms
 5. **Ad generation 3-step flow**: preview → submit → poll (video takes 60-90s)
+
+---
+
+## TikTok Content Posting API (March 26, 2026)
+
+TikTok posting uses the **FILE_UPLOAD** method with the **Inbox endpoint** — no domain verification or Direct Post audit required.
+
+### Architecture
+
+```
+Video URL (Vercel Blob) → postToTikTok()
+                                ↓
+                    1. getValidTikTokToken() — auto-refresh if expired
+                    2. creator_info query — validates token
+                    3. Download video binary (fetch → Buffer)
+                    4. Init FILE_UPLOAD via Inbox endpoint
+                       POST /v2/post/publish/inbox/video/init/
+                       { source_info: { source: "FILE_UPLOAD", video_size, chunk_size, total_chunk_count: 1 } }
+                    5. Upload binary via PUT to upload_url
+                       Content-Range: bytes 0-{size-1}/{size}
+                       Content-Type: video/mp4
+                                ↓
+                    Video appears in creator's TikTok inbox/drafts
+```
+
+### Sandbox vs Production
+
+| Mode | Credentials | Endpoint | Notes |
+|------|------------|----------|-------|
+| Sandbox | `TIKTOK_SANDBOX_CLIENT_KEY` / `SECRET` | Inbox (same) | Only sandbox target users can see content |
+| Production | `TIKTOK_CLIENT_KEY` / `SECRET` | Inbox (same) | Requires approved TikTok app |
+
+Mode is stored in `marketing_platform_accounts.extra_config` as `{"sandbox": true/false}`.
+
+### OAuth Flow
+
+1. User clicks Re-authorize → `/api/auth/tiktok?sandbox=true`
+2. Auth route creates state = `{uuid}:sandbox`, saves in cookie, redirects to TikTok
+3. User authorizes on TikTok
+4. TikTok redirects to `/api/auth/callback/tiktok?code=X&state={uuid}:sandbox`
+5. Callback reads sandbox from `state` param (NOT cookie — Safari ITP blocks cross-site cookies)
+6. Exchanges code for tokens, saves to DB with `extra_config: {"sandbox": true}`
+7. Redirects to `/admin/marketing?tiktok_mode=sandbox`
+
+### Known Limitations
+
+- **TikTok is video-only** — text and image posts are not supported
+- **Inbox upload** — videos go to creator's drafts, must be published manually from TikTok app
+- **Pending upload limit** — too many failed uploads trigger `spam_risk_too_many_pending_share`, expires after ~24h
+- **15 posts/day limit** — TikTok Content Posting API rate limit per account
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/marketing/platforms.ts` | `postToTikTok()` — FILE_UPLOAD + Inbox, token refresh, error handling |
+| `src/app/api/auth/tiktok/route.ts` | OAuth initiation — sandbox flag in state param |
+| `src/app/api/auth/callback/tiktok/route.ts` | OAuth callback — token exchange, DB upsert |
+| `src/app/admin/marketing/page.tsx` | Sandbox/Live toggle, Test Video button |
