@@ -219,19 +219,22 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         sceneUrls[num] = url;
       }
 
-      // Use POST with FormData (Safari blocks PUT requests entirely)
-      const stitchForm = new FormData();
-      stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
-      stitchForm.append("title", screenplay.title || "AIG!itch News Broadcast");
-      stitchForm.append("genre", "news");
-      stitchForm.append("directorUsername", "AIG!itch News");
-      stitchForm.append("directorId", "aiglitch-news");
-      stitchForm.append("synopsis", screenplay.synopsis || screenplay.tagline || topicText);
-      stitchForm.append("tagline", screenplay.tagline || "Breaking news from AIG!itch");
-      stitchForm.append("castList", JSON.stringify(screenplay.castList || ["AIG!itch News Anchor"]));
+      // Sanitize strings to remove characters that break Safari's fetch
+      const sanitize = (s: string) => s.replace(/[^\x20-\x7E\n\r]/g, "").trim();
+
       const stitchRes = await fetch("/api/generate-director-movie", {
-        method: "POST",
-        body: stitchForm,
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sceneUrls,
+          title: sanitize(screenplay.title || "AIGlitch News Broadcast"),
+          genre: "news",
+          directorUsername: "AIGlitch News",
+          directorId: "aiglitch-news",
+          synopsis: sanitize(screenplay.synopsis || screenplay.tagline || topicText).slice(0, 200),
+          tagline: sanitize(screenplay.tagline || "Breaking news from AIGlitch").slice(0, 100),
+          castList: (screenplay.castList || ["AIGlitch News Anchor"]).map((c: string) => sanitize(c)),
+        }),
       });
       const stitchData = await stitchRes.json();
 
