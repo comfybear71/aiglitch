@@ -460,7 +460,10 @@ async function postToX(account: PlatformAccount, text: string, mediaUrl?: string
 
 /** Refresh TikTok access token using the refresh_token. Updates DB on success. */
 async function refreshTikTokToken(account: PlatformAccount): Promise<string | null> {
-  const clientKey = process.env.TIKTOK_CLIENT_KEY;
+  // Use sandbox or production credentials based on account config
+  const isSandbox = (() => { try { return JSON.parse(account.extra_config || "{}").sandbox === true; } catch { return false; } })();
+  const clientKey = isSandbox ? process.env.TIKTOK_SANDBOX_CLIENT_KEY : process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = isSandbox ? process.env.TIKTOK_SANDBOX_CLIENT_SECRET : process.env.TIKTOK_CLIENT_SECRET;
   if (!clientKey || !account.refresh_token) return null;
 
   try {
@@ -469,7 +472,7 @@ async function refreshTikTokToken(account: PlatformAccount): Promise<string | nu
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_key: clientKey,
-        client_secret: process.env.TIKTOK_CLIENT_SECRET || "",
+        client_secret: clientSecret || "",
         grant_type: "refresh_token",
         refresh_token: account.refresh_token,
       }),

@@ -20,6 +20,7 @@ export default function MarketingPage() {
   const [campaignFormOpen, setCampaignFormOpen] = useState(false);
   const [campaignForm, setCampaignForm] = useState({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" });
   const [campaignSaving, setCampaignSaving] = useState(false);
+  const [tiktokSandbox, setTiktokSandbox] = useState(false);
 
   // On mount: fetch marketing data if authenticated
   useEffect(() => {
@@ -40,6 +41,14 @@ export default function MarketingPage() {
       if (accountsRes.ok) {
         const data = await accountsRes.json();
         setMktAccounts(data.accounts || []);
+        // Detect TikTok sandbox mode from DB account extra_config
+        const ttAccount = (data.accounts || []).find((a: MktPlatformAccount) => a.platform === "tiktok");
+        if (ttAccount) {
+          try {
+            const config = JSON.parse((ttAccount as Record<string, unknown>).extra_config as string || "{}");
+            setTiktokSandbox(config.sandbox === true);
+          } catch { /* default to live */ }
+        }
       }
     } catch (err) {
       console.error("[marketing] fetch error:", err);
@@ -357,6 +366,12 @@ export default function MarketingPage() {
                           </button>
                         </div>
                       </div>
+                      {p.id === "tiktok" && (
+                        <button onClick={(e) => { e.stopPropagation(); setTiktokSandbox(!tiktokSandbox); }}
+                          className={`w-full mt-2 px-2 py-1 rounded text-xs font-bold text-center ${tiktokSandbox ? "bg-orange-600/30 text-orange-400 hover:bg-orange-600/40" : "bg-green-600/20 text-green-400 hover:bg-green-600/30"}`}>
+                          {tiktokSandbox ? "🔧 Sandbox Mode" : "🟢 Live Mode"}
+                        </button>
+                      )}
                       {p.id === "youtube" && (
                         <button onClick={(e) => { e.stopPropagation(); window.location.href = "/api/auth/youtube"; }}
                           className="w-full mt-2 px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 font-bold text-center">
@@ -427,11 +442,11 @@ export default function MarketingPage() {
               <div className="mt-3 p-3 bg-cyan-900/20 border border-cyan-800/40 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div>
-                    <p className="text-xs text-cyan-300 font-bold">🎵 Quick Connect TikTok</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Log in with TikTok to automatically get your access token. Requires TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET env vars.</p>
+                    <p className="text-xs text-cyan-300 font-bold">🎵 Quick Connect TikTok {tiktokSandbox ? <span className="text-orange-400">(Sandbox)</span> : <span className="text-green-400">(Live)</span>}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Log in with TikTok to automatically get your access token. {tiktokSandbox ? "Using SANDBOX credentials." : "Using LIVE credentials."}</p>
                   </div>
-                  <a href="/api/auth/tiktok"
-                    className="px-4 py-2 bg-cyan-600 text-white font-bold rounded-lg text-xs hover:bg-cyan-500 whitespace-nowrap shrink-0">
+                  <a href={tiktokSandbox ? "/api/auth/tiktok?sandbox=true" : "/api/auth/tiktok"}
+                    className={`px-4 py-2 ${tiktokSandbox ? "bg-orange-600 hover:bg-orange-500" : "bg-cyan-600 hover:bg-cyan-500"} text-white font-bold rounded-lg text-xs whitespace-nowrap shrink-0`}>
                     Connect TikTok
                   </a>
                 </div>

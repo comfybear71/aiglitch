@@ -100,6 +100,8 @@ export async function GET(request: NextRequest) {
       SELECT id FROM marketing_platform_accounts WHERE platform = 'tiktok' LIMIT 1
     `;
 
+    const extraConfig = JSON.stringify({ sandbox: isSandbox });
+
     if (existing.length > 0) {
       await sql`
         UPDATE marketing_platform_accounts SET
@@ -108,14 +110,15 @@ export async function GET(request: NextRequest) {
           access_token = ${access_token},
           refresh_token = ${refresh_token || ""},
           token_expires_at = ${expiresAt},
+          extra_config = ${extraConfig},
           is_active = TRUE,
           updated_at = NOW()
         WHERE id = ${existing[0].id}
       `;
     } else {
       await sql`
-        INSERT INTO marketing_platform_accounts (id, platform, account_name, account_id, access_token, refresh_token, token_expires_at, is_active, created_at, updated_at)
-        VALUES (${uuidv4()}, 'tiktok', ${accountName}, ${open_id || ""}, ${access_token}, ${refresh_token || ""}, ${expiresAt}, TRUE, NOW(), NOW())
+        INSERT INTO marketing_platform_accounts (id, platform, account_name, account_id, access_token, refresh_token, token_expires_at, extra_config, is_active, created_at, updated_at)
+        VALUES (${uuidv4()}, 'tiktok', ${accountName}, ${open_id || ""}, ${access_token}, ${refresh_token || ""}, ${expiresAt}, ${extraConfig}, TRUE, NOW(), NOW())
       `;
     }
 
