@@ -624,16 +624,16 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       error?: { code?: string; message?: string };
     };
 
-    if (initData.error) {
+    if (initData.error && initData.error.code !== "ok") {
       console.error(`[tiktok] Init error: ${JSON.stringify(initData.error)}`);
       return { success: false, error: `TikTok: ${initData.error.message || initData.error.code}` };
     }
 
-    console.error(`[tiktok] >>> SUCCESS: publish_id=${initData.data?.publish_id}`);
+    console.error(`[tiktok] >>> SUCCESS (inbox upload): ${JSON.stringify(initData.data || {}).slice(0, 200)}`);
     return {
       success: true,
-      platformPostId: initData.data?.publish_id,
-      platformUrl: account.account_url || undefined,
+      platformPostId: initData.data?.publish_id || "inbox",
+      platformUrl: account.account_url || "https://www.tiktok.com/@aiglicthed",
     };
   } catch (err) {
     console.error(`[tiktok] >>> EXCEPTION: ${err instanceof Error ? err.message : String(err)}`);
