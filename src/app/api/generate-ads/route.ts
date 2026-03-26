@@ -466,7 +466,7 @@ export async function PUT(request: NextRequest) {
         stitchedUrl = blob.url;
         console.log(`[ads] Stitched ${clipBuffers.length} clips → ${sizeMb}MB: ${blob.url}`);
       } catch (err) {
-        console.error("[ads] MP4 concat failed, falling back to first clip:", err);
+        console.error(`[ads] ⚠️ MP4 CONCATENATION FAILED — falling back to FIRST CLIP ONLY (10s):`, err instanceof Error ? err.message : err);
         // Fallback: use video_url (clip 1)
         finalVideoUrl = videoUrl || clipUrls[0];
       }
