@@ -175,7 +175,7 @@ export default function SponsorsPage() {
   if (!authenticated) return null;
 
   const inquiries = sponsors.filter(s => s.status === "inquiry");
-  const activeSponsorOptions = sponsors.filter(s => s.status === "active" || s.status === "negotiating" || s.status === "inquiry");
+  const activeSponsorOptions = sponsors.filter(s => s.status !== "churned");
 
   return (
     <div className="space-y-6">
