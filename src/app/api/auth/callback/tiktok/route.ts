@@ -13,10 +13,10 @@ export async function GET(request: NextRequest) {
   const error = request.nextUrl.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/admin?tiktok_error=${error}`, request.url));
+    return NextResponse.redirect(new URL(`/admin/marketing?tiktok_error=${error}`, request.url));
   }
   if (!code) {
-    return NextResponse.redirect(new URL("/admin?tiktok_error=no_code", request.url));
+    return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=no_code", request.url));
   }
 
   // Check if this was a sandbox auth
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   console.log(`[TikTok OAuth] Callback: ${isSandbox ? "SANDBOX" : "PRODUCTION"} mode`);
 
   if (!clientKey || !clientSecret) {
-    return NextResponse.redirect(new URL(`/admin?tiktok_error=not_configured_${isSandbox ? "sandbox" : "production"}`, request.url));
+    return NextResponse.redirect(new URL(`/admin/marketing?tiktok_error=not_configured_${isSandbox ? "sandbox" : "production"}`, request.url));
   }
 
   // Verify state
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
   const codeVerifier = cookieStore.get("tiktok_code_verifier")?.value || "";
 
   if (state !== savedState) {
-    return NextResponse.redirect(new URL("/admin?tiktok_error=state_mismatch", request.url));
+    return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=state_mismatch", request.url));
   }
 
   try {
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     if (!tokenData.access_token) {
       console.error("[TikTok OAuth] Token exchange failed:", tokenData);
-      return NextResponse.redirect(new URL(`/admin?tiktok_error=token_failed`, request.url));
+      return NextResponse.redirect(new URL(`/admin/marketing?tiktok_error=token_failed`, request.url));
     }
 
     const {
@@ -126,9 +126,10 @@ export async function GET(request: NextRequest) {
     cookieStore.delete("tiktok_oauth_state");
     cookieStore.delete("tiktok_code_verifier");
 
-    return NextResponse.redirect(new URL("/admin?tiktok_success=true", request.url));
+    const successPath = `/admin/marketing?tiktok_success=true&tiktok_mode=${isSandbox ? "sandbox" : "live"}`;
+    return NextResponse.redirect(new URL(successPath, request.url));
   } catch (err) {
     console.error("[TikTok OAuth] Callback error:", err);
-    return NextResponse.redirect(new URL("/admin?tiktok_error=oauth_failed", request.url));
+    return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=oauth_failed", request.url));
   }
 }

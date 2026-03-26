@@ -411,11 +411,14 @@ export default function MarketingPage() {
                                 {tiktokSandbox ? "Switch to LIVE" : "Switch to SANDBOX"}
                               </span>
                             </button>
-                            <a href={tiktokSandbox ? "/api/auth/tiktok?sandbox=true" : "/api/auth/tiktok"}
-                              onClick={(e) => e.stopPropagation()}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.location.href = tiktokSandbox ? "/api/auth/tiktok?sandbox=true" : "/api/auth/tiktok";
+                              }}
                               className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-bold">
                               Re-authorize
-                            </a>
+                            </button>
                           </div>
                         </div>
                       )}
