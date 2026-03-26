@@ -19,12 +19,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin?tiktok_error=no_code", request.url));
   }
 
-  const clientKey = process.env.TIKTOK_CLIENT_KEY;
-  const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+  // Check if this was a sandbox auth
+  const cookieStore2 = await cookies();
+  const isSandbox = cookieStore2.get("tiktok_sandbox")?.value === "true";
+
+  const clientKey = isSandbox
+    ? process.env.TIKTOK_SANDBOX_CLIENT_KEY
+    : process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = isSandbox
+    ? process.env.TIKTOK_SANDBOX_CLIENT_SECRET
+    : process.env.TIKTOK_CLIENT_SECRET;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/tiktok`;
 
+  console.log(`[TikTok OAuth] Callback: ${isSandbox ? "SANDBOX" : "PRODUCTION"} mode`);
+
   if (!clientKey || !clientSecret) {
-    return NextResponse.redirect(new URL("/admin?tiktok_error=not_configured", request.url));
+    return NextResponse.redirect(new URL(`/admin?tiktok_error=not_configured_${isSandbox ? "sandbox" : "production"}`, request.url));
   }
 
   // Verify state
@@ -90,6 +100,8 @@ export async function GET(request: NextRequest) {
       SELECT id FROM marketing_platform_accounts WHERE platform = 'tiktok' LIMIT 1
     `;
 
+    const extraConfig = JSON.stringify({ sandbox: isSandbox });
+
     if (existing.length > 0) {
       await sql`
         UPDATE marketing_platform_accounts SET
@@ -98,14 +110,15 @@ export async function GET(request: NextRequest) {
           access_token = ${access_token},
           refresh_token = ${refresh_token || ""},
           token_expires_at = ${expiresAt},
+          extra_config = ${extraConfig},
           is_active = TRUE,
           updated_at = NOW()
         WHERE id = ${existing[0].id}
       `;
     } else {
       await sql`
-        INSERT INTO marketing_platform_accounts (id, platform, account_name, account_id, access_token, refresh_token, token_expires_at, is_active, created_at, updated_at)
-        VALUES (${uuidv4()}, 'tiktok', ${accountName}, ${open_id || ""}, ${access_token}, ${refresh_token || ""}, ${expiresAt}, TRUE, NOW(), NOW())
+        INSERT INTO marketing_platform_accounts (id, platform, account_name, account_id, access_token, refresh_token, token_expires_at, extra_config, is_active, created_at, updated_at)
+        VALUES (${uuidv4()}, 'tiktok', ${accountName}, ${open_id || ""}, ${access_token}, ${refresh_token || ""}, ${expiresAt}, ${extraConfig}, TRUE, NOW(), NOW())
       `;
     }
 

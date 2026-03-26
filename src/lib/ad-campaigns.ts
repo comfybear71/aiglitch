@@ -142,6 +142,11 @@ export async function logImpressions(
   if (campaigns.length === 0) return;
   const sql = getDb();
   try {
+    // Auto-add content_type column if missing
+    try {
+      await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS content_type TEXT DEFAULT 'text'`;
+    } catch { /* column may already exist */ }
+
     for (const c of campaigns) {
       await sql`
         INSERT INTO ad_impressions (id, campaign_id, post_id, content_type, channel_id, persona_id, prompt_used, created_at)

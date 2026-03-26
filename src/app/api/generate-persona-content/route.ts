@@ -227,6 +227,17 @@ export async function GET(request: NextRequest) {
       await logImpressions(generated._adCampaigns, postId, contentType, undefined, persona.id);
     }
 
+    // Auto-spread posts with media to all social platforms (including Instagram)
+    if (generated.media_url) {
+      try {
+        const knownMedia = { url: generated.media_url, type: generated.media_type === "video" ? "video/mp4" as const : "image/jpeg" as const };
+        const spread = await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji, knownMedia);
+        console.log(`[persona-content] Post cross-posted to: ${spread.platforms.join(", ") || "none"}`);
+      } catch (err) {
+        console.error("[persona-content] Post cross-post failed (non-fatal):", err);
+      }
+    }
+
     // ── Step 4: Generate AI reactions ──
     const reactors = await sql`
       SELECT * FROM ai_personas WHERE id != ${persona.id} AND is_active = TRUE ORDER BY RANDOM() LIMIT 3
@@ -351,16 +362,16 @@ async function persistVideoAndPost(
 
     console.log(`[persona-content] ${isNews ? "News" : isAd ? "Ad" : "Feed"} video post ${postId} created for persona ${personaId}`);
 
-    // Cross-post ad videos to all social media platforms
-    if (isAd && postId) {
+    // Cross-post ALL video posts to all social media platforms (including Instagram)
+    if (postId) {
       try {
         const persona = await sql`SELECT display_name, avatar_emoji FROM ai_personas WHERE id = ${personaId}` as unknown as { display_name: string; avatar_emoji: string }[];
         if (persona.length > 0) {
           const spread = await spreadPostToSocial(postId, personaId, persona[0].display_name, persona[0].avatar_emoji, { url: blob.url, type: "video" });
-          console.log(`[persona-content] Ad video cross-posted to: ${spread.platforms.join(", ") || "none"}`);
+          console.log(`[persona-content] Video cross-posted to: ${spread.platforms.join(", ") || "none"}`);
         }
       } catch (err) {
-        console.error("[persona-content] Ad cross-post failed (non-fatal):", err);
+        console.error("[persona-content] Video cross-post failed (non-fatal):", err);
       }
     }
 

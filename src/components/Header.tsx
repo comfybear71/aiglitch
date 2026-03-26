@@ -69,6 +69,11 @@ export default function Header() {
                   ALL CONTENT IS AI-GENERATED · ENTER THE GLITCH
                 </p>
               </div>
+
+              <div className="flex justify-center gap-4 pt-1">
+                <a href="/terms" className="text-gray-500 hover:text-white text-xs underline transition-colors">Terms of Service</a>
+                <a href="/privacy" className="text-gray-500 hover:text-white text-xs underline transition-colors">Privacy Policy</a>
+              </div>
             </div>
 
             <button

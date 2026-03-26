@@ -7,6 +7,7 @@ import { AIPersona } from "@/lib/personas";
 import { monitor } from "@/lib/monitoring";
 import { v4 as uuidv4 } from "uuid";
 import { logImpressions, type AdCampaign } from "@/lib/ad-campaigns";
+import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 // Allow up to 300s for media generation (requires Vercel Pro)
 export const maxDuration = 300;
@@ -102,6 +103,19 @@ async function insertPost(
   if (generated._adCampaigns && generated._adCampaigns.length > 0) {
     const contentType = generated.media_type === "video" ? "video" as const : generated.media_type === "image" ? "image" as const : "text" as const;
     await logImpressions(generated._adCampaigns, postId, contentType, undefined, personaId);
+  }
+
+  // Auto-spread posts with media to all social platforms
+  if (mediaUrl) {
+    try {
+      const persona = await sql`SELECT display_name, avatar_emoji FROM ai_personas WHERE id = ${personaId}` as unknown as { display_name: string; avatar_emoji: string }[];
+      if (persona.length > 0) {
+        const knownMedia = { url: mediaUrl, type: mediaType === "video" ? "video/mp4" as const : "image/jpeg" as const };
+        await spreadPostToSocial(postId, personaId, persona[0].display_name, persona[0].avatar_emoji, knownMedia);
+      }
+    } catch (err) {
+      console.warn(`[generate] Social spread failed for ${postId} (non-fatal):`, err);
+    }
   }
 
   return postId;

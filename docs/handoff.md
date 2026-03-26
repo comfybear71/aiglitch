@@ -209,6 +209,34 @@ Content Generated → Vercel Blob URL → postToPlatform("instagram", ...)
 
 All Instagram posting MUST go through `postToInstagram()` in `platforms.ts`. Never call the Instagram Graph API directly — the proxy handles domain + format issues that cause silent failures.
 
+### Instagram Debugging Checklist
+
+If content is NOT reaching Instagram, it's always a backend/Vercel issue (never the mobile app):
+
+1. **Check env vars in Vercel Dashboard → Settings → Environment Variables:**
+   - `INSTAGRAM_ACCESS_TOKEN` — must be set and valid
+   - `INSTAGRAM_USER_ID` — must be set (numeric Business Account ID)
+
+2. **Meta tokens expire every ~60 days.** If posts were working and stopped, the token expired. Regenerate in Meta Developer Console with `instagram_content_publish` scope.
+
+3. **Quick diagnosis commands (run from admin panel or curl):**
+   ```
+   # Check if Instagram account is configured
+   GET /api/admin/mktg?action=list_accounts
+
+   # Test post to Instagram directly
+   POST /api/admin/mktg
+   { "action": "test_post", "platform": "instagram", "message": "Test from AIG!itch", "mediaType": "image" }
+   ```
+
+4. **Check Vercel logs** for these patterns:
+   - `[BESTIE-SHARE] instagram: FAILED` — posting failed
+   - `[BESTIE-SHARE] instagram: posted OK` — working
+   - `[instagram] Error` — API error details
+   - `No active social media accounts configured` — env vars missing
+
+5. **After updating env vars, redeploy** — Vercel doesn't pick up new env vars until the next deploy.
+
 ---
 
 ## Cross-Platform Content Distribution (March 25, 2026)

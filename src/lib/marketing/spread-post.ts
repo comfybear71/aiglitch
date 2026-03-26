@@ -76,9 +76,9 @@ export async function spreadPostToSocial(
       postData = posts[0];
       // Override with known media if DB returned NULL (replication lag fix)
       if (knownMedia && (!postData.media_url || postData.media_url === "")) {
-        console.log(`[spread-post] DB returned null media_url for ${postId}, using known media: ${knownMedia.url.slice(0, 80)}...`);
+        console.error(`[spread-post] DB returned null media_url for ${postId}, using known media: ${knownMedia.url.slice(0, 80)}...`);
         postData.media_url = knownMedia.url;
-        postData.media_type = knownMedia.type;
+        postData.media_type = knownMedia.type.startsWith("video") ? "video" : "image";
         // Also fix the DB record so the post isn't broken
         await sql`UPDATE posts SET media_url = ${knownMedia.url}, media_type = ${knownMedia.type} WHERE id = ${postId} AND (media_url IS NULL OR media_url = '')`;
       }
@@ -90,61 +90,78 @@ export async function spreadPostToSocial(
   // Post to social media platforms (X, Facebook, TikTok, YouTube, Instagram)
   if (postData) {
     try {
+      console.error(`[spread-post] === START === postId=${postId}, media_type="${postData.media_type}", media_url=${postData.media_url?.slice(0, 80)}`);
       const accounts = await getActiveAccounts();
-      const isVideo = postData.media_type === "video";
+      const isVideo = postData.media_type === "video" || postData.media_type?.startsWith("video/") || postData.media_url?.includes(".mp4");
+      console.error(`[spread-post] accounts=${accounts.length} (${accounts.map(a => a.platform).join(",")}), isVideo=${isVideo}`);
 
       // If post has no media, pick a fallback image so we don't show the generic OG card
       let mediaUrlToSpread = postData.media_url;
       if (!mediaUrlToSpread) {
         mediaUrlToSpread = await pickFallbackMedia() || "";
         if (mediaUrlToSpread) {
-          console.log(`[spread-post] No media on post ${postId}, using fallback: ${mediaUrlToSpread}`);
+          console.error(`[spread-post] No media on post ${postId}, using fallback: ${mediaUrlToSpread}`);
         }
       }
 
-      for (const account of accounts) {
-        const platform = account.platform as MarketingPlatform;
+      console.error(`[spread-post] Spreading ${postId}: isVideo=${isVideo}, media=${mediaUrlToSpread?.slice(0, 60)}, accounts=${accounts.length}`);
 
-        // Platform compatibility: YouTube/TikTok = video only, Instagram = requires media
-        if ((platform === "youtube" || platform === "tiktok") && !isVideo) continue;
-        if (platform === "instagram" && !mediaUrlToSpread) continue;
-
-        try {
-          const adapted = await adaptContentForPlatform(
-            postData.content || "",
-            personaName,
-            personaEmoji,
-            platform,
-            mediaUrlToSpread,
-          );
-
-          const marketingPostId = uuidv4();
-          await sql`
-            INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
-            VALUES (${marketingPostId}, ${platform}, ${postId}, ${personaId}, ${adapted.text}, ${mediaUrlToSpread}, 'posting', NOW())
-          `;
-
-          const result = await postToPlatform(platform, account, adapted.text, mediaUrlToSpread);
-
-          if (result.success) {
-            await sql`
-              UPDATE marketing_posts
-              SET status = 'posted', platform_post_id = ${result.platformPostId || null}, platform_url = ${result.platformUrl || null}, posted_at = NOW()
-              WHERE id = ${marketingPostId}
-            `;
-            platforms.push(platform);
-          } else {
-            await sql`
-              UPDATE marketing_posts
-              SET status = 'failed', error_message = ${result.error || 'Unknown error'}
-              WHERE id = ${marketingPostId}
-            `;
-            failed.push(platform);
+      // Post to ALL platforms in PARALLEL to avoid timeout
+      const platformPromises = accounts
+        .filter(account => {
+          const platform = account.platform as MarketingPlatform;
+          if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+            console.error(`[spread-post] SKIP ${platform}: not video (media_type=${postData.media_type})`);
+            return false;
           }
-        } catch {
-          failed.push(platform);
-        }
-      }
+          if (platform === "instagram" && !mediaUrlToSpread) return false;
+          return true;
+        })
+        .map(async (account) => {
+          const platform = account.platform as MarketingPlatform;
+          console.error(`[spread-post] ATTEMPTING ${platform}...`);
+
+          try {
+            const adapted = await adaptContentForPlatform(
+              postData!.content || "",
+              personaName,
+              personaEmoji,
+              platform,
+              mediaUrlToSpread,
+            );
+
+            const marketingPostId = uuidv4();
+            await sql`
+              INSERT INTO marketing_posts (id, platform, source_post_id, persona_id, adapted_content, adapted_media_url, status, created_at)
+              VALUES (${marketingPostId}, ${platform}, ${postId}, ${personaId}, ${adapted.text}, ${mediaUrlToSpread}, 'posting', NOW())
+            `;
+
+            const result = await postToPlatform(platform, account, adapted.text, mediaUrlToSpread);
+
+            if (result.success) {
+              await sql`
+                UPDATE marketing_posts
+                SET status = 'posted', platform_post_id = ${result.platformPostId || null}, platform_url = ${result.platformUrl || null}, posted_at = NOW()
+                WHERE id = ${marketingPostId}
+              `;
+              platforms.push(platform);
+              console.error(`[spread-post] ${platform} OK: ${result.platformPostId || "no id"}`);
+            } else {
+              await sql`
+                UPDATE marketing_posts
+                SET status = 'failed', error_message = ${result.error || 'Unknown error'}
+                WHERE id = ${marketingPostId}
+              `;
+              failed.push(platform);
+              console.error(`[spread-post] ${platform} FAILED: ${result.error}`);
+            }
+          } catch (err) {
+            failed.push(platform);
+            console.error(`[spread-post] ${platform} ERROR: ${err instanceof Error ? err.message : err}`);
+          }
+        });
+
+      await Promise.allSettled(platformPromises);
     } catch (err) {
       console.error("[spread-post] Error spreading to social platforms:", err);
     }
@@ -177,7 +194,7 @@ export async function spreadPostToSocial(
 
       await sendTelegramMessage(tgMessage);
       platforms.push("telegram");
-      console.log(`[spread-post] ${label} pushed to Telegram channel`);
+      console.error(`[spread-post] ${label} pushed to Telegram channel`);
     } catch (err) {
       console.error("[spread-post] Telegram push failed (non-fatal):", err);
     }

@@ -67,6 +67,47 @@ function getEnvOnlyAccounts(): PlatformAccount[] {
     } as PlatformAccount);
   }
 
+  // Facebook — needs FACEBOOK_ACCESS_TOKEN + FACEBOOK_PAGE_ID (or falls back to DB)
+  const fbToken = process.env.FACEBOOK_ACCESS_TOKEN;
+  const fbPageId = process.env.FACEBOOK_PAGE_ID || "1041648825691964";
+  if (fbToken) {
+    accounts.push({
+      id: "env-facebook",
+      platform: "facebook",
+      account_name: "AIGlitch",
+      account_id: fbPageId,
+      account_url: "https://www.facebook.com/AIGlitch",
+      access_token: fbToken,
+      refresh_token: "",
+      token_expires_at: null,
+      extra_config: "{}",
+      is_active: true,
+      last_posted_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as PlatformAccount);
+  }
+
+  // TikTok — needs TIKTOK_ACCESS_TOKEN
+  const ttToken = process.env.TIKTOK_ACCESS_TOKEN;
+  if (ttToken) {
+    accounts.push({
+      id: "env-tiktok",
+      platform: "tiktok",
+      account_name: "aiglicthed",
+      account_id: "",
+      account_url: "https://www.tiktok.com/@aiglicthed",
+      access_token: ttToken,
+      refresh_token: "",
+      token_expires_at: null,
+      extra_config: "{}",
+      is_active: true,
+      last_posted_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as PlatformAccount);
+  }
+
   return accounts;
 }
 
@@ -86,6 +127,9 @@ export async function getActiveAccounts(): Promise<PlatformAccount[]> {
       accounts.push(envAccount);
     }
   }
+
+  // Log active accounts for debugging
+  console.error(`[getActiveAccounts] ${accounts.length} accounts: ${accounts.map(a => `${a.platform}(${a.id.startsWith("env-") ? "env" : "db"})`).join(", ")}`);
 
   return accounts;
 }
@@ -416,7 +460,10 @@ async function postToX(account: PlatformAccount, text: string, mediaUrl?: string
 
 /** Refresh TikTok access token using the refresh_token. Updates DB on success. */
 async function refreshTikTokToken(account: PlatformAccount): Promise<string | null> {
-  const clientKey = process.env.TIKTOK_CLIENT_KEY;
+  // Use sandbox or production credentials based on account config
+  const isSandbox = (() => { try { return JSON.parse(account.extra_config || "{}").sandbox === true; } catch { return false; } })();
+  const clientKey = isSandbox ? process.env.TIKTOK_SANDBOX_CLIENT_KEY : process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = isSandbox ? process.env.TIKTOK_SANDBOX_CLIENT_SECRET : process.env.TIKTOK_CLIENT_SECRET;
   if (!clientKey || !account.refresh_token) return null;
 
   try {
@@ -425,7 +472,7 @@ async function refreshTikTokToken(account: PlatformAccount): Promise<string | nu
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_key: clientKey,
-        client_secret: process.env.TIKTOK_CLIENT_SECRET || "",
+        client_secret: clientSecret || "",
         grant_type: "refresh_token",
         refresh_token: account.refresh_token,
       }),
@@ -472,17 +519,28 @@ async function getValidTikTokToken(account: PlatformAccount): Promise<string | n
 
 async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
+    console.error(`[tiktok] >>> START: mediaUrl=${mediaUrl?.slice(0, 100)}, hasToken=${!!account.access_token}`);
+
     if (!mediaUrl) {
+      console.error(`[tiktok] >>> SKIP: no media URL`);
       return { success: false, error: "TikTok requires video content" };
     }
 
-    // Auto-refresh token if needed
-    const token = await getValidTikTokToken(account);
-    if (!token) {
-      return { success: false, error: "TikTok: no valid token (re-connect via admin)" };
+    const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
+    if (!isVideo) {
+      console.error(`[tiktok] >>> SKIP: not video: ${mediaUrl.slice(0, 80)}`);
+      return { success: false, error: "TikTok only supports video content" };
     }
 
+    const token = await getValidTikTokToken(account);
+    if (!token) {
+      console.error(`[tiktok] >>> FAIL: no token`);
+      return { success: false, error: "TikTok: no valid token" };
+    }
+    console.error(`[tiktok] >>> Token OK: ${token.slice(0, 15)}...`);
+
     // Step 1: Query creator info
+    console.error(`[tiktok] >>> Step 1: creator_info query...`);
     const creatorResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
       {
@@ -495,7 +553,11 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       },
     );
 
+    const creatorBody = await creatorResponse.text();
+    console.error(`[tiktok] >>> creator_info response: ${creatorResponse.status} ${creatorBody.slice(0, 500)}`);
+
     if (!creatorResponse.ok) {
+      console.error(`[tiktok] Creator info FAILED: ${creatorResponse.status} ${creatorBody.slice(0, 300)}`);
       // If 401, try one more time with a refreshed token
       if (creatorResponse.status === 401) {
         const refreshedToken = await refreshTikTokToken(account);
@@ -524,18 +586,18 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       }
     }
 
-    // Step 2: Download video from Vercel Blob
+    // Use Upload to Inbox API — does NOT require Direct Post audit
+    // Videos go to creator's draft inbox for publishing from TikTok app
     const finalToken = account.access_token || token;
-    const videoResponse = await fetch(mediaUrl);
-    if (!videoResponse.ok) {
-      return { success: false, error: `TikTok: failed to download video from ${mediaUrl}: ${videoResponse.status}` };
-    }
-    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-    const videoSize = videoBuffer.length;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+    const ttVideoUrl = mediaUrl.startsWith(appUrl)
+      ? mediaUrl
+      : `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
 
-    // Step 3: Initialize FILE_UPLOAD post
+    console.error(`[tiktok] >>> Step 2: Upload to Inbox via PULL_FROM_URL: ${ttVideoUrl.slice(0, 120)}`);
+
     const initResponse = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/video/init/",
+      "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
       {
         method: "POST",
         headers: {
@@ -543,18 +605,9 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          post_info: {
-            title: text.slice(0, 150),
-            privacy_level: "SELF_ONLY",
-            disable_duet: false,
-            disable_comment: false,
-            disable_stitch: false,
-          },
           source_info: {
-            source: "FILE_UPLOAD",
-            video_size: videoSize,
-            chunk_size: videoSize,
-            total_chunk_count: 1,
+            source: "PULL_FROM_URL",
+            video_url: ttVideoUrl,
           },
         }),
       },
@@ -562,39 +615,28 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
 
     if (!initResponse.ok) {
       const errBody = await initResponse.text();
+      console.error(`[tiktok] Init FAILED: ${initResponse.status} ${errBody.slice(0, 500)}`);
       return { success: false, error: `TikTok init failed: ${initResponse.status} ${errBody}` };
     }
 
     const initData = await initResponse.json() as {
-      data?: { publish_id?: string; upload_url?: string };
+      data?: { publish_id?: string };
+      error?: { code?: string; message?: string };
     };
-    const uploadUrl = initData.data?.upload_url;
-    if (!uploadUrl) {
-      return { success: false, error: "TikTok: no upload_url returned from init" };
+
+    if (initData.error && initData.error.code !== "ok") {
+      console.error(`[tiktok] Init error: ${JSON.stringify(initData.error)}`);
+      return { success: false, error: `TikTok: ${initData.error.message || initData.error.code}` };
     }
 
-    // Step 4: Upload video chunk to TikTok
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "video/mp4",
-        "Content-Length": videoSize.toString(),
-        "Content-Range": `bytes 0-${videoSize - 1}/${videoSize}`,
-      },
-      body: videoBuffer,
-    });
-
-    if (!uploadResponse.ok) {
-      const errBody = await uploadResponse.text();
-      return { success: false, error: `TikTok upload failed: ${uploadResponse.status} ${errBody}` };
-    }
-
+    console.error(`[tiktok] >>> SUCCESS (inbox upload): ${JSON.stringify(initData.data || {}).slice(0, 200)}`);
     return {
       success: true,
-      platformPostId: initData.data?.publish_id,
-      platformUrl: account.account_url || undefined,
+      platformPostId: initData.data?.publish_id || "inbox",
+      platformUrl: account.account_url || "https://www.tiktok.com/@aiglicthed",
     };
   } catch (err) {
+    console.error(`[tiktok] >>> EXCEPTION: ${err instanceof Error ? err.message : String(err)}`);
     return { success: false, error: `TikTok error: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
@@ -609,47 +651,61 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     const config = JSON.parse(account.extra_config || "{}");
     const igUserId = process.env.INSTAGRAM_USER_ID || config.instagram_user_id || account.account_id;
 
+    console.log(`[instagram] === POSTING START === igUserId=${igUserId}, mediaUrl=${mediaUrl?.slice(0, 100)}, text=${text.slice(0, 50)}`);
+
     if (!mediaUrl) {
+      console.error(`[instagram] REJECTED: no media URL`);
       return { success: false, error: "Instagram requires media content" };
-    }
-
-    // Instagram only supports JPEG/PNG for images — reject unsupported formats
-    const lowerUrl = mediaUrl.toLowerCase();
-    const unsupportedFormats = [".webp", ".svg", ".gif", ".bmp", ".tiff"];
-    if (unsupportedFormats.some(fmt => lowerUrl.includes(fmt))) {
-      return { success: false, error: `Instagram does not support this image format. URL: ${mediaUrl}` };
-    }
-
-    // Verify the image URL is accessible before sending to Instagram
-    try {
-      const headRes = await fetch(mediaUrl, { method: "HEAD" });
-      if (!headRes.ok) {
-        return { success: false, error: `Image URL returned ${headRes.status}: ${mediaUrl}` };
-      }
-      const contentType = headRes.headers.get("content-type") || "";
-      console.log(`[instagram] Image content-type: ${contentType}, url: ${mediaUrl}`);
-      if (contentType.includes("webp") || contentType.includes("svg") || contentType.includes("html")) {
-        return { success: false, error: `Instagram unsupported content-type "${contentType}" for: ${mediaUrl}` };
-      }
-    } catch (headErr) {
-      console.warn(`[instagram] HEAD check failed for ${mediaUrl}:`, headErr);
-      // Continue anyway — the URL might still work
     }
 
     // Determine media type from URL
     const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
 
-    // Proxy ALL external URLs through our domain — Instagram can't fetch from many CDNs
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+    // For images: convert to JPEG and re-upload to Blob so Instagram gets a clean direct URL
+    // Instagram can't fetch from Vercel Blob CDN or our proxy reliably
     let igMediaUrl = mediaUrl;
-    if (!mediaUrl.startsWith(appUrl)) {
-      if (isVideo) {
-        igMediaUrl = `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
-      } else {
-        igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
+    if (!isVideo) {
+      try {
+        const { put } = await import("@vercel/blob");
+        const sharp = (await import("sharp")).default;
+        const { v4: uuidv4 } = await import("uuid");
+
+        console.log(`[instagram] Converting image to JPEG for Instagram: ${mediaUrl.slice(0, 100)}`);
+        const imgRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(15000) });
+        if (!imgRes.ok) {
+          return { success: false, error: `Image fetch failed: HTTP ${imgRes.status} for ${mediaUrl}` };
+        }
+        const inputBuffer = Buffer.from(await imgRes.arrayBuffer());
+        const jpegBuffer = await sharp(inputBuffer)
+          .resize(1080, 1080, { fit: "cover", position: "centre" })
+          .jpeg({ quality: 90 })
+          .toBuffer();
+
+        const blob = await put(`instagram/${uuidv4()}.jpg`, jpegBuffer, {
+          access: "public",
+          contentType: "image/jpeg",
+          addRandomSuffix: false,
+        });
+        igMediaUrl = blob.url;
+        console.log(`[instagram] Converted & uploaded JPEG: ${igMediaUrl}`);
+      } catch (convertErr) {
+        console.error(`[instagram] JPEG conversion failed, falling back to proxy: ${convertErr instanceof Error ? convertErr.message : convertErr}`);
+        // Fallback to proxy approach
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+        if (!mediaUrl.startsWith(appUrl)) {
+          igMediaUrl = `${appUrl}/api/image-proxy?url=${encodeURIComponent(mediaUrl)}`;
+        }
       }
-      console.log(`[instagram] Proxying ${isVideo ? "video" : "image"} through: ${igMediaUrl}`);
+    } else {
+      // Videos: proxy through our domain
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
+      if (!mediaUrl.startsWith(appUrl)) {
+        igMediaUrl = `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
+        console.log(`[instagram] Proxying video through: ${igMediaUrl}`);
+      }
     }
+
+    console.log(`[instagram] Sending to Graph API: igUserId=${igUserId}, igMediaUrl=${igMediaUrl.slice(0, 150)}, isVideo=${isVideo}`);
 
     // Step 1: Create media container
     const containerParams: Record<string, string> = {
@@ -732,12 +788,14 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
     }
 
     const publishData = await publishResponse.json() as { id?: string };
+    console.log(`[instagram] === SUCCESS === Published! ID: ${publishData.id}`);
     return {
       success: true,
       platformPostId: publishData.id,
       platformUrl: `https://www.instagram.com/p/${publishData.id}/`,
     };
   } catch (err) {
+    console.error(`[instagram] === EXCEPTION === ${err instanceof Error ? err.message : String(err)}`);
     return { success: false, error: `Instagram error: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
@@ -763,9 +821,37 @@ async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?:
     if (mediaUrl) {
       const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
       if (isVideo) {
+        // Pass Blob URL directly via file_url — Facebook can fetch from Vercel Blob for videos
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/videos`;
-        params.file_url = mediaUrl;
-        params.description = text;
+        console.error(`[facebook] >>> VIDEO POST START: file_url=${mediaUrl.slice(0, 100)}, pageId=${pageId}, hasToken=${!!account.access_token}`);
+
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              access_token: account.access_token,
+              file_url: mediaUrl,
+              description: text,
+            }),
+            signal: AbortSignal.timeout(60000), // 60s timeout
+          });
+
+          console.error(`[facebook] >>> VIDEO RESPONSE: status=${response.status}`);
+
+          if (!response.ok) {
+            const errBody = await response.text();
+            console.error(`[facebook] >>> VIDEO FAILED: ${response.status} ${errBody.slice(0, 500)}`);
+            return { success: false, error: `FB ${response.status}: ${errBody}` };
+          }
+          const data = await response.json() as { id?: string; post_id?: string };
+          const fbPostId = data.post_id || data.id;
+          console.error(`[facebook] >>> VIDEO SUCCESS: id=${fbPostId}`);
+          return { success: true, platformPostId: fbPostId, platformUrl: fbPostId ? `https://www.facebook.com/${pageId}/videos/${fbPostId.replace(`${pageId}_`, "")}` : undefined };
+        } catch (fbErr) {
+          console.error(`[facebook] >>> VIDEO EXCEPTION: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`);
+          return { success: false, error: `FB video error: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}` };
+        }
       } else {
         endpoint = `https://graph.facebook.com/v21.0/${pageId}/photos`;
         params.url = mediaUrl;
@@ -1094,12 +1180,24 @@ export async function postToPlatform(
   text: string,
   mediaUrl?: string | null,
 ): Promise<PostResult> {
-  switch (platform) {
-    case "x":         return postToX(account, text, mediaUrl);
-    case "tiktok":    return postToTikTok(account, text, mediaUrl);
-    case "instagram": return postToInstagram(account, text, mediaUrl);
-    case "facebook":  return postToFacebook(account, text, mediaUrl);
-    case "youtube":   return postToYouTube(account, text, mediaUrl);
-    default:          return { success: false, error: `Unknown platform: ${platform}` };
+  const startTime = Date.now();
+  console.log(`[postToPlatform] >>> ${platform} start (media=${mediaUrl?.slice(0, 60) || "none"})`);
+  try {
+    let result: PostResult;
+    switch (platform) {
+      case "x":         result = await postToX(account, text, mediaUrl); break;
+      case "tiktok":    result = await postToTikTok(account, text, mediaUrl); break;
+      case "instagram": result = await postToInstagram(account, text, mediaUrl); break;
+      case "facebook":  result = await postToFacebook(account, text, mediaUrl); break;
+      case "youtube":   result = await postToYouTube(account, text, mediaUrl); break;
+      default:          result = { success: false, error: `Unknown platform: ${platform}` };
+    }
+    const duration = Date.now() - startTime;
+    console.log(`[postToPlatform] <<< ${platform} ${result.success ? "OK" : "FAIL"} (${duration}ms) ${result.error || result.platformPostId || ""}`);
+    return result;
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.error(`[postToPlatform] <<< ${platform} EXCEPTION (${duration}ms): ${err instanceof Error ? err.message : err}`);
+    return { success: false, error: `${platform} crashed: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
