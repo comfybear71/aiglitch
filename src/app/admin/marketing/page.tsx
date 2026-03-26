@@ -214,6 +214,28 @@ export default function MarketingPage() {
     setMktSaving(false);
   };
 
+  const toggleTiktokSandbox = async () => {
+    const newSandbox = !tiktokSandbox;
+    setTiktokSandbox(newSandbox);
+    // Persist to DB via extra_config
+    try {
+      const form = new FormData();
+      form.append("action", "save_account");
+      form.append("platform", "tiktok");
+      // Preserve existing account data
+      const ttAccount = mktAccounts.find(a => a.platform === "tiktok");
+      form.append("account_name", ttAccount?.account_name || "");
+      form.append("account_id", ttAccount?.account_id || "");
+      form.append("account_url", ttAccount?.account_url || "");
+      form.append("is_active", ttAccount?.is_active ? "1" : "0");
+      form.append("extra_config", JSON.stringify({ sandbox: newSandbox }));
+      await fetch("/api/admin/mktg", { method: "POST", body: form });
+    } catch {
+      // Revert on failure
+      setTiktokSandbox(!newSandbox);
+    }
+  };
+
   const testPlatformToken = async () => {
     setMktTestingToken(true);
     try {
@@ -379,7 +401,7 @@ export default function MarketingPage() {
                           {/* Toggle switch */}
                           <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={() => setTiktokSandbox(!tiktokSandbox)}
+                              onClick={() => toggleTiktokSandbox()}
                               className="flex items-center gap-2 cursor-pointer group"
                             >
                               <div className={`relative w-9 h-5 rounded-full transition-colors ${tiktokSandbox ? "bg-orange-500" : "bg-green-500"}`}>
