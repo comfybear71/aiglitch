@@ -221,24 +221,20 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         sceneUrls[num] = url;
       }
 
-      const sanitize = (s: string) => s.replace(/[^\x20-\x7E\n\r]/g, "").trim();
-      const stitchBody = {
-        sceneUrls,
-        title: sanitize(screenplay.title || "AIGlitch News Broadcast"),
-        genre: "news",
-        directorUsername: "AIGlitch News",
-        directorId: "aiglitch-news",
-        synopsis: sanitize(screenplay.synopsis || screenplay.tagline || topicText).slice(0, 200),
-        tagline: sanitize(screenplay.tagline || "Breaking news from AIGlitch").slice(0, 100),
-        castList: (screenplay.castList || ["AIGlitch News Anchor"]).map((c: string) => sanitize(c)),
-      };
-
-      setNewsLog(prev => [...prev, `Sending stitch: ${Object.keys(stitchBody).join(", ")} | ${Object.keys(sceneUrls).length} scenes`]);
+      // Use EXACT same POST+FormData pattern as directors page (line ~423)
+      const stitchForm = new FormData();
+      stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
+      stitchForm.append("title", screenplay.title || "AIG!itch News Broadcast");
+      stitchForm.append("genre", "news");
+      stitchForm.append("directorUsername", screenplay.director || "AIG!itch News");
+      stitchForm.append("directorId", screenplay.directorId || "aiglitch-news");
+      stitchForm.append("synopsis", screenplay.synopsis || screenplay.tagline || topicText);
+      stitchForm.append("tagline", screenplay.tagline || "Breaking news from AIG!itch");
+      stitchForm.append("castList", JSON.stringify(screenplay.castList || ["AIG!itch News Anchor"]));
 
       const stitchRes = await fetch("/api/generate-director-movie", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(stitchBody),
+        method: "POST",
+        body: stitchForm,
       });
       const stitchData = await stitchRes.json();
 
