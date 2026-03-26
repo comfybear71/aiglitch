@@ -351,7 +351,7 @@ export default function SponsorsPage() {
             <label className="text-[10px] text-gray-400 block mb-1">Package</label>
             <select value={adForm.package} onChange={e => setAdForm({ ...adForm, package: e.target.value })}
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
-              {Object.entries(SPONSOR_PACKAGES).map(([k, v]) => <option key={k} value={k}>{v.name} — {v.description} (${v.cash_equivalent})</option>)}
+              {Object.entries(SPONSOR_PACKAGES).map(([k, v]) => <option key={k} value={k}>{v.name} — {v.description} ({"\u00A7"}{v.glitch_cost})</option>)}
             </select>
           </div>
           <div>
