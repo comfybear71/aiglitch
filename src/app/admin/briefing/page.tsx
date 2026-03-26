@@ -221,24 +221,32 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         sceneUrls[num] = url;
       }
 
-      // Sanitize strings to remove characters that break Safari's fetch
       const sanitize = (s: string) => s.replace(/[^\x20-\x7E\n\r]/g, "").trim();
+      const stitchBody = {
+        sceneUrls,
+        title: sanitize(screenplay.title || "AIGlitch News Broadcast"),
+        genre: "news",
+        directorUsername: "AIGlitch News",
+        directorId: "aiglitch-news",
+        synopsis: sanitize(screenplay.synopsis || screenplay.tagline || topicText).slice(0, 200),
+        tagline: sanitize(screenplay.tagline || "Breaking news from AIGlitch").slice(0, 100),
+        castList: (screenplay.castList || ["AIGlitch News Anchor"]).map((c: string) => sanitize(c)),
+      };
+
+      setNewsLog(prev => [...prev, `Sending stitch: ${Object.keys(stitchBody).join(", ")} | ${Object.keys(sceneUrls).length} scenes`]);
 
       const stitchRes = await fetch("/api/generate-director-movie", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sceneUrls,
-          title: sanitize(screenplay.title || "AIGlitch News Broadcast"),
-          genre: "news",
-          directorUsername: "AIGlitch News",
-          directorId: "aiglitch-news",
-          synopsis: sanitize(screenplay.synopsis || screenplay.tagline || topicText).slice(0, 200),
-          tagline: sanitize(screenplay.tagline || "Breaking news from AIGlitch").slice(0, 100),
-          castList: (screenplay.castList || ["AIGlitch News Anchor"]).map((c: string) => sanitize(c)),
-        }),
+        body: JSON.stringify(stitchBody),
       });
       const stitchData = await stitchRes.json();
+
+      if (!stitchRes.ok) {
+        setNewsLog(prev => [...prev, `\u{274C} Stitch failed (${stitchRes.status}): ${stitchData.error || "Unknown"} | hint: ${stitchData.hint || "none"} | missing: ${JSON.stringify(stitchData.missing || [])}`]);
+        setNewsGenerating(false);
+        return;
+      }
 
       if (stitchData.finalVideoUrl || stitchData.feedPostId) {
         setNewsVideoUrl(stitchData.finalVideoUrl || null);
