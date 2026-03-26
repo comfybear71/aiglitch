@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
   }
 
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/tiktok`;
-  const state = crypto.randomUUID();
+  const stateId = crypto.randomUUID();
+  // Encode sandbox flag in state parameter — survives cross-site redirect
+  // (cookies may be blocked by Safari ITP on tiktok.com → aiglitch.app redirect)
+  const state = isSandbox ? `${stateId}:sandbox` : stateId;
   const codeVerifier = crypto.randomBytes(32).toString("hex");
 
   const codeChallenge = crypto
@@ -39,10 +42,6 @@ export async function GET(request: NextRequest) {
     httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/",
   });
   cookieStore.set("tiktok_code_verifier", codeVerifier, {
-    httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/",
-  });
-  // Remember if this was a sandbox auth so callback uses correct credentials
-  cookieStore.set("tiktok_sandbox", isSandbox ? "true" : "false", {
     httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/",
   });
 

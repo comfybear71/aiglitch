@@ -606,48 +606,20 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       return { success: false, error: `TikTok: video too small (${videoSize} bytes) — likely not a valid video` };
     }
 
-    // Step 3: Initialize upload via FILE_UPLOAD
-    // Sandbox: use Direct Post (enabled without audit)
-    // Production: use Inbox upload (no audit required, goes to drafts)
-    const title = text.slice(0, 2200); // TikTok title limit
-    const privacyLevel = "SELF_ONLY";
+    // Step 3: Initialize upload via FILE_UPLOAD using Inbox endpoint
+    // Inbox upload works without Direct Post audit for both sandbox and production
+    // Videos go to creator's inbox for publishing from TikTok app
+    const initEndpoint = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
+    const initBody = {
+      source_info: {
+        source: "FILE_UPLOAD",
+        video_size: videoSize,
+        chunk_size: videoSize,
+        total_chunk_count: 1,
+      },
+    };
 
-    let initEndpoint: string;
-    let initBody: Record<string, unknown>;
-
-    if (isSandbox) {
-      // Sandbox: Direct Post with post_info
-      initEndpoint = "https://open.tiktokapis.com/v2/post/publish/video/init/";
-      initBody = {
-        post_info: {
-          title,
-          privacy_level: privacyLevel,
-          disable_duet: false,
-          disable_comment: false,
-          disable_stitch: false,
-          video_cover_timestamp_ms: 1000,
-        },
-        source_info: {
-          source: "FILE_UPLOAD",
-          video_size: videoSize,
-          chunk_size: videoSize,
-          total_chunk_count: 1,
-        },
-      };
-    } else {
-      // Production: Inbox upload (no Direct Post audit needed)
-      initEndpoint = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
-      initBody = {
-        source_info: {
-          source: "FILE_UPLOAD",
-          video_size: videoSize,
-          chunk_size: videoSize,
-          total_chunk_count: 1,
-        },
-      };
-    }
-
-    console.error(`[tiktok] >>> Step 3: Init FILE_UPLOAD (${isSandbox ? "Direct Post" : "Inbox"}, size=${videoSize})`);
+    console.error(`[tiktok] >>> Step 3: Init FILE_UPLOAD (Inbox, ${isSandbox ? "sandbox" : "production"}, size=${videoSize})`);
 
     const initResponse = await fetch(initEndpoint, {
       method: "POST",

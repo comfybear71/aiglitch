@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=no_code", request.url));
   }
 
-  // Check if this was a sandbox auth
-  const cookieStore2 = await cookies();
-  const isSandbox = cookieStore2.get("tiktok_sandbox")?.value === "true";
+  // Sandbox flag is encoded in the state parameter (not a cookie)
+  // Format: "uuid:sandbox" for sandbox, or just "uuid" for live
+  const isSandbox = state?.endsWith(":sandbox") || false;
 
   const clientKey = isSandbox
     ? process.env.TIKTOK_SANDBOX_CLIENT_KEY
@@ -31,18 +31,19 @@ export async function GET(request: NextRequest) {
     : process.env.TIKTOK_CLIENT_SECRET;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/tiktok`;
 
-  console.log(`[TikTok OAuth] Callback: ${isSandbox ? "SANDBOX" : "PRODUCTION"} mode`);
+  console.log(`[TikTok OAuth] Callback: ${isSandbox ? "SANDBOX" : "PRODUCTION"} mode (from state param)`);
 
   if (!clientKey || !clientSecret) {
     return NextResponse.redirect(new URL(`/admin/marketing?tiktok_error=not_configured_${isSandbox ? "sandbox" : "production"}`, request.url));
   }
 
-  // Verify state
+  // Verify state matches cookie
   const cookieStore = await cookies();
   const savedState = cookieStore.get("tiktok_oauth_state")?.value;
   const codeVerifier = cookieStore.get("tiktok_code_verifier")?.value || "";
 
   if (state !== savedState) {
+    console.error(`[TikTok OAuth] State mismatch: got=${state}, saved=${savedState}`);
     return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=state_mismatch", request.url));
   }
 
@@ -121,6 +122,8 @@ export async function GET(request: NextRequest) {
         VALUES (${uuidv4()}, 'tiktok', ${accountName}, ${open_id || ""}, ${access_token}, ${refresh_token || ""}, ${expiresAt}, ${extraConfig}, TRUE, NOW(), NOW())
       `;
     }
+
+    console.log(`[TikTok OAuth] Saved: sandbox=${isSandbox}, account=${accountName}`);
 
     // Clear cookies
     cookieStore.delete("tiktok_oauth_state");
