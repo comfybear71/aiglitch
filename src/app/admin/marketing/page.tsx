@@ -367,10 +367,35 @@ export default function MarketingPage() {
                         </div>
                       </div>
                       {p.id === "tiktok" && (
-                        <button onClick={(e) => { e.stopPropagation(); setTiktokSandbox(!tiktokSandbox); }}
-                          className={`w-full mt-2 px-2 py-1 rounded text-xs font-bold text-center ${tiktokSandbox ? "bg-orange-600/30 text-orange-400 hover:bg-orange-600/40" : "bg-green-600/20 text-green-400 hover:bg-green-600/30"}`}>
-                          {tiktokSandbox ? "🔧 Sandbox Mode" : "🟢 Live Mode"}
-                        </button>
+                        <div className="mt-2 space-y-1.5">
+                          {/* SANDBOX / LIVE badge */}
+                          {account?.is_active && (
+                            <div className="flex items-center justify-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wide ${tiktokSandbox ? "bg-orange-500/30 text-orange-300 border border-orange-500/40" : "bg-green-500/30 text-green-300 border border-green-500/40"}`}>
+                                {tiktokSandbox ? "SANDBOX" : "LIVE"}
+                              </span>
+                            </div>
+                          )}
+                          {/* Toggle switch */}
+                          <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => setTiktokSandbox(!tiktokSandbox)}
+                              className="flex items-center gap-2 cursor-pointer group"
+                            >
+                              <div className={`relative w-9 h-5 rounded-full transition-colors ${tiktokSandbox ? "bg-orange-500" : "bg-green-500"}`}>
+                                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${tiktokSandbox ? "left-0.5" : "translate-x-4 left-0.5"}`} />
+                              </div>
+                              <span className={`text-[10px] font-medium ${tiktokSandbox ? "text-orange-400" : "text-green-400"} group-hover:underline`}>
+                                {tiktokSandbox ? "Switch to LIVE" : "Switch to SANDBOX"}
+                              </span>
+                            </button>
+                            <a href={tiktokSandbox ? "/api/auth/tiktok?sandbox=true" : "/api/auth/tiktok"}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-bold">
+                              Re-authorize
+                            </a>
+                          </div>
+                        </div>
                       )}
                       {p.id === "youtube" && (
                         <button onClick={(e) => { e.stopPropagation(); window.location.href = "/api/auth/youtube"; }}
