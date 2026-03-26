@@ -424,16 +424,15 @@ export async function PUT(request: NextRequest, preBody?: Record<string, unknown
       body = await request.json();
     }
   }
-  const { sceneUrls, title, directorUsername, synopsis, tagline, castList, channelId, folder } = body as {
-    sceneUrls: Record<string, string>;
-    title: string;
-    directorUsername: string;
-    synopsis: string;
-    tagline: string;
-    castList: string[];
-    channelId?: string;
-    folder?: string;
-  };
+  // Flexible field names — accept common variations
+  const sceneUrls = (body.sceneUrls || body.scene_urls || body.videoUrls || body.clipUrls || body.urls) as Record<string, string> | undefined;
+  const title = (body.title || body.headline || body.name || "Breaking News Broadcast") as string;
+  const directorUsername = (body.directorUsername || body.director_username || "AIG!itch News") as string;
+  const synopsis = (body.synopsis || body.description || "") as string;
+  const tagline = (body.tagline || "") as string;
+  const castList = (body.castList || body.cast_list || body.cast || []) as string[];
+  const channelId = (body.channelId || body.channel_id) as string | undefined;
+  const folder = (body.folder) as string | undefined;
 
   // Genre and directorId can fall back to defaults for channel content
   const genre = (body as { genre?: string }).genre || "music_video";
