@@ -606,54 +606,27 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
       return { success: false, error: `TikTok: video too small (${videoSize} bytes) — likely not a valid video` };
     }
 
-    // Step 3: Initialize upload via FILE_UPLOAD with Direct Post
-    // Direct Post works in sandbox without audit; in production use inbox fallback
+    // Step 3: Initialize upload via FILE_UPLOAD
+    // Sandbox: use Direct Post (enabled without audit)
+    // Production: use Inbox upload (no audit required, goes to drafts)
     const title = text.slice(0, 2200); // TikTok title limit
-    // Sandbox: SELF_ONLY works without audit. Production: SELF_ONLY until Direct Post audit passes.
     const privacyLevel = "SELF_ONLY";
 
-    const initBody = {
-      post_info: {
-        title,
-        privacy_level: privacyLevel,
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
-        video_cover_timestamp_ms: 1000,
-      },
-      source_info: {
-        source: "FILE_UPLOAD",
-        video_size: videoSize,
-        chunk_size: videoSize,
-        total_chunk_count: 1,
-      },
-    };
+    let initEndpoint: string;
+    let initBody: Record<string, unknown>;
 
-    console.error(`[tiktok] >>> Step 3: Init FILE_UPLOAD (Direct Post, privacy=${privacyLevel}, size=${videoSize})`);
-
-    let initResponse = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/video/init/",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${activeToken}`,
-          "Content-Type": "application/json; charset=UTF-8",
+    if (isSandbox) {
+      // Sandbox: Direct Post with post_info
+      initEndpoint = "https://open.tiktokapis.com/v2/post/publish/video/init/";
+      initBody = {
+        post_info: {
+          title,
+          privacy_level: privacyLevel,
+          disable_duet: false,
+          disable_comment: false,
+          disable_stitch: false,
+          video_cover_timestamp_ms: 1000,
         },
-        body: JSON.stringify(initBody),
-      },
-    );
-
-    let initData = await initResponse.json() as {
-      data?: { publish_id?: string; upload_url?: string };
-      error?: { code?: string; message?: string; log_id?: string };
-    };
-
-    console.error(`[tiktok] >>> Direct Post init response: ${initResponse.status} ${JSON.stringify(initData).slice(0, 500)}`);
-
-    // If Direct Post fails (e.g. unaudited in production), fall back to Inbox upload
-    if (!initResponse.ok || (initData.error && initData.error.code !== "ok")) {
-      console.error(`[tiktok] >>> Direct Post failed, trying Inbox upload fallback...`);
-      const inboxBody = {
         source_info: {
           source: "FILE_UPLOAD",
           video_size: videoSize,
@@ -661,33 +634,51 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
           total_chunk_count: 1,
         },
       };
-
-      initResponse = await fetch(
-        "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${activeToken}`,
-            "Content-Type": "application/json; charset=UTF-8",
-          },
-          body: JSON.stringify(inboxBody),
+    } else {
+      // Production: Inbox upload (no Direct Post audit needed)
+      initEndpoint = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
+      initBody = {
+        source_info: {
+          source: "FILE_UPLOAD",
+          video_size: videoSize,
+          chunk_size: videoSize,
+          total_chunk_count: 1,
         },
-      );
-
-      initData = await initResponse.json() as {
-        data?: { publish_id?: string; upload_url?: string };
-        error?: { code?: string; message?: string; log_id?: string };
       };
+    }
 
-      console.error(`[tiktok] >>> Inbox init response: ${initResponse.status} ${JSON.stringify(initData).slice(0, 500)}`);
+    console.error(`[tiktok] >>> Step 3: Init FILE_UPLOAD (${isSandbox ? "Direct Post" : "Inbox"}, size=${videoSize})`);
+
+    const initResponse = await fetch(initEndpoint, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${activeToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify(initBody),
+    });
+
+    const initData = await initResponse.json() as {
+      data?: { publish_id?: string; upload_url?: string };
+      error?: { code?: string; message?: string; log_id?: string };
+    };
+
+    console.error(`[tiktok] >>> Init response: ${initResponse.status} ${JSON.stringify(initData).slice(0, 500)}`);
+
+    // Handle specific TikTok error codes
+    if (initData.error && initData.error.code !== "ok") {
+      const errCode = initData.error.code || "";
+      if (errCode.includes("spam_risk") || errCode.includes("too_many_pending")) {
+        return { success: false, error: `TikTok: too many pending uploads — wait ~24h for old uploads to expire, then try again` };
+      }
+      if (errCode.includes("rate_limit")) {
+        return { success: false, error: `TikTok: rate limited — try again later` };
+      }
+      return { success: false, error: `TikTok: ${initData.error.message || errCode}` };
     }
 
     if (!initResponse.ok) {
       return { success: false, error: `TikTok init failed: ${initResponse.status} ${JSON.stringify(initData.error || {})}` };
-    }
-
-    if (initData.error && initData.error.code !== "ok") {
-      return { success: false, error: `TikTok: ${initData.error.message || initData.error.code}` };
     }
 
     const uploadUrl = initData.data?.upload_url;
