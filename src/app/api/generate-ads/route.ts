@@ -296,16 +296,119 @@ async function cronHandler(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   const requestId = request.nextUrl.searchParams.get("id");
+  const multiIds = request.nextUrl.searchParams.get("ids"); // comma-separated for 30s
   const caption = request.nextUrl.searchParams.get("caption") || "";
 
   // No id = legacy cron handler
-  if (!requestId) {
+  if (!requestId && !multiIds) {
     return cronHandler(request);
   }
 
-  // Poll Grok video API for completion
   if (!env.XAI_API_KEY) {
     return NextResponse.json({ success: false, error: "XAI_API_KEY not set" });
+  }
+
+  // Multi-clip polling for 30s ads
+  if (multiIds) {
+    const ids = multiIds.split(",").filter(Boolean);
+    const results: { id: string; status: string; videoUrl?: string }[] = [];
+
+    for (const rid of ids) {
+      try {
+        const pollRes = await fetch(`https://api.x.ai/v1/videos/${encodeURIComponent(rid)}`, {
+          headers: { "Authorization": `Bearer ${env.XAI_API_KEY}` },
+        });
+        if (pollRes.ok) {
+          const data = await pollRes.json();
+          results.push({ id: rid, status: data.status || "unknown", videoUrl: data.video?.url });
+        } else {
+          results.push({ id: rid, status: "error" });
+        }
+      } catch {
+        results.push({ id: rid, status: "error" });
+      }
+    }
+
+    const completedClips = results.filter(r => r.videoUrl);
+    const failedClips = results.filter(r => ["failed", "moderation_failed", "expired", "error"].includes(r.status));
+    const allDone = results.every(r => r.videoUrl || failedClips.some(f => f.id === r.id));
+
+    if (!allDone) {
+      return NextResponse.json({
+        success: false,
+        phase: "polling",
+        clips: results.map(r => ({ id: r.id, status: r.status, done: !!r.videoUrl })),
+        completed: completedClips.length,
+        total: ids.length,
+      });
+    }
+
+    // All clips finished — stitch if we have 2+
+    if (completedClips.length >= 2) {
+      try {
+        const clipBuffers: Buffer[] = [];
+        for (const clip of completedClips) {
+          const res = await fetch(clip.videoUrl!);
+          if (res.ok) clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+        }
+
+        if (clipBuffers.length >= 2) {
+          const stitched = concatMP4Clips(clipBuffers);
+          const blob = await put(`ads/ad-${uuidv4()}-30s.mp4`, stitched, { access: "public", contentType: "video/mp4" });
+          console.log(`[ads] 30s ad stitched: ${clipBuffers.length} clips → ${(stitched.length / 1024 / 1024).toFixed(1)}MB`);
+
+          // Create feed post + spread
+          const sql = getDb();
+          const postId = uuidv4();
+          const postCaption = caption || "📺 30s Ad from AIG!itch";
+          const ARCHITECT_ID = "glitch-000";
+          await sql`INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
+            VALUES (${postId}, ${ARCHITECT_ID}, ${postCaption}, ${"product_shill"}, ${blob.url}, ${"video"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})`;
+          await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+          const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: blob.url, type: "video" });
+
+          return NextResponse.json({
+            success: true,
+            phase: "done",
+            status: "posted",
+            videoUrl: blob.url,
+            postId,
+            spreading: spread.platforms,
+            clipCount: clipBuffers.length,
+            duration: clipBuffers.length * 10,
+          });
+        }
+      } catch (err) {
+        console.error("[ads] 30s stitch failed:", err);
+      }
+    }
+
+    // Fallback: use first completed clip
+    if (completedClips.length > 0) {
+      const sql = getDb();
+      const postId = uuidv4();
+      const ARCHITECT_ID = "glitch-000";
+      // Persist first clip
+      const firstClipRes = await fetch(completedClips[0].videoUrl!);
+      const firstClipBuf = Buffer.from(await firstClipRes.arrayBuffer());
+      const blob = await put(`ads/ad-${uuidv4()}.mp4`, firstClipBuf, { access: "public", contentType: "video/mp4" });
+      const postCaption = caption || "📺 Ad from AIG!itch";
+      await sql`INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, ai_like_count, media_source)
+        VALUES (${postId}, ${ARCHITECT_ID}, ${postCaption}, ${"product_shill"}, ${blob.url}, ${"video"}, ${Math.floor(Math.random() * 200) + 50}, ${"ad-studio"})`;
+      await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
+      const spread = await spreadPostToSocial(postId, ARCHITECT_ID, "AIG!itch", "🤖", { url: blob.url, type: "video" });
+      return NextResponse.json({
+        success: true, phase: "done", status: "posted_single_clip",
+        videoUrl: blob.url, postId, spreading: spread.platforms, clipCount: 1, duration: 10,
+      });
+    }
+
+    return NextResponse.json({ success: false, phase: "done", status: "all_clips_failed" });
+  }
+
+  // Single clip polling (existing flow)
+  if (!requestId) {
+    return NextResponse.json({ success: false, error: "Missing id parameter" }, { status: 400 });
   }
 
   try {
@@ -643,6 +746,68 @@ JSON: {"prompt": "video prompt here", "caption": "short punchy social caption un
     // Inject active ad campaigns into the interactive ad prompt
     const { prompt: adVideoPrompt } = await injectCampaignPlacement(videoPrompt);
 
+    // Check if 30s extended mode
+    const is30s = body.duration === "30s" || body.duration === "30" || body.is30s === true;
+
+    if (is30s) {
+      // Generate 3 connected scene prompts for a 30s ad
+      const multiPrompt = `Based on this 10-second video concept:
+"${adVideoPrompt}"
+
+Create 3 DIFFERENT but CONNECTED 10-second scenes for a 30-second ad:
+- Scene 1: Opening hook — grab attention immediately
+- Scene 2: Product/feature showcase — the core message
+- Scene 3: Call to action — make them desperate to join
+
+Each scene: vivid paragraph under 80 words for 9:16 vertical video. Consistent neon purple/cyan aesthetic. AIG!ITCH logo visible.
+
+JSON: {"scenes": ["scene 1 prompt", "scene 2 prompt", "scene 3 prompt"]}`;
+
+      let scenePrompts: string[] = [];
+      try {
+        const parsed = await claude.generateJSON<{ scenes: string[] }>(multiPrompt, 800);
+        scenePrompts = parsed?.scenes || [];
+      } catch {
+        scenePrompts = [adVideoPrompt, adVideoPrompt, adVideoPrompt];
+      }
+      if (scenePrompts.length < 3) scenePrompts = [adVideoPrompt, adVideoPrompt, adVideoPrompt];
+
+      // Submit all 3 clips to Grok IN PARALLEL
+      const requestIds: string[] = [];
+      const submissions = await Promise.allSettled(
+        scenePrompts.map(prompt =>
+          fetch("https://api.x.ai/v1/videos/generations", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${env.XAI_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "grok-imagine-video", prompt, duration: 10, aspect_ratio: "9:16", resolution: "720p" }),
+          }).then(r => r.json())
+        )
+      );
+
+      for (const result of submissions) {
+        if (result.status === "fulfilled" && result.value?.request_id) {
+          requestIds.push(result.value.request_id);
+        }
+      }
+
+      if (requestIds.length === 0) {
+        return NextResponse.json({ success: false, error: "Failed to submit any clips to Grok" });
+      }
+
+      console.log(`[ads] 30s ad: submitted ${requestIds.length} clips in parallel`);
+
+      return NextResponse.json({
+        success: true,
+        phase: "submitted",
+        requestIds,
+        clipCount: requestIds.length,
+        caption,
+        prompt: videoPrompt,
+        is30s: true,
+      });
+    }
+
+    // Single 10s clip (standard)
     // Submit to Grok
     try {
       const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
