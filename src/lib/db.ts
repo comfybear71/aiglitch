@@ -1065,6 +1065,57 @@ export async function runMigrations() {
     await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS show_director BOOLEAN NOT NULL DEFAULT TRUE`;
   });
 
+  // ── Sponsors table for sponsored ad campaigns ──
+  await safeMigrate(sql, "table_sponsors", () =>
+    sql`CREATE TABLE IF NOT EXISTS sponsors (
+      id SERIAL PRIMARY KEY,
+      company_name VARCHAR(255) NOT NULL,
+      contact_email VARCHAR(255) NOT NULL,
+      contact_name VARCHAR(255),
+      industry VARCHAR(100),
+      website VARCHAR(500),
+      status VARCHAR(50) NOT NULL DEFAULT 'inquiry',
+      glitch_balance INTEGER NOT NULL DEFAULT 0,
+      total_spent INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+  await safeMigrate(sql, "idx_sponsors_status", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_sponsors_status ON sponsors(status)`);
+  await safeMigrate(sql, "idx_sponsors_email", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_sponsors_email ON sponsors(contact_email)`);
+
+  // ── Sponsored ads table ──
+  await safeMigrate(sql, "table_sponsored_ads", () =>
+    sql`CREATE TABLE IF NOT EXISTS sponsored_ads (
+      id SERIAL PRIMARY KEY,
+      sponsor_id INTEGER NOT NULL REFERENCES sponsors(id) ON DELETE CASCADE,
+      campaign_id INTEGER,
+      product_name VARCHAR(255) NOT NULL,
+      product_description TEXT NOT NULL,
+      product_image_url VARCHAR(500),
+      ad_style VARCHAR(50) NOT NULL DEFAULT 'product_showcase',
+      target_platforms TEXT[] NOT NULL DEFAULT ARRAY['x','tiktok','instagram','facebook','youtube','telegram'],
+      duration INTEGER NOT NULL DEFAULT 10,
+      package VARCHAR(50) NOT NULL DEFAULT 'basic',
+      glitch_cost INTEGER NOT NULL DEFAULT 0,
+      cash_equivalent DECIMAL(10,2) NOT NULL DEFAULT 0,
+      status VARCHAR(50) NOT NULL DEFAULT 'draft',
+      video_url VARCHAR(500),
+      post_ids JSONB DEFAULT '[]',
+      performance JSONB DEFAULT '{}',
+      follow_ups_remaining INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+  await safeMigrate(sql, "idx_sponsored_ads_sponsor", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_sponsored_ads_sponsor ON sponsored_ads(sponsor_id)`);
+  await safeMigrate(sql, "idx_sponsored_ads_status", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_sponsored_ads_status ON sponsored_ads(status)`);
+
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
     sql`INSERT INTO platform_settings (key, value, updated_at)
