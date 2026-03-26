@@ -128,7 +128,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
 
       const screenplayRes = await fetch("/api/admin/screenplay", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({ genre: "news", concept }),
       });
       const screenplay = await screenplayRes.json();
@@ -221,7 +221,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
 
       const stitchRes = await fetch("/api/generate-director-movie", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
           sceneUrls,
           title: screenplay.title || "AIG!itch News Broadcast",
@@ -250,7 +250,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         try {
           await fetch("/api/admin/spread", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json; charset=utf-8" },
             body: JSON.stringify({
               text: `BREAKING: ${screenplay.title}\n${screenplay.synopsis || topicText}`,
               media_url: stitchData.finalVideoUrl,
@@ -322,7 +322,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
 
             {/* Go Live Button */}
             <div className="flex justify-end mb-3 gap-2">
-              {newsComplete && (
+              {(newsComplete || (newsLog.length > 0 && !newsGenerating)) && (
                 <button onClick={() => { setNewsLog([]); setNewsVideoUrl(null); setNewsComplete(false); setSelectedTopics([]); setCustomTopic(""); }}
                   className="px-3 py-2 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60">
                   {"\u{1F504}"} Clear
