@@ -186,6 +186,7 @@ export interface MktPlatformAccount {
   is_active: boolean;
   has_token: boolean;
   last_posted_at: string | null;
+  extra_config?: string;
 }
 
 export interface TradingData {

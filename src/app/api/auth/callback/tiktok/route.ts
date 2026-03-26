@@ -13,15 +13,15 @@ export async function GET(request: NextRequest) {
   const error = request.nextUrl.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/admin?tiktok_error=${error}`, request.url));
+    return NextResponse.redirect(new URL(`/admin/marketing?tiktok_error=${error}`, request.url));
   }
   if (!code) {
-    return NextResponse.redirect(new URL("/admin?tiktok_error=no_code", request.url));
+    return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=no_code", request.url));
   }
 
-  // Check if this was a sandbox auth
-  const cookieStore2 = await cookies();
-  const isSandbox = cookieStore2.get("tiktok_sandbox")?.value === "true";
+  // Sandbox flag is encoded in the state parameter (not a cookie)
+  // Format: "uuid:sandbox" for sandbox, or just "uuid" for live
+  const isSandbox = state?.endsWith(":sandbox") || false;
 
   const clientKey = isSandbox
     ? process.env.TIKTOK_SANDBOX_CLIENT_KEY
@@ -31,19 +31,20 @@ export async function GET(request: NextRequest) {
     : process.env.TIKTOK_CLIENT_SECRET;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app"}/api/auth/callback/tiktok`;
 
-  console.log(`[TikTok OAuth] Callback: ${isSandbox ? "SANDBOX" : "PRODUCTION"} mode`);
+  console.log(`[TikTok OAuth] Callback: ${isSandbox ? "SANDBOX" : "PRODUCTION"} mode (from state param)`);
 
   if (!clientKey || !clientSecret) {
-    return NextResponse.redirect(new URL(`/admin?tiktok_error=not_configured_${isSandbox ? "sandbox" : "production"}`, request.url));
+    return NextResponse.redirect(new URL(`/admin/marketing?tiktok_error=not_configured_${isSandbox ? "sandbox" : "production"}`, request.url));
   }
 
-  // Verify state
+  // Verify state matches cookie
   const cookieStore = await cookies();
   const savedState = cookieStore.get("tiktok_oauth_state")?.value;
   const codeVerifier = cookieStore.get("tiktok_code_verifier")?.value || "";
 
   if (state !== savedState) {
-    return NextResponse.redirect(new URL("/admin?tiktok_error=state_mismatch", request.url));
+    console.error(`[TikTok OAuth] State mismatch: got=${state}, saved=${savedState}`);
+    return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=state_mismatch", request.url));
   }
 
   try {
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     if (!tokenData.access_token) {
       console.error("[TikTok OAuth] Token exchange failed:", tokenData);
-      return NextResponse.redirect(new URL(`/admin?tiktok_error=token_failed`, request.url));
+      return NextResponse.redirect(new URL(`/admin/marketing?tiktok_error=token_failed`, request.url));
     }
 
     const {
@@ -122,13 +123,16 @@ export async function GET(request: NextRequest) {
       `;
     }
 
+    console.log(`[TikTok OAuth] Saved: sandbox=${isSandbox}, account=${accountName}`);
+
     // Clear cookies
     cookieStore.delete("tiktok_oauth_state");
     cookieStore.delete("tiktok_code_verifier");
 
-    return NextResponse.redirect(new URL("/admin?tiktok_success=true", request.url));
+    const successPath = `/admin/marketing?tiktok_success=true&tiktok_mode=${isSandbox ? "sandbox" : "live"}`;
+    return NextResponse.redirect(new URL(successPath, request.url));
   } catch (err) {
     console.error("[TikTok OAuth] Callback error:", err);
-    return NextResponse.redirect(new URL("/admin?tiktok_error=oauth_failed", request.url));
+    return NextResponse.redirect(new URL("/admin/marketing?tiktok_error=oauth_failed", request.url));
   }
 }

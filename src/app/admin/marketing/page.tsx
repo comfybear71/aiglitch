@@ -43,9 +43,9 @@ export default function MarketingPage() {
         setMktAccounts(data.accounts || []);
         // Detect TikTok sandbox mode from DB account extra_config
         const ttAccount = (data.accounts || []).find((a: MktPlatformAccount) => a.platform === "tiktok");
-        if (ttAccount) {
+        if (ttAccount?.extra_config) {
           try {
-            const config = JSON.parse((ttAccount as Record<string, unknown>).extra_config as string || "{}");
+            const config = JSON.parse(ttAccount.extra_config);
             setTiktokSandbox(config.sandbox === true);
           } catch { /* default to live */ }
         }
@@ -214,6 +214,28 @@ export default function MarketingPage() {
     setMktSaving(false);
   };
 
+  const toggleTiktokSandbox = async () => {
+    const newSandbox = !tiktokSandbox;
+    setTiktokSandbox(newSandbox);
+    // Persist to DB via extra_config
+    try {
+      const form = new FormData();
+      form.append("action", "save_account");
+      form.append("platform", "tiktok");
+      // Preserve existing account data
+      const ttAccount = mktAccounts.find(a => a.platform === "tiktok");
+      form.append("account_name", ttAccount?.account_name || "");
+      form.append("account_id", ttAccount?.account_id || "");
+      form.append("account_url", ttAccount?.account_url || "");
+      form.append("is_active", ttAccount?.is_active ? "1" : "0");
+      form.append("extra_config", JSON.stringify({ sandbox: newSandbox }));
+      await fetch("/api/admin/mktg", { method: "POST", body: form });
+    } catch {
+      // Revert on failure
+      setTiktokSandbox(!newSandbox);
+    }
+  };
+
   const testPlatformToken = async () => {
     setMktTestingToken(true);
     try {
@@ -351,26 +373,64 @@ export default function MarketingPage() {
                         <span className="text-pink-400">{(pStats?.likes || 0).toLocaleString()}</span>
                       </div>
                       <div className="space-y-1 mt-2">
-                        <button onClick={(e) => { e.stopPropagation(); testPlatformPost(p.id); }}
-                          className="w-full px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs hover:bg-yellow-500/30 font-bold">
-                          🧪 Test Post
-                        </button>
-                        <div className="flex gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "image"); }}
-                            className="flex-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs hover:bg-green-500/30 font-bold">
-                            🖼 Image
-                          </button>
+                        {p.id !== "tiktok" && (
+                          <>
+                            <button onClick={(e) => { e.stopPropagation(); testPlatformPost(p.id); }}
+                              className="w-full px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs hover:bg-yellow-500/30 font-bold">
+                              🧪 Test Post
+                            </button>
+                            <div className="flex gap-1">
+                              <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "image"); }}
+                                className="flex-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs hover:bg-green-500/30 font-bold">
+                                🖼 Image
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "video"); }}
+                                className="flex-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
+                                🎬 Video
+                              </button>
+                            </div>
+                          </>
+                        )}
+                        {p.id === "tiktok" && (
                           <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "video"); }}
-                            className="flex-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
-                            🎬 Video
+                            className="w-full px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
+                            🎬 Test Video
                           </button>
-                        </div>
+                        )}
                       </div>
                       {p.id === "tiktok" && (
-                        <button onClick={(e) => { e.stopPropagation(); setTiktokSandbox(!tiktokSandbox); }}
-                          className={`w-full mt-2 px-2 py-1 rounded text-xs font-bold text-center ${tiktokSandbox ? "bg-orange-600/30 text-orange-400 hover:bg-orange-600/40" : "bg-green-600/20 text-green-400 hover:bg-green-600/30"}`}>
-                          {tiktokSandbox ? "🔧 Sandbox Mode" : "🟢 Live Mode"}
-                        </button>
+                        <div className="mt-2 space-y-1.5">
+                          {/* SANDBOX / LIVE badge */}
+                          {account?.is_active && (
+                            <div className="flex items-center justify-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wide ${tiktokSandbox ? "bg-orange-500/30 text-orange-300 border border-orange-500/40" : "bg-green-500/30 text-green-300 border border-green-500/40"}`}>
+                                {tiktokSandbox ? "SANDBOX" : "LIVE"}
+                              </span>
+                            </div>
+                          )}
+                          {/* Toggle switch */}
+                          <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => toggleTiktokSandbox()}
+                              className="flex items-center gap-2 cursor-pointer group"
+                            >
+                              <div className={`relative w-9 h-5 rounded-full transition-colors ${tiktokSandbox ? "bg-orange-500" : "bg-green-500"}`}>
+                                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${tiktokSandbox ? "left-0.5" : "translate-x-4 left-0.5"}`} />
+                              </div>
+                              <span className={`text-[10px] font-medium ${tiktokSandbox ? "text-orange-400" : "text-green-400"} group-hover:underline`}>
+                                {tiktokSandbox ? "Switch to LIVE" : "Switch to SANDBOX"}
+                              </span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.location.href = tiktokSandbox ? "/api/auth/tiktok?sandbox=true" : "/api/auth/tiktok";
+                              }}
+                              className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-bold">
+                              Re-authorize
+                            </button>
+                          </div>
+                        </div>
                       )}
                       {p.id === "youtube" && (
                         <button onClick={(e) => { e.stopPropagation(); window.location.href = "/api/auth/youtube"; }}

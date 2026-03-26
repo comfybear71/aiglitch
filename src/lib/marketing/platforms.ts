@@ -539,14 +539,19 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
     }
     console.error(`[tiktok] >>> Token OK: ${token.slice(0, 15)}...`);
 
-    // Step 1: Query creator info
+    // Determine sandbox mode from account config
+    const isSandbox = (() => { try { return JSON.parse(account.extra_config || "{}").sandbox === true; } catch { return false; } })();
+    console.error(`[tiktok] >>> Mode: ${isSandbox ? "SANDBOX" : "PRODUCTION"}`);
+
+    // Step 1: Query creator info (validates token)
     console.error(`[tiktok] >>> Step 1: creator_info query...`);
+    let activeToken = token;
     const creatorResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${token}`,
+          "Authorization": `Bearer ${activeToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({}),
@@ -558,81 +563,127 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
 
     if (!creatorResponse.ok) {
       console.error(`[tiktok] Creator info FAILED: ${creatorResponse.status} ${creatorBody.slice(0, 300)}`);
-      // If 401, try one more time with a refreshed token
       if (creatorResponse.status === 401) {
         const refreshedToken = await refreshTikTokToken(account);
         if (refreshedToken) {
+          activeToken = refreshedToken;
           const retry = await fetch(
             "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
             {
               method: "POST",
               headers: {
-                "Authorization": `Bearer ${refreshedToken}`,
+                "Authorization": `Bearer ${activeToken}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({}),
             },
           );
           if (!retry.ok) {
-            return { success: false, error: `TikTok creator info failed after refresh: ${retry.status}` };
+            const retryBody = await retry.text();
+            return { success: false, error: `TikTok creator info failed after refresh: ${retry.status} ${retryBody.slice(0, 200)}` };
           }
-          // Continue with refreshed token for step 2
-          account = { ...account, access_token: refreshedToken };
         } else {
           return { success: false, error: "TikTok token expired — re-connect via admin" };
         }
       } else {
-        return { success: false, error: `TikTok creator info failed: ${creatorResponse.status}` };
+        return { success: false, error: `TikTok creator info failed: ${creatorResponse.status} ${creatorBody.slice(0, 200)}` };
       }
     }
 
-    // Use Upload to Inbox API — does NOT require Direct Post audit
-    // Videos go to creator's draft inbox for publishing from TikTok app
-    const finalToken = account.access_token || token;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aiglitch.app";
-    const ttVideoUrl = mediaUrl.startsWith(appUrl)
-      ? mediaUrl
-      : `${appUrl}/api/video-proxy?url=${encodeURIComponent(mediaUrl)}`;
+    // Step 2: Download the video binary
+    // Using FILE_UPLOAD instead of PULL_FROM_URL — no domain verification required
+    console.error(`[tiktok] >>> Step 2: Downloading video: ${mediaUrl.slice(0, 120)}`);
+    const videoResponse = await fetch(mediaUrl, { signal: AbortSignal.timeout(60000) });
+    if (!videoResponse.ok) {
+      console.error(`[tiktok] >>> Video download FAILED: ${videoResponse.status}`);
+      return { success: false, error: `TikTok: video download failed (HTTP ${videoResponse.status})` };
+    }
+    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+    const videoSize = videoBuffer.length;
+    console.error(`[tiktok] >>> Video downloaded: ${videoSize} bytes (${(videoSize / 1024 / 1024).toFixed(1)} MB)`);
 
-    console.error(`[tiktok] >>> Step 2: Upload to Inbox via PULL_FROM_URL: ${ttVideoUrl.slice(0, 120)}`);
-
-    const initResponse = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${finalToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          source_info: {
-            source: "PULL_FROM_URL",
-            video_url: ttVideoUrl,
-          },
-        }),
-      },
-    );
-
-    if (!initResponse.ok) {
-      const errBody = await initResponse.text();
-      console.error(`[tiktok] Init FAILED: ${initResponse.status} ${errBody.slice(0, 500)}`);
-      return { success: false, error: `TikTok init failed: ${initResponse.status} ${errBody}` };
+    if (videoSize < 1000) {
+      return { success: false, error: `TikTok: video too small (${videoSize} bytes) — likely not a valid video` };
     }
 
-    const initData = await initResponse.json() as {
-      data?: { publish_id?: string };
-      error?: { code?: string; message?: string };
+    // Step 3: Initialize upload via FILE_UPLOAD using Inbox endpoint
+    // Inbox upload works without Direct Post audit for both sandbox and production
+    // Videos go to creator's inbox for publishing from TikTok app
+    const initEndpoint = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
+    const initBody = {
+      source_info: {
+        source: "FILE_UPLOAD",
+        video_size: videoSize,
+        chunk_size: videoSize,
+        total_chunk_count: 1,
+      },
     };
 
+    console.error(`[tiktok] >>> Step 3: Init FILE_UPLOAD (Inbox, ${isSandbox ? "sandbox" : "production"}, size=${videoSize})`);
+
+    const initResponse = await fetch(initEndpoint, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${activeToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify(initBody),
+    });
+
+    const initData = await initResponse.json() as {
+      data?: { publish_id?: string; upload_url?: string };
+      error?: { code?: string; message?: string; log_id?: string };
+    };
+
+    console.error(`[tiktok] >>> Init response: ${initResponse.status} ${JSON.stringify(initData).slice(0, 500)}`);
+
+    // Handle specific TikTok error codes
     if (initData.error && initData.error.code !== "ok") {
-      console.error(`[tiktok] Init error: ${JSON.stringify(initData.error)}`);
-      return { success: false, error: `TikTok: ${initData.error.message || initData.error.code}` };
+      const errCode = initData.error.code || "";
+      if (errCode.includes("spam_risk") || errCode.includes("too_many_pending")) {
+        return { success: false, error: `TikTok: too many pending uploads — wait ~24h for old uploads to expire, then try again` };
+      }
+      if (errCode.includes("rate_limit")) {
+        return { success: false, error: `TikTok: rate limited — try again later` };
+      }
+      return { success: false, error: `TikTok: ${initData.error.message || errCode}` };
     }
 
-    console.error(`[tiktok] >>> SUCCESS (inbox upload): ${JSON.stringify(initData.data || {}).slice(0, 200)}`);
+    if (!initResponse.ok) {
+      return { success: false, error: `TikTok init failed: ${initResponse.status} ${JSON.stringify(initData.error || {})}` };
+    }
+
+    const uploadUrl = initData.data?.upload_url;
+    const publishId = initData.data?.publish_id;
+
+    if (!uploadUrl) {
+      console.error(`[tiktok] >>> No upload_url in response: ${JSON.stringify(initData)}`);
+      return { success: false, error: "TikTok: no upload_url returned from init" };
+    }
+
+    // Step 4: Upload the video binary
+    console.error(`[tiktok] >>> Step 4: Uploading ${videoSize} bytes to TikTok...`);
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Range": `bytes 0-${videoSize - 1}/${videoSize}`,
+        "Content-Type": "video/mp4",
+      },
+      body: videoBuffer,
+    });
+
+    console.error(`[tiktok] >>> Upload response: ${uploadResponse.status}`);
+
+    if (!uploadResponse.ok) {
+      const uploadErr = await uploadResponse.text();
+      console.error(`[tiktok] >>> Upload FAILED: ${uploadResponse.status} ${uploadErr.slice(0, 500)}`);
+      return { success: false, error: `TikTok upload failed: ${uploadResponse.status} ${uploadErr.slice(0, 200)}` };
+    }
+
+    console.error(`[tiktok] >>> SUCCESS: publish_id=${publishId}`);
     return {
       success: true,
-      platformPostId: initData.data?.publish_id || "inbox",
+      platformPostId: publishId || "uploaded",
       platformUrl: account.account_url || "https://www.tiktok.com/@aiglicthed",
     };
   } catch (err) {
