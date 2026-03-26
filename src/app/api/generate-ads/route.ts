@@ -11,6 +11,7 @@ import { AIGLITCH_BRAND, getAIGlitchBrandPrompt } from "@/lib/bible/constants";
 import { injectCampaignPlacement } from "@/lib/ad-campaigns";
 import { put } from "@vercel/blob";
 import { concatMP4Clips } from "@/lib/media/mp4-concat";
+import { buildSponsoredAdPrompt, SPONSOR_PACKAGES, type SponsorPackageId } from "@/lib/sponsor-packages";
 
 export const maxDuration = 300;
 
@@ -563,6 +564,44 @@ JSON: {"prompt": "video generation prompt here", "caption": "social media captio
         success: false,
         error: err instanceof Error ? err.message : "AI generation failed",
       });
+    }
+  }
+
+  // Sponsored ad mode: generate prompt + caption for a sponsor's product
+  const sponsored = body.sponsored as { sponsor_id?: number; sponsored_ad_id?: number; product_name?: string; product_description?: string; product_image_url?: string; ad_style?: string; package?: string } | undefined;
+  if (sponsored && isAdmin) {
+    const pkg = SPONSOR_PACKAGES[(sponsored.package || "basic") as SponsorPackageId] || SPONSOR_PACKAGES.basic;
+    const sponsoredPrompt = buildSponsoredAdPrompt({
+      product_name: sponsored.product_name || "Product",
+      product_description: sponsored.product_description || "",
+      ad_style: sponsored.ad_style || "product_showcase",
+      duration: pkg.duration,
+    });
+
+    try {
+      const parsed = await claude.generateJSON<{ video_prompt: string; caption: string; x_caption: string }>(sponsoredPrompt, 800);
+      if (parsed?.video_prompt) {
+        // Update sponsored ad status if ID provided
+        if (sponsored.sponsored_ad_id) {
+          const sql = getDb();
+          await sql`UPDATE sponsored_ads SET status = 'pending_review', updated_at = NOW() WHERE id = ${sponsored.sponsored_ad_id}`.catch(() => {});
+        }
+
+        return NextResponse.json({
+          success: true,
+          sponsored: true,
+          prompt: parsed.video_prompt,
+          caption: parsed.caption || "",
+          x_caption: parsed.x_caption || "",
+          sponsor_id: sponsored.sponsor_id,
+          sponsored_ad_id: sponsored.sponsored_ad_id,
+          package: sponsored.package,
+          duration: pkg.duration,
+        });
+      }
+      return NextResponse.json({ success: false, error: "AI returned empty sponsored ad prompt" });
+    } catch (err) {
+      return NextResponse.json({ success: false, error: err instanceof Error ? err.message : "Sponsored ad generation failed" });
     }
   }
 

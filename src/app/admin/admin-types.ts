@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs" | "channels" | "events" | "campaigns";
+export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors";
 
 export interface AdminChannel {
   id: string;
@@ -276,6 +276,7 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "channels", label: "Channels", icon: "\u{1F4FA}" },
   { id: "events", label: "Events", icon: "\uD83C\uDFAD" },
   { id: "campaigns", label: "Ad Campaigns", icon: "\uD83D\uDCE2" },
+  { id: "sponsors", label: "Sponsors", icon: "\uD83E\uDD1D" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────

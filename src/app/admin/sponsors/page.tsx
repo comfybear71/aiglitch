@@ -1,0 +1,452 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useAdmin } from "../AdminContext";
+import { SPONSOR_PACKAGES, AD_STYLES, INDUSTRIES, SPONSOR_STATUSES } from "@/lib/sponsor-packages";
+
+interface Sponsor {
+  id: number;
+  company_name: string;
+  contact_email: string;
+  contact_name: string | null;
+  industry: string | null;
+  website: string | null;
+  status: string;
+  glitch_balance: number;
+  total_spent: number;
+  notes: string | null;
+  created_at: string;
+}
+
+interface SponsoredAd {
+  id: number;
+  sponsor_id: number;
+  product_name: string;
+  product_description: string;
+  product_image_url: string | null;
+  ad_style: string;
+  package: string;
+  duration: number;
+  glitch_cost: number;
+  cash_equivalent: number;
+  status: string;
+  video_url: string | null;
+  target_platforms: string[];
+  created_at: string;
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  inquiry: "bg-gray-500/30 text-gray-300",
+  contacted: "bg-blue-500/30 text-blue-300",
+  negotiating: "bg-amber-500/30 text-amber-300",
+  active: "bg-green-500/30 text-green-300",
+  paused: "bg-orange-500/30 text-orange-300",
+  churned: "bg-red-500/30 text-red-300",
+};
+
+const AD_STATUS_COLORS: Record<string, string> = {
+  draft: "bg-gray-500/30 text-gray-300",
+  pending_review: "bg-yellow-500/30 text-yellow-300",
+  approved: "bg-blue-500/30 text-blue-300",
+  generating: "bg-purple-500/30 text-purple-300",
+  ready: "bg-cyan-500/30 text-cyan-300",
+  published: "bg-green-500/30 text-green-300",
+  completed: "bg-emerald-500/30 text-emerald-300",
+  rejected: "bg-red-500/30 text-red-300",
+};
+
+export default function SponsorsPage() {
+  const { authenticated } = useAdmin();
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
+  const [expandedSponsor, setExpandedSponsor] = useState<number | null>(null);
+  const [sponsorAds, setSponsorAds] = useState<SponsoredAd[]>([]);
+  const [form, setForm] = useState({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry" });
+  const [saving, setSaving] = useState(false);
+
+  // Ad creator state
+  const [adForm, setAdForm] = useState({ sponsor_id: "", product_name: "", product_description: "", product_image_url: "", ad_style: "product_showcase", package: "standard" });
+  const [adSaving, setAdSaving] = useState(false);
+
+  // Email outreach state
+  const [emailForm, setEmailForm] = useState({ company_name: "", industry: "", what_they_sell: "", tone: "casual", sponsor_id: "" });
+  const [emailResult, setEmailResult] = useState<{ subject: string; body: string; followup_subject: string; followup_body: string } | null>(null);
+  const [emailGenerating, setEmailGenerating] = useState(false);
+
+  useEffect(() => {
+    if (authenticated) fetchSponsors();
+  }, [authenticated]);
+
+  const fetchSponsors = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/sponsors");
+      if (res.ok) {
+        const data = await res.json();
+        setSponsors(data.sponsors || []);
+      }
+    } catch (err) { console.error("Fetch sponsors error:", err); }
+    setLoading(false);
+  };
+
+  const fetchAds = async (sponsorId: number) => {
+    try {
+      const res = await fetch(`/api/admin/sponsors/${sponsorId}/ads`);
+      if (res.ok) {
+        const data = await res.json();
+        setSponsorAds(data.ads || []);
+      }
+    } catch (err) { console.error("Fetch ads error:", err); }
+  };
+
+  const saveSponsor = async () => {
+    setSaving(true);
+    try {
+      const method = editingSponsor ? "PUT" : "POST";
+      const body = editingSponsor ? { ...form, id: editingSponsor.id } : form;
+      const res = await fetch("/api/admin/sponsors", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (data.ok || data.id) {
+        setShowForm(false);
+        setEditingSponsor(null);
+        setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry" });
+        fetchSponsors();
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch (err) { alert(`Error: ${err instanceof Error ? err.message : String(err)}`); }
+    setSaving(false);
+  };
+
+  const deleteSponsor = async (id: number) => {
+    if (!confirm("Delete this sponsor and all their ads?")) return;
+    try {
+      await fetch(`/api/admin/sponsors?id=${id}`, { method: "DELETE" });
+      fetchSponsors();
+    } catch (err) { alert(`Delete error: ${err}`); }
+  };
+
+  const createAd = async () => {
+    if (!adForm.sponsor_id) { alert("Select a sponsor"); return; }
+    setAdSaving(true);
+    try {
+      const res = await fetch(`/api/admin/sponsors/${adForm.sponsor_id}/ads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(adForm),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(`Sponsored ad #${data.id} created!`);
+        setAdForm({ ...adForm, product_name: "", product_description: "", product_image_url: "" });
+        if (expandedSponsor === parseInt(adForm.sponsor_id)) fetchAds(parseInt(adForm.sponsor_id));
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch (err) { alert(`Error: ${err}`); }
+    setAdSaving(false);
+  };
+
+  const generateEmail = async () => {
+    setEmailGenerating(true);
+    setEmailResult(null);
+    try {
+      const res = await fetch("/api/admin/email-outreach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(emailForm),
+      });
+      const data = await res.json();
+      if (data.subject) {
+        setEmailResult(data);
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch (err) { alert(`Error: ${err}`); }
+    setEmailGenerating(false);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => alert("Copied!")).catch(() => alert("Copy failed"));
+  };
+
+  if (!authenticated) return null;
+
+  const inquiries = sponsors.filter(s => s.status === "inquiry");
+  const activeSponsorOptions = sponsors.filter(s => s.status === "active" || s.status === "negotiating" || s.status === "inquiry");
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-cyan-400">Sponsored Campaigns</h2>
+          <p className="text-xs text-gray-500">Manage sponsors, create ads, and generate outreach emails</p>
+        </div>
+        <button onClick={() => { setShowForm(true); setEditingSponsor(null); setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry" }); }}
+          className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
+          + Add Sponsor
+        </button>
+      </div>
+
+      {/* Inquiries Feed */}
+      {inquiries.length > 0 && (
+        <div className="bg-amber-900/20 border border-amber-800/40 rounded-lg p-4">
+          <h3 className="text-sm font-bold text-amber-300 mb-2">New Inquiries ({inquiries.length})</h3>
+          <div className="space-y-2">
+            {inquiries.slice(0, 5).map(s => (
+              <div key={s.id} className="flex items-center justify-between bg-gray-900/50 p-2 rounded text-xs">
+                <div>
+                  <span className="font-bold text-white">{s.company_name}</span>
+                  <span className="text-gray-400 ml-2">{s.contact_email}</span>
+                  {s.notes && <p className="text-gray-500 mt-1 line-clamp-1">{s.notes}</p>}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => { fetch("/api/admin/sponsors", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id, status: "contacted" }) }).then(fetchSponsors); }}
+                    className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">Contacted</button>
+                  <button onClick={() => { fetch("/api/admin/sponsors", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id, status: "active" }) }).then(fetchSponsors); }}
+                    className="px-2 py-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30">Activate</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sponsor List */}
+      <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+        <h3 className="text-sm font-bold text-gray-300 mb-3">All Sponsors ({sponsors.length})</h3>
+        {loading ? (
+          <p className="text-gray-500 text-center py-4">Loading...</p>
+        ) : sponsors.length === 0 ? (
+          <p className="text-gray-500 text-center py-4">No sponsors yet. Add one or wait for inquiries from the public page.</p>
+        ) : (
+          <div className="space-y-2">
+            {sponsors.map(s => (
+              <div key={s.id}>
+                <div onClick={() => { setExpandedSponsor(expandedSponsor === s.id ? null : s.id); if (expandedSponsor !== s.id) fetchAds(s.id); }}
+                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-gray-800/50 transition-colors ${expandedSponsor === s.id ? "bg-gray-800/50 ring-1 ring-cyan-500/30" : "bg-gray-900/30"}`}>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${STATUS_COLORS[s.status] || "bg-gray-500/30 text-gray-300"}`}>{s.status.toUpperCase()}</span>
+                    <div>
+                      <span className="font-bold text-white text-sm">{s.company_name}</span>
+                      <span className="text-gray-400 text-xs ml-2">{s.contact_email}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs">
+                    {s.industry && <span className="text-gray-500">{s.industry}</span>}
+                    <span className="text-green-400">{s.glitch_balance} GLITCH</span>
+                    <span className="text-gray-500">Spent: {s.total_spent}</span>
+                    <button onClick={(e) => { e.stopPropagation(); setEditingSponsor(s); setForm({ company_name: s.company_name, contact_email: s.contact_email, contact_name: s.contact_name || "", industry: s.industry || "", website: s.website || "", notes: s.notes || "", status: s.status }); setShowForm(true); }}
+                      className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded hover:bg-yellow-500/30">Edit</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteSponsor(s.id); }}
+                      className="px-2 py-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30">Del</button>
+                  </div>
+                </div>
+                {/* Expanded: show ads */}
+                {expandedSponsor === s.id && (
+                  <div className="ml-6 mt-2 space-y-2 border-l-2 border-cyan-800/30 pl-4 pb-2">
+                    {sponsorAds.length === 0 ? (
+                      <p className="text-xs text-gray-500">No ads yet for this sponsor.</p>
+                    ) : sponsorAds.map(ad => (
+                      <div key={ad.id} className="flex items-center justify-between bg-gray-900/50 p-2 rounded text-xs">
+                        <div>
+                          <span className="font-bold text-white">{ad.product_name}</span>
+                          <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] ${AD_STATUS_COLORS[ad.status] || ""}`}>{ad.status}</span>
+                          <span className="text-gray-500 ml-2">{ad.duration}s {ad.package}</span>
+                        </div>
+                        <span className="text-green-400">{ad.glitch_cost} GLITCH</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sponsor Form Modal */}
+      {showForm && (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+          <h3 className="text-sm font-bold text-gray-300 mb-3">{editingSponsor ? "Edit Sponsor" : "Add Sponsor"}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] text-gray-400 block mb-1">Company Name *</label>
+              <input value={form.company_name} onChange={e => setForm({ ...form, company_name: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 block mb-1">Contact Email *</label>
+              <input value={form.contact_email} onChange={e => setForm({ ...form, contact_email: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 block mb-1">Contact Name</label>
+              <input value={form.contact_name} onChange={e => setForm({ ...form, contact_name: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 block mb-1">Industry</label>
+              <select value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+                <option value="">Select...</option>
+                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 block mb-1">Website</label>
+              <input value={form.website} onChange={e => setForm({ ...form, website: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 block mb-1">Status</label>
+              <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+                {SPONSOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2 md:col-span-3">
+              <label className="text-[10px] text-gray-400 block mb-1">Notes</label>
+              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={saveSponsor} disabled={saving} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50">
+              {saving ? "Saving..." : editingSponsor ? "Update" : "Create"}
+            </button>
+            <button onClick={() => { setShowForm(false); setEditingSponsor(null); }} className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg text-xs hover:bg-gray-600">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Ad Creator */}
+      <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+        <h3 className="text-sm font-bold text-gray-300 mb-3">Create Sponsored Ad</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Sponsor *</label>
+            <select value={adForm.sponsor_id} onChange={e => setAdForm({ ...adForm, sponsor_id: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+              <option value="">Select sponsor...</option>
+              {activeSponsorOptions.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Product Name *</label>
+            <input value={adForm.product_name} onChange={e => setAdForm({ ...adForm, product_name: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Ad Style</label>
+            <select value={adForm.ad_style} onChange={e => setAdForm({ ...adForm, ad_style: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+              {AD_STYLES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Package</label>
+            <select value={adForm.package} onChange={e => setAdForm({ ...adForm, package: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+              {Object.entries(SPONSOR_PACKAGES).map(([k, v]) => <option key={k} value={k}>{v.name} — {v.description} (${v.cash_equivalent})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Product Image URL</label>
+            <input value={adForm.product_image_url} onChange={e => setAdForm({ ...adForm, product_image_url: e.target.value })}
+              placeholder="https://..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+          </div>
+          <div className="sm:col-span-2 md:col-span-3">
+            <label className="text-[10px] text-gray-400 block mb-1">Product Description *</label>
+            <textarea value={adForm.product_description} onChange={e => setAdForm({ ...adForm, product_description: e.target.value })} rows={2}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+          </div>
+        </div>
+        <button onClick={createAd} disabled={adSaving} className="mt-3 px-4 py-2 bg-purple-600 text-white font-bold rounded-lg text-xs hover:bg-purple-500 disabled:opacity-50">
+          {adSaving ? "Creating..." : "Create Sponsored Ad"}
+        </button>
+      </div>
+
+      {/* Email Outreach Generator */}
+      <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+        <h3 className="text-sm font-bold text-gray-300 mb-3">Email Outreach Generator</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Company Name *</label>
+            <input value={emailForm.company_name} onChange={e => setEmailForm({ ...emailForm, company_name: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Industry *</label>
+            <select value={emailForm.industry} onChange={e => setEmailForm({ ...emailForm, industry: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+              <option value="">Select...</option>
+              {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">What They Sell *</label>
+            <input value={emailForm.what_they_sell} onChange={e => setEmailForm({ ...emailForm, what_they_sell: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-1">Tone</label>
+            <select value={emailForm.tone} onChange={e => setEmailForm({ ...emailForm, tone: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+              <option value="casual">Casual</option>
+              <option value="formal">Formal</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-3">
+          <button onClick={generateEmail} disabled={emailGenerating} className="px-4 py-2 bg-cyan-600 text-white font-bold rounded-lg text-xs hover:bg-cyan-500 disabled:opacity-50">
+            {emailGenerating ? "Generating..." : "Generate Email"}
+          </button>
+          {sponsors.length > 0 && (
+            <select value={emailForm.sponsor_id} onChange={e => {
+              const s = sponsors.find(sp => sp.id === parseInt(e.target.value));
+              if (s) setEmailForm({ ...emailForm, sponsor_id: e.target.value, company_name: s.company_name, industry: s.industry || "" });
+              else setEmailForm({ ...emailForm, sponsor_id: "" });
+            }} className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs">
+              <option value="">Auto-fill from sponsor...</option>
+              {sponsors.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+            </select>
+          )}
+        </div>
+
+        {emailResult && (
+          <div className="mt-4 space-y-4">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-cyan-300">Initial Email</h4>
+                <button onClick={() => copyToClipboard(`Subject: ${emailResult.subject}\n\n${emailResult.body}`)}
+                  className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-[10px] hover:bg-cyan-500/30">Copy All</button>
+              </div>
+              <div className="mb-2">
+                <span className="text-[10px] text-gray-400">Subject: </span>
+                <span className="text-sm text-white font-bold">{emailResult.subject}</span>
+                <button onClick={() => copyToClipboard(emailResult.subject)} className="ml-2 text-[10px] text-gray-500 hover:text-gray-300">copy</button>
+              </div>
+              <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-900/50 p-3 rounded max-h-64 overflow-y-auto">{emailResult.body}</pre>
+            </div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-amber-300">Follow-Up Email (5 days later)</h4>
+                <button onClick={() => copyToClipboard(`Subject: ${emailResult.followup_subject}\n\n${emailResult.followup_body}`)}
+                  className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-[10px] hover:bg-amber-500/30">Copy All</button>
+              </div>
+              <div className="mb-2">
+                <span className="text-[10px] text-gray-400">Subject: </span>
+                <span className="text-sm text-white font-bold">{emailResult.followup_subject}</span>
+              </div>
+              <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-900/50 p-3 rounded max-h-40 overflow-y-auto">{emailResult.followup_body}</pre>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
