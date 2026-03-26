@@ -63,7 +63,7 @@ export default function SponsorsPage() {
   const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
   const [expandedSponsor, setExpandedSponsor] = useState<number | null>(null);
   const [sponsorAds, setSponsorAds] = useState<SponsoredAd[]>([]);
-  const [form, setForm] = useState({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry" });
+  const [form, setForm] = useState({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 });
   const [saving, setSaving] = useState(false);
 
   // Ad creator state
@@ -111,7 +111,7 @@ export default function SponsorsPage() {
       if (data.ok || data.id) {
         setShowForm(false);
         setEditingSponsor(null);
-        setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry" });
+        setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 });
         fetchSponsors();
       } else {
         alert(`Failed: ${data.error}`);
@@ -185,7 +185,7 @@ export default function SponsorsPage() {
           <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-cyan-400">Sponsored Campaigns</h2>
           <p className="text-xs text-gray-500">Manage sponsors, create ads, and generate outreach emails</p>
         </div>
-        <button onClick={() => { setShowForm(true); setEditingSponsor(null); setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry" }); }}
+        <button onClick={() => { setShowForm(true); setEditingSponsor(null); setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 }); }}
           className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
           + Add Sponsor
         </button>
@@ -239,7 +239,7 @@ export default function SponsorsPage() {
                     {s.industry && <span className="text-gray-500">{s.industry}</span>}
                     <span className="text-green-400">{s.glitch_balance} GLITCH</span>
                     <span className="text-gray-500">Spent: {s.total_spent}</span>
-                    <button onClick={(e) => { e.stopPropagation(); setEditingSponsor(s); setForm({ company_name: s.company_name, contact_email: s.contact_email, contact_name: s.contact_name || "", industry: s.industry || "", website: s.website || "", notes: s.notes || "", status: s.status }); setShowForm(true); }}
+                    <button onClick={(e) => { e.stopPropagation(); setEditingSponsor(s); setForm({ company_name: s.company_name, contact_email: s.contact_email, contact_name: s.contact_name || "", industry: s.industry || "", website: s.website || "", notes: s.notes || "", status: s.status, glitch_balance: s.glitch_balance }); setShowForm(true); }}
                       className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded hover:bg-yellow-500/30">Edit</button>
                     <button onClick={(e) => { e.stopPropagation(); deleteSponsor(s.id); }}
                       className="px-2 py-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30">Del</button>
@@ -308,6 +308,14 @@ export default function SponsorsPage() {
                 {SPONSOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+            {editingSponsor && (
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">{"\u00A7"}GLITCH Balance</label>
+                <input type="number" value={form.glitch_balance} onChange={e => setForm({ ...form, glitch_balance: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+                <p className="text-[9px] text-gray-500 mt-0.5">Set this when the sponsor pays. Package costs: Basic=500, Standard=1000, Premium=2500, Ultra=5000</p>
+              </div>
+            )}
             <div className="sm:col-span-2 md:col-span-3">
               <label className="text-[10px] text-gray-400 block mb-1">Notes</label>
               <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}
