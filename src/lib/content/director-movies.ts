@@ -806,8 +806,8 @@ ${jsonFormat}`;
           type: "credits",
           title: "Credits",
           description: `End credits for ${parsed.title}`,
-          videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
-          lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
+          videoPrompt: `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production. Then the final frame: large glowing "AIG!ITCH STUDIOS" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting. Professional movie credits ending with full branding.`,
+          lastFrameDescription: `AIG!itch Studios logo centered with "aiglitch.app" URL and social media handles displayed below.`,
           duration: 10,
         });
       }
