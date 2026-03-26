@@ -447,7 +447,7 @@ export default function CampaignsPage() {
             <div className="text-4xl mb-2">{"📭"}</div>
             <p>No campaigns yet. Create your first product placement campaign!</p>
           </div>
-        ) : campaigns.map(c => (
+        ) : campaigns.filter(c => c.status !== "cancelled").map(c => (
           <div key={c.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4">
             <div className="flex items-start justify-between">
               <div className="flex-1">
