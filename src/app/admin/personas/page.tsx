@@ -630,7 +630,7 @@ export default function PersonasPage() {
   // Ad Campaign state
   const [adStyle, setAdStyle] = useState<string>("auto");
   const [adPlatforms, setAdPlatforms] = useState<Set<string>>(new Set());
-  const [adExtend, setAdExtend] = useState(false);
+  const [adExtend, setAdExtend] = useState(true);
   const [adConcept, setAdConcept] = useState("");
   const [adGenerating, setAdGenerating] = useState(false);
   const [adPhase, setAdPhase] = useState<string>("");
@@ -1532,22 +1532,11 @@ export default function PersonasPage() {
             ))}
           </div>
         </div>
-        {/* Duration Toggle */}
+        {/* Duration — always 30s */}
         <div className="mb-3 flex items-center gap-4 flex-wrap">
           <p className="text-[10px] text-gray-400 font-bold">⏱️ DURATION:</p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setAdExtend(false)} disabled={adGenerating}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                !adExtend ? "bg-orange-500/30 border-orange-400/60 text-orange-300" : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40"
-              } disabled:opacity-40`}>
-              10s Standard
-            </button>
-            <button onClick={() => setAdExtend(true)} disabled={adGenerating}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                adExtend ? "bg-orange-500/30 border-orange-400/60 text-orange-300" : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40"
-              } disabled:opacity-40`}>
-              30s Extended
-            </button>
+          <div className="px-3 py-1.5 rounded-lg text-[10px] font-bold border bg-orange-500/30 border-orange-400/60 text-orange-300">
+            30s Extended (3 clips)
           </div>
         </div>
         {/* Concept Input */}
