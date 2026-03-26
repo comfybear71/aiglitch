@@ -617,8 +617,9 @@ async function stitchAndPost(
   let stitched: Buffer;
   try {
     stitched = concatMP4Clips(buffers);
+    console.log(`[multi-clip] Stitching SUCCESS: ${buffers.length} clips → ${(stitched.length / 1024 / 1024).toFixed(1)}MB`);
   } catch (err) {
-    console.error(`[multi-clip] MP4 concatenation failed, using first clip as fallback:`, err);
+    console.error(`[multi-clip] ⚠️ MP4 CONCATENATION FAILED — falling back to FIRST CLIP ONLY (10s):`, err instanceof Error ? err.message : err);
     stitched = buffers[0];
   }
   const stitchedCaption = scenes.length > 1

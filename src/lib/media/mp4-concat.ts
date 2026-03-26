@@ -422,11 +422,18 @@ function rebuildMoov(
         } else if (child.type === "mdhd") {
           parts.push(patchDuration(buf, child, trackMediaDuration, "mdhd"));
         } else if (child.type === "edts") {
-          // CRITICAL: Drop the edit list (elst) from the stitched file.
-          // The original elst limits playback to the first clip's duration (~10s).
-          // Without edts, the player uses the full duration from tkhd/mdhd,
-          // which we've already patched to the combined total duration.
-          continue;
+          // Rebuild edts with a single elst entry spanning the full combined duration.
+          // The original elst only covers the first clip's duration — we extend it
+          // to cover all stitched clips. Uses trackMediaDuration (media timescale).
+          const elstEntryData = Buffer.alloc(4 + 12); // entry_count(4) + 1 entry(12)
+          elstEntryData.writeUInt32BE(1, 0); // entry_count = 1
+          elstEntryData.writeUInt32BE(trackMediaDuration, 4); // segment_duration in media timescale
+          elstEntryData.writeInt32BE(0, 8); // media_time = 0 (start from beginning)
+          elstEntryData.writeUInt16BE(1, 12); // media_rate_integer = 1
+          elstEntryData.writeUInt16BE(0, 14); // media_rate_fraction = 0
+          const elstBox = makeFullBox("elst", 0, 0, elstEntryData);
+          const edtsBox = makeBox("edts", elstBox);
+          parts.push(edtsBox);
         } else if (child.children) {
           const inner = rebuildChildren(child.children);
           const header = Buffer.alloc(8);
@@ -691,7 +698,19 @@ function concatMP4ClipsUnsafe(buffers: Buffer[]): Buffer {
 
   const totalVideoSamples = videoTables.allSampleSizes.length;
   const totalAudioSamples = audioRebuildInfo ? clips.reduce((sum, c) => sum + (c.audio?.sampleSizes.length || 0), 0) : 0;
-  console.log(`[mp4-concat] Stitched ${buffers.length} clips: ${totalVideoSamples} video samples, ${totalAudioSamples} audio samples, ${(combinedMdatData.length / 1024 / 1024).toFixed(1)}MB`);
+
+  // Log duration info for debugging
+  const templateMvhd = templateMoov.children?.find(b => b.type === "mvhd");
+  let timescale = 600; // default
+  if (templateMvhd) {
+    const cs = templateMvhd.headerSize;
+    const version = templateBuf[templateMvhd.offset + cs];
+    timescale = version === 0
+      ? templateBuf.readUInt32BE(templateMvhd.offset + cs + 12)
+      : templateBuf.readUInt32BE(templateMvhd.offset + cs + 20);
+  }
+  const durationSecs = totalMovieDuration / timescale;
+  console.log(`[mp4-concat] Stitched ${buffers.length} clips: ${totalVideoSamples} video samples, ${totalAudioSamples} audio samples, ${(combinedMdatData.length / 1024 / 1024).toFixed(1)}MB, duration=${totalMovieDuration} (${durationSecs.toFixed(1)}s at timescale ${timescale})`);
 
   return Buffer.concat([ftyp, mdatHeader, combinedMdatData, newMoov]);
 }

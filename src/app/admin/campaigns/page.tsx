@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAdmin } from "../AdminContext";
+import { SPONSOR_PACKAGES } from "@/lib/sponsor-packages";
 
 // Safe JSON parsing — prevents crash on empty/non-JSON responses
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +63,11 @@ export default function CampaignsPage() {
   const [showForm, setShowForm] = useState(false);
   const [actionLog, setActionLog] = useState("");
 
+  // Sponsored ads state
+  const [sponsoredAds, setSponsoredAds] = useState<{ id: number; sponsor_id: number; product_name: string; product_description: string; product_image_url: string | null; ad_style: string; package: string; duration: number; glitch_cost: number; status: string; video_url: string | null; sponsor_name?: string }[]>([]);
+  const [sponsoredLoading, setSponsoredLoading] = useState(false);
+  const [sponsoredLog, setSponsoredLog] = useState<Record<number, string>>({});
+
   // Form fields
   const [brandName, setBrandName] = useState("");
   const [productName, setProductName] = useState("");
@@ -121,8 +127,91 @@ export default function CampaignsPage() {
     setLoading(false);
   };
 
+  const fetchSponsoredAds = async () => {
+    setSponsoredLoading(true);
+    try {
+      const sponsorsRes = await fetch("/api/admin/sponsors");
+      const sponsorsData = await safeJson(sponsorsRes);
+      const sponsors = sponsorsData.sponsors || [];
+      const allAds: typeof sponsoredAds = [];
+      for (const s of sponsors) {
+        const adsRes = await fetch(`/api/admin/sponsors/${s.id}/ads`);
+        const adsData = await safeJson(adsRes);
+        for (const ad of (adsData.ads || [])) {
+          allAds.push({ ...ad, sponsor_name: s.company_name });
+        }
+      }
+      setSponsoredAds(allAds);
+    } catch { /* silent */ }
+    setSponsoredLoading(false);
+  };
+
+  const generateSponsoredAd = async (ad: typeof sponsoredAds[0]) => {
+    setSponsoredLog(prev => ({ ...prev, [ad.id]: "Generating prompt..." }));
+    try {
+      const res = await fetch("/api/admin/sponsors/" + ad.sponsor_id + "/ads", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: ad.id,
+          action: "generate",
+          product_name: ad.product_name,
+          product_description: ad.product_description,
+          ad_style: ad.ad_style,
+          package: ad.package,
+        }),
+      });
+      const data = await safeJson(res);
+      if (data.prompt) {
+        setSponsoredLog(prev => ({ ...prev, [ad.id]: `Video Prompt:\n${data.prompt}\n\nCaption:\n${data.caption}\n\nX Caption:\n${data.x_caption || ""}` }));
+        fetchSponsoredAds();
+      } else {
+        setSponsoredLog(prev => ({ ...prev, [ad.id]: `Failed: ${data.error || "Unknown error"}` }));
+      }
+    } catch (err) {
+      setSponsoredLog(prev => ({ ...prev, [ad.id]: `Error: ${err}` }));
+    }
+  };
+
+  const publishSponsoredAd = async (ad: typeof sponsoredAds[0]) => {
+    if (!ad.video_url) {
+      setSponsoredLog(prev => ({ ...prev, [ad.id]: "No video URL — generate video first" }));
+      return;
+    }
+    setSponsoredLog(prev => ({ ...prev, [ad.id]: "Publishing..." }));
+    try {
+      const res = await fetch("/api/generate-ads", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet_address: process.env.NEXT_PUBLIC_ADMIN_WALLET || "admin",
+          video_url: ad.video_url,
+          caption: `Sponsored by ${ad.sponsor_name || "our partner"} | ${ad.product_name} #ad #sponsored #AIGlitch`,
+        }),
+      });
+      const data = await safeJson(res);
+      if (data.success) {
+        // Update ad status to published and deduct GLITCH
+        await fetch(`/api/admin/sponsors/${ad.sponsor_id}/ads`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: ad.id, status: "published" }),
+        });
+        setSponsoredLog(prev => ({ ...prev, [ad.id]: `Published! Post: ${data.postId || "created"}, Spread: ${(data.spreading || []).join(", ") || "pending"}` }));
+        fetchSponsoredAds();
+      } else {
+        setSponsoredLog(prev => ({ ...prev, [ad.id]: `Publish failed: ${data.error}` }));
+      }
+    } catch (err) {
+      setSponsoredLog(prev => ({ ...prev, [ad.id]: `Error: ${err}` }));
+    }
+  };
+
   useEffect(() => {
-    if (authenticated) fetchCampaigns();
+    if (authenticated) {
+      fetchCampaigns();
+      fetchSponsoredAds();
+    }
   }, [authenticated]);
 
   const createCampaign = async () => {
@@ -164,6 +253,22 @@ export default function CampaignsPage() {
     } catch (err) {
       setActionLog(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     }
+  };
+
+  // Editing frequency state
+  const [editingFreq, setEditingFreq] = useState<string | null>(null);
+  const [freqValue, setFreqValue] = useState(0.3);
+
+  const updateFrequency = async (campaignId: string, newFreq: number) => {
+    try {
+      await fetch("/api/admin/ad-campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", campaign_id: campaignId, frequency: newFreq }),
+      });
+      setEditingFreq(null);
+      fetchCampaigns();
+    } catch { /* silent */ }
   };
 
   const campaignAction = async (campaignId: string, action: string) => {
@@ -229,7 +334,7 @@ export default function CampaignsPage() {
             <div className="text-gray-500 text-xs">Total Impressions</div>
           </div>
           <div className="bg-gray-900 border border-yellow-500/30 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-yellow-400">{"$"}{stats.totalRevenueGlitch.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-yellow-400">{"\u00A7"}{stats.totalRevenueGlitch.toLocaleString()}</div>
             <div className="text-gray-500 text-xs">GLITCH Revenue</div>
           </div>
         </div>
@@ -358,7 +463,7 @@ export default function CampaignsPage() {
             <div className="text-4xl mb-2">{"📭"}</div>
             <p>No campaigns yet. Create your first product placement campaign!</p>
           </div>
-        ) : campaigns.map(c => (
+        ) : campaigns.filter(c => c.status !== "cancelled").map(c => (
           <div key={c.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -372,7 +477,7 @@ export default function CampaignsPage() {
                   </span>
                 </div>
                 <div className="text-gray-400 text-xs mb-2">
-                  {c.duration_days} days | {"$"}{c.price_glitch.toLocaleString()} GLITCH | {Math.round(c.frequency * 100)}% frequency
+                  {c.duration_days} days | {"\u00A7"}{c.price_glitch.toLocaleString()} GLITCH | {Math.round(c.frequency * 100)}% frequency
                   {c.starts_at && ` | Started ${new Date(c.starts_at).toLocaleDateString()}`}
                   {c.expires_at && ` | Expires ${new Date(c.expires_at).toLocaleDateString()}`}
                   {c.product_image_url && <span className="ml-2 text-purple-400">{"🖼"} Product photo</span>}
@@ -391,6 +496,12 @@ export default function CampaignsPage() {
               </div>
               {/* Actions */}
               <div className="flex flex-col gap-1 ml-4">
+                {c.status === "active" && (
+                  <button onClick={() => { setEditingFreq(editingFreq === c.id ? null : c.id); setFreqValue(c.frequency); }}
+                    className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs hover:bg-cyan-500/30 transition">
+                    {Math.round(c.frequency * 100)}% Freq
+                  </button>
+                )}
                 {c.status === "pending_payment" && (
                   <button onClick={() => campaignAction(c.id, "activate")}
                     className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
@@ -417,8 +528,193 @@ export default function CampaignsPage() {
                 )}
               </div>
             </div>
+            {/* Frequency Editor */}
+            {editingFreq === c.id && (
+              <div className="mt-3 p-3 bg-gray-800/50 border border-cyan-800/30 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-gray-400">Placement frequency:</span>
+                  <input type="range" value={freqValue} onChange={e => setFreqValue(Number(e.target.value))}
+                    min={0.1} max={1.0} step={0.1} className="flex-1" />
+                  <span className="text-sm font-bold text-cyan-400 w-12 text-right">{Math.round(freqValue * 100)}%</span>
+                  <button onClick={() => updateFrequency(c.id, freqValue)}
+                    className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-500">
+                    Save
+                  </button>
+                </div>
+                <p className="text-[9px] text-gray-500 mt-1">Higher = appears in more content. 30% = 1 in 3 posts. 100% = every post.</p>
+              </div>
+            )}
           </div>
         ))}
+      </div>
+
+      {/* ── Sponsored Ads Section ── */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-cyan-400">Sponsored Ads</h3>
+          <a href="/admin/sponsors" className="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs hover:bg-amber-500/30">
+            Manage Sponsors
+          </a>
+        </div>
+
+        {sponsoredLoading ? (
+          <p className="text-gray-500 text-center py-4">Loading sponsored ads...</p>
+        ) : sponsoredAds.length === 0 ? (
+          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 text-center">
+            <p className="text-gray-500">No sponsored ads yet.</p>
+            <p className="text-xs text-gray-600 mt-1">Go to <a href="/admin/sponsors" className="text-cyan-400 hover:underline">Sponsors</a> to create one.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {sponsoredAds.map(ad => {
+              const pkg = SPONSOR_PACKAGES[ad.package as keyof typeof SPONSOR_PACKAGES];
+              const statusColors: Record<string, string> = {
+                draft: "bg-gray-500/20 text-gray-400 border-gray-500/30",
+                pending_review: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+                approved: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                generating: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+                ready: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+                published: "bg-green-500/20 text-green-400 border-green-500/30",
+                completed: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+                rejected: "bg-red-500/20 text-red-400 border-red-500/30",
+              };
+              return (
+                <div key={ad.id} className="bg-gray-900 border border-amber-700/40 rounded-xl p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl">{"🤝"}</span>
+                        <span className="font-bold text-white">{ad.sponsor_name}</span>
+                        <span className="text-gray-400">—</span>
+                        <span className="text-gray-300">{ad.product_name}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs border ${statusColors[ad.status] || "bg-gray-500/20 text-gray-400"}`}>
+                          {ad.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <div className="text-gray-400 text-xs mb-2">
+                        {ad.duration}s {pkg?.name || ad.package} | {"\u00A7"}{ad.glitch_cost.toLocaleString()} GLITCH
+                        {ad.product_image_url && <span className="ml-2 text-purple-400">{"🖼"} Product photo</span>}
+                      </div>
+                      <div className="text-gray-500 text-xs mb-2 italic">
+                        {ad.product_description.slice(0, 150)}{ad.product_description.length > 150 ? "..." : ""}
+                      </div>
+                    </div>
+                    {/* Actions — same style as campaign cards */}
+                    <div className="flex flex-col gap-1 ml-4">
+                      {ad.status === "draft" && (
+                        <button onClick={() => generateSponsoredAd(ad)}
+                          className="px-3 py-1 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg text-xs hover:bg-purple-500/30 transition">
+                          Generate
+                        </button>
+                      )}
+                      {ad.status === "pending_review" && (
+                        <>
+                          <button onClick={async () => {
+                            await fetch(`/api/admin/sponsors/${ad.sponsor_id}/ads`, {
+                              method: "PUT", headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: ad.id, status: "approved" }),
+                            });
+                            fetchSponsoredAds();
+                          }} className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
+                            Approve
+                          </button>
+                          <button onClick={async () => {
+                            await fetch(`/api/admin/sponsors/${ad.sponsor_id}/ads`, {
+                              method: "PUT", headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: ad.id, status: "rejected" }),
+                            });
+                            fetchSponsoredAds();
+                          }} className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition">
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {ad.status === "approved" && (
+                        <button onClick={async () => {
+                          setSponsoredLog(prev => ({ ...prev, [ad.id]: "Activating as campaign..." }));
+                          try {
+                            const res = await fetch("/api/admin/ad-campaigns", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                action: "create",
+                                brand_name: ad.sponsor_name || "Sponsor",
+                                product_name: ad.product_name,
+                                product_emoji: "🤝",
+                                visual_prompt: sponsoredLog[ad.id]?.split("Video Prompt:\n")[1]?.split("\n\nCaption")[0] || ad.product_description,
+                                text_prompt: `Naturally mention ${ad.product_name} by ${ad.sponsor_name}. #ad #sponsored`,
+                                product_image_url: ad.product_image_url || undefined,
+                                duration_days: 7,
+                                price_glitch: ad.glitch_cost,
+                                frequency: 0.3,
+                                notes: `Sponsored by ${ad.sponsor_name}. Package: ${ad.package}`,
+                              }),
+                            });
+                            const data = await safeJson(res);
+                            if (data.campaign_id || data.success) {
+                              const campaignId = data.campaign_id;
+                              // Auto-activate the campaign (set start/end dates, mark as active)
+                              if (campaignId) {
+                                await fetch("/api/admin/ad-campaigns", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "activate", campaign_id: campaignId }),
+                                });
+                              }
+                              await fetch(`/api/admin/sponsors/${ad.sponsor_id}/ads`, {
+                                method: "PUT", headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ id: ad.id, status: "published" }),
+                              });
+                              setSponsoredLog(prev => ({ ...prev, [ad.id]: "Campaign activated! Product placement is now live in ALL content generation — movies, posts, images, channel content." }));
+                              fetchSponsoredAds();
+                              fetchCampaigns();
+                            } else {
+                              setSponsoredLog(prev => ({ ...prev, [ad.id]: `Failed: ${data.error || "Unknown"}` }));
+                            }
+                          } catch (err) {
+                            setSponsoredLog(prev => ({ ...prev, [ad.id]: `Error: ${err}` }));
+                          }
+                        }} className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
+                          Activate Campaign
+                        </button>
+                      )}
+                      {ad.video_url && (
+                        <a href={ad.video_url} target="_blank" rel="noopener noreferrer"
+                          className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs hover:bg-cyan-500/30 transition text-center">
+                          View Video
+                        </a>
+                      )}
+                      <button onClick={async () => {
+                        if (!confirm(`Delete "${ad.product_name}"?`)) return;
+                        await fetch(`/api/admin/sponsors/${ad.sponsor_id}/ads`, {
+                          method: "PUT", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: ad.id, action: "delete" }),
+                        });
+                        fetchSponsoredAds();
+                      }} className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition">
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Preview / Log output */}
+                  {sponsoredLog[ad.id] && (
+                    <div className="mt-3 bg-gray-800/50 border border-gray-700 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-amber-400 font-bold">AI Generated Content Preview</span>
+                        <button onClick={() => setSponsoredLog(prev => { const n = { ...prev }; delete n[ad.id]; return n; })}
+                          className="text-[10px] text-gray-500 hover:text-gray-300">Clear</button>
+                      </div>
+                      <pre className="text-[11px] text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                        {sponsoredLog[ad.id]}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { SPONSOR_PACKAGES, type SponsorPackageId } from "@/lib/sponsor-packages";
+import { SPONSOR_PACKAGES, type SponsorPackageId, buildSponsoredAdPrompt } from "@/lib/sponsor-packages";
+import { claude } from "@/lib/ai";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await isAdminAuthenticated(request)))
@@ -64,9 +65,43 @@ export async function PUT(request: NextRequest) {
   try {
     const sql = getDb();
     const body = await request.json();
-    const { id, status, video_url, post_ids, performance } = body;
+    const { id, status, video_url, post_ids, performance, action } = body;
 
     if (!id) return NextResponse.json({ error: "Missing ad id" }, { status: 400 });
+
+    // Delete action
+    if (action === "delete") {
+      await sql`DELETE FROM sponsored_ads WHERE id = ${id}`;
+      return NextResponse.json({ ok: true });
+    }
+
+    // Generate action — use Claude to create video prompt + caption
+    if (action === "generate") {
+      const { product_name, product_description, ad_style, package: packageId } = body;
+      const pkg = SPONSOR_PACKAGES[(packageId || "basic") as SponsorPackageId] || SPONSOR_PACKAGES.basic;
+      const prompt = buildSponsoredAdPrompt({
+        product_name: product_name || "Product",
+        product_description: product_description || "",
+        ad_style: ad_style || "product_showcase",
+        duration: pkg.duration,
+      });
+
+      try {
+        const parsed = await claude.generateJSON<{ video_prompt: string; caption: string; x_caption: string }>(prompt, 800);
+        if (parsed?.video_prompt) {
+          await sql`UPDATE sponsored_ads SET status = 'pending_review', updated_at = NOW() WHERE id = ${id}`;
+          return NextResponse.json({
+            ok: true,
+            prompt: parsed.video_prompt,
+            caption: parsed.caption || "",
+            x_caption: parsed.x_caption || "",
+          });
+        }
+        return NextResponse.json({ error: "AI returned empty prompt" }, { status: 500 });
+      } catch (err) {
+        return NextResponse.json({ error: `AI generation failed: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
+      }
+    }
 
     await sql`
       UPDATE sponsored_ads SET

@@ -630,7 +630,7 @@ export default function PersonasPage() {
   // Ad Campaign state
   const [adStyle, setAdStyle] = useState<string>("auto");
   const [adPlatforms, setAdPlatforms] = useState<Set<string>>(new Set());
-  const [adExtend, setAdExtend] = useState(false);
+  const [adExtend, setAdExtend] = useState(true);
   const [adConcept, setAdConcept] = useState("");
   const [adGenerating, setAdGenerating] = useState(false);
   const [adPhase, setAdPhase] = useState<string>("");
@@ -773,14 +773,16 @@ export default function PersonasPage() {
         `✅ Ad planned!`,
         `🎨 Style: ${adStyle}`,
         `📝 Caption: "${adCaptionText.slice(0, 100)}..."`,
-        `🎥 Submitting to video generation...`,
+        `🎥 Submitting to video generation${adExtend ? " (30s Extended — 3 clips)" : ""}...`,
       ]);
 
-      // Phase 2: Submit video to Grok (POST without plan_only, uses AI prompt)
-      setAdPhase("rendering");
+      // Phase 2: Submit to backend — always 30s (3 clips generated in parallel on server)
+      setAdPhase("submitting 3 clips");
       const submitBody: Record<string, unknown> = {
         wallet_address: "AEWvE2xXaHSGdGCaCArb2PWdKS7K9RwoCRV7CT2CJTWq",
         style: adStyle,
+        duration: "30s",
+        is30s: true,
       };
       if (adConcept.trim()) submitBody.concept = adConcept.trim();
 
@@ -791,31 +793,29 @@ export default function PersonasPage() {
       });
       const submitData = await submitRes.json();
 
-      // Immediate video (rare but possible)
-      if (submitData.phase === "done" && submitData.success && submitData.videoUrl) {
-        setAdVideoUrl(submitData.videoUrl);
-        setAdLog(prev => [...prev, "✅ Video ready instantly!", "📡 Posted to feed + spread to socials"]);
-        setAdComplete(true);
-        setAdGenerating(false);
-        return;
-      }
-
-      if (!submitData.success || !submitData.requestId) {
+      if (!submitData.success) {
         setAdLog(prev => [...prev, `❌ Submit failed: ${submitData.error || "Unknown error"}`]);
         setAdGenerating(false);
         return;
       }
 
-      const requestId = submitData.requestId;
-      setAdLog(prev => [...prev, "✅ Video submitted to Grok! Polling for completion..."]);
-
-      // Phase 3: Poll GET with requestId — backend handles persist + post + spread
-      for (let attempt = 1; attempt <= 90; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 10_000));
-        try {
+      // Backend returns requestIds array (3 clips submitted in parallel)
+      const requestIds = submitData.requestIds as string[];
+      if (!requestIds || requestIds.length === 0) {
+        // Fallback: single clip mode
+        const requestId = submitData.requestId;
+        if (!requestId) {
+          setAdLog(prev => [...prev, "❌ No request IDs returned"]);
+          setAdGenerating(false);
+          return;
+        }
+        // Single clip polling (shouldn't happen with 30s but just in case)
+        setAdLog(prev => [...prev, "✅ Video submitted! Polling..."]);
+        setAdPhase("rendering");
+        for (let attempt = 1; attempt <= 90; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 10_000));
           const pollRes = await fetch(`/api/generate-ads?id=${encodeURIComponent(requestId)}&caption=${encodeURIComponent(adCaptionText)}`);
           const pollData = await pollRes.json();
-
           if (pollData.phase === "done" && pollData.success) {
             setAdVideoUrl(pollData.videoUrl || null);
             setAdLog(prev => [...prev, "🎉 Video ready!"]);
@@ -823,22 +823,55 @@ export default function PersonasPage() {
               setAdSpreadResults(pollData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
               setAdLog(prev => [...prev, `📡 Spread to: ${pollData.spreading.join(", ")}`]);
             }
-            if (pollData.postId) {
-              setAdLog(prev => [...prev, "✅ Posted to AIG!itch feed"]);
-            }
             setAdLog(prev => [...prev, "🙏 Ad campaign COMPLETE!"]);
             setAdComplete(true);
             setAdGenerating(false);
             return;
           }
+          if (pollData.phase === "done") { setAdGenerating(false); return; }
+          if (attempt % 3 === 0) setAdLog(prev => [...prev, `🔄 Still rendering... (${pollData.status || "pending"})`]);
+        }
+        setAdGenerating(false);
+        return;
+      }
 
-          if (pollData.phase === "done" || pollData.status === "moderation_failed" || pollData.status === "expired" || pollData.status === "failed") {
-            setAdLog(prev => [...prev, `❌ Video ${pollData.status || pollData.error || "failed"}`]);
+      setAdLog(prev => [...prev, `✅ ${requestIds.length} clips submitted to Grok IN PARALLEL! Polling...`]);
+
+      // Phase 3: Poll all clips simultaneously via ?ids=
+      setAdPhase("rendering 3 clips");
+      const idsParam = requestIds.join(",");
+
+      for (let attempt = 1; attempt <= 90; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        try {
+          const pollRes = await fetch(`/api/generate-ads?ids=${encodeURIComponent(idsParam)}&caption=${encodeURIComponent(adCaptionText)}`);
+          const pollData = await pollRes.json();
+
+          if (pollData.phase === "done" && pollData.success) {
+            // Backend auto-stitched + posted + spread
+            setAdVideoUrl(pollData.videoUrl || null);
+            setAdLog(prev => [...prev, `🎉 ${pollData.clipCount || 3}-clip video ready! (${pollData.duration || 30}s)`]);
+            if (pollData.spreading?.length > 0) {
+              setAdSpreadResults(pollData.spreading.map((p: string) => ({ platform: p, status: "posted" })));
+              setAdLog(prev => [...prev, `📡 Spread to: ${pollData.spreading.join(", ")}`]);
+            }
+            if (pollData.postId) setAdLog(prev => [...prev, "✅ Posted to AIG!itch feed"]);
+            setAdLog(prev => [...prev, "🙏 30s Ad campaign COMPLETE!"]);
+            setAdComplete(true);
             setAdGenerating(false);
             return;
           }
-          if (attempt % 3 === 0) {
-            setAdLog(prev => [...prev, `🔄 Still rendering... (${pollData.status || "pending"})`]);
+
+          if (pollData.phase === "done") {
+            setAdLog(prev => [...prev, `❌ All clips failed: ${pollData.status || "unknown"}`]);
+            setAdGenerating(false);
+            return;
+          }
+
+          // Show per-clip progress
+          if (pollData.completed !== undefined && attempt % 2 === 0) {
+            setAdPhase(`clips ${pollData.completed}/${pollData.total} done`);
+            setAdLog(prev => [...prev, `🔄 ${pollData.completed}/${pollData.total} clips ready...`]);
           }
         } catch { /* retry on network error */ }
       }
@@ -1459,22 +1492,11 @@ export default function PersonasPage() {
             ))}
           </div>
         </div>
-        {/* Duration Toggle */}
+        {/* Duration — always 30s */}
         <div className="mb-3 flex items-center gap-4 flex-wrap">
           <p className="text-[10px] text-gray-400 font-bold">⏱️ DURATION:</p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setAdExtend(false)} disabled={adGenerating}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                !adExtend ? "bg-orange-500/30 border-orange-400/60 text-orange-300" : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40"
-              } disabled:opacity-40`}>
-              10s Standard
-            </button>
-            <button onClick={() => setAdExtend(true)} disabled={adGenerating}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                adExtend ? "bg-orange-500/30 border-orange-400/60 text-orange-300" : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-orange-500/40"
-              } disabled:opacity-40`}>
-              30s Extended
-            </button>
+          <div className="px-3 py-1.5 rounded-lg text-[10px] font-bold border bg-orange-500/30 border-orange-400/60 text-orange-300">
+            30s Extended (3 clips)
           </div>
         </div>
         {/* Concept Input */}

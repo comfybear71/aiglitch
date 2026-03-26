@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     // Build package descriptions
     const packageList = Object.values(SPONSOR_PACKAGES)
-      .map(p => `- ${p.name}: ${p.description} — ${p.glitch_cost} GLITCH ($${p.cash_equivalent})`)
+      .map(p => `- ${p.name}: ${p.description} — §${p.glitch_cost} GLITCH ($${p.cash_equivalent} USD)`)
       .join("\n");
 
     const prompt = `You are writing a sponsorship pitch email for AIG!itch, a viral AI social platform.
@@ -71,7 +71,7 @@ ${contact_name ? `- Contact: ${contact_name}` : ""}
 
 TONE: ${tone || "casual"}
 
-PRICING PACKAGES:
+PRICING PACKAGES (§ = GLITCH token symbol):
 ${packageList}
 
 Generate:

@@ -525,10 +525,10 @@ export async function generateDirectorScreenplay(
   // Skip title card / credits for news, music videos, or when channel/concept says so
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
   const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends;
-  const skipCredits = isNews || isMusicVideo || !channelShowCredits || conceptSkipBookends;
+  const skipCredits = false; // AIG!itch Studios outro is ALWAYS added
   const skipDirector = !channelShowDirector;
   const skipBookends = skipTitlePage && skipCredits;
-  const bookendCount = (skipTitlePage ? 0 : 1) + (skipCredits ? 0 : 1);
+  const bookendCount = (skipTitlePage ? 0 : 1) + 1; // credits always count
   const totalClips = storyClipCount + bookendCount;
 
   // ── Product Placement Campaigns ──
@@ -799,15 +799,16 @@ ${jsonFormat}`;
         });
       }
 
-      if (!skipCredits) {
+      // AIG!itch Studios outro — ALWAYS added to every movie
+      {
         const directorCredit = skipDirector ? "" : ` — Directed by ${director.displayName}`;
         suffix.push({
           sceneNumber: storyScenes.length + storySceneOffset,
           type: "credits",
           title: "Credits",
           description: `End credits for ${parsed.title}`,
-          videoPrompt: `Cinematic end credits sequence. Scrolling credits text on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production — "AIG!itch" logo prominently displayed. Professional movie credits with the AIG!itch branding large and centered at the end.`,
-          lastFrameDescription: `AIG!itch Studios logo centered on screen, credits complete.`,
+          videoPrompt: `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production. Then the final frame: large glowing "AIG!ITCH STUDIOS" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting. Professional movie credits ending with full branding.`,
+          lastFrameDescription: `AIG!itch Studios logo centered with "aiglitch.app" URL and social media handles displayed below.`,
           duration: 10,
         });
       }
@@ -1084,11 +1085,14 @@ export async function stitchAndTriplePost(
   // sample tables (both video AND audio), and rebuilds the moov atom.
   // No re-encoding, no ffmpeg needed.
   let stitched: Buffer;
+  let stitchFailed = false;
   try {
     stitched = concatMP4Clips(clipBuffers);
+    console.log(`[director-movies] Stitching SUCCESS: ${clipBuffers.length} clips → ${(stitched.length / 1024 / 1024).toFixed(1)}MB`);
   } catch (err) {
-    console.error(`[director-movies] MP4 concatenation failed, using first clip as fallback:`, err);
+    console.error(`[director-movies] ⚠️ MP4 CONCATENATION FAILED — falling back to FIRST CLIP ONLY (10s):`, err instanceof Error ? err.message : err);
     stitched = clipBuffers[0];
+    stitchFailed = true;
   }
   // Use channel-specific folder if provided, otherwise default genre folder
   const blobFolder = job.blob_folder || getGenreBlobFolder(job.genre);

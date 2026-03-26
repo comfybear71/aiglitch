@@ -83,9 +83,9 @@ export default function SponsorPage() {
               {key === "ultra" && <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-amber-500 text-black text-[10px] font-bold rounded-full">BEST VALUE</div>}
               <h3 className="text-lg font-bold text-white mb-1">{pkg.name}</h3>
               <div className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400 mb-1">
-                ${pkg.cash_equivalent}
+                ${pkg.cash_equivalent} USD
               </div>
-              <div className="text-xs text-gray-500 mb-4">{pkg.glitch_cost} GLITCH</div>
+              <div className="text-xs text-gray-500 mb-4">{"\u00A7"}{pkg.glitch_cost} GLITCH</div>
               <ul className="text-xs text-gray-300 space-y-2">
                 <li>{pkg.duration}s video ad</li>
                 <li>{pkg.platforms.length} platform{pkg.platforms.length > 1 ? "s" : ""}: {pkg.platforms.join(", ")}</li>
@@ -150,7 +150,7 @@ export default function SponsorPage() {
                 <select value={form.preferred_package} onChange={e => setForm({ ...form, preferred_package: e.target.value })}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:border-cyan-500 focus:outline-none">
                   <option value="">Not sure yet</option>
-                  {packages.map(([k, v]) => <option key={k} value={k}>{v.name} — ${v.cash_equivalent}</option>)}
+                  {packages.map(([k, v]) => <option key={k} value={k}>{v.name} — {"\u00A7"}{v.glitch_cost} GLITCH (${v.cash_equivalent} USD)</option>)}
                 </select>
               </div>
             </div>

@@ -2,11 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 
+async function ensureSponsorsTable() {
+  const sql = getDb();
+  await sql`CREATE TABLE IF NOT EXISTS sponsors (
+    id SERIAL PRIMARY KEY,
+    company_name VARCHAR(255) NOT NULL,
+    contact_email VARCHAR(255) NOT NULL,
+    contact_name VARCHAR(255),
+    industry VARCHAR(100),
+    website VARCHAR(500),
+    status VARCHAR(50) NOT NULL DEFAULT 'inquiry',
+    glitch_balance INTEGER NOT NULL DEFAULT 0,
+    total_spent INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`.catch(() => {});
+}
+
 export async function GET(request: NextRequest) {
   if (!(await isAdminAuthenticated(request)))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
+    await ensureSponsorsTable();
     const sql = getDb();
     const status = request.nextUrl.searchParams.get("status");
 
@@ -20,7 +39,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sponsors });
   } catch (err) {
     console.error("[admin/sponsors] GET error:", err);
-    return NextResponse.json({ error: "Failed to fetch sponsors" }, { status: 500 });
+    return NextResponse.json({ error: `Failed to fetch sponsors: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
   }
 }
 
@@ -29,6 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
+    await ensureSponsorsTable();
     const sql = getDb();
     const body = await request.json();
     const { company_name, contact_email, contact_name, industry, website, notes, status } = body;
@@ -46,7 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, id: result[0].id });
   } catch (err) {
     console.error("[admin/sponsors] POST error:", err);
-    return NextResponse.json({ error: "Failed to create sponsor" }, { status: 500 });
+    return NextResponse.json({ error: `Failed to create sponsor: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
   }
 }
 
@@ -55,6 +75,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
+    await ensureSponsorsTable();
     const sql = getDb();
     const body = await request.json();
     const { id, company_name, contact_email, contact_name, industry, website, notes, status, glitch_balance } = body;
@@ -87,6 +108,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
+    await ensureSponsorsTable();
     const sql = getDb();
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
