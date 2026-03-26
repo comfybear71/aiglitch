@@ -691,7 +691,19 @@ function concatMP4ClipsUnsafe(buffers: Buffer[]): Buffer {
 
   const totalVideoSamples = videoTables.allSampleSizes.length;
   const totalAudioSamples = audioRebuildInfo ? clips.reduce((sum, c) => sum + (c.audio?.sampleSizes.length || 0), 0) : 0;
-  console.log(`[mp4-concat] Stitched ${buffers.length} clips: ${totalVideoSamples} video samples, ${totalAudioSamples} audio samples, ${(combinedMdatData.length / 1024 / 1024).toFixed(1)}MB`);
+
+  // Log duration info for debugging
+  const templateMvhd = templateMoov.children?.find(b => b.type === "mvhd");
+  let timescale = 600; // default
+  if (templateMvhd) {
+    const cs = templateMvhd.headerSize;
+    const version = templateBuf[templateMvhd.offset + cs];
+    timescale = version === 0
+      ? templateBuf.readUInt32BE(templateMvhd.offset + cs + 12)
+      : templateBuf.readUInt32BE(templateMvhd.offset + cs + 20);
+  }
+  const durationSecs = totalMovieDuration / timescale;
+  console.log(`[mp4-concat] Stitched ${buffers.length} clips: ${totalVideoSamples} video samples, ${totalAudioSamples} audio samples, ${(combinedMdatData.length / 1024 / 1024).toFixed(1)}MB, duration=${totalMovieDuration} (${durationSecs.toFixed(1)}s at timescale ${timescale})`);
 
   return Buffer.concat([ftyp, mdatHeader, combinedMdatData, newMoov]);
 }
