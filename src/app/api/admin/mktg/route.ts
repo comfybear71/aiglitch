@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     case "accounts": {
       const dbAccounts = await sql`
         SELECT id, platform, account_name, account_id, account_url, is_active,
-               last_posted_at, created_at, updated_at,
+               last_posted_at, created_at, updated_at, extra_config,
                CASE WHEN access_token != '' THEN true ELSE false END AS has_token
         FROM marketing_platform_accounts ORDER BY platform
       `;

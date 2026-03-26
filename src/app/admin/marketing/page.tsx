@@ -43,9 +43,9 @@ export default function MarketingPage() {
         setMktAccounts(data.accounts || []);
         // Detect TikTok sandbox mode from DB account extra_config
         const ttAccount = (data.accounts || []).find((a: MktPlatformAccount) => a.platform === "tiktok");
-        if (ttAccount) {
+        if (ttAccount?.extra_config) {
           try {
-            const config = JSON.parse((ttAccount as Record<string, unknown>).extra_config as string || "{}");
+            const config = JSON.parse(ttAccount.extra_config);
             setTiktokSandbox(config.sandbox === true);
           } catch { /* default to live */ }
         }
