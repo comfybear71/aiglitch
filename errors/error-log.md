@@ -499,5 +499,87 @@ All 6 Instagram posting entry points go through `postToPlatform()` → `postToIn
 
 ---
 
+## #6 — TikTok Content Posting Always Failing
+
+**Date:** March 26, 2026
+**Status:** Resolved (waiting for TikTok pending upload expiry ~24h)
+**Affected:** All TikTok video posting from the marketing dashboard
+**Impact:** Every TikTok post attempt failed; 603 failed posts accumulated
+**Root Cause:** Chain of 5 interrelated bugs in the TikTok integration
+
+### Bug Chain
+
+**Bug 1: PULL_FROM_URL requires domain verification**
+- TikTok's `PULL_FROM_URL` source type requires verifying your domain in the TikTok Developer Portal
+- The "Verify domains" section in the dev portal had NOT been completed (visible "Verify" button in screenshot)
+- TikTok's servers couldn't fetch videos from `aiglitch.app` URLs
+- **Fix:** Switched to `FILE_UPLOAD` — download video binary first, then upload directly to TikTok's servers
+
+**Bug 2: Direct Post endpoint requires audit**
+- The Direct Post endpoint (`/v2/post/publish/video/init/`) returned "Please review our integration guidelines"
+- TikTok requires passing a "Direct Post" audit for this endpoint, even in sandbox for some operations
+- **Fix:** Switched to Inbox endpoint (`/v2/post/publish/inbox/video/init/`) — no audit required, videos go to creator's inbox/drafts
+
+**Bug 3: Double endpoint calls created spam risk**
+- Code tried Direct Post first, then fell back to Inbox on failure — creating TWO pending uploads per attempt
+- Combined with the PULL_FROM_URL failures, this created a large backlog of pending uploads
+- TikTok triggered `spam_risk_too_many_pending_share` error
+- **Fix:** Use only ONE endpoint per mode (Inbox for both sandbox and production); no fallback cascade
+
+**Bug 4: Sandbox mode never persisted**
+- The accounts SQL query (`SELECT id, platform, account_name...`) did NOT include `extra_config`
+- Frontend always received `undefined` for `extra_config`, parsed as `{}`, defaulted `sandbox` to `false`
+- Every page refresh showed "LIVE" regardless of what was saved in the DB
+- **Fix:** Added `extra_config` to the SELECT query and the `MktPlatformAccount` TypeScript type
+
+**Bug 5: Safari ITP blocked OAuth sandbox cookie**
+- The sandbox flag was stored in a `tiktok_sandbox` cookie during OAuth flow
+- Safari's Intelligent Tracking Prevention (ITP) blocks cookies on cross-site redirects (tiktok.com → aiglitch.app)
+- The callback always read `isSandbox = false` because the cookie was missing
+- **Fix:** Encode sandbox flag in the OAuth `state` parameter (e.g., `uuid:sandbox`) which TikTok passes back unchanged
+
+### Resolution
+
+All 5 bugs fixed. TikTok now uses:
+- `FILE_UPLOAD` method (binary upload, no domain verification)
+- Inbox endpoint (no Direct Post audit)
+- Single endpoint per mode (no cascade)
+- `extra_config` returned to frontend (sandbox persists)
+- Sandbox flag in OAuth state (survives cross-site redirect)
+
+Currently waiting ~24h for TikTok to clear old pending uploads before retesting.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/lib/marketing/platforms.ts` | Rewrote `postToTikTok()`: FILE_UPLOAD + Inbox, download video binary, single endpoint |
+| `src/app/api/auth/tiktok/route.ts` | Encode sandbox in state param, remove sandbox cookie |
+| `src/app/api/auth/callback/tiktok/route.ts` | Read sandbox from state param, redirect to /admin/marketing |
+| `src/app/api/admin/mktg/route.ts` | Added `extra_config` to accounts SELECT query |
+| `src/app/admin/marketing/page.tsx` | Toggle switch UI, video-only TikTok card, sandbox persistence |
+| `src/app/admin/admin-types.ts` | Added `extra_config` to MktPlatformAccount type |
+
+### Key Env Vars
+
+| Variable | Purpose |
+|----------|---------|
+| `TIKTOK_CLIENT_KEY` | OAuth client key (production) |
+| `TIKTOK_CLIENT_SECRET` | OAuth client secret (production) |
+| `TIKTOK_SANDBOX_CLIENT_KEY` | OAuth client key (sandbox) |
+| `TIKTOK_SANDBOX_CLIENT_SECRET` | OAuth client secret (sandbox) |
+| `TIKTOK_ACCESS_TOKEN` | Direct token override (optional, overrides DB) |
+
+### Lessons Learned
+
+1. **Always verify SQL SELECT includes ALL fields the frontend needs** — missing fields return `undefined` silently
+2. **TikTok PULL_FROM_URL needs domain verification** — always use FILE_UPLOAD
+3. **TikTok Direct Post needs audit** — use Inbox endpoint until audited
+4. **Never try multiple TikTok endpoints in sequence** — each creates a pending upload
+5. **Safari ITP blocks cookies on cross-site redirects** — use OAuth state parameter for metadata
+6. **TikTok pending uploads expire after ~24h** — don't retry rapidly
+
+---
+
 <!-- APPEND NEW INCIDENTS BELOW THIS LINE -->
 <!-- Use format: ## #N — Short Title -->
