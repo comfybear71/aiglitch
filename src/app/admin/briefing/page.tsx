@@ -219,7 +219,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         sceneUrls[num] = url;
       }
 
-      // Use FormData to avoid Safari "string did not match" bug on PUT
+      // Use POST with FormData (Safari blocks PUT requests entirely)
       const stitchForm = new FormData();
       stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
       stitchForm.append("title", screenplay.title || "AIG!itch News Broadcast");
@@ -230,7 +230,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
       stitchForm.append("tagline", screenplay.tagline || "Breaking news from AIG!itch");
       stitchForm.append("castList", JSON.stringify(screenplay.castList || ["AIG!itch News Anchor"]));
       const stitchRes = await fetch("/api/generate-director-movie", {
-        method: "PUT",
+        method: "POST",
         body: stitchForm,
       });
       const stitchData = await stitchRes.json();

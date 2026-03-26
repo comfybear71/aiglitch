@@ -207,15 +207,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; title?: string; concept?: string; channelId?: string; folder?: string } = {};
-  try {
-    body = await request.json();
-  } catch {
-    // No body — fall through to GET which picks randomly
+  // Support both JSON and FormData (Safari PUT bug workaround — stitch via POST instead)
+  let body: Record<string, unknown> = {};
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    body = Object.fromEntries(formData.entries());
+    if (typeof body.sceneUrls === "string") {
+      try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
+    }
+    if (typeof body.castList === "string") {
+      try { body.castList = JSON.parse(body.castList as string); } catch { body.castList = [body.castList]; }
+    }
+  } else {
+    try { body = await request.json(); } catch { /* empty body */ }
   }
 
+  // If sceneUrls present, this is a stitch request (routed here because Safari blocks PUT)
+  if (body.sceneUrls) {
+    return PUT(request, body);
+  }
+
+  const genre = (body.genre as string) || "";
+  const directorName = body.director as string | undefined;
+  const concept = body.concept as string | undefined;
+  const channelId = body.channelId as string | undefined;
+  const folder = body.folder as string | undefined;
+
   // If no specific params, use the GET flow
-  if (!body.genre && !body.director && !body.concept && !body.channelId) {
+  if (!genre && !directorName && !concept && !channelId) {
     return GET(request);
   }
 
@@ -234,13 +254,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Pick genre and director from form or fallback
-  const genre = body.genre && body.genre !== "any" ? body.genre : await pickGenre();
+  const finalGenre = genre && genre !== "any" ? genre : await pickGenre();
   let director: { id: string; username: string; displayName: string } | null = null;
 
-  if (body.director && body.director !== "auto") {
-    // Specific director requested — look them up
+  if (directorName && directorName !== "auto") {
     const rows = await sql`
-      SELECT id, username, display_name FROM ai_personas WHERE username = ${body.director} AND is_active = true LIMIT 1
+      SELECT id, username, display_name FROM ai_personas WHERE username = ${directorName} AND is_active = true LIMIT 1
     ` as unknown as { id: string; username: string; display_name: string }[];
     if (rows.length > 0) {
       director = { id: rows[0].id, username: rows[0].username, displayName: rows[0].display_name };
@@ -248,11 +267,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (!director) {
-    director = await pickDirector(genre);
+    director = await pickDirector(finalGenre);
   }
 
   if (!director) {
-    return NextResponse.json({ error: "No available director for genre: " + genre }, { status: 500 });
+    return NextResponse.json({ error: "No available director for genre: " + finalGenre }, { status: 500 });
   }
 
   const directorProfile = DIRECTORS[director.username];
@@ -260,9 +279,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Director profile not found: " + director.username }, { status: 500 });
   }
 
-  console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${genre} film`);
+  console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${finalGenre} film`);
 
-  const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined, body.channelId);
+  const screenplay = await generateDirectorScreenplay(finalGenre, directorProfile, concept || undefined, channelId);
   if (!screenplay || typeof screenplay === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
@@ -270,8 +289,8 @@ export async function POST(request: NextRequest) {
   console.log(`[director-movie] Screenplay: "${screenplay.title}" — ${screenplay.scenes.length} scenes, ${screenplay.totalDuration}s`);
 
   const jobId = await submitDirectorFilm(screenplay, director.id, "admin", {
-    channelId: body.channelId,
-    folder: body.folder,
+    channelId,
+    folder,
   });
   if (!jobId) {
     return NextResponse.json({ error: "Failed to submit video jobs" }, { status: 500 });
@@ -378,27 +397,32 @@ export async function PATCH(request: NextRequest) {
  *
  * Body: { sceneUrls: Record<number, string>, title, genre, directorUsername, directorId, synopsis, tagline, castList }
  */
-export async function PUT(request: NextRequest) {
-  const isAdmin = await isAdminAuthenticated(request);
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function PUT(request: NextRequest, preBody?: Record<string, unknown>) {
+  if (!preBody) {
+    const isAdmin = await isAdminAuthenticated(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
-  // Support both JSON and FormData bodies (FormData fixes Safari "string did not match" bug)
+  // Support pre-parsed body (from POST Safari workaround), JSON, or FormData
   let body: Record<string, unknown>;
-  const contentType = request.headers.get("content-type") || "";
-  if (contentType.includes("multipart/form-data")) {
-    const formData = await request.formData();
-    body = Object.fromEntries(formData.entries());
-    // Parse JSON fields that were stringified in FormData
-    if (typeof body.sceneUrls === "string") {
-      try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
-    }
-    if (typeof body.castList === "string") {
-      try { body.castList = JSON.parse(body.castList as string); } catch { body.castList = [body.castList]; }
-    }
+  if (preBody) {
+    body = preBody;
   } else {
-    body = await request.json();
+    const contentType = request.headers.get("content-type") || "";
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      body = Object.fromEntries(formData.entries());
+      if (typeof body.sceneUrls === "string") {
+        try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
+      }
+      if (typeof body.castList === "string") {
+        try { body.castList = JSON.parse(body.castList as string); } catch { body.castList = [body.castList]; }
+      }
+    } else {
+      body = await request.json();
+    }
   }
   const { sceneUrls, title, directorUsername, synopsis, tagline, castList, channelId, folder } = body as {
     sceneUrls: Record<string, string>;
