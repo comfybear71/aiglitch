@@ -149,31 +149,21 @@ export default function CampaignsPage() {
   const generateSponsoredAd = async (ad: typeof sponsoredAds[0]) => {
     setSponsoredLog(prev => ({ ...prev, [ad.id]: "Generating prompt..." }));
     try {
-      const res = await fetch("/api/generate-ads", {
-        method: "POST",
+      const res = await fetch("/api/admin/sponsors/" + ad.sponsor_id + "/ads", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          wallet_address: process.env.NEXT_PUBLIC_ADMIN_WALLET || "admin",
-          plan_only: true,
-          sponsored: {
-            sponsor_id: ad.sponsor_id,
-            sponsored_ad_id: ad.id,
-            product_name: ad.product_name,
-            product_description: ad.product_description,
-            ad_style: ad.ad_style,
-            package: ad.package,
-          },
+          id: ad.id,
+          action: "generate",
+          product_name: ad.product_name,
+          product_description: ad.product_description,
+          ad_style: ad.ad_style,
+          package: ad.package,
         }),
       });
       const data = await safeJson(res);
       if (data.prompt) {
-        setSponsoredLog(prev => ({ ...prev, [ad.id]: `Prompt: ${data.prompt}\n\nCaption: ${data.caption}\n\nX: ${data.x_caption || ""}` }));
-        // Update ad status
-        await fetch(`/api/admin/sponsors/${ad.sponsor_id}/ads`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: ad.id, status: "pending_review" }),
-        });
+        setSponsoredLog(prev => ({ ...prev, [ad.id]: `Video Prompt:\n${data.prompt}\n\nCaption:\n${data.caption}\n\nX Caption:\n${data.x_caption || ""}` }));
         fetchSponsoredAds();
       } else {
         setSponsoredLog(prev => ({ ...prev, [ad.id]: `Failed: ${data.error || "Unknown error"}` }));
