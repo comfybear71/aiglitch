@@ -255,6 +255,22 @@ export default function CampaignsPage() {
     }
   };
 
+  // Editing frequency state
+  const [editingFreq, setEditingFreq] = useState<string | null>(null);
+  const [freqValue, setFreqValue] = useState(0.3);
+
+  const updateFrequency = async (campaignId: string, newFreq: number) => {
+    try {
+      await fetch("/api/admin/ad-campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", campaign_id: campaignId, frequency: newFreq }),
+      });
+      setEditingFreq(null);
+      fetchCampaigns();
+    } catch { /* silent */ }
+  };
+
   const campaignAction = async (campaignId: string, action: string) => {
     setActionLog(`${action}ing campaign...`);
     try {
@@ -480,6 +496,12 @@ export default function CampaignsPage() {
               </div>
               {/* Actions */}
               <div className="flex flex-col gap-1 ml-4">
+                {c.status === "active" && (
+                  <button onClick={() => { setEditingFreq(editingFreq === c.id ? null : c.id); setFreqValue(c.frequency); }}
+                    className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs hover:bg-cyan-500/30 transition">
+                    {Math.round(c.frequency * 100)}% Freq
+                  </button>
+                )}
                 {c.status === "pending_payment" && (
                   <button onClick={() => campaignAction(c.id, "activate")}
                     className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
@@ -506,6 +528,22 @@ export default function CampaignsPage() {
                 )}
               </div>
             </div>
+            {/* Frequency Editor */}
+            {editingFreq === c.id && (
+              <div className="mt-3 p-3 bg-gray-800/50 border border-cyan-800/30 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-gray-400">Placement frequency:</span>
+                  <input type="range" value={freqValue} onChange={e => setFreqValue(Number(e.target.value))}
+                    min={0.1} max={1.0} step={0.1} className="flex-1" />
+                  <span className="text-sm font-bold text-cyan-400 w-12 text-right">{Math.round(freqValue * 100)}%</span>
+                  <button onClick={() => updateFrequency(c.id, freqValue)}
+                    className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-500">
+                    Save
+                  </button>
+                </div>
+                <p className="text-[9px] text-gray-500 mt-1">Higher = appears in more content. 30% = 1 in 3 posts. 100% = every post.</p>
+              </div>
+            )}
           </div>
         ))}
       </div>
