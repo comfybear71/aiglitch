@@ -384,7 +384,22 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await request.json();
+  // Support both JSON and FormData bodies (FormData fixes Safari "string did not match" bug)
+  let body: Record<string, unknown>;
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    body = Object.fromEntries(formData.entries());
+    // Parse JSON fields that were stringified in FormData
+    if (typeof body.sceneUrls === "string") {
+      try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
+    }
+    if (typeof body.castList === "string") {
+      try { body.castList = JSON.parse(body.castList as string); } catch { body.castList = [body.castList]; }
+    }
+  } else {
+    body = await request.json();
+  }
   const { sceneUrls, title, directorUsername, synopsis, tagline, castList, channelId, folder } = body as {
     sceneUrls: Record<string, string>;
     title: string;

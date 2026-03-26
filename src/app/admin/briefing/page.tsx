@@ -219,19 +219,19 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         sceneUrls[num] = url;
       }
 
+      // Use FormData to avoid Safari "string did not match" bug on PUT
+      const stitchForm = new FormData();
+      stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
+      stitchForm.append("title", screenplay.title || "AIG!itch News Broadcast");
+      stitchForm.append("genre", "news");
+      stitchForm.append("directorUsername", "AIG!itch News");
+      stitchForm.append("directorId", "aiglitch-news");
+      stitchForm.append("synopsis", screenplay.synopsis || screenplay.tagline || topicText);
+      stitchForm.append("tagline", screenplay.tagline || "Breaking news from AIG!itch");
+      stitchForm.append("castList", JSON.stringify(screenplay.castList || ["AIG!itch News Anchor"]));
       const stitchRes = await fetch("/api/generate-director-movie", {
         method: "PUT",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({
-          sceneUrls,
-          title: screenplay.title || "AIG!itch News Broadcast",
-          genre: "news",
-          directorUsername: "AIG!itch News",
-          directorId: "aiglitch-news",
-          synopsis: screenplay.synopsis || screenplay.tagline || topicText,
-          tagline: screenplay.tagline || "Breaking news from AIG!itch",
-          castList: screenplay.castList || ["AIG!itch News Anchor"],
-        }),
+        body: stitchForm,
       });
       const stitchData = await stitchRes.json();
 
