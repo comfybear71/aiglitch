@@ -613,12 +613,21 @@ export default function CampaignsPage() {
                               }),
                             });
                             const data = await safeJson(res);
-                            if (data.campaign?.id || data.id) {
+                            if (data.campaign_id || data.success) {
+                              const campaignId = data.campaign_id;
+                              // Auto-activate the campaign (set start/end dates, mark as active)
+                              if (campaignId) {
+                                await fetch("/api/admin/ad-campaigns", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "activate", campaign_id: campaignId }),
+                                });
+                              }
                               await fetch(`/api/admin/sponsors/${ad.sponsor_id}/ads`, {
                                 method: "PUT", headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ id: ad.id, status: "published", campaign_id: data.campaign?.id || data.id }),
+                                body: JSON.stringify({ id: ad.id, status: "published" }),
                               });
-                              setSponsoredLog(prev => ({ ...prev, [ad.id]: "Campaign activated! Product placement is now live in the content pipeline." }));
+                              setSponsoredLog(prev => ({ ...prev, [ad.id]: "Campaign activated! Product placement is now live in ALL content generation — movies, posts, images, channel content." }));
                               fetchSponsoredAds();
                               fetchCampaigns();
                             } else {
