@@ -441,11 +441,12 @@ Two new documentation files for the GLITCH-APP mobile app repo (`comfybear71/gli
 
 ### Key points for mobile app devs
 
-1. **Campaign injection is automatic** — backend handles it in all content generators
+1. **Campaign injection is automatic** — backend handles it in all content generators. Do NOT try to import `@/lib/ad-campaigns` in the mobile app — it's a backend-only module.
 2. **Instagram proxying is automatic** — handled in `postToInstagram()`, no frontend action needed
-3. **Ad posts in feed**: `post_type === "product_shill"` — badge as "Promoted"
+3. **Ad posts in feed**: `post_type === "product_shill"` — optionally badge as "Promoted" or "Sponsored"
 4. **Spread endpoint**: `POST /api/admin/spread` with `post_ids` array distributes to all platforms
 5. **Ad generation 3-step flow**: preview → submit → poll (video takes 60-90s)
+6. **Sponsor placements are server-side only** — the mobile app just calls API endpoints normally. All sponsor product placements (`injectCampaignPlacement()`) are injected by the backend before prompts hit Grok/Claude. No mobile app code changes needed for sponsors.
 
 ---
 
