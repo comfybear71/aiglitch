@@ -138,13 +138,15 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         setNewsGenerating(false);
         return;
       }
-      setNewsLog(prev => [...prev, `\u{2705} Screenplay ready: "${screenplay.title}" — ${screenplay.scenes.length} scenes`]);
+      // Cap at 9 scenes (the news broadcast spec)
+      const scenes = screenplay.scenes.slice(0, 9);
+      setNewsLog(prev => [...prev, `\u{2705} Screenplay ready: "${screenplay.title}" — ${scenes.length} scenes`]);
 
       // Step 3: Submit all 9 clips to Grok IN PARALLEL
       setNewsPhase("submitting 9 clips");
-      setNewsLog(prev => [...prev, `\u{1F3A5} Submitting ${screenplay.scenes.length} clips to Grok in parallel...`]);
+      setNewsLog(prev => [...prev, `\u{1F3A5} Submitting ${scenes.length} clips to Grok in parallel...`]);
 
-      const clipPromises = screenplay.scenes.map((scene: { videoPrompt: string; video_prompt?: string; duration?: number }, i: number) =>
+      const clipPromises = scenes.map((scene: { videoPrompt: string; video_prompt?: string; duration?: number }, i: number) =>
         fetch("/api/test-grok-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -164,7 +166,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
         }
       }
 
-      setNewsLog(prev => [...prev, `\u{2705} ${requestIds.length}/${screenplay.scenes.length} clips submitted! Polling...`]);
+      setNewsLog(prev => [...prev, `\u{2705} ${requestIds.length}/${scenes.length} clips submitted! Polling...`]);
 
       // Step 4: Poll all clips until done (parallel polling)
       setNewsPhase(`rendering ${requestIds.length} clips`);

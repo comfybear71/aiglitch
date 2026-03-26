@@ -485,12 +485,13 @@ export async function PUT(request: NextRequest, preBody?: Record<string, unknown
   }
 
   // Stitch all clips into one MP4
-  console.log(`[director-movie] Stitching ${clipBuffers.length} clips for "${title}"...`);
+  console.log(`[director-movie] Stitching ${clipBuffers.length} clips (${clipBuffers.reduce((s, b) => s + b.length, 0) / 1024 / 1024 | 0}MB total) for "${title}"...`);
   let stitched: Buffer;
   try {
     stitched = concatMP4Clips(clipBuffers);
+    console.log(`[director-movie] Stitch SUCCESS: ${(stitched.length / 1024 / 1024).toFixed(1)}MB`);
   } catch (err) {
-    console.error(`[director-movie] MP4 concatenation failed, using first clip as fallback:`, err);
+    console.error(`[director-movie] MP4 concatenation FAILED:`, err instanceof Error ? err.message : err);
     stitched = clipBuffers[0];
   }
   // Use channel-specific folder if provided, otherwise default genre folder
