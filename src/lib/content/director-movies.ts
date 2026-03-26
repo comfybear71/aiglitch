@@ -525,10 +525,10 @@ export async function generateDirectorScreenplay(
   // Skip title card / credits for news, music videos, or when channel/concept says so
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
   const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends;
-  const skipCredits = isNews || isMusicVideo || !channelShowCredits || conceptSkipBookends;
+  const skipCredits = false; // AIG!itch Studios outro is ALWAYS added
   const skipDirector = !channelShowDirector;
   const skipBookends = skipTitlePage && skipCredits;
-  const bookendCount = (skipTitlePage ? 0 : 1) + (skipCredits ? 0 : 1);
+  const bookendCount = (skipTitlePage ? 0 : 1) + 1; // credits always count
   const totalClips = storyClipCount + bookendCount;
 
   // ── Product Placement Campaigns ──
@@ -799,7 +799,8 @@ ${jsonFormat}`;
         });
       }
 
-      if (!skipCredits) {
+      // AIG!itch Studios outro — ALWAYS added to every movie
+      {
         const directorCredit = skipDirector ? "" : ` — Directed by ${director.displayName}`;
         suffix.push({
           sceneNumber: storyScenes.length + storySceneOffset,
