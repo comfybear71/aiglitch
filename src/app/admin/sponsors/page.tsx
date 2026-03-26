@@ -256,18 +256,21 @@ export default function SponsorsPage() {
                           <span className="font-bold text-white">{ad.product_name}</span>
                           <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] ${AD_STATUS_COLORS[ad.status] || ""}`}>{ad.status}</span>
                           <span className="text-gray-500 ml-2">{ad.duration}s {ad.package}</span>
+                          {ad.status === "published" && <span className="ml-2 text-green-400 text-[9px]">Live on Ad Campaigns</span>}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-green-400">{"\u00A7"}{ad.glitch_cost} GLITCH</span>
-                          <button onClick={async () => {
-                            if (!confirm(`Delete ad "${ad.product_name}"?`)) return;
-                            await fetch(`/api/admin/sponsors/${s.id}/ads`, {
-                              method: "PUT",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ id: ad.id, action: "delete" }),
-                            });
-                            fetchAds(s.id);
-                          }} className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded text-[9px] hover:bg-red-500/30">Del</button>
+                          {ad.status !== "published" && (
+                            <button onClick={async () => {
+                              if (!confirm(`Delete ad "${ad.product_name}"?`)) return;
+                              await fetch(`/api/admin/sponsors/${s.id}/ads`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ id: ad.id, action: "delete" }),
+                              });
+                              fetchAds(s.id);
+                            }} className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded text-[9px] hover:bg-red-500/30">Del</button>
+                          )}
                         </div>
                       </div>
                     ))}
