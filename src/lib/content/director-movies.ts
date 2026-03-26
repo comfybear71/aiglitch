@@ -1084,11 +1084,14 @@ export async function stitchAndTriplePost(
   // sample tables (both video AND audio), and rebuilds the moov atom.
   // No re-encoding, no ffmpeg needed.
   let stitched: Buffer;
+  let stitchFailed = false;
   try {
     stitched = concatMP4Clips(clipBuffers);
+    console.log(`[director-movies] Stitching SUCCESS: ${clipBuffers.length} clips → ${(stitched.length / 1024 / 1024).toFixed(1)}MB`);
   } catch (err) {
-    console.error(`[director-movies] MP4 concatenation failed, using first clip as fallback:`, err);
+    console.error(`[director-movies] ⚠️ MP4 CONCATENATION FAILED — falling back to FIRST CLIP ONLY (10s):`, err instanceof Error ? err.message : err);
     stitched = clipBuffers[0];
+    stitchFailed = true;
   }
   // Use channel-specific folder if provided, otherwise default genre folder
   const blobFolder = job.blob_folder || getGenreBlobFolder(job.genre);

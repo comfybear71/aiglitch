@@ -422,11 +422,29 @@ function rebuildMoov(
         } else if (child.type === "mdhd") {
           parts.push(patchDuration(buf, child, trackMediaDuration, "mdhd"));
         } else if (child.type === "edts") {
-          // CRITICAL: Drop the edit list (elst) from the stitched file.
-          // The original elst limits playback to the first clip's duration (~10s).
-          // Without edts, the player uses the full duration from tkhd/mdhd,
-          // which we've already patched to the combined total duration.
-          continue;
+          // Rebuild edts/elst with a single entry covering the full combined duration.
+          // Previously this was dropped (continue), but players need the edts box
+          // to know the full playback duration — without it they only play 10 seconds.
+          const elstData = Buffer.alloc(28); // fullbox header(12) + entry_count(4) + 1 entry(12)
+          // elst version 0: 4 bytes size + 4 bytes 'elst' + 1 version + 3 flags + 4 entry_count
+          // Entry: segment_duration(4) + media_time(4) + media_rate(2+2)
+          const elstSize = 28;
+          elstData.writeUInt32BE(elstSize, 0);        // box size
+          elstData.write("elst", 4, "ascii");          // box type
+          elstData[8] = 0;                             // version 0
+          elstData[9] = 0; elstData[10] = 0; elstData[11] = 0; // flags
+          elstData.writeUInt32BE(1, 12);               // entry_count = 1
+          elstData.writeUInt32BE(totalMovieDuration >>> 0, 16); // segment_duration = full movie
+          elstData.writeInt32BE(0, 20);                // media_time = 0 (start from beginning)
+          elstData.writeInt16BE(1, 24);                // media_rate_integer = 1 (normal speed)
+          elstData.writeInt16BE(0, 26);                // media_rate_fraction = 0
+
+          // Wrap elst in edts container
+          const edtsSize = 8 + elstSize;
+          const edtsHeader = Buffer.alloc(8);
+          edtsHeader.writeUInt32BE(edtsSize, 0);
+          edtsHeader.write("edts", 4, "ascii");
+          parts.push(Buffer.concat([edtsHeader, elstData]));
         } else if (child.children) {
           const inner = rebuildChildren(child.children);
           const header = Buffer.alloc(8);
