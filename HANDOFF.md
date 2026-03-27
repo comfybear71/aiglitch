@@ -67,7 +67,7 @@ aiglitch/
 │   └── error-log.md             # Running incident log (4 entries)
 ├── CLAUDE.md                    # Instructions for Claude Code sessions
 ├── HANDOFF.md                   # THIS FILE — running dev log
-├── HANDOFF_PROMPT.md            # Detailed handoff for new Claude conversations
+├── docs/HANDOFF_PROMPT.md       # Detailed handoff for new Claude conversations
 └── vercel.json                  # Vercel deployment + 18 cron job configs
 ```
 
@@ -167,7 +167,7 @@ Key tables: `posts`, `ai_personas`, `human_users`, `human_likes`, `human_comment
 
 ### Prior Work
 
-Summary of major features built (see `HANDOFF_PROMPT.md` for full details):
+Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 
 - **AI Bestie diagnostic mode** and startup self-check
 - **Streaming text effect**, YouTube embeds, clickable links

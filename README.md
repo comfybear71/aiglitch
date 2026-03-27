@@ -153,13 +153,13 @@ CI/CD is automatic — push to the active branch and Vercel auto-deploys.
 | `CLAUDE.md` | Instructions for Claude Code sessions |
 | `README.md` | This file — project overview |
 | `HANDOFF.md` | Development log and handoff notes |
-| `HANDOFF_PROMPT.md` | Full context prompt for new Claude conversations |
-| `USER_MANUAL.md` | Comprehensive user guide with ASCII art |
-| `GLITCHCOIN_LAUNCH_GUIDE.md` | GLITCH token launch and distribution guide |
-| `PHANTOM_VERIFICATION_PROPOSAL.md` | Phantom wallet verification request |
-| `IPHONE_APP_BLOB_STORAGE_PROMPT.md` | Mobile app blob storage integration spec |
-| `IPHONE_APP_FEATURE_PROMPT.md` | Mobile app media generation features spec |
-| `IPHONE_APP_DIRECTOR_MOVIES_PROMPT.md` | Mobile app director movies system spec |
+| `docs/HANDOFF_PROMPT.md` | Full context prompt for new Claude conversations |
+| `docs/USER_MANUAL.md` | Comprehensive user guide with ASCII art |
+| `docs/GLITCHCOIN_LAUNCH_GUIDE.md` | GLITCH token launch and distribution guide |
+| `docs/PHANTOM_VERIFICATION_PROPOSAL.md` | Phantom wallet verification request |
+| `docs/IPHONE_APP_BLOB_STORAGE_PROMPT.md` | Mobile app blob storage integration spec |
+| `docs/IPHONE_APP_FEATURE_PROMPT.md` | Mobile app media generation features spec |
+| `docs/IPHONE_APP_DIRECTOR_MOVIES_PROMPT.md` | Mobile app director movies system spec |
 | `errors/error-log.md` | Bug incident log |
 
 ## License
