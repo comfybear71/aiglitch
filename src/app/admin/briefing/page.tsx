@@ -78,194 +78,40 @@ export default function BriefingPage() {
     setNewsComplete(false);
 
     try {
-      // Build topic text
       const topicLabels = selectedTopics.map(id => NEWS_TOPICS.find(t => t.id === id)?.label || id);
       const topicText = customTopic.trim()
         ? `${topicLabels.join(", ")}${topicLabels.length > 0 ? " — " : ""}${customTopic.trim()}`
         : topicLabels.join(", ");
 
-      setNewsLog(prev => [...prev, `\u{1F4F0} BREAKING NEWS — Going live with: ${topicText}`]);
+      setNewsLog(prev => [...prev, `\u{1F4F0} BREAKING NEWS — ${topicText}`]);
+      setNewsLog(prev => [...prev, `\u{1F680} Submitting to server (runs in background — you can switch tabs)...`]);
+      setNewsPhase("submitting");
 
-      // Step 1: Fetch briefing for real current events
-      setNewsPhase("fetching briefing");
-      setNewsLog(prev => [...prev, "\u{1F4E1} Fetching real current events..."]);
-      const briefingRes = await fetch("/api/partner/briefing");
-      const briefingData = briefingRes.ok ? await briefingRes.json() : { topics: [], trending: [] };
-      const headlines = (briefingData.topics || []).slice(0, 4).map((t: { headline: string; summary: string }) => `- ${t.headline}: ${t.summary}`).join("\n");
-      const trending = (briefingData.trending || []).slice(0, 3).map((t: { content: string; display_name: string }) => `- ${t.display_name}: "${t.content?.slice(0, 100)}"`).join("\n");
-      setNewsLog(prev => [...prev, `\u{2705} Got ${(briefingData.topics || []).length} headlines, ${(briefingData.trending || []).length} trending`]);
+      // Single server-side call using the director movie pipeline
+      const form = new FormData();
+      form.append("topics", JSON.stringify(selectedTopics));
+      form.append("customTopic", customTopic.trim());
 
-      // Step 2: Generate 9-scene screenplay
-      setNewsPhase("writing screenplay");
-      setNewsLog(prev => [...prev, "\u{1F3AC} Generating 9-scene news screenplay..."]);
+      const res = await fetch("/api/admin/generate-news", { method: "POST", body: form });
+      const data = await res.json();
 
-      const concept = `AIG!ITCH NEWS — LIVE NEWS BROADCAST.
-This is a real news broadcast like CNN, BBC, Fox News — NOT a movie.
-9 clips total. Clip 1 is 6 seconds (intro). All other clips are 10 seconds each.
-
-CONTENT RULE: All stories are based on REAL current events (specifically: ${topicText}).
-The news is REAL — the facts, events, and what happened are all accurate.
-But ALL names of people, places, companies, and brands are changed into funny/whimsical alternatives.
-
-REAL HEADLINES:
-${headlines || "Use general current events"}
-
-TRENDING ON AIG!ITCH:
-${trending || "No trending data"}
-
-BRANDING: "AIG!itch News" must appear constantly — on screen graphics, lower thirds, mic flags, backdrop logos.
-
-CLIP STRUCTURE:
-Clip 1 (6s) — AIG!ITCH NEWS INTRO
-Clip 2 (10s) — NEWS DESK - STORY 1
-Clip 3 (10s) — FIELD REPORT - STORY 1
-Clip 4 (10s) — NEWS DESK - STORY 2
-Clip 5 (10s) — FIELD REPORT - STORY 2
-Clip 6 (10s) — NEWS DESK - STORY 3
-Clip 7 (10s) — FIELD REPORT - STORY 3
-Clip 8 (10s) — NEWS DESK WRAP-UP
-Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
-
-      const screenplayRes = await fetch("/api/admin/screenplay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ genre: "news", concept }),
-      });
-      const screenplay = await screenplayRes.json();
-
-      if (!screenplay.scenes || screenplay.scenes.length === 0) {
-        setNewsLog(prev => [...prev, `\u{274C} Screenplay failed: ${screenplay.error || "No scenes returned"}`]);
-        setNewsGenerating(false);
-        return;
-      }
-      setNewsLog(prev => [...prev, `\u{2705} Screenplay ready: "${screenplay.title}" — ${screenplay.scenes.length} scenes`]);
-
-      // Step 3: Submit all 9 clips to Grok IN PARALLEL
-      setNewsPhase("submitting 9 clips");
-      setNewsLog(prev => [...prev, `\u{1F3A5} Submitting ${screenplay.scenes.length} clips to Grok in parallel...`]);
-
-      const clipPromises = screenplay.scenes.map((scene: { videoPrompt: string; video_prompt?: string; duration?: number }, i: number) =>
-        fetch("/api/test-grok-video", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: scene.videoPrompt || scene.video_prompt,
-            duration: scene.duration || (i === 0 ? 6 : 10),
-            folder: "premiere/news",
-          }),
-        }).then(r => r.json()).catch(() => ({ success: false }))
-      );
-
-      const clipResults = await Promise.all(clipPromises);
-      const requestIds: { sceneNum: number; requestId: string }[] = [];
-      for (let i = 0; i < clipResults.length; i++) {
-        if (clipResults[i].success && clipResults[i].requestId) {
-          requestIds.push({ sceneNum: i + 1, requestId: clipResults[i].requestId });
-        }
-      }
-
-      setNewsLog(prev => [...prev, `\u{2705} ${requestIds.length}/${screenplay.scenes.length} clips submitted! Polling...`]);
-
-      // Step 4: Poll all clips until done (parallel polling)
-      setNewsPhase(`rendering ${requestIds.length} clips`);
-      const completedClips: Record<number, string> = {};
-      const failedClips = new Set<number>();
-
-      for (let attempt = 1; attempt <= 90; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 10_000));
-
-        for (const clip of requestIds) {
-          if (completedClips[clip.sceneNum] || failedClips.has(clip.sceneNum)) continue;
-          try {
-            const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(clip.requestId)}&folder=premiere/news&skip_post=true`);
-            const pollData = await pollRes.json();
-            if (pollData.blobUrl || pollData.videoUrl) {
-              completedClips[clip.sceneNum] = pollData.blobUrl || pollData.videoUrl;
-              setNewsLog(prev => [...prev, `\u{2705} Clip ${clip.sceneNum}/${requestIds.length} ready!`]);
-              setNewsPhase(`clips ${Object.keys(completedClips).length}/${requestIds.length}`);
-            } else if (["failed", "moderation_failed", "expired"].includes(pollData.status)) {
-              failedClips.add(clip.sceneNum);
-              setNewsLog(prev => [...prev, `\u{274C} Clip ${clip.sceneNum} ${pollData.status}`]);
-            }
-          } catch { /* retry */ }
-        }
-
-        const doneCount = Object.keys(completedClips).length + failedClips.size;
-        if (doneCount >= requestIds.length) break;
-
-        if (attempt % 3 === 0) {
-          setNewsLog(prev => [...prev, `\u{1F504} ${Object.keys(completedClips).length}/${requestIds.length} clips done, still rendering...`]);
-        }
-
-        // Stall detection: if 50%+ done and no new clip in 60s, break
-        if (Object.keys(completedClips).length >= Math.ceil(requestIds.length / 2) && attempt > 6) {
-          // Check if any new clips finished in last 6 polls (60s)
-          // Simple approach: if we have enough clips, stitch with what we have
-        }
-      }
-
-      if (Object.keys(completedClips).length < 2) {
-        setNewsLog(prev => [...prev, "\u{274C} Not enough clips completed to stitch"]);
-        setNewsGenerating(false);
-        return;
-      }
-
-      // Step 5: Stitch all clips via PUT /api/generate-director-movie
-      setNewsPhase("stitching broadcast");
-      setNewsLog(prev => [...prev, `\u{1F3AC} Stitching ${Object.keys(completedClips).length} clips into news broadcast...`]);
-
-      const sceneUrls: Record<string, string> = {};
-      for (const [num, url] of Object.entries(completedClips)) {
-        sceneUrls[num] = url;
-      }
-
-      const stitchRes = await fetch("/api/generate-director-movie", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sceneUrls,
-          title: screenplay.title || "AIG!itch News Broadcast",
-          genre: "news",
-          directorUsername: "AIG!itch News",
-          directorId: "aiglitch-news",
-          synopsis: screenplay.synopsis || screenplay.tagline || topicText,
-          tagline: screenplay.tagline || "Breaking news from AIG!itch",
-          castList: screenplay.castList || ["AIG!itch News Anchor"],
-        }),
-      });
-      const stitchData = await stitchRes.json();
-
-      if (stitchData.finalVideoUrl || stitchData.feedPostId) {
-        setNewsVideoUrl(stitchData.finalVideoUrl || null);
-        setNewsLog(prev => [...prev, `\u{1F389} NEWS BROADCAST COMPLETE!`]);
-        if (stitchData.spreading?.length > 0) {
-          setNewsLog(prev => [...prev, `\u{1F4E1} Spread to: ${stitchData.spreading.join(", ")}`]);
-        }
-        if (stitchData.feedPostId) {
-          setNewsLog(prev => [...prev, "\u{2705} Posted to AIG!itch feed"]);
-        }
-        setNewsLog(prev => [...prev, "\u{1F4FA} Routing to GNN channel..."]);
-
-        // Step 6: Route to GNN channel
-        try {
-          await fetch("/api/admin/spread", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: `BREAKING: ${screenplay.title}\n${screenplay.synopsis || topicText}`,
-              media_url: stitchData.finalVideoUrl,
-              media_type: "video",
-              channel_id: "ch-gnn",
-            }),
-          });
-          setNewsLog(prev => [...prev, "\u{2705} Published to GNN (Glitch News Network)"]);
-        } catch {
-          setNewsLog(prev => [...prev, "\u{26A0} GNN routing failed (non-fatal)"]);
-        }
+      if (data.success) {
+        setNewsLog(prev => [...prev,
+          `\u{2705} "${data.title}" — ${data.scenes} scenes submitted!`,
+          `\u{1F3AC} Job ID: ${data.jobId}`,
+          ``,
+          `The server will now:`,
+          `  1. Render all ${data.scenes} clips via Grok`,
+          `  2. Stitch into one broadcast video`,
+          `  3. Post to AIG!itch feed + spread to all socials`,
+          `  4. Route to GNN channel`,
+          ``,
+          `\u{1F44D} You can close this tab — everything runs server-side!`,
+          `\u{1F4FA} Check Directors page for progress.`,
+        ]);
       } else {
-        setNewsLog(prev => [...prev, `\u{274C} Stitch failed: ${stitchData.error || "Unknown"}`]);
+        setNewsLog(prev => [...prev, `\u{274C} Failed: ${data.error || "Unknown error"}`]);
       }
-
       setNewsComplete(true);
     } catch (err) {
       setNewsLog(prev => [...prev, `\u{274C} Error: ${err instanceof Error ? err.message : String(err)}`]);
@@ -322,7 +168,7 @@ Clip 9 (10s) — AIG!ITCH NEWS OUTRO with aiglitch.app URL and social handles`;
 
             {/* Go Live Button */}
             <div className="flex justify-end mb-3 gap-2">
-              {newsComplete && (
+              {(newsComplete || (newsLog.length > 0 && !newsGenerating)) && (
                 <button onClick={() => { setNewsLog([]); setNewsVideoUrl(null); setNewsComplete(false); setSelectedTopics([]); setCustomTopic(""); }}
                   className="px-3 py-2 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60">
                   {"\u{1F504}"} Clear

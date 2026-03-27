@@ -420,19 +420,18 @@ export default function DirectorsPage() {
         setGenProgress({ label: `🧩 Stitching`, current: 1, total: 1, startTime: Date.now() });
 
         try {
+          const stitchForm = new FormData();
+          stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
+          stitchForm.append("title", screenplay.title);
+          stitchForm.append("genre", genre);
+          stitchForm.append("directorUsername", screenplay.director);
+          stitchForm.append("directorId", screenplay.directorId);
+          stitchForm.append("synopsis", screenplay.synopsis);
+          stitchForm.append("tagline", screenplay.tagline);
+          stitchForm.append("castList", JSON.stringify(screenplay.castList));
           const stitchRes = await fetch("/api/generate-director-movie", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sceneUrls: sceneUrls,
-              title: screenplay.title,
-              genre,
-              directorUsername: screenplay.director,
-              directorId: screenplay.directorId,
-              synopsis: screenplay.synopsis,
-              tagline: screenplay.tagline,
-              castList: screenplay.castList,
-            }),
+            method: "POST",
+            body: stitchForm,
           });
           const stitchData = await stitchRes.json();
 

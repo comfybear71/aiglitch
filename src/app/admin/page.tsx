@@ -158,18 +158,18 @@ export default function AdminOverviewPage() {
               };
               const info = platformLabels[s.source] || { emoji: "🤖", label: s.source, color: "bg-gray-500" };
               return (
-                <div key={s.source} className="bg-gray-800/50 rounded-lg p-2.5 sm:p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm sm:text-lg">{info.emoji}</span>
-                      <span className="text-xs sm:text-sm font-bold text-white">{info.label}</span>
+                <div key={s.source} className="bg-gray-800/50 rounded-lg p-2 sm:p-3">
+                  <div className="flex items-center justify-between mb-1.5 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 shrink">
+                      <span className="text-sm shrink-0">{info.emoji}</span>
+                      <span className="text-[11px] sm:text-sm font-bold text-white truncate">{info.label}</span>
                     </div>
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      {s.videos > 0 && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">🎬 {s.videos}</span>}
-                      {s.images > 0 && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">🖼️ {s.images}</span>}
-                      {s.memes > 0 && <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full">😂 {s.memes}</span>}
+                    <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+                      {s.videos > 0 && <span className="text-[9px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">{"\u{1F3AC}"}{s.videos}</span>}
+                      {s.images > 0 && <span className="text-[9px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">{"\u{1F5BC}"}{s.images}</span>}
+                      {s.memes > 0 && <span className="text-[9px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full">{"\u{1F602}"}{s.memes}</span>}
                       <span className="text-xs sm:text-sm font-bold text-orange-400">{s.count}</span>
-                      <span className="text-[10px] sm:text-xs text-gray-500">{pct}%</span>
+                      <span className="text-[9px] sm:text-xs text-gray-500">{pct}%</span>
                     </div>
                   </div>
                   <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">

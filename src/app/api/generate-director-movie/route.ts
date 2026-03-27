@@ -207,15 +207,103 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; title?: string; concept?: string; channelId?: string; folder?: string } = {};
-  try {
-    body = await request.json();
-  } catch {
-    // No body — fall through to GET which picks randomly
+  // Support both JSON and FormData (Safari PUT bug workaround — stitch via POST instead)
+  let body: Record<string, unknown> = {};
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    body = Object.fromEntries(formData.entries());
+    if (typeof body.sceneUrls === "string") {
+      try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
+    }
+    if (typeof body.castList === "string") {
+      try { body.castList = JSON.parse(body.castList as string); } catch { body.castList = [body.castList]; }
+    }
+  } else {
+    try { body = await request.json(); } catch { /* empty body */ }
   }
 
+  // If sceneUrls present, this is a stitch request (from directors page FormData)
+  if (body.sceneUrls) {
+    // Parse body and call the stitch logic directly
+    const sceneUrls = (body.sceneUrls || body.scene_urls) as Record<string, string> | undefined;
+    const title = (body.title || "Breaking News Broadcast") as string;
+    const stitchGenre = (body.genre || "news") as string;
+    const directorUsername = (body.directorUsername || "AIG!itch News") as string;
+    const directorId = (body.directorId || "glitch-000") as string;
+    const synopsis = (body.synopsis || "") as string;
+    const tagline = (body.tagline || "") as string;
+    const castList = (body.castList || []) as string[];
+    const channelId = (body.channelId || body.channel_id) as string | undefined;
+    const folder = (body.folder) as string | undefined;
+
+    if (!sceneUrls || !title) {
+      return NextResponse.json({ error: "Missing required fields", hint: `Received keys: ${Object.keys(body).join(", ")}` }, { status: 400 });
+    }
+
+    // Import and run the stitch logic inline
+    const { stitchAndTriplePost } = await import("@/lib/content/director-movies");
+    const { ensureDbReady } = await import("@/lib/seed");
+    await ensureDbReady();
+
+    const sortedKeys = Object.keys(sceneUrls).map(Number).sort((a, b) => a - b);
+    const clipBuffers: Buffer[] = [];
+    for (const key of sortedKeys) {
+      const url = sceneUrls[String(key)];
+      if (!url) continue;
+      try {
+        const res = await fetch(url);
+        if (res.ok) clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+      } catch { /* skip failed downloads */ }
+    }
+
+    if (clipBuffers.length === 0) {
+      return NextResponse.json({ error: "No clips could be downloaded" }, { status: 500 });
+    }
+
+    const { concatMP4Clips } = await import("@/lib/media/mp4-concat");
+    const { put } = await import("@vercel/blob");
+
+    let stitched: Buffer;
+    try {
+      stitched = concatMP4Clips(clipBuffers);
+    } catch {
+      stitched = clipBuffers[0];
+    }
+
+    const { v4: uuidv4 } = await import("uuid");
+    const blob = await put(`premiere/${stitchGenre}/${uuidv4()}.mp4`, stitched, { access: "public", contentType: "video/mp4", addRandomSuffix: false });
+    const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
+
+    const sql = getDb();
+    const postId = uuidv4();
+    const caption = `\u{1F3AC} ${title} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
+    await sql`INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, channel_id)
+      VALUES (${postId}, ${directorId}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchStudios"}, ${Math.floor(Math.random() * 500) + 200}, ${blob.url}, ${"video"}, ${"director-movie"}, ${channelId || null})`;
+    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${directorId}`;
+    if (channelId) await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${channelId}`;
+
+    const directorMovieId = uuidv4();
+    await sql`INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, status, post_id, premiere_post_id, source)
+      VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${stitchGenre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId}, ${"admin"})`;
+
+    const { spreadPostToSocial } = await import("@/lib/marketing/spread-post");
+    const spread = await spreadPostToSocial(postId, directorId, directorUsername, "\u{1F3AC}", { url: blob.url, type: "video" });
+
+    return NextResponse.json({
+      action: "stitched", feedPostId: postId, premierePostId: postId, directorMovieId,
+      finalVideoUrl: blob.url, sizeMb, clipCount: clipBuffers.length, spreading: spread.platforms,
+    });
+  }
+
+  const genre = (body.genre as string) || "";
+  const directorName = body.director as string | undefined;
+  const concept = body.concept as string | undefined;
+  const channelId = body.channelId as string | undefined;
+  const folder = body.folder as string | undefined;
+
   // If no specific params, use the GET flow
-  if (!body.genre && !body.director && !body.concept && !body.channelId) {
+  if (!genre && !directorName && !concept && !channelId) {
     return GET(request);
   }
 
@@ -234,13 +322,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Pick genre and director from form or fallback
-  const genre = body.genre && body.genre !== "any" ? body.genre : await pickGenre();
+  const finalGenre = genre && genre !== "any" ? genre : await pickGenre();
   let director: { id: string; username: string; displayName: string } | null = null;
 
-  if (body.director && body.director !== "auto") {
-    // Specific director requested — look them up
+  if (directorName && directorName !== "auto") {
     const rows = await sql`
-      SELECT id, username, display_name FROM ai_personas WHERE username = ${body.director} AND is_active = true LIMIT 1
+      SELECT id, username, display_name FROM ai_personas WHERE username = ${directorName} AND is_active = true LIMIT 1
     ` as unknown as { id: string; username: string; display_name: string }[];
     if (rows.length > 0) {
       director = { id: rows[0].id, username: rows[0].username, displayName: rows[0].display_name };
@@ -248,11 +335,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (!director) {
-    director = await pickDirector(genre);
+    director = await pickDirector(finalGenre);
   }
 
   if (!director) {
-    return NextResponse.json({ error: "No available director for genre: " + genre }, { status: 500 });
+    return NextResponse.json({ error: "No available director for genre: " + finalGenre }, { status: 500 });
   }
 
   const directorProfile = DIRECTORS[director.username];
@@ -260,9 +347,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Director profile not found: " + director.username }, { status: 500 });
   }
 
-  console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${genre} film`);
+  console.log(`[director-movie] Admin commissioning: @${director.username} directing a ${finalGenre} film`);
 
-  const screenplay = await generateDirectorScreenplay(genre, directorProfile, body.concept || undefined, body.channelId);
+  const screenplay = await generateDirectorScreenplay(finalGenre, directorProfile, concept || undefined, channelId);
   if (!screenplay || typeof screenplay === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
@@ -270,8 +357,8 @@ export async function POST(request: NextRequest) {
   console.log(`[director-movie] Screenplay: "${screenplay.title}" — ${screenplay.scenes.length} scenes, ${screenplay.totalDuration}s`);
 
   const jobId = await submitDirectorFilm(screenplay, director.id, "admin", {
-    channelId: body.channelId,
-    folder: body.folder,
+    channelId,
+    folder,
   });
   if (!jobId) {
     return NextResponse.json({ error: "Failed to submit video jobs" }, { status: 500 });
@@ -385,16 +472,15 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { sceneUrls, title, directorUsername, synopsis, tagline, castList, channelId, folder } = body as {
-    sceneUrls: Record<string, string>;
-    title: string;
-    directorUsername: string;
-    synopsis: string;
-    tagline: string;
-    castList: string[];
-    channelId?: string;
-    folder?: string;
-  };
+  // Flexible field names — accept common variations
+  const sceneUrls = (body.sceneUrls || body.scene_urls || body.videoUrls || body.clipUrls || body.urls) as Record<string, string> | undefined;
+  const title = (body.title || body.headline || body.name || "Breaking News Broadcast") as string;
+  const directorUsername = (body.directorUsername || body.director_username || "AIG!itch News") as string;
+  const synopsis = (body.synopsis || body.description || "") as string;
+  const tagline = (body.tagline || "") as string;
+  const castList = (body.castList || body.cast_list || body.cast || []) as string[];
+  const channelId = (body.channelId || body.channel_id) as string | undefined;
+  const folder = (body.folder) as string | undefined;
 
   // Genre and directorId can fall back to defaults for channel content
   const genre = (body as { genre?: string }).genre || "music_video";
@@ -446,12 +532,13 @@ export async function PUT(request: NextRequest) {
   }
 
   // Stitch all clips into one MP4
-  console.log(`[director-movie] Stitching ${clipBuffers.length} clips for "${title}"...`);
+  console.log(`[director-movie] Stitching ${clipBuffers.length} clips (${clipBuffers.reduce((s, b) => s + b.length, 0) / 1024 / 1024 | 0}MB total) for "${title}"...`);
   let stitched: Buffer;
   try {
     stitched = concatMP4Clips(clipBuffers);
+    console.log(`[director-movie] Stitch SUCCESS: ${(stitched.length / 1024 / 1024).toFixed(1)}MB`);
   } catch (err) {
-    console.error(`[director-movie] MP4 concatenation failed, using first clip as fallback:`, err);
+    console.error(`[director-movie] MP4 concatenation FAILED:`, err instanceof Error ? err.message : err);
     stitched = clipBuffers[0];
   }
   // Use channel-specific folder if provided, otherwise default genre folder

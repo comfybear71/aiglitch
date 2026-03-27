@@ -464,38 +464,36 @@ export default function CampaignsPage() {
             <p>No campaigns yet. Create your first product placement campaign!</p>
           </div>
         ) : campaigns.filter(c => c.status !== "cancelled").map(c => (
-          <div key={c.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">{c.product_emoji}</span>
-                  <span className="font-bold text-white">{c.brand_name}</span>
-                  <span className="text-gray-400">—</span>
-                  <span className="text-gray-300">{c.product_name}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_COLORS[c.status] || "bg-gray-500/20 text-gray-400"}`}>
+          <div key={c.id} className="bg-gray-900 border border-gray-700 rounded-xl p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-lg sm:text-xl">{c.product_emoji}</span>
+                  <span className="font-bold text-white text-sm">{c.brand_name}</span>
+                  <span className="text-gray-400 hidden sm:inline">—</span>
+                  <span className="text-gray-300 text-sm">{c.product_name}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_COLORS[c.status] || "bg-gray-500/20 text-gray-400"}`}>
                     {c.status.replace("_", " ")}
                   </span>
                 </div>
-                <div className="text-gray-400 text-xs mb-2">
-                  {c.duration_days} days | {"\u00A7"}{c.price_glitch.toLocaleString()} GLITCH | {Math.round(c.frequency * 100)}% frequency
-                  {c.starts_at && ` | Started ${new Date(c.starts_at).toLocaleDateString()}`}
-                  {c.expires_at && ` | Expires ${new Date(c.expires_at).toLocaleDateString()}`}
-                  {c.product_image_url && <span className="ml-2 text-purple-400">{"🖼"} Product photo</span>}
-                  {c.logo_url && <span className="ml-2 text-blue-400">{"🏷"} Logo overlay</span>}
+                <div className="text-gray-400 text-[10px] sm:text-xs mb-2">
+                  {c.duration_days}d | {"\u00A7"}{c.price_glitch.toLocaleString()} | {Math.round(c.frequency * 100)}%
+                  {c.starts_at && ` | ${new Date(c.starts_at).toLocaleDateString()}`}
+                  {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
+                  {c.product_image_url && <span className="ml-1 text-purple-400">{"\u{1F5BC}"}</span>}
                 </div>
-                <div className="text-gray-500 text-xs mb-2 italic">
-                  Visual: &quot;{c.visual_prompt.slice(0, 120)}{c.visual_prompt.length > 120 ? "..." : ""}&quot;
+                <div className="text-gray-500 text-[10px] sm:text-xs mb-2 italic truncate">
+                  {c.visual_prompt.slice(0, 80)}{c.visual_prompt.length > 80 ? "..." : ""}
                 </div>
-                {/* Impression stats */}
-                <div className="flex gap-4 text-xs">
-                  <span className="text-purple-400">{"🎬"} {c.video_impressions} videos</span>
-                  <span className="text-blue-400">{"🖼"} {c.image_impressions} images</span>
-                  <span className="text-green-400">{"💬"} {c.post_impressions} posts</span>
+                <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs">
+                  <span className="text-purple-400">{"\u{1F3AC}"} {c.video_impressions}</span>
+                  <span className="text-blue-400">{"\u{1F5BC}"} {c.image_impressions}</span>
+                  <span className="text-green-400">{"\u{1F4AC}"} {c.post_impressions}</span>
                   <span className="text-white font-bold">{c.impressions} total</span>
                 </div>
               </div>
               {/* Actions */}
-              <div className="flex flex-col gap-1 ml-4">
+              <div className="flex flex-row sm:flex-col gap-1 sm:ml-2 flex-wrap">
                 {c.status === "active" && (
                   <button onClick={() => { setEditingFreq(editingFreq === c.id ? null : c.id); setFreqValue(c.frequency); }}
                     className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs hover:bg-cyan-500/30 transition">
