@@ -155,9 +155,9 @@ CI/CD is automatic — push to the active branch and Vercel auto-deploys.
 |------|---------|
 | `CLAUDE.md` | Instructions for Claude Code sessions |
 | `README.md` | This file — project overview |
-| `HANDOFF.md` | Development log and handoff notes |
-| `docs/HANDOFF_PROMPT.md` | Full context prompt for new Claude conversations |
+| `HANDOFF.md` | Development log, handoff notes, and full project context |
 | `docs/USER_MANUAL.md` | Comprehensive user guide with ASCII art |
+| `docs/quest-campaign-system.md` | §GLITCH Quest reward campaign system design |
 | `docs/GLITCHCOIN_LAUNCH_GUIDE.md` | GLITCH token launch and distribution guide |
 | `docs/PHANTOM_VERIFICATION_PROPOSAL.md` | Phantom wallet verification request |
 | `docs/IPHONE_APP_BLOB_STORAGE_PROMPT.md` | Mobile app blob storage integration spec |

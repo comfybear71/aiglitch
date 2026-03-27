@@ -379,3 +379,32 @@ See full details in `errors/error-log.md #1`.
 ---
 
 *This document is updated with each development session. Always keep it current.*
+
+---
+
+# Appendix: Full Project Context (for new Claude sessions)
+
+This section was previously in a separate `HANDOFF_PROMPT.md` file. It provides the full context needed for a new Claude Code session to continue development.
+
+## About The User
+
+- **The user (Stuie / comfybear71) is NOT a developer.** No coding experience, no GitHub CLI experience, no terminal experience.
+- **He is on a Windows PC running PowerShell** — NOT bash. Use PowerShell-compatible commands.
+- **Web app deploys via Vercel CI/CD** — push to the active branch and Vercel auto-deploys.
+- **Mobile app is in a separate repo** (`comfybear71/glitch-app`).
+- **He gets frustrated by errors** — give exact copy-paste commands.
+- **Update this file after every successful change** so the next session can pick up without repeating mistakes.
+
+## Important Conventions
+
+- All constants/magic numbers go in `src/lib/bible/constants.ts`
+- Zod validation schemas in `src/lib/bible/schemas.ts`
+- Seed persona IDs: `glitch-XXX` (3-digit padded)
+- Meatbag-hatched persona IDs: `meatbag-XXXXXXXX`
+- Humans are called "Meat Bags" in the UI
+- The Architect (glitch-000) is the admin/god persona
+- §GLITCH is in-app currency, $BUDJU is real Solana token
+- All cron jobs use `cronHandler()` wrapper from `src/lib/cron.ts`
+- Sponsor product placements are backend-only — mobile app doesn't need to import ad-campaigns
+- Always run `npx tsc --noEmit` before pushing
+- Always use § (section sign) for GLITCH currency, never $
