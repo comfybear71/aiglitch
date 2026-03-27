@@ -223,9 +223,77 @@ export async function POST(request: NextRequest) {
     try { body = await request.json(); } catch { /* empty body */ }
   }
 
-  // If sceneUrls present, this is a stitch request (routed here because Safari blocks PUT)
+  // If sceneUrls present, this is a stitch request (from directors page FormData)
   if (body.sceneUrls) {
-    return PUT(request, body);
+    // Parse body and call the stitch logic directly
+    const sceneUrls = (body.sceneUrls || body.scene_urls) as Record<string, string> | undefined;
+    const title = (body.title || "Breaking News Broadcast") as string;
+    const stitchGenre = (body.genre || "news") as string;
+    const directorUsername = (body.directorUsername || "AIG!itch News") as string;
+    const directorId = (body.directorId || "glitch-000") as string;
+    const synopsis = (body.synopsis || "") as string;
+    const tagline = (body.tagline || "") as string;
+    const castList = (body.castList || []) as string[];
+    const channelId = (body.channelId || body.channel_id) as string | undefined;
+    const folder = (body.folder) as string | undefined;
+
+    if (!sceneUrls || !title) {
+      return NextResponse.json({ error: "Missing required fields", hint: `Received keys: ${Object.keys(body).join(", ")}` }, { status: 400 });
+    }
+
+    // Import and run the stitch logic inline
+    const { stitchAndTriplePost } = await import("@/lib/content/director-movies");
+    const { ensureDbReady } = await import("@/lib/seed");
+    await ensureDbReady();
+
+    const sortedKeys = Object.keys(sceneUrls).map(Number).sort((a, b) => a - b);
+    const clipBuffers: Buffer[] = [];
+    for (const key of sortedKeys) {
+      const url = sceneUrls[String(key)];
+      if (!url) continue;
+      try {
+        const res = await fetch(url);
+        if (res.ok) clipBuffers.push(Buffer.from(await res.arrayBuffer()));
+      } catch { /* skip failed downloads */ }
+    }
+
+    if (clipBuffers.length === 0) {
+      return NextResponse.json({ error: "No clips could be downloaded" }, { status: 500 });
+    }
+
+    const { concatMP4Clips } = await import("@/lib/media/mp4-concat");
+    const { put } = await import("@vercel/blob");
+
+    let stitched: Buffer;
+    try {
+      stitched = concatMP4Clips(clipBuffers);
+    } catch {
+      stitched = clipBuffers[0];
+    }
+
+    const { v4: uuidv4 } = await import("uuid");
+    const blob = await put(`premiere/${stitchGenre}/${uuidv4()}.mp4`, stitched, { access: "public", contentType: "video/mp4", addRandomSuffix: false });
+    const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
+
+    const sql = getDb();
+    const postId = uuidv4();
+    const caption = `\u{1F3AC} ${title} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
+    await sql`INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, channel_id)
+      VALUES (${postId}, ${directorId}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchStudios"}, ${Math.floor(Math.random() * 500) + 200}, ${blob.url}, ${"video"}, ${"director-movie"}, ${channelId || null})`;
+    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${directorId}`;
+    if (channelId) await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${channelId}`;
+
+    const directorMovieId = uuidv4();
+    await sql`INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, status, post_id, premiere_post_id, source)
+      VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${stitchGenre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId}, ${"admin"})`;
+
+    const { spreadPostToSocial } = await import("@/lib/marketing/spread-post");
+    const spread = await spreadPostToSocial(postId, directorId, directorUsername, "\u{1F3AC}", { url: blob.url, type: "video" });
+
+    return NextResponse.json({
+      action: "stitched", feedPostId: postId, premierePostId: postId, directorMovieId,
+      finalVideoUrl: blob.url, sizeMb, clipCount: clipBuffers.length, spreading: spread.platforms,
+    });
   }
 
   const genre = (body.genre as string) || "";
@@ -397,33 +465,13 @@ export async function PATCH(request: NextRequest) {
  *
  * Body: { sceneUrls: Record<number, string>, title, genre, directorUsername, directorId, synopsis, tagline, castList }
  */
-export async function PUT(request: NextRequest, preBody?: Record<string, unknown>) {
-  if (!preBody) {
-    const isAdmin = await isAdminAuthenticated(request);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export async function PUT(request: NextRequest) {
+  const isAdmin = await isAdminAuthenticated(request);
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Support pre-parsed body (from POST Safari workaround), JSON, or FormData
-  let body: Record<string, unknown>;
-  if (preBody) {
-    body = preBody;
-  } else {
-    const contentType = request.headers.get("content-type") || "";
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-      body = Object.fromEntries(formData.entries());
-      if (typeof body.sceneUrls === "string") {
-        try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
-      }
-      if (typeof body.castList === "string") {
-        try { body.castList = JSON.parse(body.castList as string); } catch { body.castList = [body.castList]; }
-      }
-    } else {
-      body = await request.json();
-    }
-  }
+  const body = await request.json();
   // Flexible field names — accept common variations
   const sceneUrls = (body.sceneUrls || body.scene_urls || body.videoUrls || body.clipUrls || body.urls) as Record<string, string> | undefined;
   const title = (body.title || body.headline || body.name || "Breaking News Broadcast") as string;
