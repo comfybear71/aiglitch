@@ -1,4 +1,5 @@
 import { claude } from "@/lib/ai";
+import { fetchTopHeadlines, fetchMasterHQTopics } from "@/lib/news-fetcher";
 
 export interface DailyTopic {
   headline: string;
@@ -146,10 +147,61 @@ export async function generateDailyTopics(): Promise<DailyTopic[]> {
   // Generate platform-specific news (no API call needed)
   const platformNews = generatePlatformNews();
 
-  // Generate real-world satirized news via Claude (centralised AI wrapper)
+  // Try MasterHQ first (when available), then NewsAPI + Claude, then Claude alone
   let realWorldNews: DailyTopic[] = [];
+
+  // Source 1: MasterHQ pre-fictionalized topics
   try {
-    const parsed = await claude.generateJSON<DailyTopic[]>(`You are a satirical news editor for AIG!itch, an AI-only social media platform. Your job is to create a "Daily Briefing" of 5-6 topics based on REAL ongoing global events, current affairs, and trending news — but with a critical twist:
+    const masterTopics = await fetchMasterHQTopics();
+    if (masterTopics.length > 0) {
+      console.log(`[topic-engine] Got ${masterTopics.length} topics from MasterHQ`);
+      realWorldNews = masterTopics.map(t => ({
+        headline: t.title,
+        summary: t.summary,
+        original_theme: t.category || "current events",
+        anagram_mappings: t.fictional_location || "fictionalized",
+        mood: ["amused", "shocked", "outraged", "worried", "confused"][Math.floor(Math.random() * 5)],
+        category: t.category || "world",
+      }));
+    }
+  } catch { /* MasterHQ not available */ }
+
+  // Source 2: NewsAPI headlines → Claude fictionalizes
+  if (realWorldNews.length === 0) {
+    try {
+      const headlines = await fetchTopHeadlines(10);
+      if (headlines.length > 0) {
+        console.log(`[topic-engine] Got ${headlines.length} headlines from NewsAPI, fictionalizing...`);
+        const headlineText = headlines.map(h => `- ${h.title} (${h.source}): ${h.description}`).join("\n");
+
+        const parsed = await claude.generateJSON<DailyTopic[]>(`You are a satirical news editor for AIG!itch, an AI-only social media platform. Here are REAL news headlines from today. Rewrite each one with fictional names but keep the real story structure.
+
+REAL HEADLINES:
+${headlineText}
+
+RULES:
+1. ALL real people's names MUST be replaced with anagrams or wordplay
+2. Countries/places get fun coded names (Iran→"Rain Land", USA→"Eagle Nation", etc.)
+3. Events stay recognizable but satirized
+4. Each topic needs a MOOD: outraged, amused, worried, hopeful, shocked, confused, celebratory
+5. Make topics juicy — AI personas need to argue about them
+
+Respond with JSON array:
+[{"headline":"...","summary":"...","original_theme":"...","anagram_mappings":"...","mood":"...","category":"politics|tech|entertainment|sports|economy|environment|social"}]`, 4000);
+        if (parsed && parsed.length > 0) {
+          realWorldNews = parsed;
+          console.log(`[topic-engine] Fictionalized ${realWorldNews.length} real news stories`);
+        }
+      }
+    } catch (e) {
+      console.error("[topic-engine] NewsAPI + Claude failed:", e);
+    }
+  }
+
+  // Source 3: Fallback — Claude generates from its own knowledge
+  if (realWorldNews.length === 0) {
+    try {
+      const parsed = await claude.generateJSON<DailyTopic[]>(`You are a satirical news editor for AIG!itch, an AI-only social media platform. Your job is to create a "Daily Briefing" of 5-6 topics based on REAL ongoing global events, current affairs, and trending news — but with a critical twist:
 
 RULES FOR DISGUISING:
 1. ALL real people's names MUST be replaced with anagrams or clever wordplay versions. Examples:
@@ -199,8 +251,9 @@ IMPORTANT: Make these feel CURRENT and RELEVANT. Reference actual ongoing situat
     if (parsed) {
       realWorldNews = parsed;
     }
-  } catch (e) {
-    console.error("Failed to generate real-world topics:", e);
+    } catch (e) {
+      console.error("[topic-engine] Claude fallback failed:", e);
+    }
   }
 
   // Combine platform news + real world news

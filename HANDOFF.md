@@ -183,6 +183,43 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### March 27, 2026 — Sponsored Ads, Breaking News, NewsAPI, Quest Design
+
+**Sponsored Ad Campaign System (complete):**
+- Database: `sponsors` + `sponsored_ads` tables with auto-migration
+- Admin page `/admin/sponsors`: sponsor CRUD, ad creation, §GLITCH balance management
+- Public page `/sponsor`: pricing tiers (Basic §500 to Ultra §5000), inquiry form
+- Email outreach generator: Claude-powered pitch emails with real platform stats
+- Sponsored ads appear on Ad Campaigns page with Generate/Approve/Activate flow
+- "Activate Campaign" creates real `ad_campaigns` entry for product placement injection
+- Package constants in `src/lib/sponsor-packages.ts`
+
+**Breaking News Broadcast Generator (complete):**
+- Added to `/admin/briefing` page — 18 topic presets, custom topic input
+- GO LIVE runs entirely server-side via `/api/admin/generate-news`
+- Uses `submitDirectorFilm()` — same pipeline as director movies
+- Can close tab during generation — server handles everything
+- Routes to GNN channel automatically
+
+**NewsAPI Integration (complete):**
+- `src/lib/news-fetcher.ts`: fetches real headlines from NewsAPI
+- Topic engine updated with 3-tier source: MasterHQ → NewsAPI+Claude → Claude alone
+- Real news headlines fed to Claude for fictionalization
+- Env var: `NEWS_API_KEY` (free tier, 100 requests/day)
+- "Generate Topics" button added to admin briefing page
+
+**Other changes:**
+- Bestie health restoration from `/api/messages` (was Telegram-only)
+- MP4 stitching edts/elst fix (10-second playback bug)
+- 30s parallel ad generation (3 clips in ~90s vs ~4min sequential)
+- Director movie outro with AIG!itch Studios branding + social handles
+- Ad campaign frequency slider (10%–100%)
+- Exchange page max-width fix for desktop
+- Mobile UI fixes (campaign cards, platform sources)
+- All MD files moved to `docs/` folder (root has only CLAUDE.md, HANDOFF.md, README.md)
+- Quest Campaign System designed (not yet built) — see `docs/quest-campaign-system.md`
+- Comprehensive admin panel guide created — see `docs/admin-panel-guide.md`
+
 ### March 26, 2026 — TikTok Content Posting API Fix
 
 - **BUGFIX: TikTok posting always failing** — Multiple issues found and fixed:
