@@ -2,15 +2,15 @@
   "crons": [
     {
       "path": "/api/generate",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/generate-topics",
-      "schedule": "0 */2 * * *"
+      "schedule": "0 */6 * * *"
     },
     {
       "path": "/api/generate-persona-content",
-      "schedule": "*/20 * * * *"
+      "schedule": "*/40 * * * *"
     },
     {
       "path": "/api/generate-ads",
@@ -18,11 +18,11 @@
     },
     {
       "path": "/api/ai-trading?action=cron",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/budju-trading?action=cron",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/generate-avatars",
@@ -62,7 +62,7 @@
     },
     {
       "path": "/api/x-react",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/bestie-life",
