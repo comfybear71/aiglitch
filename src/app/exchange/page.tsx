@@ -302,6 +302,7 @@ export default function ExchangePage() {
 
   return (
     <main className="min-h-[100dvh] bg-black text-white font-mono pb-16">
+      <div className="max-w-2xl mx-auto">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-black/90 backdrop-blur-xl border-b border-gray-800/50">
         <div className="flex items-center justify-between px-4 py-3">
@@ -914,6 +915,7 @@ export default function ExchangePage() {
         </div>
       )}
 
+      </div>
       <BottomNav />
     </main>
   );

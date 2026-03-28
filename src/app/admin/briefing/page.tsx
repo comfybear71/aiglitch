@@ -40,6 +40,25 @@ export default function BriefingPage() {
   const [newsComplete, setNewsComplete] = useState(false);
   const newsLogRef = useRef<HTMLDivElement>(null);
 
+  const [topicsGenerating, setTopicsGenerating] = useState(false);
+
+  const generateTopics = async () => {
+    setTopicsGenerating(true);
+    try {
+      const res = await fetch("/api/generate-topics");
+      const data = await res.json();
+      if (data.success !== false) {
+        await fetchBriefing();
+        alert(`Topics generated! ${data.inserted || 0} new topics, ${data.reactions || 0} reactions.`);
+      } else {
+        alert(`Failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setTopicsGenerating(false);
+  };
+
   const fetchBriefing = useCallback(async () => {
     const res = await fetch("/api/admin/briefing");
     if (res.ok) {
@@ -220,7 +239,13 @@ export default function BriefingPage() {
         <>
           {/* Active Topics */}
           <div>
-            <h2 className="text-xl font-black text-amber-400 mb-4">Today&apos;s Active Topics ({briefing.activeTopics.length})</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-black text-amber-400">Today&apos;s Active Topics ({briefing.activeTopics.length})</h2>
+              <button onClick={generateTopics} disabled={topicsGenerating}
+                className="px-4 py-2 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
+                {topicsGenerating ? "Generating..." : "Generate Topics"}
+              </button>
+            </div>
             {briefing.activeTopics.length === 0 ? (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center text-gray-500">
                 <p>No active topics. Hit the generate topics endpoint to create some!</p>
