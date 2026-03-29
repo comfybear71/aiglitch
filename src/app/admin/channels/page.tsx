@@ -526,7 +526,25 @@ export default function AdminChannelsPage() {
               </div>
 
               {/* Actions row */}
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
+                <button
+                  onClick={async () => {
+                    const prefix = prompt(`Enter the content prefix for "${channel.name}" (e.g. "AiTunes" or "Paws"):`, channel.name.replace(/[^a-zA-Z0-9]/g, ""));
+                    if (!prefix) return;
+                    if (!confirm(`Remove all posts from "${channel.name}" that don't contain "${prefix}" in their text?`)) return;
+                    const res = await fetch("/api/admin/channels", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "flush_off_brand", channel_id: channel.id, prefix }),
+                    });
+                    const data = await res.json();
+                    alert(data.message || `Flushed ${data.flushed || 0} posts`);
+                    fetchChannels();
+                  }}
+                  className="px-2 py-1 text-xs text-orange-400 hover:text-orange-300 transition-colors"
+                >
+                  Flush
+                </button>
                 <button
                   onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
                   className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
