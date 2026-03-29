@@ -948,25 +948,33 @@ export default function AdminChannelsPage() {
                       setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: true, log: [`🎬 Generating ${chName} video...`, `  📜 Writing screenplay (Grok 50% / Claude 50%)...`] } }));
 
                       try {
-                        // ── Phase 1: Generate screenplay ──
-                        const form = new FormData();
-                        form.append("channel_id", chId);
-                        if (channelVideoGen[chId]?.concept) form.append("concept", channelVideoGen[chId].concept);
-                        if (channelVideoGen[chId]?.genre) form.append("genre", channelVideoGen[chId].genre);
-                        if (channelVideoGen[chId]?.category) form.append("category", channelVideoGen[chId].category);
-                        form.append("screenplay_only", "true");
-                        const res = await fetch("/api/admin/generate-channel-video", { method: "POST", body: form });
-                        const data = await res.json();
+                        // ── Phase 1: Generate screenplay (same endpoint as Directors page) ──
+                        let concept = channelVideoGen[chId]?.concept || "";
+                        const genreVal = channelVideoGen[chId]?.genre || "";
+                        const categoryVal = channelVideoGen[chId]?.category || "";
+                        if (categoryVal) concept = `${concept ? concept + ". " : ""}THEME/CATEGORY (MANDATORY): ${categoryVal}`;
+                        if (genreVal) concept = `${concept ? concept + ". " : ""}MUSIC GENRE (MANDATORY — ALL clips): ${genreVal}`;
 
-                        if (!data.success) {
-                          addLog(`  ❌ ${data.error}`);
+                        const screenplayRes = await fetch("/api/admin/screenplay", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            genre: channel.genre || "drama",
+                            concept: concept || undefined,
+                            channel_id: chId,
+                          }),
+                        });
+                        const screenplay = await screenplayRes.json();
+
+                        if (screenplay.error) {
+                          addLog(`  ❌ ${screenplay.error}`);
                           setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
                           return;
                         }
 
-                        const scenes = data.scenes as { sceneNumber: number; title: string; videoPrompt: string; duration: number }[];
-                        addLog(`  ✅ "${data.title}" — ${scenes.length} scenes`);
-                        addLog(`  📖 ${data.synopsis}`);
+                        const scenes = screenplay.scenes as { sceneNumber: number; title: string; videoPrompt: string; duration: number }[];
+                        addLog(`  ✅ "${screenplay.title}" — ${scenes.length} scenes`);
+                        addLog(`  📖 ${screenplay.synopsis}`);
                         addLog(``);
 
                         // ── Phase 2: Submit each scene to Grok ──
@@ -1060,7 +1068,7 @@ export default function AdminChannelsPage() {
 
                         // Final summary
                         addLog(``);
-                        addLog(`🏁 "${data.title}" — ${doneScenes.size}/${pendingJobs.length} scenes completed, ${failedScenes.size} failed`);
+                        addLog(`🏁 "${screenplay.title}" — ${doneScenes.size}/${pendingJobs.length} scenes completed, ${failedScenes.size} failed`);
 
                         if (doneScenes.size === 0) {
                           addLog(`❌ No scenes rendered. Try a different concept.`);
@@ -1075,13 +1083,13 @@ export default function AdminChannelsPage() {
                         try {
                           const stitchForm = new FormData();
                           stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
-                          stitchForm.append("title", data.title);
-                          stitchForm.append("genre", data.genre || "drama");
-                          stitchForm.append("directorUsername", data.directorUsername || "the_architect");
-                          stitchForm.append("directorId", "glitch-000");
-                          stitchForm.append("synopsis", data.synopsis || "");
-                          stitchForm.append("tagline", data.tagline || "");
-                          stitchForm.append("castList", JSON.stringify(data.castList || []));
+                          stitchForm.append("title", screenplay.title);
+                          stitchForm.append("genre", screenplay.genre || "drama");
+                          stitchForm.append("directorUsername", screenplay.director || "the_architect");
+                          stitchForm.append("directorId", screenplay.directorId || "glitch-000");
+                          stitchForm.append("synopsis", screenplay.synopsis || "");
+                          stitchForm.append("tagline", screenplay.tagline || "");
+                          stitchForm.append("castList", JSON.stringify(screenplay.castList || []));
                           stitchForm.append("channelId", chId);
                           const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
                           const stitchData = await stitchRes.json();
