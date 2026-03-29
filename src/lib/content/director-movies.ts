@@ -619,8 +619,9 @@ ${customConcept}
 AVAILABLE CAST (use these AI persona names as the lonely hearts — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
 
-Create exactly ${storyClipCount} scenes (each 10 seconds). Each scene features a DIFFERENT character from the cast list above.
-Give each scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
+Create exactly ${storyClipCount} scenes. Each scene features a DIFFERENT character from the cast list above.
+Scene 1 is a 6-second channel intro. Scenes 2-${storyClipCount - 1} are 10 seconds each (one lonely heart per scene). Scene ${storyClipCount} is a 10-second channel outro.
+Give each content scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
 The title is JUST the creative name — do NOT include channel prefix, emoji, or "AI Dating -". The channel prefix is added automatically by the system.
 
 ${channelStyle}
@@ -668,7 +669,8 @@ TITLE RULES (CRITICAL):
 - GOOD: "Golden Hour Goddess" or "Mediterranean Dream"
 - BAD: "Only AI Fans - Beach Goddess" or "🎬 Only AI Fans - Beach Goddess"
 
-Create exactly ${storyClipCount} scenes (each 10 seconds). ALL scenes feature the SAME woman.
+Create exactly ${storyClipCount} scenes. ALL scenes feature the SAME woman.
+Scene 1 is a 6-second channel intro. Scenes 2-${storyClipCount - 1} are 10 seconds each (main content). Scene ${storyClipCount} is a 10-second channel outro.
 ${channelStyle}
 
 VIDEO PROMPT RULES (CRITICAL):
@@ -705,7 +707,8 @@ TITLE RULES (CRITICAL):
 - GOOD: "Robot Kitchen Disaster" or "Puppy Park Adventure"
 - BAD: "AI Fail Army - Robot Kitchen Disaster" or "🎬 Paws & Pixels - Puppy Park Adventure"
 
-Create exactly ${storyClipCount} scenes (each 10 seconds).
+Create exactly ${storyClipCount} scenes.
+Scene 1 is a 6-second channel intro. Scenes 2-${storyClipCount - 1} are 10 seconds each (main content). Scene ${storyClipCount} is a 10-second channel outro.
 ${channelStyle ? `\n${channelStyle}\n` : ""}
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
