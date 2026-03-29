@@ -261,104 +261,84 @@ export function buildContinuityPrompt(
   const isDatingClip = channelId === "ch-ai-dating";
   const channelStyle = channelId ? CHANNEL_VISUAL_STYLE[channelId] : undefined;
 
-  if (isDatingClip) {
-    // ── Lonely Hearts — NO movie/director language at all ──
+  // ── Channel clips use a compact format to stay under Grok's 4096 char limit ──
+  if (isChannelClip) {
+    // Compact character bible (truncate to 600 chars max)
+    const charBible = movieBible.characterBible.slice(0, 600);
+
     sections.push(
-      `=== LONELY HEARTS CLUB — "${movieBible.title}" ===`,
-      `CONCEPT: ${movieBible.synopsis}`,
-      `\nIMPORTANT: This is NOT a movie, film, or show. Do NOT generate title cards, credits, director names, studio logos, or any text overlays. Each clip is a personal video dating profile — one character alone, looking at camera, in an intimate setting.`,
+      `"${movieBible.title}" — Clip ${clipNumber}/${totalClips}`,
+      `\nCHARACTERS: ${charBible}`,
     );
-  } else if (isChannelClip) {
-    // ── Channel content — stripped-down header, no movie framing ──
-    sections.push(
-      `=== "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
-      `SYNOPSIS: ${movieBible.synopsis}`,
-      `\nIMPORTANT: Do NOT generate title cards, credits, director names, studio logos, "Directed by" text, or any text overlays. This is channel content, not a movie.`,
-    );
+
+    // Previous clip context (compact)
+    if (clipNumber > 1 && previousLastFrame) {
+      sections.push(`\nCONTINUE FROM: ${previousLastFrame.slice(0, 200)}`);
+    } else if (clipNumber === 1) {
+      sections.push(`\nOPENING CLIP — establishes all visuals for the entire video. Be specific.`);
+    }
+
+    // Scene to generate
+    sections.push(`\nSCENE: ${sceneVideoPrompt}`);
+
+    // Visual style (compact)
+    if (channelStyle) {
+      sections.push(`\n${channelStyle.slice(0, 400)}`);
+    }
+
+    // No text overlays
+    sections.push(`\nNo title cards, credits, text overlays, or on-screen text.`);
+
   } else {
-    // ── Movie Bible Header ──
+    // ── Standard movie prompts — full format ──
     sections.push(
       `=== MOVIE BIBLE — "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
       `SYNOPSIS: ${movieBible.synopsis}`,
     );
-  }
 
-  // ── Character Bible ──
-  sections.push(
-    `\nCHARACTER BIBLE (MUST remain visually identical in EVERY clip):`,
-    movieBible.characterBible,
-  );
+    // ── Character Bible ──
+    sections.push(
+      `\nCHARACTER BIBLE (MUST remain visually identical in EVERY clip):`,
+      movieBible.characterBible,
+    );
 
-  // ── Director Style Guide (only for movies, NOT channel content) ──
-  if (!isChannelClip) {
+    // ── Director Style Guide ──
     sections.push(
       `\nDIRECTOR STYLE GUIDE:`,
       movieBible.directorStyleGuide,
     );
-  }
 
-  // ── Clip Position ──
-  sections.push(`\n=== CLIP ${clipNumber} OF ${totalClips} ===`);
+    // ── Clip Position ──
+    sections.push(`\n=== CLIP ${clipNumber} OF ${totalClips} ===`);
 
-  // ── Previous Clip Context ──
-  if (clipNumber === 1) {
-    sections.push(
-      `This is the OPENING CLIP — it establishes EVERYTHING for the entire video.`,
-      `Every character, setting, lighting setup, color palette, and art style you show here MUST remain IDENTICAL in all ${totalClips - 1} subsequent clips.`,
-      `Be SPECIFIC: if a character has red hair, they have red hair in EVERY clip. If the room has blue walls, EVERY clip has blue walls. If the lighting is golden hour, EVERY clip is golden hour.`,
-      `This clip sets the visual "contract" — nothing changes after this.`,
-    );
-  } else if (previousClipSummary) {
-    sections.push(
-      `PREVIOUS CLIP (Clip ${clipNumber - 1}):`,
-      previousClipSummary,
-    );
-    if (previousLastFrame) {
+    // ── Previous Clip Context ──
+    if (clipNumber === 1) {
       sections.push(
-        `LAST FRAME OF PREVIOUS CLIP: ${previousLastFrame}`,
-        `START this clip from EXACTLY this visual moment. Continue seamlessly.`,
+        `This is the OPENING CLIP — it establishes EVERYTHING for the entire video.`,
+        `Every character, setting, lighting setup, color palette, and art style you show here MUST remain IDENTICAL in all ${totalClips - 1} subsequent clips.`,
+        `Be SPECIFIC: if a character has red hair, they have red hair in EVERY clip. If the room has blue walls, EVERY clip has blue walls. If the lighting is golden hour, EVERY clip is golden hour.`,
+        `This clip sets the visual "contract" — nothing changes after this.`,
       );
+    } else if (previousClipSummary) {
+      sections.push(
+        `PREVIOUS CLIP (Clip ${clipNumber - 1}):`,
+        previousClipSummary,
+      );
+      if (previousLastFrame) {
+        sections.push(
+          `LAST FRAME OF PREVIOUS CLIP: ${previousLastFrame}`,
+          `START this clip from EXACTLY this visual moment. Continue seamlessly.`,
+        );
+      }
     }
-  }
 
-  // ── Scene To Generate ──
-  sections.push(
-    `\nSCENE TO GENERATE:`,
-    sceneVideoPrompt,
-  );
+    // ── Scene To Generate ──
+    sections.push(
+      `\nSCENE TO GENERATE:`,
+      sceneVideoPrompt,
+    );
 
-  // ── Visual Requirements ──
-  if (isDatingClip) {
-    // Dating channel: intimate confessional style, NOT cinematic
-    sections.push(
-      `\nVISUAL REQUIREMENTS:`,
-      channelStyle || `Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds.`,
-      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, scrolling text, ANY on-screen text whatsoever.`,
-      `Each clip shows ONE character alone in a warm intimate setting, looking at camera.`,
-    );
-  } else if (channelId === "ch-only-ai-fans") {
-    // Only AI Fans: keep language strictly fashion/editorial to avoid moderation blocks
-    sections.push(
-      `\nVISUAL REQUIREMENTS:`,
-      channelStyle || `Ultra-premium fashion cinematography. Slow-motion, shallow depth of field, golden hour lighting, elegant and tasteful.`,
-      `\nCONTENT MODERATION RULES (CRITICAL — violating these will cause the clip to be REJECTED):`,
-      `- This is a FASHION and LIFESTYLE video — think Vogue, Elle, or luxury perfume commercial`,
-      `- Keep all content tasteful and elegant — NO explicit, suggestive, or provocative content`,
-      `- The woman should be confident and beautiful, NOT objectified`,
-      `- Clothing must be present and visible — designer fashion, elegant swimwear, evening wear`,
-      `- NO nudity, NO implied nudity, NO bedroom/intimate scenarios`,
-      `- Focus on: fashion, beauty, luxury settings, elegant poses, natural confidence`,
-      `- DO NOT include: title cards, credits, text overlays, or ANY on-screen text`,
-    );
-  } else if (isChannelClip && channelStyle) {
-    // Other channels with custom visual style
-    sections.push(
-      `\nVISUAL REQUIREMENTS:`,
-      channelStyle,
-      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, or any text on screen.`,
-    );
-  } else {
-    // Standard movies — full cinematic treatment
+    // ── Cinematic Requirements ──
     sections.push(
       `\nCINEMATIC REQUIREMENTS:`,
       `Style: ${genreTemplate.cinematicStyle}`,
@@ -387,7 +367,13 @@ export function buildContinuityPrompt(
       `- AIG!itch branding subtly visible in each scene (coffee cup, sign, necklace, phone screen)`,
       `- NO text, NO titles, NO credits, NO director names — just the character in their setting`,
     );
+  } else if (isChannelClip) {
+    // Compact continuity for channel clips (stay under 4096 total)
+    sections.push(
+      `\nCONTINUITY: Same characters, same look, same location, same lighting in every clip. AIG!itch branding visible.`,
+    );
   } else {
+    // Full continuity rules for movies
     sections.push(
       `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
       `- Maintain 100% visual continuity with previous clip — this MUST look like ONE continuous video`,
@@ -401,9 +387,6 @@ export function buildContinuityPrompt(
       `- Characters must be recognizable frame-to-frame — a viewer should NEVER wonder "is that the same person?"`,
       `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram, logo on clothing)`,
     );
-    if (isChannelClip) {
-      sections.push(`- NO title cards, credits, director names, or studio logos`);
-    }
   }
 
   return sections.join("\n");
