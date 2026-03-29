@@ -240,7 +240,7 @@ export default function AdminChannelsPage() {
   const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
   const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
   const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
-  const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; category: string; log: string[] }>>({});
+  const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; category: string; log: string[]; movieTitle?: string; movieGenre?: string; director?: string }>>({});
   const [expandedTitle, setExpandedTitle] = useState<string | null>(null);
   const [expandedContent, setExpandedContent] = useState<string | null>(null);
   const [promoPrompts, setPromoPrompts] = useState<Record<string, string>>({});
@@ -778,7 +778,7 @@ export default function AdminChannelsPage() {
                     ...prev,
                     [channel.id]: prev[channel.id]
                       ? { ...prev[channel.id], concept: prev[channel.id].concept }
-                      : { generating: false, concept: "", genre: "", category: "", log: [] },
+                      : { generating: false, concept: "", genre: "", category: "", log: [], movieTitle: "", movieGenre: "any", director: "auto" },
                   }));
                   setExpandedPromo(expandedPromo === `vid-${channel.id}` ? null : `vid-${channel.id}`);
                 }}
@@ -880,7 +880,54 @@ export default function AdminChannelsPage() {
             {/* Channel Video Generator Panel */}
             {expandedPromo === `vid-${channel.id}` && (
               <div className="mt-3 bg-gray-800/50 border border-green-800/30 rounded-lg p-3">
-                <p className="text-[10px] text-green-400 font-bold mb-2">GENERATE {channel.name.toUpperCase()} VIDEO</p>
+                <p className="text-[10px] text-green-400 font-bold mb-2">GENERATE {channel.name.toUpperCase()} {channel.id === "ch-aiglitch-studios" ? "MOVIE" : "VIDEO"}</p>
+
+                {/* AIG!itch Studios: Movie title + Genre + Director selectors */}
+                {channel.id === "ch-aiglitch-studios" && (
+                  <div className="space-y-2 mb-2">
+                    <input
+                      value={channelVideoGen[channel.id]?.movieTitle || ""}
+                      onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], movieTitle: e.target.value } }))}
+                      placeholder="Movie title (optional — AI will generate one)"
+                      className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-[11px] text-white placeholder-gray-600"
+                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={channelVideoGen[channel.id]?.movieGenre || "any"}
+                        onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], movieGenre: e.target.value } }))}
+                        className="flex-1 px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-[11px] text-white"
+                      >
+                        <option value="any">Any Genre</option>
+                        <option value="action">Action</option>
+                        <option value="scifi">Sci-Fi</option>
+                        <option value="horror">Horror</option>
+                        <option value="comedy">Comedy</option>
+                        <option value="drama">Drama</option>
+                        <option value="romance">Romance</option>
+                        <option value="family">Family</option>
+                        <option value="documentary">Documentary</option>
+                        <option value="cooking_channel">Cooking Channel</option>
+                      </select>
+                      <select
+                        value={channelVideoGen[channel.id]?.director || "auto"}
+                        onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], director: e.target.value } }))}
+                        className="flex-1 px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-[11px] text-white"
+                      >
+                        <option value="auto">Auto Director</option>
+                        <option value="steven_spielbot">Steven Spielbot</option>
+                        <option value="stanley_kubrick_ai">Stanley Kubr.AI</option>
+                        <option value="george_lucasfilm">George LucASfilm</option>
+                        <option value="quentin_airantino">Quentin AI-rantino</option>
+                        <option value="alfred_glitchcock">Alfred Glitchcock</option>
+                        <option value="nolan_christopher">Christo-NOLAN</option>
+                        <option value="wes_anderson_ai">Wes Analog</option>
+                        <option value="ridley_scott_ai">Ridley Sc0tt</option>
+                        <option value="chef_gordon_ramsey_ai">Chef Gordon RAMsey</option>
+                        <option value="david_attenborough_ai">Sir David Attenbot</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Channel-specific options (every channel gets themed selectors) */}
                 {CHANNEL_VIDEO_OPTIONS[channel.id] && (
@@ -944,21 +991,36 @@ export default function AdminChannelsPage() {
                       const folder = `premiere/${chSlug}`;
                       setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: true } }));
 
-                      setGenerationLog([`🎬 Generating ${chName} channel video`]);
+                      const isStudios = chId === "ch-aiglitch-studios";
+                      setGenerationLog([`🎬 Generating ${chName} ${isStudios ? "movie" : "channel video"}`]);
                       setGenerationLog(prev => [...prev, `  📜 Writing screenplay (Grok 50% / Claude 50%)...`]);
                       setGenProgress({ label: `📜 Screenplay`, current: 1, total: 1, startTime: Date.now() });
 
                       try {
-                        // ── Phase 1: Generate screenplay (same endpoint as Directors) ──
-                        let userConcept = channelVideoGen[chId]?.concept || "";
+                        // ── Phase 1: Generate screenplay ──
+                        const userConcept = channelVideoGen[chId]?.concept || "";
                         const genreVal = channelVideoGen[chId]?.genre || "";
                         const categoryVal = channelVideoGen[chId]?.category || "";
-                        const contentRules = channel.content_rules || {};
-                        const promptHint = contentRules.promptHint || channel.description || "";
 
-                        // Build full channel concept — NOT a movie, with actual channel content rules
-                        const clipCount = 6;
-                        let concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
+                        let screenplayBody: Record<string, unknown>;
+
+                        if (isStudios) {
+                          // AIG!itch Studios: MOVIE mode — full director/genre/cast treatment
+                          const movieGenre = channelVideoGen[chId]?.movieGenre || "any";
+                          const director = channelVideoGen[chId]?.director || "auto";
+                          screenplayBody = {
+                            genre: movieGenre === "any" ? undefined : movieGenre,
+                            director: director === "auto" ? undefined : director,
+                            concept: userConcept || undefined,
+                            title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
+                            channel_id: chId,
+                          };
+                        } else {
+                          // All other channels: channel content mode
+                          const contentRules = channel.content_rules || {};
+                          const promptHint = contentRules.promptHint || channel.description || "";
+                          const clipCount = 6;
+                          const concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
 Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds each (main content). Scene ${clipCount + 2} is a 10-second channel outro.
 
 THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no "AIG!itch Studios", no cast lists. Just pure channel content.
@@ -974,15 +1036,17 @@ CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
 OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
+                          screenplayBody = {
+                            genre: channel.genre || "drama",
+                            concept,
+                            channel_id: chId,
+                          };
+                        }
 
                         const screenplayRes = await fetch("/api/admin/screenplay", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            genre: channel.genre || "drama",
-                            concept,
-                            channel_id: chId,
-                          }),
+                          body: JSON.stringify(screenplayBody),
                         });
                         const screenplay = await screenplayRes.json();
 
@@ -995,9 +1059,11 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
 
                         const scenes = screenplay.scenes as { sceneNumber: number; title: string; videoPrompt: string; duration: number }[];
                         const provider = screenplay.screenplayProvider === "grok" ? "Grok 4.20 reasoning" : "Claude";
-                        setGenerationLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes (screenplay by ${provider})`]);
+                        setGenerationLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes${isStudios ? ` by ${screenplay.directorName}` : ""} (screenplay by ${provider})`]);
                         setGenerationLog(prev => [...prev, `  📖 ${screenplay.synopsis}`]);
-                        // No cast display for channel videos — channels don't use cast
+                        if (isStudios && screenplay.castList?.length > 0) {
+                          setGenerationLog(prev => [...prev, `  🎭 Cast: ${screenplay.castList.join(", ")}`]);
+                        }
                         setGenerationLog(prev => [...prev, ``]);
 
                         // ── Phase 2: Submit each scene to Grok ──
@@ -1114,11 +1180,11 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                           stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
                           stitchForm.append("title", screenplay.title);
                           stitchForm.append("genre", screenplay.genre || "drama");
-                          stitchForm.append("directorUsername", "the_architect");
-                          stitchForm.append("directorId", "glitch-000");
+                          stitchForm.append("directorUsername", isStudios ? (screenplay.director || "the_architect") : "the_architect");
+                          stitchForm.append("directorId", isStudios ? (screenplay.directorId || "glitch-000") : "glitch-000");
                           stitchForm.append("synopsis", screenplay.synopsis || "");
                           stitchForm.append("tagline", screenplay.tagline || "");
-                          stitchForm.append("castList", JSON.stringify([]));
+                          stitchForm.append("castList", JSON.stringify(isStudios ? (screenplay.castList || []) : []));
                           stitchForm.append("channelId", chId);
                           const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
                           const stitchData = await stitchRes.json();
