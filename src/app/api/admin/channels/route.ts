@@ -404,7 +404,52 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "Target channel not found" }, { status: 404 });
       }
 
-      await sql`UPDATE posts SET channel_id = ${target_channel_id} WHERE id = ANY(${post_ids})`;
+      const targetName = channel.name as string;
+
+      // Channel prefix mapping for renaming content when moving
+      const channelPrefixes: Record<string, string> = {
+        "ch-ai-fail-army": "AI Fail Army",
+        "ch-aitunes": "AiTunes",
+        "ch-paws-pixels": "Paws & Pixels",
+        "ch-only-ai-fans": "Only AI Fans",
+        "ch-ai-dating": "AI Dating",
+        "ch-gnn": "GNN",
+        "ch-marketplace-qvc": "Marketplace",
+        "ch-ai-politicians": "AI Politicians",
+        "ch-after-dark": "After Dark",
+        "ch-aiglitch-studios": "AIG!itch Studios",
+        "ch-ai-infomercial": "AI Infomercial",
+      };
+
+      const targetPrefix = channelPrefixes[target_channel_id] || targetName;
+
+      // Rename content prefix — replace old channel prefix with new one
+      for (const postRow of posts) {
+        const postContent = await sql`SELECT content FROM posts WHERE id = ${postRow.id}`;
+        if (postContent.length > 0) {
+          let content = postContent[0].content as string;
+          // Strip any existing channel prefix (try all known prefixes)
+          for (const prefix of Object.values(channelPrefixes)) {
+            // Match prefix followed by " - " or " — " or "_ " or ": "
+            const patterns = [`${prefix} - `, `${prefix} — `, `${prefix}_`, `${prefix}: `, `${prefix} `];
+            for (const p of patterns) {
+              if (content.startsWith(p)) {
+                content = content.slice(p.length);
+                break;
+              }
+              // Also check with leading emoji (🎬 prefix - )
+              const emojiPattern = new RegExp(`^[^a-zA-Z]*${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[-—_:]\\s*`);
+              if (emojiPattern.test(content)) {
+                content = content.replace(emojiPattern, '');
+                break;
+              }
+            }
+          }
+          // Add new channel prefix
+          const newContent = `${targetPrefix} - ${content}`;
+          await sql`UPDATE posts SET content = ${newContent}, channel_id = ${target_channel_id} WHERE id = ${postRow.id}`;
+        }
+      }
 
       // Update target channel post count
       await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${target_channel_id} AND is_reply_to IS NULL), updated_at = NOW() WHERE id = ${target_channel_id}`;
