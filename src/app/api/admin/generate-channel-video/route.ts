@@ -14,6 +14,77 @@ import { getPrompt } from "@/lib/prompt-overrides";
 export const maxDuration = 600;
 
 /**
+ * GET /api/admin/generate-channel-video?jobId=xxx
+ *
+ * Poll job progress — returns clip-level status for live UI updates.
+ */
+export async function GET(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request)))
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const jobId = request.nextUrl.searchParams.get("jobId");
+  if (!jobId) {
+    return NextResponse.json({ error: "jobId is required" }, { status: 400 });
+  }
+
+  try {
+    const sql = getDb();
+
+    // Get job overview
+    const jobs = await sql`
+      SELECT id, title, status, clip_count, completed_clips, final_video_url, created_at, completed_at
+      FROM multi_clip_jobs WHERE id = ${jobId}
+    ` as unknown as {
+      id: string; title: string; status: string;
+      clip_count: number; completed_clips: number;
+      final_video_url: string | null;
+      created_at: string; completed_at: string | null;
+    }[];
+
+    if (jobs.length === 0) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    const job = jobs[0];
+
+    // Get individual scene statuses
+    const scenes = await sql`
+      SELECT scene_number, title, status, fail_reason, video_url,
+             created_at, completed_at
+      FROM multi_clip_scenes WHERE job_id = ${jobId}
+      ORDER BY scene_number ASC
+    ` as unknown as {
+      scene_number: number; title: string; status: string;
+      fail_reason: string | null; video_url: string | null;
+      created_at: string; completed_at: string | null;
+    }[];
+
+    return NextResponse.json({
+      jobId: job.id,
+      title: job.title,
+      status: job.status,
+      clipCount: job.clip_count,
+      completedClips: job.completed_clips,
+      finalVideoUrl: job.final_video_url,
+      createdAt: job.created_at,
+      completedAt: job.completed_at,
+      scenes: scenes.map(s => ({
+        sceneNumber: s.scene_number,
+        title: s.title,
+        status: s.status,
+        failReason: s.fail_reason,
+        hasVideo: !!s.video_url,
+        completedAt: s.completed_at,
+      })),
+    });
+  } catch (err) {
+    return NextResponse.json({
+      error: `Poll failed: ${err instanceof Error ? err.message : String(err)}`,
+    }, { status: 500 });
+  }
+}
+
+/**
  * POST /api/admin/generate-channel-video
  *
  * Server-side channel video generator. Same pipeline as director movies

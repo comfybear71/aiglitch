@@ -934,26 +934,102 @@ export default function AdminChannelsPage() {
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <p className="text-[9px] text-gray-500">Server-side — you can close this tab. Check channel for the finished video.</p>
+                  <p className="text-[9px] text-gray-500">Server-side — you can close this tab, or stay for live progress.</p>
                   <button
                     disabled={channelVideoGen[channel.id]?.generating}
                     onClick={async () => {
-                      setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: true, log: ["Submitting..."] } }));
+                      const chId = channel.id;
+                      const addLog = (line: string) => setChannelVideoGen(prev => ({
+                        ...prev, [chId]: { ...prev[chId], log: [...(prev[chId]?.log || []), line] }
+                      }));
+                      setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: true, log: ["⏳ Generating screenplay..."] } }));
                       try {
                         const form = new FormData();
-                        form.append("channel_id", channel.id);
-                        if (channelVideoGen[channel.id]?.concept) form.append("concept", channelVideoGen[channel.id].concept);
-                        if (channelVideoGen[channel.id]?.genre) form.append("genre", channelVideoGen[channel.id].genre);
-                        if (channelVideoGen[channel.id]?.category) form.append("category", channelVideoGen[channel.id].category);
+                        form.append("channel_id", chId);
+                        if (channelVideoGen[chId]?.concept) form.append("concept", channelVideoGen[chId].concept);
+                        if (channelVideoGen[chId]?.genre) form.append("genre", channelVideoGen[chId].genre);
+                        if (channelVideoGen[chId]?.category) form.append("category", channelVideoGen[chId].category);
                         const res = await fetch("/api/admin/generate-channel-video", { method: "POST", body: form });
                         const data = await res.json();
-                        if (data.success) {
-                          setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`✅ "${data.title}" — ${data.scenes} clips submitted!`, `Job: ${data.jobId}`, data.message] } }));
-                        } else {
-                          setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`❌ ${data.error}`] } }));
+                        if (!data.success) {
+                          addLog(`❌ ${data.error}`);
+                          setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
+                          return;
                         }
+
+                        addLog(`🎬 "${data.title}" — ${data.scenes} clips submitted to render`);
+                        addLog(`🏷️ Job: ${data.jobId}`);
+
+                        // Poll for progress every 10 seconds
+                        const startTime = Date.now();
+                        const maxPolls = 120; // 20 minutes max
+                        let lastCompleted = 0;
+
+                        for (let attempt = 1; attempt <= maxPolls; attempt++) {
+                          await new Promise(r => setTimeout(r, 10_000));
+                          try {
+                            const pollRes = await fetch(`/api/admin/generate-channel-video?jobId=${data.jobId}`);
+                            const poll = await pollRes.json();
+                            if (poll.error) continue;
+
+                            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                            const mins = Math.floor(elapsed / 60);
+                            const secs = elapsed % 60;
+                            const timeStr = `${mins}m ${secs.toString().padStart(2, "0")}s`;
+
+                            // Log newly completed clips
+                            if (poll.completedClips > lastCompleted) {
+                              const newlyDone = (poll.scenes || []).filter(
+                                (s: { status: string; sceneNumber: number }) => s.status === "done" && s.sceneNumber > lastCompleted
+                              );
+                              for (const s of newlyDone) {
+                                addLog(`🎉 Clip ${s.sceneNumber}/${poll.clipCount} "${s.title || `Scene ${s.sceneNumber}`}" done (${timeStr})`);
+                              }
+                              // If no individual scene info, just show count
+                              if (newlyDone.length === 0 && poll.completedClips > lastCompleted) {
+                                addLog(`🎉 ${poll.completedClips}/${poll.clipCount} clips rendered (${timeStr})`);
+                              }
+                              lastCompleted = poll.completedClips;
+                            }
+
+                            // Log failed clips
+                            const failedScenes = (poll.scenes || []).filter(
+                              (s: { status: string }) => s.status === "failed"
+                            );
+
+                            // Status update every 30s
+                            if (attempt % 3 === 0 && poll.status === "generating") {
+                              const doneCount = (poll.scenes || []).filter((s: { status: string }) => s.status === "done").length;
+                              const failCount = failedScenes.length;
+                              addLog(`🔄 ${timeStr}: ${doneCount}/${poll.clipCount} done${failCount > 0 ? `, ${failCount} failed` : ""}`);
+                            }
+
+                            // Job complete statuses
+                            if (poll.status === "done" || poll.status === "posted") {
+                              addLog(`✅ Video stitched and posted! (${timeStr})`);
+                              if (poll.finalVideoUrl) addLog(`🎬 ${poll.finalVideoUrl}`);
+                              setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
+                              return;
+                            }
+                            if (poll.status === "stitching") {
+                              addLog(`🔧 Stitching ${poll.completedClips} clips into final video... (${timeStr})`);
+                            }
+                            if (poll.status === "failed") {
+                              addLog(`❌ Job failed (${timeStr})`);
+                              setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
+                              return;
+                            }
+                          } catch {
+                            // Network error, retry next poll
+                          }
+                        }
+
+                        // Max polls reached
+                        addLog(`⏰ Still rendering — server will finish automatically. Check channel later.`);
+                        setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
                       } catch (err) {
-                        setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`❌ ${err}`] } }));
+                        addLog(`❌ ${err}`);
+                        setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
                       }
                     }}
                     className="px-4 py-1.5 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50"
@@ -962,9 +1038,9 @@ export default function AdminChannelsPage() {
                   </button>
                 </div>
                 {channelVideoGen[channel.id]?.log?.length > 0 && (
-                  <div className="mt-2 bg-black/30 rounded p-2 space-y-1">
+                  <div className="mt-2 bg-black/30 rounded p-2 space-y-1 max-h-48 overflow-y-auto">
                     {channelVideoGen[channel.id].log.map((line, i) => (
-                      <p key={i} className={`text-[10px] font-mono ${line.includes("✅") ? "text-green-400" : line.includes("❌") ? "text-red-400" : "text-gray-400"}`}>{line}</p>
+                      <p key={i} className={`text-[10px] font-mono ${line.includes("✅") || line.includes("🎉") ? "text-green-400" : line.includes("❌") ? "text-red-400" : line.includes("🔄") || line.includes("🔧") ? "text-amber-400" : "text-gray-400"}`}>{line}</p>
                     ))}
                   </div>
                 )}
