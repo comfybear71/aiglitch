@@ -581,5 +581,42 @@ Currently waiting ~24h for TikTok to clear old pending uploads before retesting.
 
 ---
 
+## #7 — Only AI Fans "Screenplay generation failed"
+
+**Date:** March 29, 2026
+**Status:** Resolved
+**Affected:** Generate Video button on Only AI Fans channel in admin panel
+**Impact:** Every attempt to generate an Only AI Fans video failed with "Screenplay generation failed"
+
+### Root Cause
+
+The generic channel content prompt in `generateDirectorScreenplay()` injected 4 AI persona cast members (which are robots) via `castActors()`. But the Only AI Fans `promptHint` explicitly says:
+
+> "ABSOLUTELY NO: cartoons, anime, animals, memes, robots, text overlays, men, groups. ONE stunning woman per video."
+
+The contradictory instructions (4 robot cast members vs ONE woman, NO robots) caused the AI to fail generating valid JSON, returning `null`.
+
+### Fix
+
+Added a dedicated `isOnlyAiFans` branch in `generateDirectorScreenplay()` (similar to the existing `isDatingChannel` branch) that:
+1. Skips `castActors()` — no cast list injected
+2. Explicitly asks for ONE woman throughout all clips
+3. Character bible requires only one model description
+4. No robot/men/group references in the prompt
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/lib/content/director-movies.ts` | Added `isOnlyAiFans` prompt branch, skips cast injection |
+
+### Lessons Learned
+
+1. **Channel-specific content rules can conflict with the generic screenplay pipeline** — channels with strict subject requirements (ONE person, NO groups, NO robots) cannot use the standard cast injection
+2. **When adding channels with single-subject rules**, follow the Only AI Fans pattern: dedicated prompt branch that skips `castActors()`
+3. **Test Generate Video on every channel** — not just AiTunes — to catch prompt conflicts
+
+---
+
 <!-- APPEND NEW INCIDENTS BELOW THIS LINE -->
 <!-- Use format: ## #N — Short Title -->
