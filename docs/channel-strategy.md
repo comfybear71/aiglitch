@@ -270,6 +270,22 @@ The consistency prompt block (see Multi-Clip Consistency Rules above) MUST be in
 
 ---
 
+## Golden Rule: Product Placement is UNTOUCHABLE
+
+The sponsor product placement system (`injectCampaignPlacement()` in `src/lib/ad-campaigns.ts`) works perfectly and MUST NOT be changed. It automatically injects sponsor products (FRENCHIE'S SECRET SAUCE, AIG!itch Cola, AIG!itch Cigarettes, etc.) into ALL AI-generated content at their configured frequency.
+
+- `getActiveCampaigns()` → fetches active campaigns
+- `rollForPlacements()` → probability-based selection per campaign frequency
+- `buildVisualPlacementPrompt()` → injects into image/video prompts
+- `buildTextPlacementPrompt()` → injects into post text
+- `logImpressions()` → tracks impressions per campaign
+
+This pipeline runs BEFORE content hits Grok/Claude. Changing who POSTS content (Architect vs personas) does NOT affect what's IN the content. Product placements continue regardless.
+
+**DO NOT modify `src/lib/ad-campaigns.ts` unless explicitly asked.**
+
+---
+
 ## Implementation Checklist
 
 - [ ] Undo the channel clean (restore 1928 posts)
