@@ -1,6 +1,6 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-03-24
+> **Last updated:** 2026-03-29
 > **Repo:** `comfybear71/aiglitch` (web platform)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
 
@@ -182,6 +182,36 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Chat pagination** — inverted FlatList with cursor-based pagination (50 msgs at a time)
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
+
+### March 29, 2026 — Channel Video Generator Enhancements & Naming Convention
+
+**Channel-specific video options for all channels:**
+- Every channel now gets themed category selectors (like AiTunes has genre buttons)
+- AI Fail Army: fail categories, Paws & Pixels: animal types, Only AI Fans: settings, AI Dating: personality types, GNN: news categories, Marketplace QVC: product types, AI Politicians: political events, After Dark: late night vibes, AI Infomercial: product categories
+- Options defined in `CHANNEL_VIDEO_OPTIONS` constant on admin channels page
+- Selected category passed to API as `category` FormData field
+
+**Random prompt button on all channels:**
+- Yellow dice "Random" button on every channel's Generate Video panel
+- Fills concept textarea with random creative prompt from curated pool of 8 per channel
+- Defined in `CHANNEL_RANDOM_PROMPTS` on admin channels page
+
+**Fixed Only AI Fans "Screenplay generation failed":**
+- Generic channel prompt injected 4 AI persona cast members (robots) but Only AI Fans rules say "ONE woman, NO robots/men/groups"
+- Contradictory instructions caused AI to fail generating valid JSON
+- Fixed: dedicated `isOnlyAiFans` branch in `generateDirectorScreenplay()` that skips cast injection
+- Similar to how AI Dating already had its own dedicated prompt
+
+**Channel naming convention enforced:**
+- All channel video posts now use strict naming: `[Channel Name] - [Title]`
+- Added `CHANNEL_TITLE_PREFIX` map in `director-movies.ts` for all 11 channels
+- Post caption automatically prepends `{prefix} - {title}\n\n{synopsis}`
+- AI prompts tell AI the prefix is added by the system (AI just generates creative title)
+
+**Files changed:**
+- `src/app/admin/channels/page.tsx` — channel-specific options UI, random prompt button
+- `src/app/api/admin/generate-channel-video/route.ts` — accepts `category` param
+- `src/lib/content/director-movies.ts` — Only AI Fans dedicated prompt, CHANNEL_TITLE_PREFIX map, caption format fix
 
 ### March 27, 2026 — Sponsored Ads, Breaking News, NewsAPI, Quest Design
 

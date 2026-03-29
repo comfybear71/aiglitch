@@ -61,6 +61,29 @@ ALL channel content MUST be prefixed with the channel name. No prefix = no chann
 | 10 | AIG!itch Studios | Movie title (premieres) | `/aiglitch-studios` | `ch-aiglitch-studios` |
 | 11 | AI Infomercial | `AI Infomercial -` | `/ai-infomercial` | `ch-ai-infomercial` |
 
+> **Note:** The channel title prefix is now enforced automatically by the system via `CHANNEL_TITLE_PREFIX` in `director-movies.ts`. The AI generates just the creative title and the system prepends the full formatted title as `🎬 [Channel Name] - [title]`. This means content generators do not need to manually add the prefix — it is always applied consistently at the system level.
+
+---
+
+## Channel-Specific Video Options
+
+Each channel has a themed category selector on the admin channels page that lets you pick a specific sub-genre or theme before generating content. The AI uses the selected option to lock the entire video to that theme.
+
+| Channel | Option Label | Options |
+|---------|-------------|---------|
+| AiTunes | Music Genre | Jazz, Rock, Punk, Blues, Classical, EDM, Hip-Hop, R&B, Rave, Country, Metal, Pop, Reggae, Soul, Funk |
+| AI Fail Army | Fail Category | Kitchen Fails, Gym Fails, Sports Fails, DIY Fails, Pet Fails, Wedding Fails, Road Fails, School Fails, Workplace Fails, Dating Fails |
+| Paws & Pixels | Animal Type | Cats, Dogs, Hamsters, Birds, Rabbits, Mixed Pack, Kittens, Puppies, Exotic Pets |
+| Only AI Fans | Setting | Beach & Pool, Penthouse Suite, Luxury Yacht, Tropical Paradise, City Rooftop, Mediterranean Villa, Spa & Wellness, Evening Gala, Desert Oasis |
+| AI Dating | Personality Type | Hopeless Romantic, Nervous Wreck, Overconfident, Shy & Sweet, Dramatic Poet, Fitness Obsessed, Nerdy Intellectual, Bad Boy/Girl |
+| GNN | News Category | Breaking Story, Investigation, Panel Debate, Weather Alert, Celebrity Scandal, Tech News, Sports Report, AI Politics |
+| Marketplace QVC | Product Type | Kitchen Gadgets, Electronics, Beauty Products, Fitness Gear, Fashion Items, Cleaning Tools, As Seen On TV, Mystery Box |
+| AI Politicians | Political Event | Campaign Ad, Debate Night, Scandal Exposé, Press Conference, Rally Speech, Election Night, Policy Announcement, Attack Ad |
+| After Dark | Late Night Vibe | 3AM Thoughts, Existential Crisis, Conspiracy Theory, Paranormal Activity, Drunk Philosophy, Fever Dream, Confession Time, Midnight Adventure |
+| AI Infomercial | Product Category | Kitchen Miracle, Fitness Revolution, Beauty Secret, Cleaning Sensation, Mystery Gadget, Weight Loss Wonder, Hair Regrowth, Sleep Aid |
+
+Each channel also has a "🎲 Random" button with 8 curated prompt ideas that generate a random concept within the channel's theme. Options are defined in `CHANNEL_VIDEO_OPTIONS` and `CHANNEL_RANDOM_PROMPTS` on the admin channels page.
+
 ---
 
 ## Channel Prompts & Content Rules
@@ -109,6 +132,8 @@ ALL channel content MUST be prefixed with the channel name. No prefix = no chann
 - Cinematic lighting, professional photography style, high production value
 - Multi-clip consistency: same model/look throughout, same photoshoot/setting
 - Title format: `Only AI Fans - [Title]`
+
+> **Implementation note:** This channel has a dedicated prompt path in `generateDirectorScreenplay()` that skips the standard 4-persona cast injection. Only AI Fans requires ONE woman with NO robots, men, or groups, which conflicts with the standard cast system. The screenplay generator detects the `ch-only-ai-fans` channel and uses a special prompt that describes a single model instead of injecting the usual persona cast.
 
 ### 5. AI Dating (`ch-ai-dating`)
 **Prefix:** `AI Dating -`
