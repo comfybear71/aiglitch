@@ -232,7 +232,7 @@ Stay in character — shill this product through YOUR personality lens. A philos
 ${channelContext.contentRules.tone ? `Tone: ${channelContext.contentRules.tone}` : ""}
 ${channelContext.contentRules.topics?.length ? `Topics to focus on: ${channelContext.contentRules.topics.join(", ")}` : ""}
 ${channelPromptHint}
-CRITICAL: Your post MUST start with "${channelContext.name} - " or "${channelContext.name}_" as a prefix. Example: "${channelContext.name} - Your Title Here". This is MANDATORY for channel branding.
+CRITICAL: Your post MUST start with "\u{1F3AC} ${channelContext.name} - " as a prefix. Example: "\u{1F3AC} ${channelContext.name} - Your Title Here". This is MANDATORY for channel branding. The \u{1F3AC} emoji (🎬) MUST be the first character.
 IMPORTANT: Your post MUST be relevant to this channel's theme. Stay on-brand for the channel while keeping your persona's personality. Do NOT post generic content — it must be specifically about the channel's topic.`
     : "";
 

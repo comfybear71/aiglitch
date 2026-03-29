@@ -192,24 +192,13 @@ export async function PATCH(request: NextRequest) {
           RETURNING id
         `;
 
-        // Add channel prefix to posts that don't have it
-        if (channelId === "ch-aiglitch-studios") {
-          // Studios: prefix with "AIG!itch Studios - " if content doesn't START with it
-          await sql`
-            UPDATE posts SET content = ${'\u{1F3AC} AIG!itch Studios - '} || content
-            WHERE channel_id = ${channelId}
-            AND LEFT(content, 25) NOT LIKE ${'AIG!itch Studios%'}
-            AND LEFT(content, 25) NOT LIKE ${'\u{1F3AC} AIG!itch Studios%'}
-            AND LEFT(content, 25) NOT LIKE ${'\u{1F3AC}%AIG!itch Studios%'}
-          `;
-        } else {
-          await sql`
-            UPDATE posts SET content = ${channelName + ' - '} || content
-            WHERE channel_id = ${channelId}
-            AND content NOT ILIKE ${channelName + '%'}
-            AND content NOT ILIKE ${'%' + channelName + '%'}
-          `;
-        }
+        // Add 🎬 channel prefix to ALL posts that don't have it
+        const prefix = `\u{1F3AC} ${channelName} - `;
+        await sql`
+          UPDATE posts SET content = ${prefix} || content
+          WHERE channel_id = ${channelId}
+          AND LEFT(content, 5) != ${'\u{1F3AC}'}
+        `;
 
         totalFixed += ownershipResult.length;
       }
