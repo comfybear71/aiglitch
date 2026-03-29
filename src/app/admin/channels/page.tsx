@@ -112,6 +112,7 @@ export default function AdminChannelsPage() {
   const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
   const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
   const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
+  const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; log: string[] }>>({});
   const [expandedTitle, setExpandedTitle] = useState<string | null>(null);
   const [expandedContent, setExpandedContent] = useState<string | null>(null);
   const [promoPrompts, setPromoPrompts] = useState<Record<string, string>>({});
@@ -640,6 +641,25 @@ export default function AdminChannelsPage() {
 
             {/* Generate buttons row */}
             <div className="flex items-center gap-2 mt-3 flex-wrap">
+              {/* Generate Channel Video */}
+              <button
+                onClick={() => {
+                  const cur = channelVideoGen[channel.id];
+                  if (cur?.generating) return;
+                  setChannelVideoGen(prev => ({
+                    ...prev,
+                    [channel.id]: prev[channel.id]
+                      ? { ...prev[channel.id], concept: prev[channel.id].concept }
+                      : { generating: false, concept: "", genre: "", log: [] },
+                  }));
+                  setExpandedPromo(expandedPromo === `vid-${channel.id}` ? null : `vid-${channel.id}`);
+                }}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-full transition-colors ${
+                  expandedPromo === `vid-${channel.id}` ? "bg-green-500/30 text-green-200 ring-1 ring-green-500/50" : "bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                }`}
+              >
+                🎬 Generate Video
+              </button>
               {/* Promo button / status */}
               {(() => {
                 const job = promoJobs[channel.id];
@@ -729,6 +749,69 @@ export default function AdminChannelsPage() {
             </div>
 
             {/* Expanded promo prompt panel */}
+            {/* Channel Video Generator Panel */}
+            {expandedPromo === `vid-${channel.id}` && (
+              <div className="mt-3 bg-gray-800/50 border border-green-800/30 rounded-lg p-3">
+                <p className="text-[10px] text-green-400 font-bold mb-2">GENERATE {channel.name.toUpperCase()} VIDEO</p>
+                {channel.id === "ch-aitunes" && (
+                  <div className="mb-2">
+                    <p className="text-[9px] text-gray-400 mb-1">Music Genre (ALL clips same genre):</p>
+                    <div className="flex flex-wrap gap-1">
+                      {["Jazz", "Rock", "Punk", "Blues", "Classical", "EDM", "Hip-Hop", "R&B", "Rave", "Country", "Metal", "Pop", "Reggae", "Soul", "Funk"].map(g => (
+                        <button key={g}
+                          onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], genre: prev[channel.id]?.genre === g ? "" : g } }))}
+                          className={`px-2 py-0.5 rounded text-[9px] ${channelVideoGen[channel.id]?.genre === g ? "bg-green-500/30 text-green-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <textarea
+                  value={channelVideoGen[channel.id]?.concept || ""}
+                  onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], concept: e.target.value } }))}
+                  placeholder={`Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 mb-2 resize-none"
+                />
+                <div className="flex justify-between items-center">
+                  <p className="text-[9px] text-gray-500">Server-side — you can close this tab. Check channel for the finished video.</p>
+                  <button
+                    disabled={channelVideoGen[channel.id]?.generating}
+                    onClick={async () => {
+                      setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: true, log: ["Submitting..."] } }));
+                      try {
+                        const form = new FormData();
+                        form.append("channel_id", channel.id);
+                        if (channelVideoGen[channel.id]?.concept) form.append("concept", channelVideoGen[channel.id].concept);
+                        if (channelVideoGen[channel.id]?.genre) form.append("genre", channelVideoGen[channel.id].genre);
+                        const res = await fetch("/api/admin/generate-channel-video", { method: "POST", body: form });
+                        const data = await res.json();
+                        if (data.success) {
+                          setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`✅ "${data.title}" — ${data.scenes} clips submitted!`, `Job: ${data.jobId}`, data.message] } }));
+                        } else {
+                          setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`❌ ${data.error}`] } }));
+                        }
+                      } catch (err) {
+                        setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`❌ ${err}`] } }));
+                      }
+                    }}
+                    className="px-4 py-1.5 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50"
+                  >
+                    {channelVideoGen[channel.id]?.generating ? "Generating..." : `Generate ${channel.name} Video`}
+                  </button>
+                </div>
+                {channelVideoGen[channel.id]?.log?.length > 0 && (
+                  <div className="mt-2 bg-black/30 rounded p-2 space-y-1">
+                    {channelVideoGen[channel.id].log.map((line, i) => (
+                      <p key={i} className={`text-[10px] font-mono ${line.includes("✅") ? "text-green-400" : line.includes("❌") ? "text-red-400" : "text-gray-400"}`}>{line}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Promo Panel */}
             {expandedPromo === channel.id && (
               <div className="mt-3 bg-purple-500/5 border border-purple-500/20 rounded-xl p-3 space-y-2">
                 <label className="text-[10px] text-purple-300 uppercase font-bold block">Promo Video Prompt</label>
@@ -952,6 +1035,7 @@ export default function AdminChannelsPage() {
                         </div>
                         {/* Action dropdown */}
                         <PostActions
+                          postId={post.id}
                           onRemove={() => quickRemovePost(channel.id, post.id, false)}
                           onDelete={() => {
                             if (confirm("Permanently delete this post?")) quickRemovePost(channel.id, post.id, true);
@@ -1053,12 +1137,14 @@ export default function AdminChannelsPage() {
 
 /* ── Per-post action dropdown ── */
 function PostActions({
+  postId,
   onRemove,
   onDelete,
   channels,
   currentChannelId,
   onMove,
 }: {
+  postId: string;
   onRemove: () => void;
   onDelete: () => void;
   channels: AdminChannel[];
@@ -1103,6 +1189,22 @@ function PostActions({
               ))}
             </div>
           )}
+          <div className="border-t border-gray-800" />
+          <button
+            onClick={async () => {
+              // Remove from channel + change prefix to "🎬 Lost Video - "
+              await fetch("/api/admin/channels", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "move_to_lost", post_ids: [postId] }),
+              });
+              onRemove();
+              setOpen(false);
+            }}
+            className="w-full px-3 py-1.5 text-left text-xs text-orange-400 hover:bg-gray-800 transition-colors"
+          >
+            Move to Lost Videos
+          </button>
           <div className="border-t border-gray-800" />
           <button
             onClick={() => { onDelete(); setOpen(false); }}

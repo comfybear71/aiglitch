@@ -409,6 +409,27 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
+    // Move posts to Lost Videos — remove from channel + change prefix
+    if (action === "move_to_lost") {
+      const lostPostIds = body.post_ids as string[];
+      if (!lostPostIds?.length) return NextResponse.json({ error: "post_ids required" }, { status: 400 });
+
+      for (const pid of lostPostIds) {
+        // Strip any existing 🎬 prefix and add Lost Video prefix
+        await sql`
+          UPDATE posts SET
+            channel_id = NULL,
+            content = ${'\u{1F3AC} Lost Video - '} || regexp_replace(content, E'^🎬[^-]*-\\s*', '')
+          WHERE id = ${pid}
+        `;
+      }
+
+      // Update channel post counts
+      await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = channels.id AND is_reply_to IS NULL), updated_at = NOW()`;
+
+      return NextResponse.json({ ok: true, moved: lostPostIds.length });
+    }
+
     // Restore posts back into a channel by prefix match
     if (action === "restore_by_prefix") {
       const { channel_id, prefix } = body;
