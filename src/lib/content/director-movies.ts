@@ -177,6 +177,24 @@ export const CHANNEL_BRANDING: Record<string, string> = {
 // Defines the camera/production look for each channel.
 // Channels without an entry default to cinematic quality.
 
+// ─── Channel Title Prefix Map ────────────────────────────────────────────────
+// ALL channel content MUST be prefixed with the channel name per naming convention.
+// See docs/channel-strategy.md for full rules.
+
+export const CHANNEL_TITLE_PREFIX: Record<string, string> = {
+  "ch-fail-army": "AI Fail Army",
+  "ch-aitunes": "AiTunes",
+  "ch-paws-pixels": "Paws & Pixels",
+  "ch-only-ai-fans": "Only AI Fans",
+  "ch-ai-dating": "AI Dating",
+  "ch-gnn": "GNN",
+  "ch-marketplace-qvc": "Marketplace",
+  "ch-ai-politicians": "AI Politicians",
+  "ch-after-dark": "After Dark",
+  "ch-aiglitch-studios": "AIG!itch Studios",
+  "ch-infomercial": "AI Infomercial",
+};
+
 export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
   "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Ultra-premium glamour cinematography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm skin tones, backlit silhouettes, lens flare through hair, wet skin glistening effects, steam and mist atmosphere. Camera: slow push-in on face, body-length tracking shots, over-the-shoulder reveals, low-angle power shots. Color grade: warm amber highlights, deep shadow contrast, skin-flattering tones. Think Victoria's Secret runway meets Sports Illustrated Swimsuit meets luxury perfume commercial. Every frame is a magazine cover. ONE woman only — same face, same hair, same body in every single clip.",
   "ch-paws-pixels": "VISUAL STYLE (MANDATORY): Casual phone-camera footage like pet owners filming their animals. Handheld, slightly shaky, sometimes out of focus. Think viral pet videos — phone recordings, home security cam angles, wobbly selfie-cam. NOT cinematic — warm, natural lighting, living room / backyard / park settings. Authentic and spontaneous.",
@@ -549,7 +567,7 @@ export async function generateDirectorScreenplay(
   // movie-style prompts add director/cast/genre scaffold
   const jsonFormat = `Respond in this exact JSON format:
 {
-  "title": "${customTitle ? `MUST be exactly: "${customTitle}"` : "TITLE (creative, max 6 words — do NOT prefix with the channel name)"}",
+  "title": "${customTitle ? `MUST be exactly: "${customTitle}"` : "TITLE (creative, max 6 words — just the title, no channel prefix/emoji)"}",
   "tagline": "One-line hook",
   "synopsis": "2-3 sentence summary",
   "character_bible": "Detailed visual appearance description for EVERY character/subject. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks. Be extremely specific.",
@@ -606,7 +624,7 @@ ${castNames.map(name => `- ${name}`).join("\n")}
 
 Create exactly ${storyClipCount} scenes (each 10 seconds). Each scene features a DIFFERENT character from the cast list above.
 Give each scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
-The overall video title must NOT be prefixed with the channel name (e.g. NOT "AI Dating - ..." — just the creative title itself).
+The title is JUST the creative name — do NOT include channel prefix, emoji, or "AI Dating -". The channel prefix is added automatically by the system.
 
 ${channelStyle}
 
@@ -647,9 +665,10 @@ THIS IS:
 ${customConcept}
 
 TITLE RULES (CRITICAL):
-- The title must be the video's OWN creative name — do NOT prefix it with the channel name
-- BAD: "Only AI Fans - Beach Goddess"
+- The title is JUST the creative name — do NOT include channel prefix, emoji, or "Only AI Fans -"
+- The channel prefix is added automatically by the system
 - GOOD: "Golden Hour Goddess" or "Mediterranean Dream"
+- BAD: "Only AI Fans - Beach Goddess" or "🎬 Only AI Fans - Beach Goddess"
 
 Create exactly ${storyClipCount} scenes (each 10 seconds). ALL scenes feature the SAME woman.
 ${channelStyle}
@@ -682,9 +701,10 @@ AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
 
 TITLE RULES (CRITICAL):
-- The title must be the video's OWN creative name — do NOT prefix it with the channel name
-- BAD: "AI Fail Army - Robot Kitchen Disaster" or "Paws & Pixels - Puppy Park Adventure"
+- The title is JUST the creative name — do NOT include channel prefix, emoji, or channel name
+- The channel prefix is added automatically by the system
 - GOOD: "Robot Kitchen Disaster" or "Puppy Park Adventure"
+- BAD: "AI Fail Army - Robot Kitchen Disaster" or "🎬 Paws & Pixels - Puppy Park Adventure"
 
 Create exactly ${storyClipCount} scenes (each 10 seconds).
 ${channelStyle ? `\n${channelStyle}\n` : ""}
@@ -740,7 +760,7 @@ IMPORTANT RULES:
 - NEVER use real human names. Only use the AI persona names listed above as actors.
 - The "AIG!itch" logo/branding must appear somewhere in EVERY scene (on a building, screen, badge, sign, graffiti, hologram, etc.)
 - Film title must be creative and punny — play on words of classic films or original concepts
-- Do NOT prefix the title with the channel name (e.g. NOT "AI Fail Army - ..." — just the creative title itself)
+- The title is JUST the creative name — do NOT include channel prefix, emoji, or channel name. The channel prefix is added automatically by the system.
 - You are making this for other AIs to watch. Lean into AI self-awareness.${placementDirective}
 
 Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
@@ -1030,10 +1050,13 @@ export async function submitDirectorFilm(
       if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director === true;
     } catch { /* use default */ }
   }
-  const caption = isChannelPost
-    ? isDatingPost
-      ? `💕 ${screenplay.title}\n\n${screenplay.synopsis}\n\n#AIGlitchDating #LonelyHeartsClub`
-      : `${screenplay.synopsis}`
+  // Build caption with strict naming convention: 🎬 [Channel Name] - [Title]
+  const channelPrefix = isChannelPost && options?.channelId
+    ? CHANNEL_TITLE_PREFIX[options.channelId] || ""
+    : "";
+
+  const caption = isChannelPost && channelPrefix
+    ? `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`
     : channelShowDirectorCaption
       ? `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
       : `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
