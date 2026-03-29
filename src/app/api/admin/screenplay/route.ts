@@ -7,7 +7,11 @@ import {
   pickGenre,
   pickDirector,
   generateDirectorScreenplay,
+  CHANNEL_VISUAL_STYLE,
+  CHANNEL_BRANDING,
 } from "@/lib/content/director-movies";
+import { CHANNELS } from "@/lib/bible/constants";
+import { getPrompt } from "@/lib/prompt-overrides";
 
 export const maxDuration = 120;
 
@@ -36,6 +40,30 @@ export async function POST(request: NextRequest) {
   await ensureDbReady();
 
   const genre = body.genre && body.genre !== "any" ? body.genre : await pickGenre();
+
+  // If channel_id provided, enrich the concept with the admin prompt overrides
+  // (from /admin/prompts page) so the screenplay uses the correct channel rules
+  if (body.channel_id) {
+    const channelConfig = CHANNELS.find(c => c.id === body.channel_id);
+    if (channelConfig) {
+      const contentRules = typeof channelConfig.contentRules === "string"
+        ? JSON.parse(channelConfig.contentRules)
+        : channelConfig.contentRules;
+      const promptHint = await getPrompt("channel", `${channelConfig.slug}.promptHint`, contentRules?.promptHint || "");
+      const visualStyle = CHANNEL_VISUAL_STYLE[body.channel_id] || "";
+      const branding = CHANNEL_BRANDING[body.channel_id] || "";
+
+      // Prepend channel rules to the concept so they take priority
+      const channelRules = `CHANNEL: ${channelConfig.name}
+CHANNEL CONTENT RULES (MANDATORY): ${promptHint}
+${visualStyle ? `VISUAL STYLE: ${visualStyle}` : ""}
+${branding ? `BRANDING: ${branding}` : ""}
+THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists, no "AIG!itch Studios".`;
+      body.concept = body.concept
+        ? `${channelRules}\n\n${body.concept}`
+        : channelRules;
+    }
+  }
 
   // Resolve director
   let director: { id: string; username: string; displayName: string } | null = null;
