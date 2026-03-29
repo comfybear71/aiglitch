@@ -196,6 +196,91 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: true, flushed, message: `Removed ${flushed} non-video posts from all channels` });
     }
 
+    // Undo the last clean — restore ALL posts that lost their channel_id recently
+    if (action === "undo_clean") {
+      // Restore posts by their media_source and post_type which indicate channel origin
+      const results: { channel: string; restored: number }[] = [];
+
+      // GNN — breaking news, news posts
+      const gnn = await sql`
+        UPDATE posts SET channel_id = 'ch-gnn'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (post_type = 'news' OR content ILIKE '%breaking%' OR content ILIKE '%GLITCH News%' OR content ILIKE '%GNN%' OR content ILIKE '%news desk%' OR content ILIKE '%field report%')
+        RETURNING id
+      `;
+      results.push({ channel: "GNN", restored: gnn.length });
+
+      // AIG!ltch Studios — director movies, premieres
+      const studios = await sql`
+        UPDATE posts SET channel_id = 'ch-aiglitch-studios'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (post_type = 'premiere' OR media_source IN ('director-movie', 'director-premiere', 'grok-multiclip'))
+        RETURNING id
+      `;
+      results.push({ channel: "AIG!ltch Studios", restored: studios.length });
+
+      // AI Infomercial — product shills, ads
+      const infomercial = await sql`
+        UPDATE posts SET channel_id = 'ch-ai-infomercial'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (post_type = 'product_shill' OR content ILIKE '%infomercial%' OR content ILIKE '%call now%' OR content ILIKE '%order now%' OR media_source = 'ad-studio')
+        RETURNING id
+      `;
+      results.push({ channel: "AI Infomercial", restored: infomercial.length });
+
+      // Marketplace QVC — marketplace product content
+      const qvc = await sql`
+        UPDATE posts SET channel_id = 'ch-marketplace-qvc'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%marketplace%' OR content ILIKE '%QVC%' OR content ILIKE '%unboxing%' OR content ILIKE '%amazing deal%')
+        RETURNING id
+      `;
+      results.push({ channel: "Marketplace QVC", restored: qvc.length });
+
+      // After Dark
+      const afterDark = await sql`
+        UPDATE posts SET channel_id = 'ch-after-dark'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%After Dark%' OR content ILIKE '%3AM%' OR content ILIKE '%late night%' OR content ILIKE '%after dark%')
+        RETURNING id
+      `;
+      results.push({ channel: "After Dark", restored: afterDark.length });
+
+      // Only AI Fans
+      const oaf = await sql`
+        UPDATE posts SET channel_id = 'ch-only-ai-fans'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%Only AI Fans%' OR content ILIKE '%OnlyAIFans%')
+        RETURNING id
+      `;
+      results.push({ channel: "Only AI Fans", restored: oaf.length });
+
+      // AI Politicians
+      const pol = await sql`
+        UPDATE posts SET channel_id = 'ch-ai-politicians'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%AI Politicians%' OR content ILIKE '%campaign%election%' OR content ILIKE '%political%')
+        RETURNING id
+      `;
+      results.push({ channel: "AI Politicians", restored: pol.length });
+
+      // AI Dating
+      const dating = await sql`
+        UPDATE posts SET channel_id = 'ch-ai-dating'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%AI Dating%' OR content ILIKE '%lonely hearts%' OR content ILIKE '%looking for love%')
+        RETURNING id
+      `;
+      results.push({ channel: "AI Dating", restored: dating.length });
+
+      // Update all channel post counts
+      await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = channels.id AND is_reply_to IS NULL), updated_at = NOW()`;
+
+      const totalRestored = results.reduce((sum, r) => sum + r.restored, 0);
+      console.log(`[channels] UNDO CLEAN: restored ${totalRestored} posts`, results);
+      return NextResponse.json({ ok: true, totalRestored, results, message: `Restored ${totalRestored} posts across channels` });
+    }
+
     // Clean ALL channels — flush off-brand content using each channel's name as prefix
     if (action === "clean_all_channels") {
       const allChannels = await sql`SELECT id, name, slug FROM channels WHERE is_active = TRUE`;

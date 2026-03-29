@@ -480,6 +480,26 @@ export default function AdminChannelsPage() {
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={async () => {
+              if (!confirm("UNDO: Restore all posts that were just cleaned? This will put posts back into GNN, Studios, Infomercial, etc. based on their content type.")) return;
+              const res = await fetch("/api/admin/channels", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "undo_clean" }),
+              });
+              const data = await res.json();
+              let msg = data.message || "Done";
+              if (data.results?.length > 0) {
+                msg += "\n\n" + data.results.map((r: { channel: string; restored: number }) => `${r.channel}: ${r.restored} restored`).join("\n");
+              }
+              alert(msg);
+              fetchChannels();
+            }}
+            className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30"
+          >
+            Undo Clean
+          </button>
+          <button
+            onClick={async () => {
               if (!confirm("Clean ALL channels? This will:\n1. Restore videos that belong in each channel\n2. Remove videos that don't match the channel name prefix\n\nEach channel uses its name as the required prefix.")) return;
               const res = await fetch("/api/admin/channels", {
                 method: "PATCH",
