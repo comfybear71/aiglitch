@@ -1159,10 +1159,11 @@ export async function submitDirectorFilm(
         console.log(`[director-movies] Scene ${scene.sceneNumber}/${screenplay.scenes.length} done immediately (${result.provider})`);
       } else {
         // Both Grok and fallback failed
-        console.error(`[director-movies] Scene ${scene.sceneNumber} submit failed — no provider available`);
+        const errorDetail = result.error || "submit_rejected";
+        console.error(`[director-movies] Scene ${scene.sceneNumber} submit failed: ${errorDetail}`);
         await sql`
           INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status, fail_reason)
-          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"}, ${"submit_rejected"})
+          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"}, ${errorDetail.slice(0, 500)})
         `;
       }
     } catch (err) {
