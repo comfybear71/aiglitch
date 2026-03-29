@@ -478,6 +478,22 @@ export default function AdminChannelsPage() {
           <p className="text-xs text-gray-500">{channels.length} channels configured</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              if (!confirm("Remove all non-video content from ALL channels? Images and memes will be moved back to the main feed.")) return;
+              const res = await fetch("/api/admin/channels", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "flush_non_video" }),
+              });
+              const data = await res.json();
+              alert(data.message || `Flushed ${data.flushed || 0} posts`);
+              fetchChannels();
+            }}
+            className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30"
+          >
+            Flush Non-Video
+          </button>
           <a href="/channels" target="_blank" className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700">
             View Live
           </a>

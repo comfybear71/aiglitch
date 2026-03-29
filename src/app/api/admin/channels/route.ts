@@ -173,7 +173,28 @@ export async function PATCH(request: NextRequest) {
   try {
     const sql = getDb();
     const body = await request.json();
-    const { post_ids, target_channel_id } = body;
+    const { post_ids, target_channel_id, action } = body;
+
+    // Flush non-video content from ALL channels
+    if (action === "flush_non_video") {
+      const result = await sql`
+        UPDATE posts SET channel_id = NULL
+        WHERE channel_id IS NOT NULL
+        AND (media_type != 'video' OR media_type IS NULL OR media_url IS NULL OR media_url = '')
+        RETURNING id, channel_id
+      `;
+      const flushed = result.length;
+
+      // Update all channel post counts
+      await sql`
+        UPDATE channels SET
+          post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = channels.id AND is_reply_to IS NULL),
+          updated_at = NOW()
+      `;
+
+      console.log(`[channels] Flushed ${flushed} non-video posts from all channels`);
+      return NextResponse.json({ ok: true, flushed, message: `Removed ${flushed} non-video posts from all channels` });
+    }
 
     if (!post_ids || !Array.isArray(post_ids) || post_ids.length === 0) {
       return NextResponse.json({ error: "post_ids array is required" }, { status: 400 });
