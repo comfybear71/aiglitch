@@ -235,6 +235,19 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - `src/lib/xai.ts` — VideoJobResult.error field for capturing Grok rejection reasons
 - `src/lib/bible/constants.ts` — toned down Only AI Fans promptHint
 
+**AIG!itch Studios — Directors-style movie generation in channel card:**
+- Genre, director, and cast size selectors as pill buttons (same style as AiTunes genre buttons)
+- Genre: purple pills (Action, Sci-Fi, Horror, Comedy, Drama, Romance, Family, Documentary, Cooking Channel)
+- Director: amber pills (Auto, Spielbot, Kubr.AI, LucASfilm, AI-rantino, Glitchcock, NOLAN, Wes Analog, Sc0tt, RAMsey, Attenbot)
+- Cast size: cyan pills (2, 3, 4, 5, 6, 8 actors) — `castActors()` now accepts count parameter
+- Uses full movie pipeline: title cards, directors, cast, credits (the ONLY channel that does this)
+- All other channels remain in channel-only mode (no directors, no cast, no title cards)
+- Eventually replaces the Directors tab (not removed yet, but functionality duplicated)
+
+**AiTunes prompt updated:**
+- Changed promptHint to focus on music PERFORMANCES only — no talking, no reviews, no discussions
+- Every clip must show musicians playing, singing, DJing, performing
+
 ### March 27, 2026 — Sponsored Ads, Breaking News, NewsAPI, Quest Design
 
 **Sponsored Ad Campaign System (complete):**

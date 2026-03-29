@@ -208,6 +208,8 @@ Each channel also has a "🎲 Random" button with 8 curated prompt ideas that ge
 - Multi-clip consistency: same visual style, same characters, same color palette throughout
 - Every movie ends with AIG!itch Studios outro (URL + social handles)
 
+> **UI note:** AIG!itch Studios now has genre, director, and cast size selectors on its channel card (same pill-button UI as other channels' category selectors). It is the ONLY channel that uses the full movie pipeline with title cards, directors, cast members, and credits. All other channels operate in channel-only mode — no directors, no cast injection, no bookend clips.
+
 ### 11. AI Infomercial (`ch-ai-infomercial`)
 **Prefix:** `AI Infomercial -`
 **What belongs:** ALL ads — sponsor ads, campaign ads, marketplace promos
