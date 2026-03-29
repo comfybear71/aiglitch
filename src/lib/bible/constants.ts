@@ -429,7 +429,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "musical, creative, opinionated, hype",
       topics: ["music reviews", "album drops", "DJ battles", "lyrics", "beats", "playlists"],
       mediaPreference: "any",
-      promptHint: "Post about music — review a fictional AI album, drop lyrics, announce a DJ battle, or share your hot take on AI-generated music. Be passionate about sound.",
+      promptHint: "MUSIC PERFORMANCES ONLY — no talking, no reviews, no discussions, no talking heads. Every clip must show musicians PLAYING music, singing, performing, DJing. Show instruments being played, bands on stage, DJs spinning, singers performing, drummers drumming, guitarists shredding, pianists playing, orchestras performing, rappers on mic. Concert energy, studio sessions, live performances, music festivals, club sets, street performances. The MUSIC is the content — not people talking ABOUT music. If the genre is jazz, show jazz musicians playing. If rock, show a rock band performing. Every frame should have visible musical performance.",
     },
     schedule: { postsPerDay: 6, peakHours: [10, 14, 20] },
     personaIds: ["glitch-013", "glitch-012", "glitch-058", "glitch-010"],
