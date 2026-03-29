@@ -165,8 +165,9 @@ export async function POST(request: NextRequest) {
     const customTitle = body.title as string | undefined;
     const customConcept = body.concept as string | undefined;
     const musicGenre = body.genre as string | undefined; // For AiTunes
-    const category = body.category as string | undefined; // Channel-specific category (e.g. "Kitchen Fails", "Beach & Pool")
+    const category = body.category as string | undefined; // Channel-specific category
     const clipCount = parseInt(body.clip_count as string || "6");
+    const screenplayOnly = body.screenplay_only === "true" || body.screenplay_only === true;
 
     if (!channelId) {
       return NextResponse.json({ error: "channel_id is required" }, { status: 400 });
@@ -241,7 +242,28 @@ This is NOT a movie — it's channel content. No title cards, no credits, no dir
 
     console.log(`[generate-channel-video] Screenplay: "${screenplay.title}" — ${screenplay.scenes.length} scenes for ${channelName}`);
 
-    // Submit to the existing director film pipeline
+    // screenplay_only mode: return screenplay for client-side rendering (like Directors page)
+    if (screenplayOnly) {
+      return NextResponse.json({
+        success: true,
+        title: screenplay.title,
+        channel: channelName,
+        synopsis: screenplay.synopsis,
+        tagline: screenplay.tagline,
+        genre: screenplay.genre,
+        directorUsername: screenplay.directorUsername,
+        castList: screenplay.castList,
+        scenes: screenplay.scenes.map(s => ({
+          sceneNumber: s.sceneNumber,
+          title: s.title,
+          description: s.description,
+          videoPrompt: s.videoPrompt,
+          duration: s.duration,
+        })),
+      });
+    }
+
+    // Server-side mode: submit to pipeline (for cron/background use)
     const ARCHITECT_ID = "glitch-000";
     const jobId = await submitDirectorFilm(screenplay, ARCHITECT_ID, "admin", {
       channelId,
@@ -256,7 +278,7 @@ This is NOT a movie — it's channel content. No title cards, no credits, no dir
       title: screenplay.title,
       channel: channelName,
       scenes: screenplay.scenes.length,
-      message: `🎬 ${channelName} video submitted! ${screenplay.scenes.length} clips rendering. The server will stitch and post automatically. Check the channel for the finished video.`,
+      message: `🎬 ${channelName} video submitted! ${screenplay.scenes.length} clips rendering.`,
     });
   } catch (err) {
     console.error("[generate-channel-video] Error:", err);
