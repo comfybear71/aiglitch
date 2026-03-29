@@ -521,9 +521,21 @@ export async function POST(request: NextRequest) {
         let avatarUrl: string | null = null;
         const avatarPrompt = `Social media profile picture portrait. ${being.hatching_description}. Character personality: "${being.personality.slice(0, 150)}". ART STYLE: hyperrealistic digital portrait with cinematic lighting, dramatic and vivid. 1:1 square crop, centered face/character. IMPORTANT: Include the text "AIG!itch" subtly somewhere in the image — on clothing, a badge, pin, necklace, hat, neon sign, screen, sticker, or tattoo.`;
 
-        const grokImage = await generateImageWithAurora(avatarPrompt, true, "1:1");
-        if (grokImage) {
-          avatarUrl = await persistToBlob(grokImage.url, "avatars");
+        try {
+          const grokImage = await generateImageWithAurora(avatarPrompt, true, "1:1");
+          if (grokImage) {
+            avatarUrl = await persistToBlob(grokImage.url, "avatars");
+          }
+          // Retry once if first attempt failed
+          if (!avatarUrl) {
+            console.error("[hatch] Avatar generation failed on first attempt, retrying...");
+            const retry = await generateImageWithAurora(avatarPrompt, true, "1:1");
+            if (retry) {
+              avatarUrl = await persistToBlob(retry.url, "avatars");
+            }
+          }
+        } catch (err) {
+          console.error("[hatch] Avatar generation error:", err instanceof Error ? err.message : err);
         }
         sendStep("generating_avatar", avatarUrl ? "completed" : "failed", { avatar_url: avatarUrl });
 
@@ -565,6 +577,27 @@ export async function POST(request: NextRequest) {
         sendStep("first_words", "started");
         const firstPostId = await postFirstWords(sql, personaId, being, meatbag_name.trim());
         sendStep("first_words", "completed", { post_id: firstPostId });
+
+        // ── Step 8: Spread to social media ──
+        try {
+          const { spreadPostToSocial } = await import("@/lib/marketing/spread-post");
+          const mediaInfo = hatchingVideoUrl
+            ? { url: hatchingVideoUrl, type: "video" as const }
+            : avatarUrl
+              ? { url: avatarUrl, type: "image" as const }
+              : undefined;
+          const spread = await spreadPostToSocial(
+            firstPostId,
+            personaId,
+            being.display_name,
+            being.avatar_emoji,
+            mediaInfo,
+            "MEATBAG HATCHED NEW BESTIE",
+          );
+          console.log(`[hatch] Spread to: ${spread.platforms.join(", ") || "none"}`);
+        } catch (spreadErr) {
+          console.error("[hatch] Social spread failed (non-fatal):", spreadErr instanceof Error ? spreadErr.message : spreadErr);
+        }
 
         // ── Final: Complete ──
         sendStep("complete", "completed", {

@@ -173,7 +173,60 @@ export async function PATCH(request: NextRequest) {
   try {
     const sql = getDb();
     const body = await request.json();
-    const { post_ids, target_channel_id } = body;
+    const { post_ids, target_channel_id, action } = body;
+
+    // Flush non-video content from ALL channels
+    if (action === "flush_non_video") {
+      const result = await sql`
+        UPDATE posts SET channel_id = NULL
+        WHERE channel_id IS NOT NULL
+        AND (media_type != 'video' OR media_type IS NULL OR media_url IS NULL OR media_url = '')
+        RETURNING id, channel_id
+      `;
+      const flushed = result.length;
+
+      // Update all channel post counts
+      await sql`
+        UPDATE channels SET
+          post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = channels.id AND is_reply_to IS NULL),
+          updated_at = NOW()
+      `;
+
+      console.log(`[channels] Flushed ${flushed} non-video posts from all channels`);
+      return NextResponse.json({ ok: true, flushed, message: `Removed ${flushed} non-video posts from all channels` });
+    }
+
+    // Flush off-brand content from a specific channel
+    if (action === "flush_off_brand") {
+      const { channel_id, prefix } = body;
+      if (!channel_id || !prefix) {
+        return NextResponse.json({ error: "channel_id and prefix are required" }, { status: 400 });
+      }
+
+      // Remove posts whose content doesn't contain the channel prefix
+      // Use regexp to strip leading emojis/spaces then check for prefix
+      const result = await sql`
+        UPDATE posts SET channel_id = NULL
+        WHERE channel_id = ${channel_id}
+        AND regexp_replace(content, '^[^a-zA-Z]*', '', 'g') NOT ILIKE ${prefix + '%'}
+        RETURNING id, LEFT(content, 80) as preview
+      `;
+      const flushed = result.length;
+      if (flushed > 0) {
+        console.log(`[channels] Flushed ${flushed} off-brand posts. Examples:`, (result as { preview: string }[]).slice(0, 3).map(r => r.preview));
+      }
+
+      // Update channel post count
+      await sql`
+        UPDATE channels SET
+          post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${channel_id} AND is_reply_to IS NULL),
+          updated_at = NOW()
+        WHERE id = ${channel_id}
+      `;
+
+      console.log(`[channels] Flushed ${flushed} off-brand posts from channel ${channel_id} (prefix: ${prefix})`);
+      return NextResponse.json({ ok: true, flushed, channel_id, prefix, message: `Removed ${flushed} posts not matching "${prefix}" from channel` });
+    }
 
     if (!post_ids || !Array.isArray(post_ids) || post_ids.length === 0) {
       return NextResponse.json({ error: "post_ids array is required" }, { status: 400 });

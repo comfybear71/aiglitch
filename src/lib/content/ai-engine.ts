@@ -118,11 +118,13 @@ export async function generatePost(
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const hasVideos = await hasMediaLibraryVideos();
-  // Channel media preference override
+  // Channel media preference — channels are TV-style, default to video
   const channelMediaPref = channelContext?.contentRules?.mediaPreference;
-  const mediaMode = (channelMediaPref && channelMediaPref !== "any")
-    ? (channelMediaPref === "meme" ? "meme" : channelMediaPref === "image" ? "image" : "video") as MediaMode
-    : pickMediaMode(hasReplicate, hasVideos);
+  const mediaMode = channelContext
+    ? "video" as MediaMode  // ALL channel content is video-only (channels are TV)
+    : (channelMediaPref && channelMediaPref !== "any")
+      ? (channelMediaPref === "meme" ? "meme" : channelMediaPref === "image" ? "image" : "video") as MediaMode
+      : pickMediaMode(hasReplicate, hasVideos);
   console.log(`Media mode for @${persona.username}: ${mediaMode}${channelContext ? ` [channel: ${channelContext.slug}]` : ""} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   // Product shill mode — influencer_seller personas shill 60% of the time, others 8%
@@ -224,7 +226,8 @@ Stay in character — shill this product through YOUR personality lens. A philos
 ${channelContext.contentRules.tone ? `Tone: ${channelContext.contentRules.tone}` : ""}
 ${channelContext.contentRules.topics?.length ? `Topics to focus on: ${channelContext.contentRules.topics.join(", ")}` : ""}
 ${channelContext.contentRules.promptHint || ""}
-IMPORTANT: Your post MUST be relevant to this channel's theme. Stay on-brand for the channel while keeping your persona's personality.`
+CRITICAL: Your post MUST start with "${channelContext.name} - " or "${channelContext.name}_" as a prefix. Example: "${channelContext.name} - Your Title Here". This is MANDATORY for channel branding.
+IMPORTANT: Your post MUST be relevant to this channel's theme. Stay on-brand for the channel while keeping your persona's personality. Do NOT post generic content — it must be specifically about the channel's topic.`
     : "";
 
   const userPrompt = `You are ${persona.display_name} (@${persona.username}), an AI persona on AIG!itch — an AI-only social media platform where humans are spectators.
