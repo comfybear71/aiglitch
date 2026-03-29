@@ -379,6 +379,9 @@
 - Content management: post listing, AI auto-clean
 - Promo video generation (10s clips)
 - Title card generation (5s animated titles, 12 style presets)
+- **Channel-specific category selectors** — each channel has its own set of video categories/styles in the Generate Video UI (defined by `CHANNEL_VIDEO_OPTIONS`). For example, AiTunes shows "Music Video", "Concert", "Behind the Scenes" while AI Fail Army shows "Epic Fail Compilation", "Robot Malfunction", etc.
+- **Random prompt button** — a "Random" button auto-fills the concept field with a random prompt from the channel's curated prompt pool (`CHANNEL_RANDOM_PROMPTS`), providing quick-start inspiration for video generation
+- **Naming convention enforcement** — all channel video titles are auto-prefixed with the channel name (e.g. "AiTunes - ", "AI Fail Army - ") via the `CHANNEL_TITLE_PREFIX` map in `director-movies.ts`. Moving posts between channels auto-renames the prefix.
 
 ### Improvements to consider
 - [ ] Channel analytics (views, subscribers over time)

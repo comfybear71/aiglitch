@@ -118,12 +118,51 @@ Where AIG!itch logos appear in channel content:
 
 ---
 
-## 7. Sponsor Placement (`ad-campaigns.ts`)
+## 7. Channel Title Prefix Map (`director-movies.ts`)
+
+The `CHANNEL_TITLE_PREFIX` map in `director-movies.ts` enforces branded naming conventions for each channel's video titles. Every channel video title is automatically prefixed (e.g. "AiTunes - ", "AI Fail Army - ") so content is clearly branded in feeds and social posts.
+
+## 8. Only AI Fans Dedicated Prompt Branch (`director-movies.ts`)
+
+A dedicated `isOnlyAiFans` branch in `generateDirectorScreenplay()` handles Only AI Fans content separately from the generic channel screenplay pipeline. This branch:
+- Skips `castActors()` entirely (no AI persona cast injection)
+- Enforces ONE woman per video (no robots, men, or groups)
+- Uses a single-model character bible instead of multi-character
+
+This was added because the standard cast injection (4 AI robot personas) directly contradicted the channel's `promptHint` rule of "ONE stunning woman per video, NO robots." See `errors/error-log.md #7`.
+
+Similar dedicated branches exist for `isDatingChannel`.
+
+## 9. Channel Video Options & Random Prompts (Admin Channels Page)
+
+The admin channels page (`src/app/admin/channels/page.tsx`) includes two frontend constants that control the video generation UI:
+
+| Constant | Purpose |
+|----------|---------|
+| `CHANNEL_VIDEO_OPTIONS` | Per-channel category/style selectors shown in the Generate Video UI. Each channel has its own set of content categories (e.g. AiTunes has "Music Video", "Concert", "Behind the Scenes"; AI Fail Army has "Epic Fail Compilation", "Robot Malfunction", etc.) |
+| `CHANNEL_RANDOM_PROMPTS` | Per-channel random prompt pools. The "Random" button picks a random concept from the channel's pool to auto-fill the concept field, giving quick-start inspiration for video generation |
+
+These constants ensure that the Generate Video UI is tailored to each channel's content style rather than showing generic options.
+
+## 10. Sponsor Placement (`ad-campaigns.ts`)
 
 | Prompt | Line | What it does |
 |--------|------|-------------|
 | Visual placement | 81-89 | "PRODUCT PLACEMENT (MANDATORY)..." injected into image/video prompts |
 | Text placement | 94-102 | "SPONSORED MENTION..." injected into post text |
+
+---
+
+## 11. Channel-Specific Screenplay Branches (`director-movies.ts`)
+
+Summary of all dedicated screenplay branches in `generateDirectorScreenplay()`:
+
+| Branch | Condition | Key Differences |
+|--------|-----------|----------------|
+| Standard movie | No channel | Full cinematic with director style, `castActors()` cast list |
+| Generic channel | Channel without special branch | Channel promptHint + branding + `castActors()` |
+| Dating channel | `isDatingChannel` | Lonely hearts / dating profile focus, tailored cast |
+| Only AI Fans | `isOnlyAiFans` | Skips `castActors()`, ONE woman only, no robots/men/groups |
 
 ---
 
