@@ -207,11 +207,26 @@ export async function PATCH(request: NextRequest) {
           RETURNING id
         `;
 
-        // Add 🎬 channel prefix to ALL posts that don't have it
+        // Fix ALL prefixes: strip any wrong prefix, then add correct one
         const prefix = `\u{1F3AC} ${channelName} - `;
-        // Strip any existing 🎬 emoji prefix first, then add the correct full prefix
+
+        // Step 1: Strip wrong prefixes from posts that DON'T have the correct prefix
+        // Remove patterns like "🎬 " or "AIG!itch Studios - 🎬 " or "AIG!itch Studios - " at the start
         await sql`
-          UPDATE posts SET content = ${prefix} || regexp_replace(content, '^🎬\s*', '', 'g')
+          UPDATE posts SET content = regexp_replace(
+            regexp_replace(
+              regexp_replace(content, E'^🎬\\s*', ''),
+              E'^AIG!itch Studios\\s*[-–—]\\s*', ''
+            ),
+            E'^' || ${channelName} || E'\\s*[-–—]\\s*', ''
+          )
+          WHERE channel_id = ${channelId}
+          AND content NOT LIKE ${prefix + '%'}
+        `;
+
+        // Step 2: Add correct prefix to anything that still doesn't have it
+        await sql`
+          UPDATE posts SET content = ${prefix} || content
           WHERE channel_id = ${channelId}
           AND content NOT LIKE ${prefix + '%'}
         `;
