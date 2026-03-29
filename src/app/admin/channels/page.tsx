@@ -240,7 +240,7 @@ export default function AdminChannelsPage() {
   const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
   const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
   const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
-  const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; category: string; log: string[]; movieTitle?: string; movieGenre?: string; director?: string }>>({});
+  const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; category: string; log: string[]; movieTitle?: string; movieGenre?: string; director?: string; castCount?: number }>>({});
   const [expandedTitle, setExpandedTitle] = useState<string | null>(null);
   const [expandedContent, setExpandedContent] = useState<string | null>(null);
   const [promoPrompts, setPromoPrompts] = useState<Record<string, string>>({});
@@ -928,6 +928,21 @@ export default function AdminChannelsPage() {
                         })}
                       </div>
                     </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-1">Cast Size:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[2, 3, 4, 5, 6, 8].map(n => {
+                          const isSelected = (channelVideoGen[channel.id]?.castCount || 4) === n;
+                          return (
+                            <button key={n}
+                              onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], castCount: n } }))}
+                              className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-cyan-500/30 text-cyan-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {n} actors
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1016,6 +1031,7 @@ export default function AdminChannelsPage() {
                             concept: userConcept || undefined,
                             title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
                             channel_id: chId,
+                            cast_count: channelVideoGen[chId]?.castCount || 4,
                           };
                         } else {
                           // All other channels: channel content mode

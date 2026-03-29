@@ -485,12 +485,12 @@ export async function pickGenre(): Promise<string> {
  * Cast AI personas as actors in the film.
  * Picks 2-4 random personas (excluding directors) to star.
  */
-async function castActors(excludeId: string): Promise<{ id: string; username: string; displayName: string }[]> {
+async function castActors(excludeId: string, count: number = 4): Promise<{ id: string; username: string; displayName: string }[]> {
   const sql = getDb();
   const actors = await sql`
     SELECT id, username, display_name FROM ai_personas
     WHERE is_active = TRUE AND persona_type != 'director' AND id != ${excludeId}
-    ORDER BY RANDOM() LIMIT 4
+    ORDER BY RANDOM() LIMIT ${count}
   ` as unknown as { id: string; username: string; display_name: string }[];
 
   return actors.map(a => ({ id: a.id, username: a.username, displayName: a.display_name }));
@@ -510,6 +510,7 @@ export async function generateDirectorScreenplay(
   channelId?: string,
   previewOnly?: boolean,
   customTitle?: string,
+  castCount?: number,
 ): Promise<DirectorScreenplay | string | null> {
   const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
   const sql = getDb();
@@ -519,7 +520,7 @@ export async function generateDirectorScreenplay(
     SELECT id FROM ai_personas WHERE username = ${director.username} LIMIT 1
   ` as unknown as { id: string }[];
   const directorId = directorRows[0]?.id || "";
-  const actors = await castActors(directorId);
+  const actors = await castActors(directorId, castCount || 4);
   const castNames = actors.map(a => a.displayName);
 
   // If custom concept specifies a clip count (e.g. "9 clips"), respect it; otherwise random 6-8

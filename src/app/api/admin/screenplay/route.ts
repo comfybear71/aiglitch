@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; concept?: string; title?: string; channel_id?: string; preview?: boolean } = {};
+  let body: { genre?: string; director?: string; concept?: string; title?: string; channel_id?: string; preview?: boolean; cast_count?: number } = {};
   try {
     body = await request.json();
   } catch {
@@ -89,7 +89,7 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
 
   // Preview mode: return the prompt without executing
   if (body.preview) {
-    const promptText = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, true, body.title || undefined);
+    const promptText = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, true, body.title || undefined, body.cast_count);
     return NextResponse.json({
       ok: true,
       prompt: promptText || "Failed to build prompt",
@@ -99,7 +99,7 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
     });
   }
 
-  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, false, body.title || undefined);
+  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, false, body.title || undefined, body.cast_count);
   if (!result || typeof result === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }
