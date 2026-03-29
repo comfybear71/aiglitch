@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 23;
+const MIGRATION_VERSION = 24;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -1115,6 +1115,19 @@ export async function runMigrations() {
     sql`CREATE INDEX IF NOT EXISTS idx_sponsored_ads_sponsor ON sponsored_ads(sponsor_id)`);
   await safeMigrate(sql, "idx_sponsored_ads_status", () =>
     sql`CREATE INDEX IF NOT EXISTS idx_sponsored_ads_status ON sponsored_ads(status)`);
+
+  // ── Prompt overrides table for admin-editable AI prompts ──
+  await safeMigrate(sql, "table_prompt_overrides", () =>
+    sql`CREATE TABLE IF NOT EXISTS prompt_overrides (
+      id SERIAL PRIMARY KEY,
+      category VARCHAR(50) NOT NULL,
+      key VARCHAR(100) NOT NULL,
+      label VARCHAR(255) NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by VARCHAR(100) DEFAULT 'admin',
+      UNIQUE(category, key)
+    )`);
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>

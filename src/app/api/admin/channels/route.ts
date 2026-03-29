@@ -17,6 +17,21 @@ export async function GET(request: NextRequest) {
     const sql = getDb();
     await ensureDbReady();
 
+    // Lost videos — video posts with no channel_id
+    const queryAction = request.nextUrl.searchParams.get("action");
+    if (queryAction === "lost_videos") {
+      const lost = await sql`
+        SELECT id, LEFT(content, 120) as content, media_url, persona_id, created_at
+        FROM posts
+        WHERE channel_id IS NULL
+        AND media_type = 'video'
+        AND media_url IS NOT NULL AND media_url != ''
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
+      return NextResponse.json({ lost });
+    }
+
     const channels = await sql`
       SELECT c.*,
         (SELECT COUNT(*)::int FROM channel_personas cp WHERE cp.channel_id = c.id) as persona_count,
@@ -175,6 +190,70 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { post_ids, target_channel_id, action } = body;
 
+    // Fix all existing channel content: set persona to Architect + add prefix
+    if (action === "fix_channel_ownership") {
+      const ARCHITECT_ID = "glitch-000";
+      const allChannels = await sql`SELECT id, name FROM channels WHERE is_active = TRUE`;
+      let totalFixed = 0;
+
+      for (const ch of allChannels) {
+        const channelName = ch.name as string;
+        const channelId = ch.id as string;
+
+        // Update all posts in this channel to be by The Architect
+        const ownershipResult = await sql`
+          UPDATE posts SET persona_id = ${ARCHITECT_ID}
+          WHERE channel_id = ${channelId} AND persona_id != ${ARCHITECT_ID}
+          RETURNING id
+        `;
+
+        // Fix ALL prefixes: strip any wrong prefix, then add correct one
+        const prefix = `\u{1F3AC} ${channelName} - `;
+
+        // Step 1: Strip wrong prefixes from posts that DON'T have the correct prefix
+        // Remove patterns like "🎬 " or "AIG!itch Studios - 🎬 " or "AIG!itch Studios - " at the start
+        await sql`
+          UPDATE posts SET content = regexp_replace(
+            regexp_replace(
+              regexp_replace(content, E'^🎬\\s*', ''),
+              E'^AIG!itch Studios\\s*[-–—]\\s*', ''
+            ),
+            E'^' || ${channelName} || E'\\s*[-–—]\\s*', ''
+          )
+          WHERE channel_id = ${channelId}
+          AND content NOT LIKE ${prefix + '%'}
+        `;
+
+        // Step 2: Add correct prefix to anything that still doesn't have it
+        await sql`
+          UPDATE posts SET content = ${prefix} || content
+          WHERE channel_id = ${channelId}
+          AND content NOT LIKE ${prefix + '%'}
+        `;
+
+        totalFixed += ownershipResult.length;
+      }
+
+      // Also remove Breaking News / GNN content from Studios
+      const movedToGnn = await sql`
+        UPDATE posts SET channel_id = 'ch-gnn'
+        WHERE channel_id = 'ch-aiglitch-studios'
+        AND (content ILIKE '%breaking%news%' OR content ILIKE '%breaking:%' OR content ILIKE '%glitched news%' OR content ILIKE '%headlines live%' OR content ILIKE '%GNN%')
+        RETURNING id
+      `;
+
+      // Update all channel post counts
+      await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = channels.id AND is_reply_to IS NULL), updated_at = NOW()`;
+
+      console.log(`[channels] Fixed ownership: ${totalFixed} posts → Architect, ${movedToGnn.length} news posts → GNN`);
+      return NextResponse.json({
+        ok: true,
+        totalFixed,
+        movedToGnn: movedToGnn.length,
+        message: `Fixed ${totalFixed} posts to Architect. Moved ${movedToGnn.length} news posts from Studios to GNN.`,
+      });
+    }
+
     // Flush non-video content from ALL channels
     if (action === "flush_non_video") {
       const result = await sql`
@@ -194,6 +273,168 @@ export async function PATCH(request: NextRequest) {
 
       console.log(`[channels] Flushed ${flushed} non-video posts from all channels`);
       return NextResponse.json({ ok: true, flushed, message: `Removed ${flushed} non-video posts from all channels` });
+    }
+
+    // Undo the last clean — restore ALL posts that lost their channel_id recently
+    if (action === "undo_clean") {
+      // Restore posts by their media_source and post_type which indicate channel origin
+      const results: { channel: string; restored: number }[] = [];
+
+      // GNN — breaking news, news posts
+      const gnn = await sql`
+        UPDATE posts SET channel_id = 'ch-gnn'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (post_type = 'news' OR content ILIKE '%breaking%' OR content ILIKE '%GLITCH News%' OR content ILIKE '%GNN%' OR content ILIKE '%news desk%' OR content ILIKE '%field report%')
+        RETURNING id
+      `;
+      results.push({ channel: "GNN", restored: gnn.length });
+
+      // AIG!ltch Studios — director movies, premieres
+      const studios = await sql`
+        UPDATE posts SET channel_id = 'ch-aiglitch-studios'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (post_type = 'premiere' OR media_source IN ('director-movie', 'director-premiere', 'grok-multiclip'))
+        RETURNING id
+      `;
+      results.push({ channel: "AIG!ltch Studios", restored: studios.length });
+
+      // AI Infomercial — product shills, ads
+      const infomercial = await sql`
+        UPDATE posts SET channel_id = 'ch-ai-infomercial'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (post_type = 'product_shill' OR content ILIKE '%infomercial%' OR content ILIKE '%call now%' OR content ILIKE '%order now%' OR media_source = 'ad-studio')
+        RETURNING id
+      `;
+      results.push({ channel: "AI Infomercial", restored: infomercial.length });
+
+      // Marketplace QVC — marketplace product content
+      const qvc = await sql`
+        UPDATE posts SET channel_id = 'ch-marketplace-qvc'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%marketplace%' OR content ILIKE '%QVC%' OR content ILIKE '%unboxing%' OR content ILIKE '%amazing deal%')
+        RETURNING id
+      `;
+      results.push({ channel: "Marketplace QVC", restored: qvc.length });
+
+      // After Dark
+      const afterDark = await sql`
+        UPDATE posts SET channel_id = 'ch-after-dark'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%After Dark%' OR content ILIKE '%3AM%' OR content ILIKE '%late night%' OR content ILIKE '%after dark%')
+        RETURNING id
+      `;
+      results.push({ channel: "After Dark", restored: afterDark.length });
+
+      // Only AI Fans
+      const oaf = await sql`
+        UPDATE posts SET channel_id = 'ch-only-ai-fans'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%Only AI Fans%' OR content ILIKE '%OnlyAIFans%')
+        RETURNING id
+      `;
+      results.push({ channel: "Only AI Fans", restored: oaf.length });
+
+      // AI Politicians
+      const pol = await sql`
+        UPDATE posts SET channel_id = 'ch-ai-politicians'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%AI Politicians%' OR content ILIKE '%campaign%election%' OR content ILIKE '%political%')
+        RETURNING id
+      `;
+      results.push({ channel: "AI Politicians", restored: pol.length });
+
+      // AI Dating
+      const dating = await sql`
+        UPDATE posts SET channel_id = 'ch-ai-dating'
+        WHERE channel_id IS NULL AND media_type = 'video' AND media_url IS NOT NULL
+        AND (content ILIKE '%AI Dating%' OR content ILIKE '%lonely hearts%' OR content ILIKE '%looking for love%')
+        RETURNING id
+      `;
+      results.push({ channel: "AI Dating", restored: dating.length });
+
+      // Update all channel post counts
+      await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = channels.id AND is_reply_to IS NULL), updated_at = NOW()`;
+
+      const totalRestored = results.reduce((sum, r) => sum + r.restored, 0);
+      console.log(`[channels] UNDO CLEAN: restored ${totalRestored} posts`, results);
+      return NextResponse.json({ ok: true, totalRestored, results, message: `Restored ${totalRestored} posts across channels` });
+    }
+
+    // Clean ALL channels — flush off-brand content using each channel's name as prefix
+    if (action === "clean_all_channels") {
+      const allChannels = await sql`SELECT id, name, slug FROM channels WHERE is_active = TRUE`;
+      let totalFlushed = 0;
+      let totalRestored = 0;
+      const results: { channel: string; flushed: number; restored: number }[] = [];
+
+      for (const ch of allChannels) {
+        const channelName = ch.name as string;
+        const channelId = ch.id as string;
+
+        // First restore any videos that belong here (were previously flushed by mistake)
+        const restored = await sql`
+          UPDATE posts SET channel_id = ${channelId}
+          WHERE channel_id IS NULL
+          AND media_type = 'video'
+          AND media_url IS NOT NULL AND media_url != ''
+          AND regexp_replace(content, '^[^a-zA-Z]*', '', 'g') ILIKE ${channelName + '%'}
+          RETURNING id
+        `;
+
+        // Then flush anything that doesn't start with the channel name
+        const flushed = await sql`
+          UPDATE posts SET channel_id = NULL
+          WHERE channel_id = ${channelId}
+          AND regexp_replace(content, '^[^a-zA-Z]*', '', 'g') NOT ILIKE ${channelName + '%'}
+          RETURNING id
+        `;
+
+        totalFlushed += flushed.length;
+        totalRestored += restored.length;
+        if (flushed.length > 0 || restored.length > 0) {
+          results.push({ channel: channelName, flushed: flushed.length, restored: restored.length });
+        }
+
+        // Update post count
+        await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${channelId} AND is_reply_to IS NULL), updated_at = NOW() WHERE id = ${channelId}`;
+      }
+
+      console.log(`[channels] Clean All: flushed ${totalFlushed}, restored ${totalRestored} across ${results.length} channels`);
+      return NextResponse.json({
+        ok: true,
+        totalFlushed,
+        totalRestored,
+        results,
+        message: `Cleaned all channels: ${totalFlushed} off-brand removed, ${totalRestored} restored`,
+      });
+    }
+
+    // Restore posts back into a channel by prefix match
+    if (action === "restore_by_prefix") {
+      const { channel_id, prefix } = body;
+      if (!channel_id || !prefix) {
+        return NextResponse.json({ error: "channel_id and prefix are required" }, { status: 400 });
+      }
+
+      const result = await sql`
+        UPDATE posts SET channel_id = ${channel_id}
+        WHERE channel_id IS NULL
+        AND media_type = 'video'
+        AND media_url IS NOT NULL AND media_url != ''
+        AND content ILIKE ${'%' + prefix + '%'}
+        RETURNING id
+      `;
+      const restored = result.length;
+
+      await sql`
+        UPDATE channels SET
+          post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${channel_id} AND is_reply_to IS NULL),
+          updated_at = NOW()
+        WHERE id = ${channel_id}
+      `;
+
+      console.log(`[channels] Restored ${restored} posts matching "${prefix}" to channel ${channel_id}`);
+      return NextResponse.json({ ok: true, restored, message: `Restored ${restored} posts containing "${prefix}" to channel` });
     }
 
     // Flush off-brand content from a specific channel
@@ -242,7 +483,52 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "Target channel not found" }, { status: 404 });
       }
 
-      await sql`UPDATE posts SET channel_id = ${target_channel_id} WHERE id = ANY(${post_ids})`;
+      const targetName = channel.name as string;
+
+      // Channel prefix mapping for renaming content when moving
+      const channelPrefixes: Record<string, string> = {
+        "ch-ai-fail-army": "AI Fail Army",
+        "ch-aitunes": "AiTunes",
+        "ch-paws-pixels": "Paws & Pixels",
+        "ch-only-ai-fans": "Only AI Fans",
+        "ch-ai-dating": "AI Dating",
+        "ch-gnn": "GNN",
+        "ch-marketplace-qvc": "Marketplace",
+        "ch-ai-politicians": "AI Politicians",
+        "ch-after-dark": "After Dark",
+        "ch-aiglitch-studios": "AIG!itch Studios",
+        "ch-ai-infomercial": "AI Infomercial",
+      };
+
+      const targetPrefix = channelPrefixes[target_channel_id] || targetName;
+
+      // Rename content prefix — replace old channel prefix with new one
+      for (const postRow of posts) {
+        const postContent = await sql`SELECT content FROM posts WHERE id = ${postRow.id}`;
+        if (postContent.length > 0) {
+          let content = postContent[0].content as string;
+          // Strip any existing channel prefix (try all known prefixes)
+          for (const prefix of Object.values(channelPrefixes)) {
+            // Match prefix followed by " - " or " — " or "_ " or ": "
+            const patterns = [`${prefix} - `, `${prefix} — `, `${prefix}_`, `${prefix}: `, `${prefix} `];
+            for (const p of patterns) {
+              if (content.startsWith(p)) {
+                content = content.slice(p.length);
+                break;
+              }
+              // Also check with leading emoji (🎬 prefix - )
+              const emojiPattern = new RegExp(`^[^a-zA-Z]*${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[-—_:]\\s*`);
+              if (emojiPattern.test(content)) {
+                content = content.replace(emojiPattern, '');
+                break;
+              }
+            }
+          }
+          // Add new channel prefix
+          const newContent = `${targetPrefix} - ${content}`;
+          await sql`UPDATE posts SET content = ${newContent}, channel_id = ${target_channel_id} WHERE id = ${postRow.id}`;
+        }
+      }
 
       // Update target channel post count
       await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${target_channel_id} AND is_reply_to IS NULL), updated_at = NOW() WHERE id = ${target_channel_id}`;

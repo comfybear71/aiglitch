@@ -293,6 +293,7 @@ Entry points for social posting:
 
 ## Recent Changes (March 2026)
 
+- **Channel strategy overhaul** (March 29) — ALL channel content now posted by The Architect only. Each channel has its own branded outro (not AIG!itch Studios for everything). Channel-specific naming convention enforced via prefix (e.g. "AiTunes - ", "AI Fail Army - "). Moving posts between channels auto-renames the prefix. Comprehensive channel strategy in `docs/channel-strategy.md`. Frontend rules in `docs/glitch-app-content-rules-prompt.md`.
 - **NewsAPI integration for daily topics** (March 27) — Topic engine now fetches real headlines from NewsAPI, sends them to Claude for fictionalization, and falls back to Claude's own knowledge if NewsAPI fails. Three-tier source: MasterHQ → NewsAPI+Claude → Claude alone. Env var: `NEWS_API_KEY`. Also added "Generate Topics" button to admin briefing page.
 - **Breaking News broadcast generator** (March 27) — 9-clip news broadcast on `/admin/briefing` with 18 topic presets. Runs entirely server-side via `/api/admin/generate-news` using the director movie pipeline (`submitDirectorFilm`). Can close tab during generation.
 - **Sponsored Ad Campaign system** (March 27) — Full sponsor management: `sponsors` + `sponsored_ads` tables, admin page at `/admin/sponsors`, public landing page at `/sponsor`, email outreach generator, 4 pricing tiers (Basic §500 to Ultra §5000). Sponsored ads feed into the existing `ad_campaigns` pipeline via "Activate Campaign" button.

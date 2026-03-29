@@ -106,6 +106,9 @@ export default function AdminChannelsPage() {
   const [loading, setLoading] = useState(true);
   const [editingChannel, setEditingChannel] = useState<AdminChannel | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [lostVideos, setLostVideos] = useState<{ id: string; content: string; media_url: string; persona_id: string; created_at: string }[]>([]);
+  const [lostLoading, setLostLoading] = useState(false);
+  const [lostOpen, setLostOpen] = useState(false);
   const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
   const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
   const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
@@ -477,7 +480,59 @@ export default function AdminChannelsPage() {
           <h2 className="text-lg font-bold text-cyan-400">AIG!itch TV — Channels</h2>
           <p className="text-xs text-gray-500">{channels.length} channels configured</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={async () => {
+              if (!confirm("Fix ALL channel content:\n1. ALL posts → @the_architect\n2. Add channel prefix where missing\n3. Move news from Studios → GNN")) return;
+              const res = await fetch("/api/admin/channels", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fix_channel_ownership" }) });
+              const data = await res.json();
+              alert(data.message || "Done");
+              fetchChannels();
+            }}
+            className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30"
+          >
+            Fix Ownership
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm("UNDO: Restore all posts that were just cleaned? This will put posts back into GNN, Studios, Infomercial, etc. based on their content type.")) return;
+              const res = await fetch("/api/admin/channels", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "undo_clean" }),
+              });
+              const data = await res.json();
+              let msg = data.message || "Done";
+              if (data.results?.length > 0) {
+                msg += "\n\n" + data.results.map((r: { channel: string; restored: number }) => `${r.channel}: ${r.restored} restored`).join("\n");
+              }
+              alert(msg);
+              fetchChannels();
+            }}
+            className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30"
+          >
+            Undo Clean
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm("Clean ALL channels? This will:\n1. Restore videos that belong in each channel\n2. Remove videos that don't match the channel name prefix\n\nEach channel uses its name as the required prefix.")) return;
+              const res = await fetch("/api/admin/channels", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "clean_all_channels" }),
+              });
+              const data = await res.json();
+              let msg = data.message || "Done";
+              if (data.results?.length > 0) {
+                msg += "\n\nDetails:\n" + data.results.map((r: { channel: string; flushed: number; restored: number }) => `${r.channel}: ${r.flushed} removed, ${r.restored} restored`).join("\n");
+              }
+              alert(msg);
+              fetchChannels();
+            }}
+            className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30"
+          >
+            Clean All Channels
+          </button>
           <button
             onClick={async () => {
               if (!confirm("Remove all non-video content from ALL channels? Images and memes will be moved back to the main feed.")) return;
@@ -544,6 +599,23 @@ export default function AdminChannelsPage() {
                   className="px-2 py-1 text-xs text-orange-400 hover:text-orange-300 transition-colors"
                 >
                   Flush
+                </button>
+                <button
+                  onClick={async () => {
+                    const prefix = prompt(`Restore videos containing this text back into "${channel.name}":`, channel.name);
+                    if (!prefix) return;
+                    const res = await fetch("/api/admin/channels", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "restore_by_prefix", channel_id: channel.id, prefix }),
+                    });
+                    const data = await res.json();
+                    alert(data.message || `Restored ${data.restored || 0} posts`);
+                    fetchChannels();
+                  }}
+                  className="px-2 py-1 text-xs text-green-400 hover:text-green-300 transition-colors"
+                >
+                  Restore
                 </button>
                 <button
                   onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
@@ -907,6 +979,63 @@ export default function AdminChannelsPage() {
             )}
           </div>
         ))}
+      </div>
+
+      {/* Lost Videos Card */}
+      <div className="bg-red-900/20 border border-red-800/40 rounded-xl overflow-hidden mt-4">
+        <button onClick={() => { setLostOpen(!lostOpen); if (!lostOpen && lostVideos.length === 0) { setLostLoading(true); fetch("/api/admin/channels?action=lost_videos").then(r => r.json()).then(d => { setLostVideos(d.lost || []); setLostLoading(false); }).catch(() => setLostLoading(false)); } }}
+          className="w-full flex items-center justify-between p-4 hover:bg-red-900/30 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs transition-transform ${lostOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <span className="text-lg">{"\u{1F50D}"}</span>
+            <span className="font-bold text-sm text-red-400">Lost Videos</span>
+            <span className="text-xs text-gray-500">Videos with no channel — assign them to the right place</span>
+          </div>
+          {lostVideos.length > 0 && <span className="text-xs text-red-400 font-bold">{lostVideos.length} orphaned</span>}
+        </button>
+        {lostOpen && (
+          <div className="px-4 pb-4 space-y-2">
+            {lostLoading ? (
+              <p className="text-xs text-gray-500 py-4 text-center">Loading lost videos...</p>
+            ) : lostVideos.length === 0 ? (
+              <p className="text-xs text-gray-500 py-4 text-center">No lost videos! Everything is in a channel.</p>
+            ) : (
+              <>
+                <div className="flex justify-end mb-2">
+                  <button onClick={() => { setLostLoading(true); fetch("/api/admin/channels?action=lost_videos").then(r => r.json()).then(d => { setLostVideos(d.lost || []); setLostLoading(false); }).catch(() => setLostLoading(false)); }}
+                    className="text-xs text-gray-400 hover:text-white">Refresh</button>
+                </div>
+                {lostVideos.map(v => (
+                  <div key={v.id} className="bg-gray-900/50 border border-gray-800 rounded-lg p-2 flex items-start gap-2">
+                    {v.media_url && <video src={v.media_url} className="w-16 h-16 object-cover rounded shrink-0" muted />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white line-clamp-2">{v.content}</p>
+                      <p className="text-[9px] text-gray-500 mt-0.5">{new Date(v.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <select
+                      onChange={async (e) => {
+                        if (!e.target.value) return;
+                        const targetId = e.target.value;
+                        await fetch("/api/admin/channels", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ post_ids: [v.id], target_channel_id: targetId }),
+                        });
+                        setLostVideos(prev => prev.filter(lv => lv.id !== v.id));
+                        fetchChannels();
+                      }}
+                      className="bg-gray-800 border border-gray-700 rounded text-[10px] text-white px-1 py-1 shrink-0"
+                      defaultValue=""
+                    >
+                      <option value="">Move to...</option>
+                      {channels.map(ch => <option key={ch.id} value={ch.id}>{ch.emoji} {ch.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Create/Edit Modal */}

@@ -284,6 +284,7 @@ export default function DirectorsPage() {
           genre,
           director: directorNewPrompt.director,
           concept: directorNewPrompt.concept,
+          title: directorNewPrompt.title.trim() || undefined,
         }),
       });
       const screenplay = await screenplayRes.json();
@@ -429,6 +430,7 @@ export default function DirectorsPage() {
           stitchForm.append("synopsis", screenplay.synopsis);
           stitchForm.append("tagline", screenplay.tagline);
           stitchForm.append("castList", JSON.stringify(screenplay.castList));
+          stitchForm.append("channelId", "ch-aiglitch-studios");
           const stitchRes = await fetch("/api/generate-director-movie", {
             method: "POST",
             body: stitchForm,

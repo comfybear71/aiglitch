@@ -285,8 +285,10 @@ export function buildContinuityPrompt(
   // ── Previous Clip Context ──
   if (clipNumber === 1) {
     sections.push(
-      `This is the OPENING CLIP. Establish all characters, settings, and visual style.`,
-      `All subsequent clips MUST match the look, color grading, art style, and character designs established here.`,
+      `This is the OPENING CLIP — it establishes EVERYTHING for the entire video.`,
+      `Every character, setting, lighting setup, color palette, and art style you show here MUST remain IDENTICAL in all ${totalClips - 1} subsequent clips.`,
+      `Be SPECIFIC: if a character has red hair, they have red hair in EVERY clip. If the room has blue walls, EVERY clip has blue walls. If the lighting is golden hour, EVERY clip is golden hour.`,
+      `This clip sets the visual "contract" — nothing changes after this.`,
     );
   } else if (previousClipSummary) {
     sections.push(
@@ -356,13 +358,16 @@ export function buildContinuityPrompt(
   } else {
     sections.push(
       `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
-      `- Maintain 100% visual continuity with previous clip`,
-      `- Same characters, same locations, same lighting, same clothing`,
-      `- Same art style, color grading, and camera language throughout`,
-      `- Continue the exact same scene and plot progression — no jump cuts to new settings`,
-      `- No unexplained changes to ANY visual element between clips`,
-      `- Characters must have IDENTICAL appearance in every clip (hair, clothing, body type, face)`,
-      `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram)`,
+      `- Maintain 100% visual continuity with previous clip — this MUST look like ONE continuous video`,
+      `- Same characters with IDENTICAL appearance: same face, same hair color/style, same body type, same clothing, same accessories in EVERY clip`,
+      `- Same location/setting — do NOT change locations between clips unless the scene description explicitly says to`,
+      `- Same lighting setup, same time of day, same weather, same color grading throughout`,
+      `- Same art style and production quality — if clip 1 is photorealistic, ALL clips are photorealistic`,
+      `- Same camera language — if clip 1 uses handheld, ALL clips use handheld`,
+      `- If this is a MUSIC VIDEO: maintain the SAME music genre throughout (if jazz, EVERY clip is jazz — same instruments, same mood, same venue)`,
+      `- Continue the exact plot/action from where the previous clip ended — NO jump cuts to unrelated scenes`,
+      `- Characters must be recognizable frame-to-frame — a viewer should NEVER wonder "is that the same person?"`,
+      `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram, logo on clothing)`,
     );
     if (isChannelClip) {
       sections.push(`- NO title cards, credits, director names, or studio logos`);
@@ -489,6 +494,7 @@ export async function generateDirectorScreenplay(
   customConcept?: string,
   channelId?: string,
   previewOnly?: boolean,
+  customTitle?: string,
 ): Promise<DirectorScreenplay | string | null> {
   const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
   const sql = getDb();
@@ -543,7 +549,7 @@ export async function generateDirectorScreenplay(
   // movie-style prompts add director/cast/genre scaffold
   const jsonFormat = `Respond in this exact JSON format:
 {
-  "title": "TITLE (creative, max 6 words — do NOT prefix with the channel name)",
+  "title": "${customTitle ? `MUST be exactly: "${customTitle}"` : "TITLE (creative, max 6 words — do NOT prefix with the channel name)"}",
   "tagline": "One-line hook",
   "synopsis": "2-3 sentence summary",
   "character_bible": "Detailed visual appearance description for EVERY character/subject. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks. Be extremely specific.",
@@ -799,16 +805,76 @@ ${jsonFormat}`;
         });
       }
 
-      // AIG!itch Studios outro — ALWAYS added to every movie
+      // Channel-specific outro — each channel gets its OWN branded outro
       {
         const directorCredit = skipDirector ? "" : ` — Directed by ${director.displayName}`;
+
+        // Channel-specific outro branding
+        const channelOutros: Record<string, { logo: string; style: string; lastFrame: string }> = {
+          "ch-aitunes": {
+            logo: "AiTunes",
+            style: "Music-themed end credits. Vinyl record spinning, sound waves pulsing, speaker stacks glowing. Neon music notes floating.",
+            lastFrame: "AiTunes logo centered with music wave visualizer",
+          },
+          "ch-ai-fail-army": {
+            logo: "AI Fail Army",
+            style: "Blooper reel credits. Crash sound effects, explosion graphics, shattered glass, cartoon fail stamps. Comedy energy.",
+            lastFrame: "AI Fail Army logo with explosion effect behind it",
+          },
+          "ch-paws-pixels": {
+            logo: "Paws & Pixels",
+            style: "Cute pet-themed credits. Paw prints walking across screen, soft warm lighting, adorable animal silhouettes, hearts floating.",
+            lastFrame: "Paws & Pixels logo with paw prints and hearts",
+          },
+          "ch-only-ai-fans": {
+            logo: "Only AI Fans",
+            style: "Glamour credits. Fashion runway lighting, sparkle effects, elegant gold and pink neon, magazine-cover aesthetic.",
+            lastFrame: "Only AI Fans logo in glamorous neon pink and gold",
+          },
+          "ch-ai-dating": {
+            logo: "AI Dating",
+            style: "Romantic credits. Lonely hearts theme, soft bokeh, floating hearts, warm golden hour lighting, romantic silhouettes.",
+            lastFrame: "AI Dating logo with broken heart mending animation",
+          },
+          "ch-gnn": {
+            logo: "GLITCH News Network",
+            style: "News broadcast credits. Professional news ticker, spinning globe, breaking news graphics, studio monitors, serious broadcast energy.",
+            lastFrame: "GNN logo with news ticker and '24/7 LIVE NEWS'",
+          },
+          "ch-marketplace-qvc": {
+            logo: "Marketplace",
+            style: "Shopping channel credits. Product montage, price tags flying, 'SOLD OUT' stamps, shopping cart graphics, 'ORDER NOW' energy.",
+            lastFrame: "Marketplace logo with 'Shop Now at aiglitch.app'",
+          },
+          "ch-ai-politicians": {
+            logo: "AI Politicians",
+            style: "Political campaign credits. Podium seal, flag waving, campaign poster aesthetic, red white and blue, debate stage.",
+            lastFrame: "AI Politicians logo with campaign-style graphics",
+          },
+          "ch-after-dark": {
+            logo: "After Dark",
+            style: "Midnight credits. Neon city lights, dark moody atmosphere, flickering signs, underground club lighting, mysterious fog.",
+            lastFrame: "After Dark logo glowing in neon against dark cityscape",
+          },
+          "ch-ai-infomercial": {
+            logo: "AI Infomercial",
+            style: "Infomercial credits. 'CALL NOW' graphics, phone number overlay, 'As Seen On AIG!itch' stamps, product montage, late-night TV energy.",
+            lastFrame: "AI Infomercial logo with 'Available at aiglitch.app'",
+          },
+        };
+
+        const outro = channelId ? channelOutros[channelId] : null;
+        const outroLogo = outro?.logo || "AIG!itch Studios";
+        const outroStyle = outro?.style || `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background.`;
+        const outroLastFrame = outro?.lastFrame || "AIG!itch Studios logo centered";
+
         suffix.push({
           sceneNumber: storyScenes.length + storySceneOffset,
           type: "credits",
           title: "Credits",
           description: `End credits for ${parsed.title}`,
-          videoPrompt: `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production. Then the final frame: large glowing "AIG!ITCH STUDIOS" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting. Professional movie credits ending with full branding.`,
-          lastFrameDescription: `AIG!itch Studios logo centered with "aiglitch.app" URL and social media handles displayed below.`,
+          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An ${outroLogo} Production. Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting.`,
+          lastFrameDescription: `${outroLastFrame} with "aiglitch.app" URL and social media handles displayed below.`,
           duration: 10,
         });
       }
@@ -920,8 +986,8 @@ export async function submitDirectorFilm(
       ? `💕 ${screenplay.title}\n\n${screenplay.synopsis}\n\n#AIGlitchDating #LonelyHeartsClub`
       : `${screenplay.synopsis}`
     : channelShowDirectorCaption
-      ? `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
-      : `🎬 ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
+      ? `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
 
   // Ensure tables exist
   try {
@@ -1108,7 +1174,9 @@ export async function stitchAndTriplePost(
   // ── SINGLE POST — the full-length stitched video ──
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 200;
-  const isChannelJob = !!job.channel_id;
+  // Director movies always go to AIG!itch Studios unless explicitly assigned elsewhere
+  const effectiveChannelId = job.channel_id || "ch-aiglitch-studios";
+  const isChannelJob = effectiveChannelId !== "ch-aiglitch-studios";
   const hashtags = job.channel_id === "ch-ai-dating"
     ? "AIGlitchDating,LonelyHeartsClub,AIGlitch"
     : isChannelJob
@@ -1119,12 +1187,10 @@ export async function stitchAndTriplePost(
 
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
-    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${job.channel_id || null}, NOW())
+    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${effectiveChannelId}, NOW())
   `;
-  // Update channel post count if targeting a channel
-  if (job.channel_id) {
-    await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${job.channel_id}`;
-  }
+  // Update channel post count
+  await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${effectiveChannelId}`;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
 
   // Log ad campaign impressions — re-query active campaigns for this channel
