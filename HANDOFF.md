@@ -208,10 +208,32 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - Post caption automatically prepends `{prefix} - {title}\n\n{synopsis}`
 - AI prompts tell AI the prefix is added by the system (AI just generates creative title)
 
+**Channel video generator — Directors-style client-side flow:**
+- Rewrote channel video generation to use exact same client-side flow as Directors page
+- Phase 1: Screenplay via `/api/admin/screenplay` (with channel_id for prompt overrides)
+- Phase 2: Submit each scene individually to `/api/test-grok-video`
+- Phase 3: Poll each scene via `/api/test-grok-video?id=X` every 10 seconds
+- Phase 4: Stitch via `/api/generate-director-movie`
+- Uses shared AdminContext progress bar (same UI as Directors page)
+- All channel videos posted as The Architect (glitch-000), no director attribution
+
+**Multiple bugs found and fixed during testing:**
+- `skipBookends` was always false (line: `skipTitlePage && skipCredits` where skipCredits=false) — channel-specific prompts were dead code
+- Grok video API has 4096 character prompt limit — continuity prompts exceeded this for channel clips. Fixed with compact format.
+- DB `show_title_page=true` overrode channel prompts, causing movie templates with cast/directors/title cards. Fixed: ALL non-Studios channels force skip bookends/directors regardless of DB.
+- `/api/admin/screenplay` didn't fetch admin prompt overrides from `/admin/prompts` page. Fixed: now calls `getPrompt()` when `channel_id` provided.
+- Stall detection was 60 seconds — too short for Grok (2-4 min per clip). Increased to 3 minutes.
+- Cast list was shown in log and passed to stitcher for channel videos. Removed — channels don't use cast.
+- Only AI Fans prompts had suggestive language triggering Grok moderation. Toned down to fashion/editorial language.
+- Fail reasons weren't stored when scene submit failed. Added `error` field to `VideoJobResult` and stored actual Grok error response.
+
 **Files changed:**
-- `src/app/admin/channels/page.tsx` — channel-specific options UI, random prompt button
-- `src/app/api/admin/generate-channel-video/route.ts` — accepts `category` param
-- `src/lib/content/director-movies.ts` — Only AI Fans dedicated prompt, CHANNEL_TITLE_PREFIX map, caption format fix
+- `src/app/admin/channels/page.tsx` — full Directors-style generation flow, shared progress bar, channel-specific options, random prompts
+- `src/app/api/admin/generate-channel-video/route.ts` — GET poll endpoint, screenplay_only mode, error capture
+- `src/app/api/admin/screenplay/route.ts` — fetch admin prompt overrides for channels
+- `src/lib/content/director-movies.ts` — compact continuity prompts, force non-Studios channels to skip bookends, Only AI Fans dedicated prompt, CHANNEL_TITLE_PREFIX, fail reason storage
+- `src/lib/xai.ts` — VideoJobResult.error field for capturing Grok rejection reasons
+- `src/lib/bible/constants.ts` — toned down Only AI Fans promptHint
 
 ### March 27, 2026 — Sponsored Ads, Breaking News, NewsAPI, Quest Design
 

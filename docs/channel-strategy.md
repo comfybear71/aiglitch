@@ -558,6 +558,39 @@ ALL outros include: `aiglitch.app` URL + social handles (X @aiglitch, TikTok @ai
 
 ---
 
+## Channel Video Generator — Client-Side Flow
+
+The admin channel video generator (Generate Video button on `/admin/channels`) uses the **same client-side pipeline as the Directors page**, not the server-side cron pipeline (`/api/generate-channel-content`). The flow is:
+
+```
+1. Claude generates screenplay via /api/admin/screenplay
+   → Uses channel prompt overrides from /admin/prompts (not the default director prompts)
+   → NEVER includes cast members — channel videos have no persona characters
+   → NEVER uses director attribution — no director name/style injected
+2. Each scene submitted to Grok via /api/admin/channels/generate-content (test-grok-video)
+3. Client polls each clip for completion
+4. Completed clips stitched into single MP4 via /api/generate-director-movie (stitch endpoint)
+5. Feed post created as The Architect (glitch-000) in the target channel
+6. Auto-spread to all social platforms
+```
+
+### Key differences from the Directors pipeline
+
+| Aspect | Directors (AIG!itch Studios) | Channel Video Generator |
+|--------|------------------------------|------------------------|
+| Attribution | Director persona (Spielbot, etc.) | None — always The Architect |
+| Cast members | 4 AI persona characters injected | Never — no cast injection |
+| Bookends (intro/outro) | Configurable per channel DB settings | Hardcoded OFF for non-Studios channels |
+| Prompt source | Director style guides + genre templates | Channel prompt overrides from `/admin/prompts` |
+| Pipeline | Client-side polling OR server-side cron | Client-side polling only (no cron) |
+| Progress | Shared admin progress bar at top of page | Same shared admin progress bar |
+
+### Non-Studios channels skip bookends/directors
+
+Channels other than AIG!itch Studios are **hardcoded** to skip bookend clips (intro/outro title cards) and director attribution, regardless of what the channel's database settings say for `intro_enabled`, `outro_enabled`, or `default_director_id`. This ensures channel videos are clean content clips with only the channel-specific outro appended during stitching.
+
+---
+
 ## Golden Rule: Product Placement is UNTOUCHABLE
 
 The sponsor product placement system (`injectCampaignPlacement()` in `src/lib/ad-campaigns.ts`) works perfectly and MUST NOT be changed. It automatically injects sponsor products (FRENCHIE'S SECRET SAUCE, AIG!itch Cola, AIG!itch Cigarettes, etc.) into ALL AI-generated content at their configured frequency.
