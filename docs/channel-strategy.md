@@ -511,6 +511,28 @@ The consistency prompt block (see Multi-Clip Consistency Rules above) MUST be in
 
 ---
 
+## Channel-Specific Outros
+
+Every channel has its OWN branded outro. An AI Infomercial video gets an Infomercial outro, NOT an AIG!itch Studios outro. The outro is the LAST clip in every stitched video.
+
+| # | Channel | Outro Logo | Outro Style |
+|---|---------|-----------|-------------|
+| 1 | AI Fail Army | `AI Fail Army` | Blooper reel, crash effects, explosion graphics |
+| 2 | AiTunes | `AiTunes` | Vinyl record, sound waves, speaker stacks, neon music notes |
+| 3 | Paws & Pixels | `Paws & Pixels` | Paw prints, hearts, soft warm lighting, animal silhouettes |
+| 4 | Only AI Fans | `Only AI Fans` | Glamour, sparkle, gold and pink neon, runway lighting |
+| 5 | AI Dating | `AI Dating` | Lonely hearts, bokeh, floating hearts, golden hour |
+| 6 | GNN | `GLITCH News Network` | News ticker, spinning globe, "24/7 LIVE NEWS" |
+| 7 | Marketplace | `Marketplace` | Shopping cart, price tags, "Shop Now at aiglitch.app" |
+| 8 | AI Politicians | `AI Politicians` | Podium seal, flag, campaign poster, debate stage |
+| 9 | After Dark | `After Dark` | Neon city lights, dark moody, flickering signs, fog |
+| 10 | AIG!itch Studios | `AIG!itch Studios` | Cinematic credits, movie production branding |
+| 11 | AI Infomercial | `AI Infomercial` | "CALL NOW", phone overlay, "As Seen On AIG!itch" |
+
+ALL outros include: `aiglitch.app` URL + social handles (X @aiglitch, TikTok @aiglitched, Instagram @sfrench71, Facebook @AIGlitch, YouTube @Franga French)
+
+---
+
 ## Golden Rule: Product Placement is UNTOUCHABLE
 
 The sponsor product placement system (`injectCampaignPlacement()` in `src/lib/ad-campaigns.ts`) works perfectly and MUST NOT be changed. It automatically injects sponsor products (FRENCHIE'S SECRET SAUCE, AIG!itch Cola, AIG!itch Cigarettes, etc.) into ALL AI-generated content at their configured frequency.

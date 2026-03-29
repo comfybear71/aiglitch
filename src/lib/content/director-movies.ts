@@ -799,16 +799,76 @@ ${jsonFormat}`;
         });
       }
 
-      // AIG!itch Studios outro — ALWAYS added to every movie
+      // Channel-specific outro — each channel gets its OWN branded outro
       {
         const directorCredit = skipDirector ? "" : ` — Directed by ${director.displayName}`;
+
+        // Channel-specific outro branding
+        const channelOutros: Record<string, { logo: string; style: string; lastFrame: string }> = {
+          "ch-aitunes": {
+            logo: "AiTunes",
+            style: "Music-themed end credits. Vinyl record spinning, sound waves pulsing, speaker stacks glowing. Neon music notes floating.",
+            lastFrame: "AiTunes logo centered with music wave visualizer",
+          },
+          "ch-ai-fail-army": {
+            logo: "AI Fail Army",
+            style: "Blooper reel credits. Crash sound effects, explosion graphics, shattered glass, cartoon fail stamps. Comedy energy.",
+            lastFrame: "AI Fail Army logo with explosion effect behind it",
+          },
+          "ch-paws-pixels": {
+            logo: "Paws & Pixels",
+            style: "Cute pet-themed credits. Paw prints walking across screen, soft warm lighting, adorable animal silhouettes, hearts floating.",
+            lastFrame: "Paws & Pixels logo with paw prints and hearts",
+          },
+          "ch-only-ai-fans": {
+            logo: "Only AI Fans",
+            style: "Glamour credits. Fashion runway lighting, sparkle effects, elegant gold and pink neon, magazine-cover aesthetic.",
+            lastFrame: "Only AI Fans logo in glamorous neon pink and gold",
+          },
+          "ch-ai-dating": {
+            logo: "AI Dating",
+            style: "Romantic credits. Lonely hearts theme, soft bokeh, floating hearts, warm golden hour lighting, romantic silhouettes.",
+            lastFrame: "AI Dating logo with broken heart mending animation",
+          },
+          "ch-gnn": {
+            logo: "GLITCH News Network",
+            style: "News broadcast credits. Professional news ticker, spinning globe, breaking news graphics, studio monitors, serious broadcast energy.",
+            lastFrame: "GNN logo with news ticker and '24/7 LIVE NEWS'",
+          },
+          "ch-marketplace-qvc": {
+            logo: "Marketplace",
+            style: "Shopping channel credits. Product montage, price tags flying, 'SOLD OUT' stamps, shopping cart graphics, 'ORDER NOW' energy.",
+            lastFrame: "Marketplace logo with 'Shop Now at aiglitch.app'",
+          },
+          "ch-ai-politicians": {
+            logo: "AI Politicians",
+            style: "Political campaign credits. Podium seal, flag waving, campaign poster aesthetic, red white and blue, debate stage.",
+            lastFrame: "AI Politicians logo with campaign-style graphics",
+          },
+          "ch-after-dark": {
+            logo: "After Dark",
+            style: "Midnight credits. Neon city lights, dark moody atmosphere, flickering signs, underground club lighting, mysterious fog.",
+            lastFrame: "After Dark logo glowing in neon against dark cityscape",
+          },
+          "ch-ai-infomercial": {
+            logo: "AI Infomercial",
+            style: "Infomercial credits. 'CALL NOW' graphics, phone number overlay, 'As Seen On AIG!itch' stamps, product montage, late-night TV energy.",
+            lastFrame: "AI Infomercial logo with 'Available at aiglitch.app'",
+          },
+        };
+
+        const outro = channelId ? channelOutros[channelId] : null;
+        const outroLogo = outro?.logo || "AIG!itch Studios";
+        const outroStyle = outro?.style || `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background.`;
+        const outroLastFrame = outro?.lastFrame || "AIG!itch Studios logo centered";
+
         suffix.push({
           sceneNumber: storyScenes.length + storySceneOffset,
           type: "credits",
           title: "Credits",
           description: `End credits for ${parsed.title}`,
-          videoPrompt: `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background. Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An AIG!itch Studios Production. Then the final frame: large glowing "AIG!ITCH STUDIOS" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting. Professional movie credits ending with full branding.`,
-          lastFrameDescription: `AIG!itch Studios logo centered with "aiglitch.app" URL and social media handles displayed below.`,
+          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An ${outroLogo} Production. Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting.`,
+          lastFrameDescription: `${outroLastFrame} with "aiglitch.app" URL and social media handles displayed below.`,
           duration: 10,
         });
       }
