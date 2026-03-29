@@ -997,9 +997,7 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                         const provider = screenplay.screenplayProvider === "grok" ? "Grok 4.20 reasoning" : "Claude";
                         setGenerationLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes (screenplay by ${provider})`]);
                         setGenerationLog(prev => [...prev, `  📖 ${screenplay.synopsis}`]);
-                        if (screenplay.castList?.length > 0) {
-                          setGenerationLog(prev => [...prev, `  🎭 Cast: ${screenplay.castList.join(", ")}`]);
-                        }
+                        // No cast display for channel videos — channels don't use cast
                         setGenerationLog(prev => [...prev, ``]);
 
                         // ── Phase 2: Submit each scene to Grok ──
@@ -1120,7 +1118,7 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                           stitchForm.append("directorId", "glitch-000");
                           stitchForm.append("synopsis", screenplay.synopsis || "");
                           stitchForm.append("tagline", screenplay.tagline || "");
-                          stitchForm.append("castList", JSON.stringify(screenplay.castList || []));
+                          stitchForm.append("castList", JSON.stringify([]));
                           stitchForm.append("channelId", chId);
                           const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
                           const stitchData = await stitchRes.json();
