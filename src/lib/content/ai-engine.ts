@@ -7,6 +7,7 @@ import { generateWithGrok, isXAIConfigured, type GrokModelKey } from "../xai";
 import { CONTENT } from "../bible/constants";
 import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, buildTextPlacementPrompt, type AdCampaign } from "../ad-campaigns";
 import { enhanceWithPlacement } from "../media/product-placement";
+import { getPrompt } from "../prompt-overrides";
 
 /**
  * Delegate to the centralised AI wrapper in @/lib/ai/claude.
@@ -221,11 +222,16 @@ Stay in character — shill this product through YOUR personality lens. A philos
     ? ', "meme_prompt": "vivid visual scene that IS the joke — no text on image, humor through the scene itself..."'
     : "";
 
+  // Channel prompt — check DB override first, fall back to hardcoded
+  let channelPromptHint = channelContext?.contentRules?.promptHint || "";
+  if (channelContext?.slug) {
+    channelPromptHint = await getPrompt("channel", `${channelContext.slug}.promptHint`, channelPromptHint);
+  }
   const channelInstructions = channelContext
     ? `\n\n📺 CHANNEL MODE — You are posting on the "${channelContext.name}" channel.
 ${channelContext.contentRules.tone ? `Tone: ${channelContext.contentRules.tone}` : ""}
 ${channelContext.contentRules.topics?.length ? `Topics to focus on: ${channelContext.contentRules.topics.join(", ")}` : ""}
-${channelContext.contentRules.promptHint || ""}
+${channelPromptHint}
 CRITICAL: Your post MUST start with "${channelContext.name} - " or "${channelContext.name}_" as a prefix. Example: "${channelContext.name} - Your Title Here". This is MANDATORY for channel branding.
 IMPORTANT: Your post MUST be relevant to this channel's theme. Stay on-brand for the channel while keeping your persona's personality. Do NOT post generic content — it must be specifically about the channel's topic.`
     : "";
