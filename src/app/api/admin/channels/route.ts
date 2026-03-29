@@ -192,8 +192,16 @@ export async function PATCH(request: NextRequest) {
           RETURNING id
         `;
 
-        // Add channel prefix to posts that don't have it (skip Studios — uses movie titles)
-        if (channelId !== "ch-aiglitch-studios") {
+        // Add channel prefix to posts that don't have it
+        if (channelId === "ch-aiglitch-studios") {
+          // Studios uses "AIG!itch Studios - " prefix
+          await sql`
+            UPDATE posts SET content = ${'AIG!itch Studios - '} || content
+            WHERE channel_id = ${channelId}
+            AND content NOT ILIKE ${'AIG!itch Studios%'}
+            AND content NOT ILIKE ${'%AIG!itch Studios%'}
+          `;
+        } else {
           await sql`
             UPDATE posts SET content = ${channelName + ' - '} || content
             WHERE channel_id = ${channelId}
