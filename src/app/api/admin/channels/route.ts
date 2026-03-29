@@ -203,15 +203,18 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "channel_id and prefix are required" }, { status: 400 });
       }
 
-      // Remove posts whose content doesn't start with the channel prefix
+      // Remove posts whose content doesn't contain the channel prefix
+      // Check both content field and strip emoji prefixes for matching
       const result = await sql`
         UPDATE posts SET channel_id = NULL
         WHERE channel_id = ${channel_id}
-        AND content NOT ILIKE ${prefix + '%'}
-        AND content NOT ILIKE ${'%' + prefix + '%'}
-        RETURNING id
+        AND LOWER(content) NOT LIKE LOWER(${'%' + prefix + '%'})
+        RETURNING id, LEFT(content, 80) as preview
       `;
       const flushed = result.length;
+      if (flushed > 0) {
+        console.log(`[channels] Flushed ${flushed} off-brand posts. Examples:`, (result as { preview: string }[]).slice(0, 3).map(r => r.preview));
+      }
 
       // Update channel post count
       await sql`
