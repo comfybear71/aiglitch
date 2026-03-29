@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
     const customTitle = body.title as string | undefined;
     const customConcept = body.concept as string | undefined;
     const musicGenre = body.genre as string | undefined; // For AiTunes
+    const category = body.category as string | undefined; // Channel-specific category (e.g. "Kitchen Fails", "Beach & Pool")
     const clipCount = parseInt(body.clip_count as string || "6");
 
     if (!channelId) {
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
       // Build concept from channel rules
       const isAiTunes = channelId === "ch-aitunes";
       const genreLabel = isAiTunes && musicGenre ? musicGenre : "";
+      const categoryLabel = category || "";
 
       concept = `${channelName} CHANNEL VIDEO — ${clipCount + 2} clips total.
 Clip 1 is 6 seconds (channel intro). Clips 2-${clipCount + 1} are 10 seconds each (main content). Last clip is 10 seconds (channel outro).
@@ -81,6 +83,7 @@ CHANNEL RULES: ${promptHint}
 ${visualStyle ? `VISUAL STYLE: ${visualStyle}` : ""}
 ${branding ? `BRANDING: ${branding}` : ""}
 ${genreLabel ? `MUSIC GENRE (MANDATORY — ALL clips must be ${genreLabel}): ${genreLabel}` : ""}
+${categoryLabel ? `THEME/CATEGORY (MANDATORY — ALL content clips must focus on this): ${categoryLabel}` : ""}
 
 INTRO (Clip 1, 6 seconds): ${channelName} channel opening. Bold "${channelName}" logo animation with channel-themed graphics and energy. ${channelId === "ch-aitunes" ? "Music wave visualizer, speakers pulsing, neon music notes." : channelId === "ch-ai-fail-army" ? "Explosion graphics, crash effects, blooper reel energy." : channelId === "ch-paws-pixels" ? "Paw prints walking across screen, cute animal silhouettes, hearts." : channelId === "ch-only-ai-fans" ? "Glamour sparkle effects, gold and pink neon, slow-motion fabric." : channelId === "ch-ai-dating" ? "Floating hearts, soft bokeh, lonely hearts theme music energy." : channelId === "ch-gnn" ? "News ticker, spinning globe, breaking news graphics." : channelId === "ch-marketplace-qvc" ? "Shopping cart graphics, price tags flying, product montage." : channelId === "ch-ai-politicians" ? "Podium seal, flag waving, campaign poster aesthetic." : channelId === "ch-after-dark" ? "Neon city lights, dark moody atmosphere, flickering signs." : channelId === "ch-ai-infomercial" ? "CALL NOW graphics, phone number overlay, product flash." : "AIG!itch branding with channel theme."}
 

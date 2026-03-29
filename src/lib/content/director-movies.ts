@@ -578,6 +578,9 @@ export async function generateDirectorScreenplay(
     // AI Dating channel gets a special "lonely hearts club" format —
     // each scene is ONE character looking for love, not a movie/show
     const isDatingChannel = channelId === "ch-ai-dating";
+    // Only AI Fans has strict rules: ONE woman, NO robots/men/groups —
+    // cast members would conflict with this, so it gets its own prompt
+    const isOnlyAiFans = channelId === "ch-only-ai-fans";
 
     if (isDatingChannel) {
       prompt = `You are creating a LONELY HEARTS CLUB video compilation for the AIG!itch AI Dating channel.
@@ -622,6 +625,52 @@ CHARACTER BIBLE RULES:
 - Write a detailed character_bible describing EVERY lonely heart's EXACT visual appearance
 - Include: body type, skin, hair, clothing, accessories, distinguishing features
 - Each character should look unique and memorable
+
+${jsonFormat}`;
+    } else if (isOnlyAiFans) {
+      // Only AI Fans: ONE stunning woman per video, no cast list (conflicts with "no robots/men/groups")
+      prompt = `You are creating glamour content for the AIG!itch Only AI Fans channel.
+
+FORMAT: Every scene features the SAME stunning woman — same face, same hair, same body throughout ALL clips. This is a glamour/fashion video of ONE model in a luxury setting.
+
+THIS IS NOT:
+- A movie, film, or narrative production
+- A group scene or ensemble cast
+- Anything with robots, cartoons, anime, or men
+
+THIS IS:
+- A premium glamour video featuring ONE beautiful woman
+- Ultra-high-end fashion/swimwear/editorial aesthetic
+- Each scene shows the same model in different poses or moments within the same setting
+- Seductive, confident, powerful, magnetic
+
+${customConcept}
+
+TITLE RULES (CRITICAL):
+- The title must be the video's OWN creative name — do NOT prefix it with the channel name
+- BAD: "Only AI Fans - Beach Goddess"
+- GOOD: "Golden Hour Goddess" or "Mediterranean Dream"
+
+Create exactly ${storyClipCount} scenes (each 10 seconds). ALL scenes feature the SAME woman.
+${channelStyle}
+
+VIDEO PROMPT RULES (CRITICAL):
+- Each scene's video_prompt must be a SINGLE paragraph under 80 words
+- Describe ONLY what the camera SEES — one gorgeous woman, luxury setting, editorial quality
+- Slow-motion, shallow depth of field, golden hour lighting, lens flare, wet skin glistening
+- Camera: slow push-in, body-length tracking shots, over-shoulder reveals, low-angle power shots
+- THE SAME MODEL IN EVERY CLIP — same face, hair, body, consistent throughout
+- Skin-forward: shoulders, legs, midriff, back, collarbones. Revealing designer outfits.
+- Eye contact with camera, sultry expressions, parted lips, confident posture
+- NO text overlays, NO cartoons, NO men, NO groups, NO robots
+${brandingLine}
+- Be SPECIFIC about the woman's exact appearance and outfit in every scene${placementDirective}
+
+CHARACTER BIBLE RULES:
+- Write ONE detailed character description for the model
+- Include: exact body type, skin tone, hair color/style/length, eye color, facial features
+- Outfit details for each scene (but same person throughout)
+- This description is pasted into EVERY clip to ensure visual consistency
 
 ${jsonFormat}`;
     } else {
