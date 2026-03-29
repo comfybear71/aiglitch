@@ -960,6 +960,19 @@ export default function AdminChannelsPage() {
                         addLog(`🎬 "${data.title}" — ${data.scenes} clips submitted to render`);
                         addLog(`🏷️ Job: ${data.jobId}`);
 
+                        // Quick initial poll to show scene list
+                        try {
+                          await new Promise(r => setTimeout(r, 2000));
+                          const initPoll = await fetch(`/api/admin/generate-channel-video?jobId=${data.jobId}`);
+                          const initData = await initPoll.json();
+                          if (initData.scenes?.length > 0) {
+                            for (const s of initData.scenes) {
+                              const statusIcon = s.status === "submitted" ? "⏳" : s.status === "done" ? "✅" : s.status === "failed" ? "❌" : "⏸️";
+                              addLog(`${statusIcon} Clip ${s.sceneNumber}/${initData.clipCount} "${s.title || `Scene ${s.sceneNumber}`}" — ${s.status}`);
+                            }
+                          }
+                        } catch { /* ignore initial poll failure */ }
+
                         // Poll for progress every 10 seconds
                         const startTime = Date.now();
                         const maxPolls = 120; // 20 minutes max
@@ -1011,11 +1024,16 @@ export default function AdminChannelsPage() {
                               }
                             }
 
-                            // Status update every 30s
-                            if (attempt % 3 === 0 && poll.status === "generating") {
-                              const doneCount = (poll.scenes || []).filter((s: { status: string }) => s.status === "done").length;
+                            // Status update every 10s (every poll) — show per-scene detail
+                            if (poll.status === "generating") {
+                              const scenes = poll.scenes || [];
+                              const doneCount = scenes.filter((s: { status: string }) => s.status === "done").length;
                               const failCount = failedScenes.length;
-                              addLog(`🔄 ${timeStr}: ${doneCount}/${poll.clipCount} done${failCount > 0 ? `, ${failCount} failed` : ""}`);
+                              const submittedCount = scenes.filter((s: { status: string }) => s.status === "submitted").length;
+                              const parts = [`${doneCount}/${poll.clipCount} done`];
+                              if (submittedCount > 0) parts.push(`${submittedCount} rendering`);
+                              if (failCount > 0) parts.push(`${failCount} failed`);
+                              addLog(`🔄 ${timeStr}: ${parts.join(", ")}`);
                             }
 
                             // Job complete statuses
