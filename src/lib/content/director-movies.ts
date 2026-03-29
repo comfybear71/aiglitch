@@ -285,8 +285,10 @@ export function buildContinuityPrompt(
   // ── Previous Clip Context ──
   if (clipNumber === 1) {
     sections.push(
-      `This is the OPENING CLIP. Establish all characters, settings, and visual style.`,
-      `All subsequent clips MUST match the look, color grading, art style, and character designs established here.`,
+      `This is the OPENING CLIP — it establishes EVERYTHING for the entire video.`,
+      `Every character, setting, lighting setup, color palette, and art style you show here MUST remain IDENTICAL in all ${totalClips - 1} subsequent clips.`,
+      `Be SPECIFIC: if a character has red hair, they have red hair in EVERY clip. If the room has blue walls, EVERY clip has blue walls. If the lighting is golden hour, EVERY clip is golden hour.`,
+      `This clip sets the visual "contract" — nothing changes after this.`,
     );
   } else if (previousClipSummary) {
     sections.push(
@@ -356,13 +358,16 @@ export function buildContinuityPrompt(
   } else {
     sections.push(
       `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
-      `- Maintain 100% visual continuity with previous clip`,
-      `- Same characters, same locations, same lighting, same clothing`,
-      `- Same art style, color grading, and camera language throughout`,
-      `- Continue the exact same scene and plot progression — no jump cuts to new settings`,
-      `- No unexplained changes to ANY visual element between clips`,
-      `- Characters must have IDENTICAL appearance in every clip (hair, clothing, body type, face)`,
-      `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram)`,
+      `- Maintain 100% visual continuity with previous clip — this MUST look like ONE continuous video`,
+      `- Same characters with IDENTICAL appearance: same face, same hair color/style, same body type, same clothing, same accessories in EVERY clip`,
+      `- Same location/setting — do NOT change locations between clips unless the scene description explicitly says to`,
+      `- Same lighting setup, same time of day, same weather, same color grading throughout`,
+      `- Same art style and production quality — if clip 1 is photorealistic, ALL clips are photorealistic`,
+      `- Same camera language — if clip 1 uses handheld, ALL clips use handheld`,
+      `- If this is a MUSIC VIDEO: maintain the SAME music genre throughout (if jazz, EVERY clip is jazz — same instruments, same mood, same venue)`,
+      `- Continue the exact plot/action from where the previous clip ended — NO jump cuts to unrelated scenes`,
+      `- Characters must be recognizable frame-to-frame — a viewer should NEVER wonder "is that the same person?"`,
+      `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram, logo on clothing)`,
     );
     if (isChannelClip) {
       sections.push(`- NO title cards, credits, director names, or studio logos`);
