@@ -194,12 +194,12 @@ export async function PATCH(request: NextRequest) {
 
         // Add channel prefix to posts that don't have it
         if (channelId === "ch-aiglitch-studios") {
-          // Studios uses "AIG!itch Studios - " prefix
+          // Studios: prefix with "AIG!itch Studios - " if content doesn't START with it
           await sql`
             UPDATE posts SET content = ${'AIG!itch Studios - '} || content
             WHERE channel_id = ${channelId}
-            AND content NOT ILIKE ${'AIG!itch Studios%'}
-            AND content NOT ILIKE ${'%AIG!itch Studios%'}
+            AND LEFT(content, 20) NOT LIKE ${'AIG!itch Studios%'}
+            AND LEFT(content, 20) NOT LIKE ${'🎬 AIG!itch Studios%'}
           `;
         } else {
           await sql`
