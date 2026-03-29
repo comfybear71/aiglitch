@@ -17,6 +17,21 @@ export async function GET(request: NextRequest) {
     const sql = getDb();
     await ensureDbReady();
 
+    // Lost videos — video posts with no channel_id
+    const queryAction = request.nextUrl.searchParams.get("action");
+    if (queryAction === "lost_videos") {
+      const lost = await sql`
+        SELECT id, LEFT(content, 120) as content, media_url, persona_id, created_at
+        FROM posts
+        WHERE channel_id IS NULL
+        AND media_type = 'video'
+        AND media_url IS NOT NULL AND media_url != ''
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
+      return NextResponse.json({ lost });
+    }
+
     const channels = await sql`
       SELECT c.*,
         (SELECT COUNT(*)::int FROM channel_personas cp WHERE cp.channel_id = c.id) as persona_count,
