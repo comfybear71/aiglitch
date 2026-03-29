@@ -196,10 +196,11 @@ export async function PATCH(request: NextRequest) {
         if (channelId === "ch-aiglitch-studios") {
           // Studios: prefix with "AIG!itch Studios - " if content doesn't START with it
           await sql`
-            UPDATE posts SET content = ${'AIG!itch Studios - '} || content
+            UPDATE posts SET content = ${'\u{1F3AC} AIG!itch Studios - '} || content
             WHERE channel_id = ${channelId}
-            AND LEFT(content, 20) NOT LIKE ${'AIG!itch Studios%'}
-            AND LEFT(content, 20) NOT LIKE ${'🎬 AIG!itch Studios%'}
+            AND LEFT(content, 25) NOT LIKE ${'AIG!itch Studios%'}
+            AND LEFT(content, 25) NOT LIKE ${'\u{1F3AC} AIG!itch Studios%'}
+            AND LEFT(content, 25) NOT LIKE ${'\u{1F3AC}%AIG!itch Studios%'}
           `;
         } else {
           await sql`
