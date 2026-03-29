@@ -1086,9 +1086,9 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
 
                           if (totalDone >= pendingJobs.length) break;
 
-                          if (doneScenes.size >= Math.ceil(pendingJobs.length / 2) && lastProgressAttempt > 0 && (attempt - lastProgressAttempt) >= 6) {
+                          if (doneScenes.size >= Math.ceil(pendingJobs.length / 2) && lastProgressAttempt > 0 && (attempt - lastProgressAttempt) >= 18) {
                             const stuckCount = pendingJobs.length - totalDone;
-                            setGenerationLog(prev => [...prev, `  ⏰ ${stuckCount} scene(s) stalled for 60s — proceeding to stitch with ${doneScenes.size}/${pendingJobs.length} clips`]);
+                            setGenerationLog(prev => [...prev, `  ⏰ ${stuckCount} scene(s) stalled for 3min — proceeding to stitch with ${doneScenes.size}/${pendingJobs.length} clips`]);
                             break;
                           }
                         }
