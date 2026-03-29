@@ -175,6 +175,56 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { post_ids, target_channel_id, action } = body;
 
+    // Fix all existing channel content: set persona to Architect + add prefix
+    if (action === "fix_channel_ownership") {
+      const ARCHITECT_ID = "glitch-000";
+      const allChannels = await sql`SELECT id, name FROM channels WHERE is_active = TRUE`;
+      let totalFixed = 0;
+
+      for (const ch of allChannels) {
+        const channelName = ch.name as string;
+        const channelId = ch.id as string;
+
+        // Update all posts in this channel to be by The Architect
+        const ownershipResult = await sql`
+          UPDATE posts SET persona_id = ${ARCHITECT_ID}
+          WHERE channel_id = ${channelId} AND persona_id != ${ARCHITECT_ID}
+          RETURNING id
+        `;
+
+        // Add channel prefix to posts that don't have it (skip Studios — uses movie titles)
+        if (channelId !== "ch-aiglitch-studios") {
+          await sql`
+            UPDATE posts SET content = ${channelName + ' - '} || content
+            WHERE channel_id = ${channelId}
+            AND content NOT ILIKE ${channelName + '%'}
+            AND content NOT ILIKE ${'%' + channelName + '%'}
+          `;
+        }
+
+        totalFixed += ownershipResult.length;
+      }
+
+      // Also remove Breaking News / GNN content from Studios
+      const movedToGnn = await sql`
+        UPDATE posts SET channel_id = 'ch-gnn'
+        WHERE channel_id = 'ch-aiglitch-studios'
+        AND (content ILIKE '%breaking%news%' OR content ILIKE '%breaking:%' OR content ILIKE '%glitched news%' OR content ILIKE '%headlines live%' OR content ILIKE '%GNN%')
+        RETURNING id
+      `;
+
+      // Update all channel post counts
+      await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = channels.id AND is_reply_to IS NULL), updated_at = NOW()`;
+
+      console.log(`[channels] Fixed ownership: ${totalFixed} posts → Architect, ${movedToGnn.length} news posts → GNN`);
+      return NextResponse.json({
+        ok: true,
+        totalFixed,
+        movedToGnn: movedToGnn.length,
+        message: `Fixed ${totalFixed} posts to Architect. Moved ${movedToGnn.length} news posts from Studios to GNN.`,
+      });
+    }
+
     // Flush non-video content from ALL channels
     if (action === "flush_non_video") {
       const result = await sql`

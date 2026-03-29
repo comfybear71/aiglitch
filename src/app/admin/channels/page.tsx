@@ -480,6 +480,18 @@ export default function AdminChannelsPage() {
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={async () => {
+              if (!confirm("Fix ALL channel content:\n1. ALL posts → @the_architect\n2. Add channel prefix where missing\n3. Move news from Studios → GNN")) return;
+              const res = await fetch("/api/admin/channels", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fix_channel_ownership" }) });
+              const data = await res.json();
+              alert(data.message || "Done");
+              fetchChannels();
+            }}
+            className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30"
+          >
+            Fix Ownership
+          </button>
+          <button
+            onClick={async () => {
               if (!confirm("UNDO: Restore all posts that were just cleaned? This will put posts back into GNN, Studios, Infomercial, etc. based on their content type.")) return;
               const res = await fetch("/api/admin/channels", {
                 method: "PATCH",
