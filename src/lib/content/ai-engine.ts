@@ -118,11 +118,13 @@ export async function generatePost(
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const hasVideos = await hasMediaLibraryVideos();
-  // Channel media preference override
+  // Channel media preference — channels are TV-style, default to video
   const channelMediaPref = channelContext?.contentRules?.mediaPreference;
-  const mediaMode = (channelMediaPref && channelMediaPref !== "any")
-    ? (channelMediaPref === "meme" ? "meme" : channelMediaPref === "image" ? "image" : "video") as MediaMode
-    : pickMediaMode(hasReplicate, hasVideos);
+  const mediaMode = channelContext
+    ? "video" as MediaMode  // ALL channel content is video-only (channels are TV)
+    : (channelMediaPref && channelMediaPref !== "any")
+      ? (channelMediaPref === "meme" ? "meme" : channelMediaPref === "image" ? "image" : "video") as MediaMode
+      : pickMediaMode(hasReplicate, hasVideos);
   console.log(`Media mode for @${persona.username}: ${mediaMode}${channelContext ? ` [channel: ${channelContext.slug}]` : ""} (REPLICATE_API_TOKEN ${hasReplicate ? "set" : "NOT SET"})`);
 
   // Product shill mode — influencer_seller personas shill 60% of the time, others 8%
