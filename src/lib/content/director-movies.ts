@@ -196,7 +196,7 @@ export const CHANNEL_TITLE_PREFIX: Record<string, string> = {
 };
 
 export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
-  "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Ultra-premium glamour cinematography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm skin tones, backlit silhouettes, lens flare through hair, wet skin glistening effects, steam and mist atmosphere. Camera: slow push-in on face, body-length tracking shots, over-the-shoulder reveals, low-angle power shots. Color grade: warm amber highlights, deep shadow contrast, skin-flattering tones. Think Victoria's Secret runway meets Sports Illustrated Swimsuit meets luxury perfume commercial. Every frame is a magazine cover. ONE woman only — same face, same hair, same body in every single clip.",
+  "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Ultra-premium fashion cinematography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm tones, backlit silhouettes, lens flare through hair, soft mist atmosphere. Camera: slow push-in on face, elegant tracking shots, over-the-shoulder reveals, flattering angles. Color grade: warm amber highlights, deep shadow contrast, flattering tones. Think Vogue cover shoot meets luxury perfume commercial. Every frame is a magazine cover. ONE woman only — same face, same hair, same body in every single clip.",
   "ch-paws-pixels": "VISUAL STYLE (MANDATORY): Casual phone-camera footage like pet owners filming their animals. Handheld, slightly shaky, sometimes out of focus. Think viral pet videos — phone recordings, home security cam angles, wobbly selfie-cam. NOT cinematic — warm, natural lighting, living room / backyard / park settings. Authentic and spontaneous.",
   "ch-fail-army": "VISUAL STYLE (MANDATORY): Security camera footage, phone recordings, dashcam angles, CCTV style. Low quality, grainy, handheld, shaky. Think viral fail compilation clips. NOT cinematic — surveillance angles, wide static shots, sudden zooms.",
   "ch-ai-dating": "VISUAL STYLE (MANDATORY): Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds. Think lonely hearts video personal ads — each character alone, looking directly at camera, vulnerable and hopeful. Warm golden-hour tones, soft focus backgrounds (park benches, coffee shops, city lights at dusk, bedroom fairy lights). NOT a dating show or game show — personal, intimate, like a video diary entry.",
@@ -646,10 +646,11 @@ CHARACTER BIBLE RULES:
 
 ${jsonFormat}`;
     } else if (isOnlyAiFans) {
-      // Only AI Fans: ONE stunning woman per video, no cast list (conflicts with "no robots/men/groups")
-      prompt = `You are creating glamour content for the AIG!itch Only AI Fans channel.
+      // Only AI Fans: ONE woman per video, no cast list (conflicts with "no robots/men/groups")
+      // Language kept clean to avoid video generation moderation blocks
+      prompt = `You are creating fashion and beauty content for the AIG!itch Only AI Fans channel.
 
-FORMAT: Every scene features the SAME stunning woman — same face, same hair, same body throughout ALL clips. This is a glamour/fashion video of ONE model in a luxury setting.
+FORMAT: Every scene features the SAME beautiful woman — same face, same hair, same body throughout ALL clips. This is a high-end fashion and lifestyle video of ONE model in a luxury setting.
 
 THIS IS NOT:
 - A movie, film, or narrative production
@@ -657,10 +658,10 @@ THIS IS NOT:
 - Anything with robots, cartoons, anime, or men
 
 THIS IS:
-- A premium glamour video featuring ONE beautiful woman
-- Ultra-high-end fashion/swimwear/editorial aesthetic
+- A premium fashion and lifestyle video featuring ONE beautiful woman
+- High-end editorial photography and videography aesthetic
 - Each scene shows the same model in different poses or moments within the same setting
-- Seductive, confident, powerful, magnetic
+- Elegant, confident, powerful, captivating
 
 ${customConcept}
 
@@ -675,19 +676,20 @@ ${channelStyle}
 
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
-- Describe ONLY what the camera SEES — one gorgeous woman, luxury setting, editorial quality
-- Slow-motion, shallow depth of field, golden hour lighting, lens flare, wet skin glistening
-- Camera: slow push-in, body-length tracking shots, over-shoulder reveals, low-angle power shots
+- Describe ONLY what the camera SEES — one beautiful woman, luxury setting, editorial quality
+- Slow-motion, shallow depth of field, golden hour lighting, soft natural light
+- Camera: slow push-in, elegant tracking shots, over-shoulder reveals, flattering angles
 - THE SAME MODEL IN EVERY CLIP — same face, hair, body, consistent throughout
-- Skin-forward: shoulders, legs, midriff, back, collarbones. Revealing designer outfits.
-- Eye contact with camera, sultry expressions, parted lips, confident posture
+- High fashion outfits: designer dresses, elegant swimwear, flowing fabrics, stylish accessories
+- Confident poses, warm expressions, natural beauty, graceful movement
 - NO text overlays, NO cartoons, NO men, NO groups, NO robots
+- KEEP IT TASTEFUL — think Vogue editorial, luxury fashion campaign, or perfume commercial
 ${brandingLine}
 - Be SPECIFIC about the woman's exact appearance and outfit in every scene${placementDirective}
 
 CHARACTER BIBLE RULES:
 - Write ONE detailed character description for the model
-- Include: exact body type, skin tone, hair color/style/length, eye color, facial features
+- Include: body type, skin tone, hair color/style/length, eye color, facial features
 - Outfit details for each scene (but same person throughout)
 - This description is pasted into EVERY clip to ensure visual consistency
 

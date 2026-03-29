@@ -964,6 +964,7 @@ export default function AdminChannelsPage() {
                         const startTime = Date.now();
                         const maxPolls = 120; // 20 minutes max
                         let lastCompleted = 0;
+                        const loggedFailsRef = new Set<string>();
 
                         for (let attempt = 1; attempt <= maxPolls; attempt++) {
                           await new Promise(r => setTimeout(r, 10_000));
@@ -992,10 +993,23 @@ export default function AdminChannelsPage() {
                               lastCompleted = poll.completedClips;
                             }
 
-                            // Log failed clips
+                            // Log failed clips with reason
                             const failedScenes = (poll.scenes || []).filter(
                               (s: { status: string }) => s.status === "failed"
                             );
+                            for (const s of failedScenes) {
+                              const failKey = `fail-${(s as { sceneNumber: number }).sceneNumber}`;
+                              if (!loggedFailsRef.has(failKey)) {
+                                loggedFailsRef.add(failKey);
+                                const reason = (s as { failReason?: string }).failReason || "unknown";
+                                const sceneTitle = (s as { title?: string }).title || `Scene ${(s as { sceneNumber: number }).sceneNumber}`;
+                                const reasonText = reason.includes("moderation") ? "content moderation blocked"
+                                  : reason.includes("expired") ? "render timed out"
+                                  : reason.includes("failed") ? "render failed"
+                                  : reason;
+                                addLog(`❌ Clip ${(s as { sceneNumber: number }).sceneNumber}/${poll.clipCount} "${sceneTitle}" — ${reasonText} (${timeStr})`);
+                              }
+                            }
 
                             // Status update every 30s
                             if (attempt % 3 === 0 && poll.status === "generating") {
