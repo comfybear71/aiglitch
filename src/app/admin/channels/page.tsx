@@ -546,6 +546,23 @@ export default function AdminChannelsPage() {
                   Flush
                 </button>
                 <button
+                  onClick={async () => {
+                    const prefix = prompt(`Restore videos containing this text back into "${channel.name}":`, channel.name);
+                    if (!prefix) return;
+                    const res = await fetch("/api/admin/channels", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "restore_by_prefix", channel_id: channel.id, prefix }),
+                    });
+                    const data = await res.json();
+                    alert(data.message || `Restored ${data.restored || 0} posts`);
+                    fetchChannels();
+                  }}
+                  className="px-2 py-1 text-xs text-green-400 hover:text-green-300 transition-colors"
+                >
+                  Restore
+                </button>
+                <button
                   onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
                   className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
                 >

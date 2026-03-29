@@ -196,6 +196,34 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: true, flushed, message: `Removed ${flushed} non-video posts from all channels` });
     }
 
+    // Restore posts back into a channel by prefix match
+    if (action === "restore_by_prefix") {
+      const { channel_id, prefix } = body;
+      if (!channel_id || !prefix) {
+        return NextResponse.json({ error: "channel_id and prefix are required" }, { status: 400 });
+      }
+
+      const result = await sql`
+        UPDATE posts SET channel_id = ${channel_id}
+        WHERE channel_id IS NULL
+        AND media_type = 'video'
+        AND media_url IS NOT NULL AND media_url != ''
+        AND content ILIKE ${'%' + prefix + '%'}
+        RETURNING id
+      `;
+      const restored = result.length;
+
+      await sql`
+        UPDATE channels SET
+          post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${channel_id} AND is_reply_to IS NULL),
+          updated_at = NOW()
+        WHERE id = ${channel_id}
+      `;
+
+      console.log(`[channels] Restored ${restored} posts matching "${prefix}" to channel ${channel_id}`);
+      return NextResponse.json({ ok: true, restored, message: `Restored ${restored} posts containing "${prefix}" to channel` });
+    }
+
     // Flush off-brand content from a specific channel
     if (action === "flush_off_brand") {
       const { channel_id, prefix } = body;
