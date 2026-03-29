@@ -952,6 +952,7 @@ export default function AdminChannelsPage() {
                         </div>
                         {/* Action dropdown */}
                         <PostActions
+                          postId={post.id}
                           onRemove={() => quickRemovePost(channel.id, post.id, false)}
                           onDelete={() => {
                             if (confirm("Permanently delete this post?")) quickRemovePost(channel.id, post.id, true);
@@ -1053,12 +1054,14 @@ export default function AdminChannelsPage() {
 
 /* ── Per-post action dropdown ── */
 function PostActions({
+  postId,
   onRemove,
   onDelete,
   channels,
   currentChannelId,
   onMove,
 }: {
+  postId: string;
   onRemove: () => void;
   onDelete: () => void;
   channels: AdminChannel[];
@@ -1103,6 +1106,22 @@ function PostActions({
               ))}
             </div>
           )}
+          <div className="border-t border-gray-800" />
+          <button
+            onClick={async () => {
+              // Remove from channel + change prefix to "🎬 Lost Video - "
+              await fetch("/api/admin/channels", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "move_to_lost", post_ids: [postId] }),
+              });
+              onRemove();
+              setOpen(false);
+            }}
+            className="w-full px-3 py-1.5 text-left text-xs text-orange-400 hover:bg-gray-800 transition-colors"
+          >
+            Move to Lost Videos
+          </button>
           <div className="border-t border-gray-800" />
           <button
             onClick={() => { onDelete(); setOpen(false); }}
