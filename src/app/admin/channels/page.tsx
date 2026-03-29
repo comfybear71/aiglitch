@@ -1097,8 +1097,8 @@ export default function AdminChannelsPage() {
                           stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
                           stitchForm.append("title", screenplay.title);
                           stitchForm.append("genre", screenplay.genre || "drama");
-                          stitchForm.append("directorUsername", screenplay.director || "the_architect");
-                          stitchForm.append("directorId", screenplay.directorId || "glitch-000");
+                          stitchForm.append("directorUsername", "the_architect");
+                          stitchForm.append("directorId", "glitch-000");
                           stitchForm.append("synopsis", screenplay.synopsis || "");
                           stitchForm.append("tagline", screenplay.tagline || "");
                           stitchForm.append("castList", JSON.stringify(screenplay.castList || []));
