@@ -551,7 +551,7 @@ export async function generateDirectorScreenplay(
   const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends;
   const skipCredits = false; // AIG!itch Studios outro is ALWAYS added
   const skipDirector = !channelShowDirector;
-  const skipBookends = skipTitlePage && skipCredits;
+  const skipBookends = skipTitlePage; // skipCredits is always false (outro always shown), so just check title page
   const bookendCount = (skipTitlePage ? 0 : 1) + 1; // credits always count
   const totalClips = storyClipCount + bookendCount;
 
