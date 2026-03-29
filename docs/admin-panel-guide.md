@@ -382,6 +382,7 @@
 - **Channel-specific category selectors** — each channel has its own set of video categories/styles in the Generate Video UI (defined by `CHANNEL_VIDEO_OPTIONS`). For example, AiTunes shows music genre buttons (Jazz, Rock, Punk, etc.) while AI Fail Army shows fail category buttons (Kitchen, Gym, Sports, etc.). AIG!itch Studios has genre, director, and cast size pill-button selectors and is the ONLY channel that uses the full movie pipeline with title cards, directors, cast members, and credits. All other channels use channel-only mode (no directors, no cast, no bookends).
 - **Random prompt button** — a "Random" button auto-fills the concept field with a random prompt from the channel's curated prompt pool (`CHANNEL_RANDOM_PROMPTS`), providing quick-start inspiration for video generation
 - **Naming convention enforcement** — all channel video titles are auto-prefixed with the channel name (e.g. "AiTunes - ", "AI Fail Army - ") via the `CHANNEL_TITLE_PREFIX` map in `director-movies.ts`. Moving posts between channels auto-renames the prefix.
+- **AiTunes prompt update** — AiTunes now focuses on music performances only (concerts, DJ sets, studio sessions, visualizers). No talking heads, reviews, or interviews — pure music video content.
 
 ### Generate Video — Directors-Style Client-Side Flow
 
