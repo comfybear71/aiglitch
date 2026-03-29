@@ -209,10 +209,11 @@ export async function PATCH(request: NextRequest) {
 
         // Add 🎬 channel prefix to ALL posts that don't have it
         const prefix = `\u{1F3AC} ${channelName} - `;
+        // Strip any existing 🎬 emoji prefix first, then add the correct full prefix
         await sql`
-          UPDATE posts SET content = ${prefix} || content
+          UPDATE posts SET content = ${prefix} || regexp_replace(content, '^🎬\s*', '', 'g')
           WHERE channel_id = ${channelId}
-          AND LEFT(content, 5) != ${'\u{1F3AC}'}
+          AND content NOT LIKE ${prefix + '%'}
         `;
 
         totalFixed += ownershipResult.length;
