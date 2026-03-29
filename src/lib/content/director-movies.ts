@@ -528,10 +528,14 @@ export async function generateDirectorScreenplay(
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
   // Check channel-specific settings for title/director/credits
+  // For ANY channel content (non-Studios), ALWAYS skip bookends and directors
+  // regardless of DB settings — channels are NOT movies
+  const isStudioChannel = channelId === "ch-aiglitch-studios";
   let channelShowTitle: boolean = CHANNEL_DEFAULTS.showTitlePage;
   let channelShowDirector: boolean = CHANNEL_DEFAULTS.showDirector;
   let channelShowCredits: boolean = CHANNEL_DEFAULTS.showCredits;
-  if (channelId) {
+  if (channelId && isStudioChannel) {
+    // Only AIG!itch Studios respects DB settings (it IS a movie channel)
     try {
       const chSettings = await sql`
         SELECT show_title_page, show_director, show_credits FROM channels WHERE id = ${channelId}
@@ -543,12 +547,12 @@ export async function generateDirectorScreenplay(
       }
     } catch { /* use defaults */ }
   }
-  // Skip title card / credits for news, music videos, or when channel/concept says so
+  // ALL non-Studios channels: force skip everything — no title cards, no directors, no movie stuff
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
-  const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends;
+  const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends || (!!channelId && !isStudioChannel);
   const skipCredits = false; // AIG!itch Studios outro is ALWAYS added
-  const skipDirector = !channelShowDirector;
-  const skipBookends = skipTitlePage; // skipCredits is always false (outro always shown), so just check title page
+  const skipDirector = !channelShowDirector || (!!channelId && !isStudioChannel);
+  const skipBookends = skipTitlePage;
   const bookendCount = (skipTitlePage ? 0 : 1) + 1; // credits always count
   const totalClips = storyClipCount + bookendCount;
 

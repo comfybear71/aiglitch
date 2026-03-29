@@ -953,8 +953,10 @@ export default function AdminChannelsPage() {
                         let userConcept = channelVideoGen[chId]?.concept || "";
                         const genreVal = channelVideoGen[chId]?.genre || "";
                         const categoryVal = channelVideoGen[chId]?.category || "";
+                        const contentRules = channel.content_rules || {};
+                        const promptHint = contentRules.promptHint || channel.description || "";
 
-                        // Build full channel concept with rules — NOT a movie
+                        // Build full channel concept — NOT a movie, with actual channel content rules
                         const clipCount = 6;
                         let concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
 Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds each (main content). Scene ${clipCount + 2} is a 10-second channel outro.
@@ -962,15 +964,16 @@ Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds ea
 THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no "AIG!itch Studios", no cast lists. Just pure channel content.
 
 CHANNEL: ${chName}
+CHANNEL RULES: ${promptHint}
 ${categoryVal ? `THEME/CATEGORY (MANDATORY — ALL content clips must focus on this): ${categoryVal}` : ""}
 ${genreVal ? `MUSIC GENRE (MANDATORY — ALL clips): ${genreVal}` : ""}
 ${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
-CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): Main channel content.
-OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL.
+CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
+OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
-CRITICAL: No title cards, no movie credits, no director names. This is channel content.`;
+CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
 
                         const screenplayRes = await fetch("/api/admin/screenplay", {
                           method: "POST",
