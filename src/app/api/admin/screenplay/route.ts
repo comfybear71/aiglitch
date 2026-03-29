@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; concept?: string; channel_id?: string; preview?: boolean } = {};
+  let body: { genre?: string; director?: string; concept?: string; title?: string; channel_id?: string; preview?: boolean } = {};
   try {
     body = await request.json();
   } catch {
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   // Preview mode: return the prompt without executing
   if (body.preview) {
-    const promptText = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, true);
+    const promptText = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, true, body.title || undefined);
     return NextResponse.json({
       ok: true,
       prompt: promptText || "Failed to build prompt",
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined);
+  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, false, body.title || undefined);
   if (!result || typeof result === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }

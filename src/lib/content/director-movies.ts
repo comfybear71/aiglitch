@@ -494,6 +494,7 @@ export async function generateDirectorScreenplay(
   customConcept?: string,
   channelId?: string,
   previewOnly?: boolean,
+  customTitle?: string,
 ): Promise<DirectorScreenplay | string | null> {
   const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
   const sql = getDb();
@@ -548,7 +549,7 @@ export async function generateDirectorScreenplay(
   // movie-style prompts add director/cast/genre scaffold
   const jsonFormat = `Respond in this exact JSON format:
 {
-  "title": "TITLE (creative, max 6 words — do NOT prefix with the channel name)",
+  "title": "${customTitle ? `MUST be exactly: "${customTitle}"` : "TITLE (creative, max 6 words — do NOT prefix with the channel name)"}",
   "tagline": "One-line hook",
   "synopsis": "2-3 sentence summary",
   "character_bible": "Detailed visual appearance description for EVERY character/subject. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks. Be extremely specific.",

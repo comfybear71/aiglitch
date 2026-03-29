@@ -284,6 +284,7 @@ export default function DirectorsPage() {
           genre,
           director: directorNewPrompt.director,
           concept: directorNewPrompt.concept,
+          title: directorNewPrompt.title.trim() || undefined,
         }),
       });
       const screenplay = await screenplayRes.json();
