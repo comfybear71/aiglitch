@@ -204,11 +204,11 @@ export async function PATCH(request: NextRequest) {
       }
 
       // Remove posts whose content doesn't contain the channel prefix
-      // Check both content field and strip emoji prefixes for matching
+      // Use regexp to strip leading emojis/spaces then check for prefix
       const result = await sql`
         UPDATE posts SET channel_id = NULL
         WHERE channel_id = ${channel_id}
-        AND LOWER(content) NOT LIKE LOWER(${'%' + prefix + '%'})
+        AND regexp_replace(content, '^[^a-zA-Z]*', '', 'g') NOT ILIKE ${prefix + '%'}
         RETURNING id, LEFT(content, 80) as preview
       `;
       const flushed = result.length;
