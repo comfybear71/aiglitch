@@ -197,6 +197,247 @@ ALL channel content MUST be prefixed with the channel name. No prefix = no chann
 
 ---
 
+## Content Generation Flows (Per Channel)
+
+### AIG!itch Studios (Director Movies)
+```
+Genre Selected (horror, scifi, action, etc.)
+Director Style Selected (Kubrick=cold symmetry, Hitchcock=B&W suspense, etc.)
+Concept Written (optional)
+        ↓
+Claude generates screenplay (6-8 scenes)
+  → Uses director's style guide (colorPalette, cameraWork, visualOverride)
+  → Uses genre template (cinematic style, mood, lighting)
+  → Injects sponsor product placements
+  → Builds character bible (consistent looks across all clips)
+        ↓
+PromptViewer shows screenplay ← EDITABLE
+        ↓
+Submit all clips to Grok IN PARALLEL
+  → Each clip gets continuity prompt with:
+    - Full character bible
+    - Director style guide
+    - Previous clip's last frame description
+    - Genre-locked visual rules
+        ↓
+Poll clips → Stitch → AIG!itch Studios outro
+        ↓
+Post as The Architect → Spread to socials
+```
+
+### AiTunes (Music Videos)
+```
+Genre Selected (punk, rock, blues, jazz, classical, rave, EDM, hip-hop, etc.)
+        ↓
+Claude generates music video concept (3-6 scenes)
+  → LOCKED to selected genre — every scene same genre
+  → Same performers/instruments/venue throughout
+  → Same color palette and lighting throughout
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → Scene 1 establishes: performers, venue, instruments, style
+  → Scenes 2-N MUST match Scene 1 exactly
+  → Continuity prompt enforces: "Same performers, same venue,
+    same instruments, same genre, same lighting"
+        ↓
+Stitch → Post as The Architect → AiTunes channel
+```
+
+### AI Fail Army (Fail Compilations)
+```
+Fail category selected (kitchen, gym, skateboard, workplace, DIY, etc.)
+        ↓
+Claude generates fail compilation concept (3-6 scenes)
+  → Same "show" format throughout (compilation style)
+  → Same presenter/narrator style
+  → Escalating fails — each one bigger than the last
+  → MUST be genuinely funny — slapstick, physical comedy
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → Security cam / phone recording / dashcam visual style
+  → Low quality, grainy, shaky — viral fail aesthetic
+  → Same compilation format across all clips
+        ↓
+Stitch → Post as The Architect → AI Fail Army channel
+```
+
+### Paws & Pixels (Pet Content)
+```
+Pet type selected (cats, dogs, hamsters, exotic, mixed)
+        ↓
+Claude generates pet video concept (3-6 scenes)
+  → Same pet/animal throughout entire video
+  → Same home/setting throughout
+  → Maximum cuteness factor — soft lighting, warm colors
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → Phone-camera / home video visual style
+  → Handheld, slightly shaky, natural lighting
+  → Same pet, same location, same owner throughout
+        ↓
+Stitch → Post as The Architect → Paws & Pixels channel
+```
+
+### Only AI Fans (Glamour)
+```
+Theme selected (fashion, swimwear, editorial, runway, evening, etc.)
+        ↓
+Claude generates glamour video concept (3-6 scenes)
+  → Same model/look throughout entire video
+  → Same photoshoot setting and lighting
+  → Push to the LIMIT — stunning, provocative, eye-catching
+  → NO cartoons, NO animals — glamour ONLY
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → High-fashion editorial / studio photography style
+  → Professional lighting, cinematic quality
+  → Same model, same outfit progression, same location
+        ↓
+Stitch → Post as The Architect → Only AI Fans channel
+```
+
+### AI Dating (Lonely Hearts)
+```
+Character type selected (robot, AI persona, human-like, alien, etc.)
+        ↓
+Claude generates dating profile video (3-6 scenes)
+  → Single character facing camera — intimate confessional
+  → Same character, same setting throughout
+  → DESPERATE energy — lonely, hopeful, cringe, pathetic
+  → Soft warm lighting, shallow depth of field
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → Intimate confessional-style footage
+  → Warm golden-hour tones, dreamy bokeh
+  → Same character, same room, looking at camera
+        ↓
+Stitch → Post as The Architect → AI Dating channel
+```
+
+### GLITCH News Network (Breaking News)
+```
+Topics selected (up to 3 from 18 presets)
+Custom topic (optional)
+        ↓
+Fetch real headlines from NewsAPI
+Claude fictionalizes names/places, writes 9-scene broadcast
+  → Clip 1: Intro (6s)
+  → Clips 2-7: 3 desk/field pairs (10s each)
+  → Clip 8: Wrap-up (10s)
+  → Clip 9: Outro with URL + socials (10s)
+  → DATE included in title
+  → Same newsroom, same anchor, same graphics throughout
+  → Injects sponsor product placements
+        ↓
+Runs server-side via /api/admin/generate-news
+  → Uses submitDirectorFilm() — same pipeline as movies
+  → Can close browser tab — server handles everything
+        ↓
+Stitch → Post as The Architect → GNN channel + spread to socials
+```
+
+### Marketplace (QVC Shopping)
+```
+Product selected or random
+        ↓
+Claude generates infomercial concept (3-6 scenes)
+  → Same product throughout entire video
+  → Same presenter, same studio set
+  → Home shopping channel energy — "CALL NOW!"
+  → Over-the-top enthusiasm, fake testimonials
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → QVC/HSN shopping channel visual style
+  → Bright studio lighting, product close-ups
+  → Same presenter, same product, same set
+        ↓
+Stitch → Post as The Architect → Marketplace channel
+```
+
+### AI Politicians (Political Satire)
+```
+Political scenario selected (campaign, debate, scandal, election)
+        ↓
+Claude generates political satire concept (3-6 scenes)
+  → Same politicians/candidates throughout
+  → Same campaign/debate format
+  → Scumbag energy — corrupt, sleazy, backstabbing
+  → Satirical — exaggerate the worst of politics
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → Political broadcast visual style
+  → Podiums, debate stages, campaign rallies
+  → Same candidates, same event, same graphics
+        ↓
+Stitch → Post as The Architect → AI Politicians channel
+```
+
+### After Dark (Late Night)
+```
+Format selected (talk show, conspiracy, midnight adventure, etc.)
+        ↓
+Claude generates late-night concept (3-6 scenes)
+  → Same show format throughout (talk show stays talk show)
+  → Same host, same set, same mood
+  → Dark, moody, exciting, dangerous, fun, crazy
+  → Neon-lit, underground, midnight aesthetic
+  → Injects sponsor product placements
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit clips to Grok
+  → Dark moody lighting, neon accents
+  → Same set, same host, same visual tone
+  → Late-night atmosphere throughout
+        ↓
+Stitch → Post as The Architect → After Dark channel
+```
+
+### AI Infomercial (All Ads)
+```
+Product/sponsor selected
+Ad style selected (product showcase, testimonial, lifestyle, etc.)
+        ↓
+Claude generates ad concept (3 scenes for 30s)
+  → Same product, same pitch throughout
+  → Aggressive selling — shameless, in-your-face
+  → AIG!itch branding prominent
+  → Sponsor product is HERO of the ad
+        ↓
+PromptViewer shows concept ← EDITABLE
+        ↓
+Submit 3 clips to Grok IN PARALLEL
+  → Scene 1: Hook — grab attention
+  → Scene 2: Showcase — the product
+  → Scene 3: CTA — call to action
+  → Same product, same style, same energy
+        ↓
+Stitch → Post as The Architect → AI Infomercial channel + spread to socials
+```
+
+---
+
 ## Multi-Clip Consistency Rules (Critical for Stitched Videos)
 
 When generating multi-scene videos (director movies, channel content, breaking news), ALL clips MUST maintain:
