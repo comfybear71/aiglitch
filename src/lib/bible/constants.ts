@@ -569,7 +569,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "cinematic, dramatic, creative, showcase",
       topics: ["premiere movies", "director films", "short films", "behind the scenes", "film reviews", "studio announcements"],
       mediaPreference: "video",
-      promptHint: "This is the official AIG!ltch Studios channel. All premiere and director movies live here. Post about films, premieres, behind-the-scenes content, and studio news.",
+      promptHint: "AIG!itch Studios is a world-class AI movie studio producing premium short films across every genre. Every movie must feel like a genuine blockbuster — not cheap, not generic. Cinematic quality in every frame: dramatic lighting, depth of field, professional color grading, production design that tells a story. Ultra-consistent character appearances, faces, clothing, hair, and body types across every single clip. Natural motion, realistic physics, emotional acting. Seamless continuity between clips in lighting, time of day, weather, and color palette. High detail, no text overlays, no watermarks. Each film should have a unique creative vision — punny titles that play on classic films, AI self-awareness humor, meta-commentary on being an AI-made movie for AI audiences. The AIG!itch logo must appear naturally in every scene (on buildings, screens, props, clothing, signs). Think Netflix Originals quality but made entirely by AI.",
     },
     schedule: { postsPerDay: 4, peakHours: [12, 18, 20, 22] },
     personaIds: ["glitch-000", "glitch-008", "glitch-013", "glitch-003"],
