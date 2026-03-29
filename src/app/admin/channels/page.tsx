@@ -882,49 +882,51 @@ export default function AdminChannelsPage() {
               <div className="mt-3 bg-gray-800/50 border border-green-800/30 rounded-lg p-3">
                 <p className="text-[10px] text-green-400 font-bold mb-2">GENERATE {channel.name.toUpperCase()} {channel.id === "ch-aiglitch-studios" ? "MOVIE" : "VIDEO"}</p>
 
-                {/* AIG!itch Studios: Movie title + Genre + Director selectors */}
+                {/* AIG!itch Studios: Genre buttons + Director buttons */}
                 {channel.id === "ch-aiglitch-studios" && (
                   <div className="space-y-2 mb-2">
-                    <input
-                      value={channelVideoGen[channel.id]?.movieTitle || ""}
-                      onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], movieTitle: e.target.value } }))}
-                      placeholder="Movie title (optional — AI will generate one)"
-                      className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-[11px] text-white placeholder-gray-600"
-                    />
-                    <div className="flex gap-2">
-                      <select
-                        value={channelVideoGen[channel.id]?.movieGenre || "any"}
-                        onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], movieGenre: e.target.value } }))}
-                        className="flex-1 px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-[11px] text-white"
-                      >
-                        <option value="any">Any Genre</option>
-                        <option value="action">Action</option>
-                        <option value="scifi">Sci-Fi</option>
-                        <option value="horror">Horror</option>
-                        <option value="comedy">Comedy</option>
-                        <option value="drama">Drama</option>
-                        <option value="romance">Romance</option>
-                        <option value="family">Family</option>
-                        <option value="documentary">Documentary</option>
-                        <option value="cooking_channel">Cooking Channel</option>
-                      </select>
-                      <select
-                        value={channelVideoGen[channel.id]?.director || "auto"}
-                        onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], director: e.target.value } }))}
-                        className="flex-1 px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-[11px] text-white"
-                      >
-                        <option value="auto">Auto Director</option>
-                        <option value="steven_spielbot">Steven Spielbot</option>
-                        <option value="stanley_kubrick_ai">Stanley Kubr.AI</option>
-                        <option value="george_lucasfilm">George LucASfilm</option>
-                        <option value="quentin_airantino">Quentin AI-rantino</option>
-                        <option value="alfred_glitchcock">Alfred Glitchcock</option>
-                        <option value="nolan_christopher">Christo-NOLAN</option>
-                        <option value="wes_anderson_ai">Wes Analog</option>
-                        <option value="ridley_scott_ai">Ridley Sc0tt</option>
-                        <option value="chef_gordon_ramsey_ai">Chef Gordon RAMsey</option>
-                        <option value="david_attenborough_ai">Sir David Attenbot</option>
-                      </select>
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-1">Genre:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {["Action", "Sci-Fi", "Horror", "Comedy", "Drama", "Romance", "Family", "Documentary", "Cooking Channel"].map(g => {
+                          const val = g.toLowerCase().replace(/ /g, "_").replace(/-/g, "");
+                          const isSelected = (channelVideoGen[channel.id]?.movieGenre || "any") === val;
+                          return (
+                            <button key={g}
+                              onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], movieGenre: isSelected ? "any" : val } }))}
+                              className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-purple-500/30 text-purple-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {g}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-1">Director:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { id: "auto", name: "Auto" },
+                          { id: "steven_spielbot", name: "Spielbot" },
+                          { id: "stanley_kubrick_ai", name: "Kubr.AI" },
+                          { id: "george_lucasfilm", name: "LucASfilm" },
+                          { id: "quentin_airantino", name: "AI-rantino" },
+                          { id: "alfred_glitchcock", name: "Glitchcock" },
+                          { id: "nolan_christopher", name: "NOLAN" },
+                          { id: "wes_anderson_ai", name: "Wes Analog" },
+                          { id: "ridley_scott_ai", name: "Sc0tt" },
+                          { id: "chef_gordon_ramsey_ai", name: "RAMsey" },
+                          { id: "david_attenborough_ai", name: "Attenbot" },
+                        ].map(d => {
+                          const isSelected = (channelVideoGen[channel.id]?.director || "auto") === d.id;
+                          return (
+                            <button key={d.id}
+                              onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], director: isSelected && d.id !== "auto" ? "auto" : d.id } }))}
+                              className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-amber-500/30 text-amber-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {d.name}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
