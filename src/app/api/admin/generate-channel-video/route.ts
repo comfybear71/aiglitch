@@ -10,13 +10,16 @@ import {
 } from "@/lib/content/director-movies";
 import { CHANNELS } from "@/lib/bible/constants";
 import { getPrompt } from "@/lib/prompt-overrides";
+import { env } from "@/lib/bible/env";
+import { put } from "@vercel/blob";
 
 export const maxDuration = 600;
 
 /**
  * GET /api/admin/generate-channel-video?jobId=xxx
  *
- * Poll job progress — returns clip-level status for live UI updates.
+ * Poll job progress — actively checks Grok for submitted scenes
+ * (doesn't wait for cron to update the DB).
  */
 export async function GET(request: NextRequest) {
   if (!(await isAdminAuthenticated(request)))
@@ -49,15 +52,66 @@ export async function GET(request: NextRequest) {
 
     // Get individual scene statuses
     const scenes = await sql`
-      SELECT scene_number, title, status, fail_reason, video_url,
-             created_at, completed_at
+      SELECT id, scene_number, title, status, fail_reason, video_url,
+             xai_request_id, created_at, completed_at
       FROM multi_clip_scenes WHERE job_id = ${jobId}
       ORDER BY scene_number ASC
     ` as unknown as {
-      scene_number: number; title: string; status: string;
+      id: string; scene_number: number; title: string; status: string;
       fail_reason: string | null; video_url: string | null;
+      xai_request_id: string | null;
       created_at: string; completed_at: string | null;
     }[];
+
+    // Actively poll Grok for any "submitted" scenes (don't wait for cron)
+    const apiKey = env.XAI_API_KEY;
+    if (apiKey && job.status === "generating") {
+      for (const scene of scenes) {
+        if (scene.status !== "submitted" || !scene.xai_request_id) continue;
+
+        try {
+          const pollRes = await fetch(`https://api.x.ai/v1/videos/${scene.xai_request_id}`, {
+            headers: { "Authorization": `Bearer ${apiKey}` },
+          });
+
+          if (!pollRes.ok) continue;
+          const pollData = await pollRes.json();
+
+          if (pollData.status === "done" && pollData.respect_moderation !== false && pollData.video?.url) {
+            // Download and persist to Vercel Blob
+            try {
+              const videoRes = await fetch(pollData.video.url);
+              const videoBlob = await videoRes.blob();
+              const blobResult = await put(
+                `premiere/channel-video/${jobId}/scene-${scene.scene_number}.mp4`,
+                videoBlob,
+                { access: "public", contentType: "video/mp4" },
+              );
+              scene.status = "done";
+              scene.video_url = blobResult.url;
+              await sql`UPDATE multi_clip_scenes SET status = 'done', video_url = ${blobResult.url}, completed_at = NOW() WHERE id = ${scene.id}`;
+              await sql`UPDATE multi_clip_jobs SET completed_clips = completed_clips + 1 WHERE id = ${jobId}`;
+              job.completed_clips++;
+            } catch {
+              // Blob upload failed, mark as done with original URL
+              scene.status = "done";
+              scene.video_url = pollData.video.url;
+              await sql`UPDATE multi_clip_scenes SET status = 'done', video_url = ${pollData.video.url}, completed_at = NOW() WHERE id = ${scene.id}`;
+              await sql`UPDATE multi_clip_jobs SET completed_clips = completed_clips + 1 WHERE id = ${jobId}`;
+              job.completed_clips++;
+            }
+          } else if (pollData.status === "expired" || pollData.status === "failed" || pollData.respect_moderation === false) {
+            const reason = pollData.respect_moderation === false ? "moderation_blocked" : `grok_${pollData.status}`;
+            scene.status = "failed";
+            scene.fail_reason = reason;
+            await sql`UPDATE multi_clip_scenes SET status = 'failed', completed_at = NOW(), fail_reason = ${reason} WHERE id = ${scene.id}`;
+          }
+          // else still processing — leave as "submitted"
+        } catch {
+          // Network error polling this scene, skip
+        }
+      }
+    }
 
     return NextResponse.json({
       jobId: job.id,
