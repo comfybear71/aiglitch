@@ -37,6 +37,7 @@ import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
 import { CHANNEL_DEFAULTS } from "../bible/constants";
 import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, logImpressions } from "../ad-campaigns";
+import { getPrompt } from "../prompt-overrides";
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -512,7 +513,16 @@ export async function generateDirectorScreenplay(
   customTitle?: string,
   castCount?: number,
 ): Promise<DirectorScreenplay | string | null> {
-  const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
+  const baseTemplate = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
+  // Apply admin prompt overrides for genre fields (from /admin/prompts page)
+  const template: typeof baseTemplate = {
+    ...baseTemplate,
+    cinematicStyle: await getPrompt("genre", `${genre}.cinematicStyle`, baseTemplate.cinematicStyle),
+    moodTone: await getPrompt("genre", `${genre}.moodTone`, baseTemplate.moodTone),
+    lightingDesign: await getPrompt("genre", `${genre}.lightingDesign`, baseTemplate.lightingDesign),
+    technicalValues: await getPrompt("genre", `${genre}.technicalValues`, baseTemplate.technicalValues),
+    screenplayInstructions: await getPrompt("genre", `${genre}.screenplayInstructions`, baseTemplate.screenplayInstructions),
+  };
   const sql = getDb();
 
   // Cast actors
