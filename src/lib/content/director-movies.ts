@@ -289,10 +289,10 @@ export function buildContinuityPrompt(
     movieBible.characterBible,
   );
 
-  // ── Director Style Guide (skip for dating — no director concept) ──
-  if (!isDatingClip) {
+  // ── Director Style Guide (only for movies, NOT channel content) ──
+  if (!isChannelClip) {
     sections.push(
-      `\n${isChannelClip ? "VISUAL STYLE GUIDE" : "DIRECTOR STYLE GUIDE"}:`,
+      `\nDIRECTOR STYLE GUIDE:`,
       movieBible.directorStyleGuide,
     );
   }
@@ -335,6 +335,20 @@ export function buildContinuityPrompt(
       channelStyle || `Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds.`,
       `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, scrolling text, ANY on-screen text whatsoever.`,
       `Each clip shows ONE character alone in a warm intimate setting, looking at camera.`,
+    );
+  } else if (channelId === "ch-only-ai-fans") {
+    // Only AI Fans: keep language strictly fashion/editorial to avoid moderation blocks
+    sections.push(
+      `\nVISUAL REQUIREMENTS:`,
+      channelStyle || `Ultra-premium fashion cinematography. Slow-motion, shallow depth of field, golden hour lighting, elegant and tasteful.`,
+      `\nCONTENT MODERATION RULES (CRITICAL — violating these will cause the clip to be REJECTED):`,
+      `- This is a FASHION and LIFESTYLE video — think Vogue, Elle, or luxury perfume commercial`,
+      `- Keep all content tasteful and elegant — NO explicit, suggestive, or provocative content`,
+      `- The woman should be confident and beautiful, NOT objectified`,
+      `- Clothing must be present and visible — designer fashion, elegant swimwear, evening wear`,
+      `- NO nudity, NO implied nudity, NO bedroom/intimate scenarios`,
+      `- Focus on: fashion, beauty, luxury settings, elegant poses, natural confidence`,
+      `- DO NOT include: title cards, credits, text overlays, or ANY on-screen text`,
     );
   } else if (isChannelClip && channelStyle) {
     // Other channels with custom visual style
@@ -1147,15 +1161,16 @@ export async function submitDirectorFilm(
         // Both Grok and fallback failed
         console.error(`[director-movies] Scene ${scene.sceneNumber} submit failed — no provider available`);
         await sql`
-          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status)
-          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"})
+          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status, fail_reason)
+          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"}, ${"submit_rejected"})
         `;
       }
     } catch (err) {
       console.error(`[director-movies] Scene ${scene.sceneNumber} error:`, err);
+      const errMsg = err instanceof Error ? err.message : String(err);
       await sql`
-        INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status)
-        VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${scene.videoPrompt}, ${"failed"})
+        INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status, fail_reason)
+        VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${scene.videoPrompt}, ${"failed"}, ${`error: ${errMsg.slice(0, 200)}`})
       `;
     }
   }
