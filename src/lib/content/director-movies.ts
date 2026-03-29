@@ -1174,7 +1174,9 @@ export async function stitchAndTriplePost(
   // ── SINGLE POST — the full-length stitched video ──
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 200;
-  const isChannelJob = !!job.channel_id;
+  // Director movies always go to AIG!itch Studios unless explicitly assigned elsewhere
+  const effectiveChannelId = job.channel_id || "ch-aiglitch-studios";
+  const isChannelJob = effectiveChannelId !== "ch-aiglitch-studios";
   const hashtags = job.channel_id === "ch-ai-dating"
     ? "AIGlitchDating,LonelyHeartsClub,AIGlitch"
     : isChannelJob
@@ -1185,12 +1187,10 @@ export async function stitchAndTriplePost(
 
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
-    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${job.channel_id || null}, NOW())
+    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${effectiveChannelId}, NOW())
   `;
-  // Update channel post count if targeting a channel
-  if (job.channel_id) {
-    await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${job.channel_id}`;
-  }
+  // Update channel post count
+  await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${effectiveChannelId}`;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
 
   // Log ad campaign impressions — re-query active campaigns for this channel

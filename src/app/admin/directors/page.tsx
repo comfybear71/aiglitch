@@ -430,6 +430,7 @@ export default function DirectorsPage() {
           stitchForm.append("synopsis", screenplay.synopsis);
           stitchForm.append("tagline", screenplay.tagline);
           stitchForm.append("castList", JSON.stringify(screenplay.castList));
+          stitchForm.append("channelId", "ch-aiglitch-studios");
           const stitchRes = await fetch("/api/generate-director-movie", {
             method: "POST",
             body: stitchForm,
