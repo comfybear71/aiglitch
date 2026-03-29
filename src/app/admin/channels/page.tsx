@@ -778,7 +778,7 @@ export default function AdminChannelsPage() {
                     ...prev,
                     [channel.id]: prev[channel.id]
                       ? { ...prev[channel.id], concept: prev[channel.id].concept }
-                      : { generating: false, concept: "", genre: "", log: [] },
+                      : { generating: false, concept: "", genre: "", category: "", log: [] },
                   }));
                   setExpandedPromo(expandedPromo === `vid-${channel.id}` ? null : `vid-${channel.id}`);
                 }}
