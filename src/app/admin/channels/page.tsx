@@ -477,7 +477,27 @@ export default function AdminChannelsPage() {
           <h2 className="text-lg font-bold text-cyan-400">AIG!itch TV — Channels</h2>
           <p className="text-xs text-gray-500">{channels.length} channels configured</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={async () => {
+              if (!confirm("Clean ALL channels? This will:\n1. Restore videos that belong in each channel\n2. Remove videos that don't match the channel name prefix\n\nEach channel uses its name as the required prefix.")) return;
+              const res = await fetch("/api/admin/channels", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "clean_all_channels" }),
+              });
+              const data = await res.json();
+              let msg = data.message || "Done";
+              if (data.results?.length > 0) {
+                msg += "\n\nDetails:\n" + data.results.map((r: { channel: string; flushed: number; restored: number }) => `${r.channel}: ${r.flushed} removed, ${r.restored} restored`).join("\n");
+              }
+              alert(msg);
+              fetchChannels();
+            }}
+            className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30"
+          >
+            Clean All Channels
+          </button>
           <button
             onClick={async () => {
               if (!confirm("Remove all non-video content from ALL channels? Images and memes will be moved back to the main feed.")) return;

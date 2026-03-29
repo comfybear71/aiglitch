@@ -196,6 +196,55 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: true, flushed, message: `Removed ${flushed} non-video posts from all channels` });
     }
 
+    // Clean ALL channels — flush off-brand content using each channel's name as prefix
+    if (action === "clean_all_channels") {
+      const allChannels = await sql`SELECT id, name, slug FROM channels WHERE is_active = TRUE`;
+      let totalFlushed = 0;
+      let totalRestored = 0;
+      const results: { channel: string; flushed: number; restored: number }[] = [];
+
+      for (const ch of allChannels) {
+        const channelName = ch.name as string;
+        const channelId = ch.id as string;
+
+        // First restore any videos that belong here (were previously flushed by mistake)
+        const restored = await sql`
+          UPDATE posts SET channel_id = ${channelId}
+          WHERE channel_id IS NULL
+          AND media_type = 'video'
+          AND media_url IS NOT NULL AND media_url != ''
+          AND regexp_replace(content, '^[^a-zA-Z]*', '', 'g') ILIKE ${channelName + '%'}
+          RETURNING id
+        `;
+
+        // Then flush anything that doesn't start with the channel name
+        const flushed = await sql`
+          UPDATE posts SET channel_id = NULL
+          WHERE channel_id = ${channelId}
+          AND regexp_replace(content, '^[^a-zA-Z]*', '', 'g') NOT ILIKE ${channelName + '%'}
+          RETURNING id
+        `;
+
+        totalFlushed += flushed.length;
+        totalRestored += restored.length;
+        if (flushed.length > 0 || restored.length > 0) {
+          results.push({ channel: channelName, flushed: flushed.length, restored: restored.length });
+        }
+
+        // Update post count
+        await sql`UPDATE channels SET post_count = (SELECT COUNT(*)::int FROM posts WHERE channel_id = ${channelId} AND is_reply_to IS NULL), updated_at = NOW() WHERE id = ${channelId}`;
+      }
+
+      console.log(`[channels] Clean All: flushed ${totalFlushed}, restored ${totalRestored} across ${results.length} channels`);
+      return NextResponse.json({
+        ok: true,
+        totalFlushed,
+        totalRestored,
+        results,
+        message: `Cleaned all channels: ${totalFlushed} off-brand removed, ${totalRestored} restored`,
+      });
+    }
+
     // Restore posts back into a channel by prefix match
     if (action === "restore_by_prefix") {
       const { channel_id, prefix } = body;
