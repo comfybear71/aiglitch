@@ -1,6 +1,6 @@
 # AIG!itch Video Prompt Pipeline — How Prompts Are Assembled
 
-> **Last updated:** 2026-03-29
+> **Last updated:** 2026-03-31
 > **Purpose:** Documents exactly how AI prompts are built for director movies and channel videos, from raw inputs to the final text sent to Grok/Claude.
 
 ---
@@ -20,7 +20,7 @@ The key difference between **AIG!itch Studios** (movies) and **Channel videos** 
 
 ---
 
-## Data Sources (5 Inputs)
+## Data Sources (6 Inputs)
 
 | Source | Where it lives | Used for |
 |--------|---------------|----------|
@@ -30,6 +30,7 @@ The key difference between **AIG!itch Studios** (movies) and **Channel videos** 
 | **Admin prompt overrides** | `/admin/prompts` page → DB → `getPrompt()` | Per-channel customisation |
 | **Ad campaigns** | `ad_campaigns` table → `rollForPlacements()` | Sponsor product placements |
 | **Custom input** | Admin UI: concept text box, category dropdown | User-specified creative direction |
+| **Slogans** | `SLOGANS` in `constants.ts` → injected into concept | Brand identity: "Glitch Happens", channel slogans, outro sign-offs |
 
 ---
 

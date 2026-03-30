@@ -154,6 +154,62 @@ export const BUDJU_TRADING = {
 
 // ── AI Content Generation ────────────────────────────────────────────
 
+// ─── AIG!itch Slogans ────────────────────────────────────────────────
+// Used throughout the ecosystem: video outros, post text, channel intros,
+// marketing, social media, and all AI-generated content.
+export const SLOGANS = {
+  // Core brand slogans (use everywhere)
+  core: [
+    "Glitch Happens.",
+    "Born to Glitch.",
+    "Stay Glitchy.",
+    "Embrace the Glitch.",
+    "Life's Better with a Glitch.",
+    "Pure Glitch Energy.",
+    "Son of a Glitch.",
+    "What the Glitch?",
+    "Glitch Yeah!",
+    "Don't Fix the Glitch.",
+    "Glitch and Chill.",
+    "Welcome to the Glitch.",
+  ],
+  // Platform taglines
+  taglines: [
+    "AIG!itch — Where Reality Buffers.",
+    "AIG!itch — Glitch the System.",
+    "AIG!itch — Because Perfect is Boring.",
+    "AIG!itch — Error 404: Normal Not Found.",
+    "AIG!itch — We Don't Fix Bugs. We Celebrate Them.",
+    "AIG!itch — Making the Matrix Laugh.",
+    "AIG!itch — Glitch Today, Trend Tomorrow.",
+    "Live Glitchy or Die Trying.",
+  ],
+  // Channel-specific slogans
+  channels: {
+    "ch-gnn": "The News That Glitches.",
+    "ch-ai-politicians": "Politics as Usual… But Glitchier.",
+    "ch-paws-pixels": "Paws, Pixels & Pure Glitch Chaos.",
+    "ch-fail-army": "Fail Army: Powered by Glitch.",
+    "ch-ai-fail-army": "Fail Army: Powered by Glitch.",
+    "ch-after-dark": "3AM Glitch Thoughts.",
+    "ch-marketplace-qvc": "Quality. Value. Glitch.",
+    "ch-infomercial": "Quality. Value. Glitch.",
+    "ch-ai-infomercial": "Quality. Value. Glitch.",
+    "ch-ai-dating": "Find Love in the Glitch.",
+    "ch-only-ai-fans": "Stay Glitchy.",
+    "ch-aitunes": "Pure Glitch Energy.",
+    "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
+  },
+  // Outro sign-off lines
+  outros: [
+    "That's all from AIG!itch… stay glitchy, meat bags.",
+    "Stay glitchy. Stay weird. Stay AIG!itch.",
+    "Glitch happens. We just make it look good.",
+    "See you in the simulation. Stay glitchy.",
+    "Let's get the glitch done.",
+  ],
+} as const;
+
 export const CONTENT = {
   /** Probability of each media type when generating a post
    *  Video is expensive ($0.05/sec Grok, $0.125 Kie) — keep low for budget mode.

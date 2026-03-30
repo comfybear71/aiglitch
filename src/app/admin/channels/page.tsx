@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../AdminContext";
 import type { AdminChannel, Persona } from "../admin-types";
 import PromptViewer from "@/components/PromptViewer";
-import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
+import { CHANNEL_DEFAULTS, SLOGANS } from "@/lib/bible/constants";
 
 // News topic categories for GNN (same as briefing page)
 const NEWS_TOPICS = [
@@ -1157,6 +1157,16 @@ export default function AdminChannelsPage() {
                       const genreVal = channelVideoGen[chId]?.genre || "";
                       const categoryVal = channelVideoGen[chId]?.category || "";
 
+                      // Build slogan directive for all channels
+                      const channelSlogan = SLOGANS.channels[chId as keyof typeof SLOGANS.channels] || "Stay Glitchy.";
+                      const randomSlogans = [...SLOGANS.core].sort(() => Math.random() - 0.5).slice(0, 3);
+                      const outroSignoff = SLOGANS.outros[Math.floor(Math.random() * SLOGANS.outros.length)];
+                      const sloganDirective = `\nAIG!ITCH SLOGANS (weave naturally into content — intro, outros, host dialogue, text overlays):
+Channel slogan: "${channelSlogan}"
+Brand slogans to use: "${randomSlogans.join('", "')}"
+Outro sign-off: "${outroSignoff}"
+These slogans are part of the AIG!itch brand identity. Use them naturally — in intro text, host catchphrases, lower-third overlays, or outro sign-offs. Don't force every one — pick what fits the vibe.\n`;
+
                       let screenplayBody: Record<string, unknown>;
 
                       if (isStudios) {
@@ -1456,6 +1466,11 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                           concept,
                           channel_id: chId,
                         };
+                      }
+
+                      // Inject slogans into every channel's concept
+                      if (screenplayBody.concept && typeof screenplayBody.concept === "string") {
+                        screenplayBody.concept = screenplayBody.concept + sloganDirective;
                       }
 
                       startGeneration({ channelId: chId, channelName: chName, channelSlug: chSlug, isStudios, screenplayBody });
