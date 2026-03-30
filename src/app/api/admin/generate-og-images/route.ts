@@ -96,11 +96,84 @@ export async function GET(request: NextRequest) {
   if (!(await isAdminAuthenticated(request)))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  return NextResponse.json({
-    total: OG_IMAGES.length,
-    images: OG_IMAGES.map(i => ({ file: i.file, prompt: i.prompt.slice(0, 80) + "..." })),
-    usage: "POST to generate all images. Each costs ~$0.07 (pro) = ~$1.47 total for 21 images.",
-  });
+  // Return an HTML page with buttons (works on iPad, no console needed)
+  const html = `<!DOCTYPE html>
+<html><head><title>OG Image Generator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { background: #000; color: #fff; font-family: -apple-system, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+  h1 { color: #a855f7; }
+  .btn { display: inline-block; padding: 12px 24px; margin: 8px 4px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; }
+  .btn-all { background: #dc2626; color: white; font-size: 18px; padding: 16px 32px; width: 100%; }
+  .btn-one { background: #1f2937; color: #9ca3af; border: 1px solid #374151; }
+  .btn-one:hover { background: #374151; color: white; }
+  .btn-done { background: #059669; color: white; }
+  .btn-fail { background: #dc2626; color: white; }
+  .btn-loading { background: #d97706; color: white; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+  #log { background: #111; border: 1px solid #333; border-radius: 8px; padding: 12px; margin-top: 16px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 16px; }
+  .preview { margin-top: 8px; }
+  .preview img { width: 100%; border-radius: 4px; border: 1px solid #333; }
+</style></head><body>
+<h1>OG Image Generator</h1>
+<p style="color:#9ca3af">Generate all 21 Open Graph images using Grok Pro. Cost: ~$1.47 total.</p>
+
+<button class="btn btn-all" onclick="generateAll()">Generate All 21 Images (~$1.47)</button>
+
+<div id="log" style="display:none"></div>
+
+<div class="grid">
+${OG_IMAGES.map(img => `
+  <div>
+    <button class="btn btn-one" id="btn-${img.file}" onclick="generateOne('${img.file}')">${img.file.replace("og-", "").replace(/-/g, " ")}</button>
+    <div class="preview" id="preview-${img.file}"></div>
+  </div>
+`).join("")}
+</div>
+
+<script>
+const log = document.getElementById("log");
+function addLog(msg) { log.style.display="block"; log.textContent += msg + "\\n"; log.scrollTop = log.scrollHeight; }
+
+async function generateOne(file) {
+  const btn = document.getElementById("btn-" + file);
+  btn.className = "btn btn-loading";
+  btn.textContent = "Generating...";
+  addLog("Generating " + file + "...");
+  try {
+    const res = await fetch("/api/admin/generate-og-images", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({file}) });
+    const data = await res.json();
+    const result = data.results?.[0];
+    if (result?.blobUrl) {
+      btn.className = "btn btn-done";
+      btn.textContent = "Done!";
+      addLog("  ✅ " + file + " → " + result.blobUrl);
+      document.getElementById("preview-" + file).innerHTML = '<img src="' + result.blobUrl + '" alt="' + file + '">';
+    } else {
+      btn.className = "btn btn-fail";
+      btn.textContent = "Failed";
+      addLog("  ❌ " + file + ": " + (result?.error || data.error || "unknown"));
+    }
+  } catch (err) {
+    btn.className = "btn btn-fail";
+    btn.textContent = "Error";
+    addLog("  ❌ " + file + ": " + err.message);
+  }
+}
+
+async function generateAll() {
+  const files = ${JSON.stringify(OG_IMAGES.map(i => i.file))};
+  addLog("Starting all " + files.length + " images...");
+  for (const file of files) {
+    await generateOne(file);
+  }
+  addLog("\\n🎉 All done!");
+}
+</script>
+</body></html>`;
+
+  return new NextResponse(html, { headers: { "Content-Type": "text/html" } });
 }
 
 export async function POST(request: NextRequest) {
