@@ -229,7 +229,7 @@ const TITLE_STYLE_PRESETS: { label: string; prompt: string }[] = [
 ];
 
 export default function AdminChannelsPage() {
-  const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress } = useAdmin();
+  const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingChannel, setEditingChannel] = useState<AdminChannel | null>(null);
@@ -1007,45 +1007,35 @@ export default function AdminChannelsPage() {
                 <div className="flex justify-between items-center">
                   <p className="text-[9px] text-gray-500">Progress shown in the top bar — same as Directors.</p>
                   <button
-                    disabled={channelVideoGen[channel.id]?.generating}
-                    onClick={async () => {
+                    disabled={generating || generationChannelId === channel.id}
+                    onClick={() => {
                       const chId = channel.id;
                       const chName = channel.name;
                       const chSlug = channel.slug;
-                      const folder = `premiere/${chSlug}`;
-                      setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: true } }));
-
                       const isStudios = chId === "ch-aiglitch-studios";
-                      setGenerationLog([`🎬 Generating ${chName} ${isStudios ? "movie" : "channel video"}`]);
-                      setGenerationLog(prev => [...prev, `  📜 Writing screenplay (Grok 50% / Claude 50%)...`]);
-                      setGenProgress({ label: `📜 Screenplay`, current: 1, total: 1, startTime: Date.now() });
 
-                      try {
-                        // ── Phase 1: Generate screenplay ──
-                        const userConcept = channelVideoGen[chId]?.concept || "";
-                        const genreVal = channelVideoGen[chId]?.genre || "";
-                        const categoryVal = channelVideoGen[chId]?.category || "";
+                      const userConcept = channelVideoGen[chId]?.concept || "";
+                      const genreVal = channelVideoGen[chId]?.genre || "";
+                      const categoryVal = channelVideoGen[chId]?.category || "";
 
-                        let screenplayBody: Record<string, unknown>;
+                      let screenplayBody: Record<string, unknown>;
 
-                        if (isStudios) {
-                          // AIG!itch Studios: MOVIE mode — full director/genre/cast treatment
-                          const movieGenre = channelVideoGen[chId]?.movieGenre || "any";
-                          const director = channelVideoGen[chId]?.director || "auto";
-                          screenplayBody = {
-                            genre: movieGenre === "any" ? undefined : movieGenre,
-                            director: director === "auto" ? undefined : director,
-                            concept: userConcept || undefined,
-                            title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
-                            channel_id: chId,
-                            cast_count: channelVideoGen[chId]?.castCount || 4,
-                          };
-                        } else {
-                          // All other channels: channel content mode
-                          const contentRules = channel.content_rules || {};
-                          const promptHint = contentRules.promptHint || channel.description || "";
-                          const clipCount = 6;
-                          const concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
+                      if (isStudios) {
+                        const movieGenre = channelVideoGen[chId]?.movieGenre || "any";
+                        const director = channelVideoGen[chId]?.director || "auto";
+                        screenplayBody = {
+                          genre: movieGenre === "any" ? undefined : movieGenre,
+                          director: director === "auto" ? undefined : director,
+                          concept: userConcept || undefined,
+                          title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
+                          channel_id: chId,
+                          cast_count: channelVideoGen[chId]?.castCount || 4,
+                        };
+                      } else {
+                        const contentRules = channel.content_rules || {};
+                        const promptHint = contentRules.promptHint || channel.description || "";
+                        const clipCount = 6;
+                        const concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
 Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds each (main content). Scene ${clipCount + 2} is a 10-second channel outro.
 
 THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no "AIG!itch Studios", no cast lists. Just pure channel content.
@@ -1061,179 +1051,14 @@ CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
 OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
-                          screenplayBody = {
-                            genre: channel.genre || "drama",
-                            concept,
-                            channel_id: chId,
-                          };
-                        }
-
-                        const screenplayRes = await fetch("/api/admin/screenplay", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify(screenplayBody),
-                        });
-                        const screenplay = await screenplayRes.json();
-
-                        if (screenplay.error) {
-                          setGenerationLog(prev => [...prev, `  ❌ ${screenplay.error}`]);
-                          setGenProgress(null);
-                          setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
-                          return;
-                        }
-
-                        const scenes = screenplay.scenes as { sceneNumber: number; title: string; videoPrompt: string; duration: number }[];
-                        const provider = screenplay.screenplayProvider === "grok" ? "Grok 4.20 reasoning" : "Claude";
-                        setGenerationLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes${isStudios ? ` by ${screenplay.directorName}` : ""} (screenplay by ${provider})`]);
-                        setGenerationLog(prev => [...prev, `  📖 ${screenplay.synopsis}`]);
-                        if (isStudios && screenplay.castList?.length > 0) {
-                          setGenerationLog(prev => [...prev, `  🎭 Cast: ${screenplay.castList.join(", ")}`]);
-                        }
-                        setGenerationLog(prev => [...prev, ``]);
-
-                        // ── Phase 2: Submit each scene to Grok ──
-                        setGenerationLog(prev => [...prev, `📡 Submitting ${scenes.length} scenes to xAI...`]);
-                        setGenProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
-                        const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
-
-                        for (const scene of scenes) {
-                          setGenProgress(prev => prev ? { ...prev, current: scene.sceneNumber } : null);
-                          setGenerationLog(prev => [...prev, `[${scene.sceneNumber}/${scenes.length}] 🎬 ${scene.title}`]);
-                          setGenerationLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
-
-                          try {
-                            const submitRes = await fetch("/api/test-grok-video", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
-                            });
-                            const submitData = await submitRes.json();
-
-                            if (submitData.success && submitData.requestId) {
-                              sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: submitData.requestId });
-                              setGenerationLog(prev => [...prev, `  ✅ Submitted: ${submitData.requestId.slice(0, 12)}...`]);
-                            } else {
-                              sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
-                              setGenerationLog(prev => [...prev, `  ❌ Submit failed: ${submitData.error || "unknown"}`]);
-                            }
-                          } catch (err) {
-                            sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
-                            setGenerationLog(prev => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
-                          }
-                        }
-
-                        const pendingJobs = sceneJobs.filter(j => j.requestId);
-                        if (pendingJobs.length === 0) {
-                          setGenerationLog(prev => [...prev, `❌ No scenes submitted successfully`]);
-                          setGenProgress(null);
-                          setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
-                          return;
-                        }
-
-                        // ── Phase 3: Poll all scenes until done ──
-                        setGenerationLog(prev => [...prev, ``]);
-                        setGenerationLog(prev => [...prev, `⏳ Polling ${pendingJobs.length} scenes every 10s (typical: 2-10 min per scene)...`]);
-
-                        const doneScenes = new Set<number>();
-                        const failedScenes = new Set<number>();
-                        const sceneUrls: Record<number, string> = {};
-                        const maxPolls = 90;
-                        let lastProgressAttempt = 0;
-
-                        for (let attempt = 1; attempt <= maxPolls; attempt++) {
-                          await new Promise(resolve => setTimeout(resolve, 10_000));
-                          const elapsedSec = attempt * 10;
-                          const min = Math.floor(elapsedSec / 60);
-                          const sec = elapsedSec % 60;
-                          const timeStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
-
-                          for (const job of pendingJobs) {
-                            if (doneScenes.has(job.sceneNumber) || failedScenes.has(job.sceneNumber)) continue;
-
-                            try {
-                              const pollRes = await fetch(`/api/test-grok-video?id=${encodeURIComponent(job.requestId!)}&folder=${folder}&skip_post=true`);
-                              const pollData = await pollRes.json();
-                              const status = pollData.status || "unknown";
-
-                              if (pollData.phase === "done" && pollData.success) {
-                                doneScenes.add(job.sceneNumber);
-                                sceneUrls[job.sceneNumber] = pollData.blobUrl || pollData.videoUrl;
-                                setGenerationLog(prev => [...prev, `  🎉 Scene ${job.sceneNumber} "${job.title}" DONE (${timeStr}) ${pollData.sizeMb ? `— ${pollData.sizeMb}MB` : ""}`]);
-                                lastProgressAttempt = attempt;
-                              } else if (status === "moderation_failed" || status === "expired" || status === "failed") {
-                                failedScenes.add(job.sceneNumber);
-                                setGenerationLog(prev => [...prev, `  ❌ Scene ${job.sceneNumber} "${job.title}" ${status} (${timeStr})`]);
-                                lastProgressAttempt = attempt;
-                              }
-                            } catch { /* retry next round */ }
-                          }
-
-                          const totalDone = doneScenes.size + failedScenes.size;
-                          setGenProgress({ label: `🎬 Rendering`, current: doneScenes.size, total: pendingJobs.length, startTime: Date.now() - elapsedSec * 1000 });
-
-                          if (attempt % 3 === 0) {
-                            setGenerationLog(prev => [...prev, `  🔄 ${timeStr}: ${doneScenes.size}/${pendingJobs.length} done, ${failedScenes.size} failed`]);
-                          }
-
-                          if (totalDone >= pendingJobs.length) break;
-
-                          if (doneScenes.size >= Math.ceil(pendingJobs.length / 2) && lastProgressAttempt > 0 && (attempt - lastProgressAttempt) >= 18) {
-                            const stuckCount = pendingJobs.length - totalDone;
-                            setGenerationLog(prev => [...prev, `  ⏰ ${stuckCount} scene(s) stalled for 3min — proceeding to stitch with ${doneScenes.size}/${pendingJobs.length} clips`]);
-                            break;
-                          }
-                        }
-
-                        // Final summary
-                        setGenerationLog(prev => [...prev, ``]);
-                        setGenerationLog(prev => [...prev, `🏁 "${screenplay.title}" — ${doneScenes.size}/${pendingJobs.length} scenes completed, ${failedScenes.size} failed`]);
-
-                        if (doneScenes.size === 0) {
-                          setGenerationLog(prev => [...prev, `❌ No scenes rendered. Try a different concept.`]);
-                          setGenProgress(null);
-                          setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
-                          return;
-                        }
-
-                        // ── Phase 4: Stitch all clips into one video ──
-                        setGenerationLog(prev => [...prev, ``]);
-                        setGenerationLog(prev => [...prev, `🧩 Stitching ${doneScenes.size} clips into one video...`]);
-                        setGenProgress({ label: `🧩 Stitching`, current: 1, total: 1, startTime: Date.now() });
-
-                        try {
-                          const stitchForm = new FormData();
-                          stitchForm.append("sceneUrls", JSON.stringify(sceneUrls));
-                          stitchForm.append("title", screenplay.title);
-                          stitchForm.append("genre", screenplay.genre || "drama");
-                          stitchForm.append("directorUsername", isStudios ? (screenplay.director || "the_architect") : "the_architect");
-                          stitchForm.append("directorId", isStudios ? (screenplay.directorId || "glitch-000") : "glitch-000");
-                          stitchForm.append("synopsis", screenplay.synopsis || "");
-                          stitchForm.append("tagline", screenplay.tagline || "");
-                          stitchForm.append("castList", JSON.stringify(isStudios ? (screenplay.castList || []) : []));
-                          stitchForm.append("channelId", chId);
-                          const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
-                          const stitchData = await stitchRes.json();
-
-                          if (stitchRes.ok) {
-                            setGenerationLog(prev => [...prev, `✅ VIDEO STITCHED! ${stitchData.clipCount} clips → ${stitchData.sizeMb}MB`]);
-                            setGenerationLog(prev => [...prev, `🎬 Feed post: ${stitchData.feedPostId}`]);
-                            setGenerationLog(prev => [...prev, ``]);
-                            setGenerationLog(prev => [...prev, `✅ Posted to feed — done`]);
-                            if (stitchData.spreading?.length > 0) {
-                              setGenerationLog(prev => [...prev, `✅ Social media marketing done → ${stitchData.spreading.join(", ")}`]);
-                            }
-                            setGenerationLog(prev => [...prev, `🙏 Thank you Architect`]);
-                          } else {
-                            setGenerationLog(prev => [...prev, `❌ Stitch failed: ${stitchData.error || "unknown"}`]);
-                          }
-                        } catch (err) {
-                          setGenerationLog(prev => [...prev, `❌ Stitch error: ${err instanceof Error ? err.message : "unknown"}`]);
-                        }
-                      } catch (err) {
-                        setGenerationLog(prev => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+                        screenplayBody = {
+                          genre: channel.genre || "drama",
+                          concept,
+                          channel_id: chId,
+                        };
                       }
-                      setGenProgress(null);
-                      setChannelVideoGen(prev => ({ ...prev, [chId]: { ...prev[chId], generating: false } }));
+
+                      startGeneration({ channelId: chId, channelName: chName, channelSlug: chSlug, isStudios, screenplayBody });
                     }}
                     className="px-4 py-1.5 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50"
                   >
