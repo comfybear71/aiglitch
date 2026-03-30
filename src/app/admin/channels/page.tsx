@@ -1066,11 +1066,17 @@ export default function AdminChannelsPage() {
                           try {
                             const res = await fetch("/api/generate-topics?force=true&count=6");
                             const data = await res.json();
-                            const inserted = data.inserted || data.topics?.length || 0;
-                            if (inserted > 0) {
-                              await fetchGnnTopics();
+                            if (data.error) {
+                              alert(`Error: ${data.error}${data.reason ? ` (${data.reason})` : ""}`);
+                            } else if (data.skipped) {
+                              alert("Throttled — try again in a moment.");
                             } else {
-                              alert("No new topics generated — check NewsAPI key or try again.");
+                              const inserted = data.inserted || 0;
+                              if (inserted > 0) {
+                                await fetchGnnTopics();
+                              } else {
+                                alert(`No new topics generated (${data.generated || 0} attempted). Check NewsAPI key.`);
+                              }
                             }
                           } catch { alert("Failed to fetch news"); }
                           setGnnFetchingNews(false);

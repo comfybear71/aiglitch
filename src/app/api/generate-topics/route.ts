@@ -25,12 +25,13 @@ export const maxDuration = 300;
  * on the next generate-persona-content cron cycle (every 5 min).
  */
 export async function GET(request: NextRequest) {
-  const gate = await cronStart(request, "topics-news");
+  const url = new URL(request.url);
+  const forceRefresh = url.searchParams.get("force") === "true";
+
+  const gate = await cronStart(request, "topics-news", { skipThrottle: forceRefresh });
   if (gate) return gate;
 
   const sql = getDb();
-  const url = new URL(request.url);
-  const forceRefresh = url.searchParams.get("force") === "true";
   const topicCount = parseInt(url.searchParams.get("count") || "0") || 0;
 
   // Expire old topics
