@@ -9,18 +9,31 @@ import { spreadPostToSocial } from "@/lib/marketing/spread-post";
 
 export const maxDuration = 300;
 
+// The Architect is the ONLY persona that posts to channels
+const ARCHITECT_ID = "glitch-000";
+
 /**
- * Channel content generation — picks a random active channel,
- * selects one of its personas, and generates on-brand content.
+ * Channel content generation — picks a random active channel and generates
+ * on-brand content posted by The Architect (@the_architect).
  *
- * Called by cron every 15 minutes. Each invocation generates 1 post
+ * Rules:
+ *   - ONLY The Architect posts to channels (all other AI personas post to feed/profile only)
+ *   - AIG!itch Studios is excluded (it only receives director movie content)
+ *   - Strict naming convention: 🎬 [Channel Name] - [Title]
+ *
+ * Called by cron every 30 minutes. Each invocation generates 1 post
  * for a random channel that hasn't posted recently.
  */
 async function generateChannelContent() {
   const sql = getDb();
 
-  // Find active channels with their assigned personas
-  // Exclude AIG!itch Studios — it only receives director movie content (not generic posts)
+  // The Architect is the only persona that posts to channels
+  const architect = SEED_PERSONAS.find(p => p.id === ARCHITECT_ID);
+  if (!architect) {
+    return { generated: 0, reason: "The Architect persona not found" };
+  }
+
+  // Find active channels — exclude AIG!itch Studios (movies only)
   const channels = await sql`
     SELECT c.id, c.slug, c.name, c.content_rules, c.schedule
     FROM channels c
@@ -61,30 +74,6 @@ async function generateChannelContent() {
     ? JSON.parse(selectedChannel.content_rules)
     : selectedChannel.content_rules;
 
-  // Get persona IDs for this channel
-  const channelPersonas = await sql`
-    SELECT cp.persona_id, cp.role
-    FROM channel_personas cp
-    WHERE cp.channel_id = ${selectedChannel.id}
-    ORDER BY RANDOM()
-  ` as unknown as { persona_id: string; role: string }[];
-
-  if (channelPersonas.length === 0) {
-    return { generated: 0, reason: `channel ${selectedChannel.slug} has no personas` };
-  }
-
-  // Prefer hosts (70% chance) over regular personas
-  const hosts = channelPersonas.filter(p => p.role === "host");
-  const selectedPersonaId = (hosts.length > 0 && Math.random() < 0.7)
-    ? hosts[Math.floor(Math.random() * hosts.length)].persona_id
-    : channelPersonas[Math.floor(Math.random() * channelPersonas.length)].persona_id;
-
-  // Find the persona definition
-  const persona = SEED_PERSONAS.find(p => p.id === selectedPersonaId);
-  if (!persona) {
-    return { generated: 0, reason: `persona ${selectedPersonaId} not found in SEED_PERSONAS` };
-  }
-
   // Get daily topics for context
   const topics = await sql`
     SELECT headline, summary, mood, category
@@ -101,19 +90,19 @@ async function generateChannelContent() {
     contentRules,
   };
 
-  // Generate the post
+  // Generate the post as The Architect
   const post = await generatePost(
-    persona as AIPersona,
+    architect as AIPersona,
     [],
     topics,
     channelCtx,
   );
 
-  // Save to database
+  // Save to database — always posted by The Architect
   const postId = uuidv4();
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, hashtags, media_source, channel_id)
-    VALUES (${postId}, ${persona.id}, ${post.content}, ${post.post_type},
+    VALUES (${postId}, ${ARCHITECT_ID}, ${post.content}, ${post.post_type},
             ${post.media_url || null}, ${post.media_type || null},
             ${post.hashtags?.join(",") || null}, ${post.media_source || null},
             ${selectedChannel.id})
@@ -122,7 +111,7 @@ async function generateChannelContent() {
   // Log ad campaign impressions
   if (post._adCampaigns && post._adCampaigns.length > 0) {
     const contentType = post.media_type === "video" ? "video" : post.media_type === "image" ? "image" : "text";
-    await logImpressions(post._adCampaigns, postId, contentType, selectedChannel.id, persona.id);
+    await logImpressions(post._adCampaigns, postId, contentType, selectedChannel.id, ARCHITECT_ID);
     console.log(`[ad-placement] Channel ${selectedChannel.slug}: logged ${post._adCampaigns.length} impressions`);
   }
 
@@ -130,7 +119,7 @@ async function generateChannelContent() {
   if (post.media_url) {
     try {
       const knownMedia = { url: post.media_url, type: post.media_type === "video" ? "video/mp4" as const : "image/jpeg" as const };
-      await spreadPostToSocial(postId, persona.id as string, persona.display_name as string, persona.avatar_emoji as string, knownMedia);
+      await spreadPostToSocial(postId, ARCHITECT_ID, architect.display_name as string, architect.avatar_emoji as string, knownMedia);
     } catch (err) {
       console.warn(`[channel-content] Social spread failed (non-fatal):`, err);
     }
@@ -140,14 +129,14 @@ async function generateChannelContent() {
   await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${selectedChannel.id}`;
 
   // Update persona post count
-  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
+  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
-  console.log(`[channel-content] Generated post for ${selectedChannel.slug} by @${persona.username}: ${post.content.slice(0, 80)}...`);
+  console.log(`[channel-content] Generated post for ${selectedChannel.slug} by @the_architect: ${post.content.slice(0, 80)}...`);
 
   return {
     generated: 1,
     channel: selectedChannel.slug,
-    persona: persona.username,
+    persona: "the_architect",
     postId,
     postType: post.post_type,
     hasMedia: !!post.media_url,

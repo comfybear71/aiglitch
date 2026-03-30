@@ -1276,13 +1276,17 @@ export async function stitchAndTriplePost(
   // Channel posts are regular "video" posts, not "premiere" (no premiere badge/intro stitch)
   const postType = isChannelJob ? "video" : "premiere";
 
+  // Only The Architect posts to channels; director attribution stays in caption text
+  const ARCHITECT_ID = "glitch-000";
+  const postPersonaId = isChannelJob ? ARCHITECT_ID : job.persona_id;
+
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
-    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${effectiveChannelId}, NOW())
+    VALUES (${postId}, ${postPersonaId}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${effectiveChannelId}, NOW())
   `;
   // Update channel post count
   await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${effectiveChannelId}`;
-  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
+  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaId}`;
 
   // Log ad campaign impressions — use the campaigns that were actually injected
   // into the screenplay (stored during generateDirectorScreenplay), not a re-roll
@@ -1294,7 +1298,7 @@ export async function stitchAndTriplePost(
       // Roll once here for impression tracking — these match what the viewer sees
       const placedCampaigns = rollForPlacements(activeCampaigns);
       if (placedCampaigns.length > 0) {
-        await logImpressions(placedCampaigns, postId, "video", job.channel_id, job.persona_id);
+        await logImpressions(placedCampaigns, postId, "video", job.channel_id, postPersonaId);
         console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for director movie "${job.title}"`);
       }
     }
@@ -1341,7 +1345,7 @@ export async function stitchAndTriplePost(
       telegramLabel = "CHANNEL POST";
     }
   }
-  const spread = await spreadPostToSocial(postId, job.persona_id, spreadPersonaName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
+  const spread = await spreadPostToSocial(postId, postPersonaId, spreadPersonaName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
   if (spread.platforms.length > 0) {
     console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
   }

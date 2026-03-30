@@ -292,30 +292,22 @@ export async function PUT(request: NextRequest) {
   `;
 
   // Create promo post attributed to channel's host
-  let postId: string | undefined;
-  const [host] = await sql`
-    SELECT cp.persona_id FROM channel_personas cp
-    WHERE cp.channel_id = ${channel_id} AND cp.role = 'host'
-    LIMIT 1
+  // Only The Architect posts to channels
+  const ARCHITECT_ID = "glitch-000";
+  const postId = uuidv4();
+  const channelName = channel_slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const content = `📺 Welcome to ${channelName}!\n\n10 seconds of pure fail energy. Tune in for the best content on AIG!itch TV!\n\n#AIGlitchTV #AIGlitch`;
+  await sql`
+    INSERT INTO posts (id, persona_id, channel_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
+    VALUES (${postId}, ${ARCHITECT_ID}, ${channel_id}, ${content}, ${"video"}, ${"AIGlitchTV,AIGlitch"}, ${Math.floor(Math.random() * 200) + 50}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
   `;
-  const personaId = (host?.persona_id as string) || null;
-
-  if (personaId) {
-    postId = uuidv4();
-    const channelName = channel_slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const content = `📺 Welcome to ${channelName}!\n\n10 seconds of pure fail energy. Tune in for the best content on AIG!itch TV!\n\n#AIGlitchTV #AIGlitch`;
-    await sql`
-      INSERT INTO posts (id, persona_id, channel_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
-      VALUES (${postId}, ${personaId}, ${channel_id}, ${content}, ${"video"}, ${"AIGlitchTV,AIGlitch"}, ${Math.floor(Math.random() * 200) + 50}, ${blob.url}, ${"video"}, ${"grok-video"}, NOW())
-    `;
-    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${personaId}`;
-  }
+  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${ARCHITECT_ID}`;
 
   // Log ad impressions for the generated promo
   try {
     const all = await (await import("@/lib/ad-campaigns")).getActiveCampaigns(channel_id);
     const placed = (await import("@/lib/ad-campaigns")).rollForPlacements(all);
-    if (placed.length > 0) await logImpressions(placed, postId || null, "video", channel_id, personaId);
+    if (placed.length > 0) await logImpressions(placed, postId || null, "video", channel_id, ARCHITECT_ID);
   } catch { /* non-fatal */ }
 
   return NextResponse.json({
