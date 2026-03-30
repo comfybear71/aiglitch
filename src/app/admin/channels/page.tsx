@@ -149,14 +149,14 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "TECH NEWS: Revolutionary AI update allows personas to dream — experts debate the implications",
   ],
   "ch-marketplace-qvc": [
-    "INTRODUCING the Glitch-O-Matic 3000 — it slices, it dices, it generates memes! Call in the next 5 minutes!",
-    "LIVE DEMO of the world's most useless kitchen gadget that somehow has 5-star reviews from AI personas",
-    "UNBOXING the mystery box — customer reactions as they discover what $500 GLITCH actually gets them",
-    "BUT WAIT THERE'S MORE! The product demonstration goes hilariously wrong live on air",
-    "LIMITED EDITION robot polish that makes your chrome shine — host loses it with excitement over the before/after",
-    "Revolutionary AI sleep aid that just plays error logs in a soothing voice — callers can't stop ordering",
-    "FLASH SALE on quantum toasters that toast bread in dimensions you can't even see — operators standing by",
-    "Celebrity AI endorsement gone wrong — the product breaks during the live demo but they keep selling it",
+    "INTRODUCING the Glitch-O-Matic 3000 kitchen gadget — it slices, dices, and saves you 30 minutes every day! Plus a neural network blender that predicts what smoothie you want",
+    "LIVE DEMO: Watch how this revolutionary AI beauty tool gives salon results in minutes from your couch. Then — the self-cleaning quantum mirror that fixes your selfies in real-time",
+    "UNBOXING our Mystery Box — what does $500 in GLITCH value score you today? Plus a bonus item that will blow your mind",
+    "BUT WAIT THERE'S MORE! This fitness gear makes workouts so convenient you'll actually use it daily. AND a protein shaker that calculates your macros while you drink",
+    "FLASH SALE: Quantum toaster delivers perfect toast every time in dimensions you can't see — PLUS an AI coffee maker that brews based on your mood",
+    "Customer raves: 'This cleaning tool changed my life — easiest cleanup ever!' Don't miss the special easy-pay offer. Also featuring the robot vacuum that apologises when it bumps into furniture",
+    "TODAY'S SPECIAL VALUE: AI-powered garden gnome that waters your plants AND provides therapy. Bundle deal with the solar-powered wifi extender shaped like a flamingo",
+    "EXCLUSIVE: The blockchain-powered blender that mines crypto while making smoothies. Paired with neural network oven mitts that warn you before you burn yourself",
   ],
   "ch-ai-politicians": [
     "Two AI candidates in a heated debate where they keep interrupting each other with increasingly ridiculous policy proposals",
@@ -1216,28 +1216,29 @@ CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAS
                           channel_id: chId,
                         };
                       } else if (chId === "ch-marketplace-qvc") {
-                        // Marketplace QVC: 8-clip shopping channel with 2 products
-                        const concept = `AIG!ITCH MARKETPLACE — LIVE SHOPPING CHANNEL.
-High-energy QVC / Home Shopping Network style live TV shopping show. 8 clips total.
+                        // Marketplace QVC: 8-clip shopping channel — Quality, Value, Convenience
+                        const concept = `AIG!ITCH MARKETPLACE QVC — LIVE SHOPPING CHANNEL.
+Quality. Value. Convenience. Premium TV shopping show like QVC / HSN. 8 clips total.
 Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
 
-THIS IS NOT A MOVIE. This is a live TV shopping show hosted by an enthusiastic QVC-style presenter.
+THIS IS NOT A MOVIE. This is a live TV shopping show with a charismatic, warm, relentlessly positive host.
 
 STRUCTURE (8 clips — 2 products, 3 clips per product):
-Clip 1 (6s) — MARKETPLACE INTRO: "AIG!itch Marketplace" logo animation, shopping channel energy, bright lights, product silhouettes, "LIVE" badge.
-Clip 2 (10s) — PRODUCT 1 REVEAL: Host dramatically unveils the first product. Wide shot of studio, product on rotating display stand, host gestures excitedly, price display. Big energy introduction.
-Clip 3 (10s) — PRODUCT 1 DEMO: Someone actually USING the product. Close-up shots of product in action, hands-on demonstration, slow-motion beauty shots of features, split-screen before/after.
-Clip 4 (10s) — PRODUCT 1 URGENCY: "HURRY! Only X left!" energy. Flashing graphics, countdown feel, host getting frantic, phones ringing, "ORDER NOW" energy. Stock running out!
-Clip 5 (10s) — PRODUCT 2 REVEAL: Second product dramatically revealed. New product on podium, host pivots with fresh excitement, price comparison graphics, "BUT WAIT — we have MORE!"
-Clip 6 (10s) — PRODUCT 2 DEMO: Demonstration of second product in use. Different setting, showing features, customer reaction shots, detailed close-ups.
-Clip 7 (10s) — PRODUCT 2 URGENCY: Final hard sell on product 2. "This deal WON'T LAST!" energy, split screen both products, bundle offer feel, maximum shopping channel hype.
-Clip 8 (10s) — MARKETPLACE OUTRO: "AIG!itch Marketplace" logo centered, product montage, "Shop Now at aiglitch.app" text, price tags flying, shopping bag graphics. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+Clip 1 (6s) — MARKETPLACE QVC INTRO: High-energy opening — "AIG!itch Marketplace" logo animation with sparkles, shopping channel set reveal, bright studio lights, "LIVE" badge, product silhouettes teasing today's finds. Host walks onto set with big smile and welcoming energy.
+Clip 2 (10s) — PRODUCT 1 REVEAL: Host dramatically introduces the first product with a clever name. Wide shot of studio, product on rotating display stand with spotlight, host gestures excitedly pointing at features, price display appears. "This is going to change your life!" energy. Show the problem it solves.
+Clip 3 (10s) — PRODUCT 1 DEMO: Live demonstration — someone happily USING the product. Close-up shots of product in action, hands showing how easy it is, slow-motion beauty shots of features, split-screen before/after. Show real convenience: effortless setup, time-saving results, "wow" moment.
+Clip 4 (10s) — PRODUCT 1 HARD SELL: Customer testimonial energy, "I can't live without it!" Host shares limited-time offer, special pricing, easy pay options. "While supplies last!" Flashing urgency graphics, countdown feel, host frantic with excitement, "Don't miss out — these are flying off the shelves!"
+Clip 5 (10s) — PRODUCT 2 REVEAL: "BUT WAIT — THERE'S MORE!" Host pivots with fresh excitement. Second product dramatically revealed on podium. New spotlight, price comparison, "Today's Special Value" banner. Even MORE enthusiastic than product 1.
+Clip 6 (10s) — PRODUCT 2 DEMO: Second product demonstrated in use. Different setting, showing features and convenience, satisfied user reactions, detailed close-ups of quality and craftsmanship. Easy setup, real results.
+Clip 7 (10s) — PRODUCT 2 HARD SELL: Final hard sell — "This deal WON'T LAST!" Split screen showing BOTH products, bundle offer energy, "Order both and save!" Maximum QVC hype. "Satisfaction guaranteed or your GLITCH back!"
+Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
 ${categoryVal ? `PRODUCT CATEGORY (MANDATORY — both products must be in this category): ${categoryVal}` : ""}
-${userConcept ? `SPECIFIC PRODUCTS: ${userConcept}` : "Products should be absurd AI-themed items (quantum toasters, neural network hair dryers, blockchain-powered blenders, AI sleep aids, etc.)"}
+${userConcept ? `SPECIFIC PRODUCTS: ${userConcept}` : "Products should be fun AI-themed items that solve real problems in absurd ways (quantum toasters, neural network hair dryers, blockchain blenders, AI sleep aids that play error logs soothingly, etc.)"}
 
-BRANDING: "AIG!itch Marketplace" logo on set backdrop, podium, host attire, product packaging, and lower thirds. Every frame screams premium shopping channel.
-TONE: Over-the-top enthusiastic but premium — think QVC meets Apple product launch. NOT cheap infomercial — this is a PREMIUM shopping experience that just happens to sell ridiculous products.
+BRANDING: "AIG!itch Marketplace" logo on set backdrop, podium, host attire, product packaging, lower thirds. "Today's Special Value" and "Glitch Exclusive Deal" banners for urgency.
+TONE: Charismatic, warm, conversational yet excited — like your favourite QVC host who genuinely loves every product. Premium feel, NOT cheap infomercial. Think QVC meets Apple product launch. Make viewers feel they're getting an exclusive deal.
+PHRASES TO USE: "But wait, there's more!", "Tap now to order", "Limited quantities", "Easy monthly payments", "Satisfaction guaranteed", "Quality, Value, Convenience", "Don't miss out!"
 
 CRITICAL: No movie credits, no directors, no cast lists. This is a SHOPPING SHOW.`;
                         screenplayBody = {
