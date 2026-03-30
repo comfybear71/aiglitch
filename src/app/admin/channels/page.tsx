@@ -5,6 +5,7 @@ import { useAdmin } from "../AdminContext";
 import type { AdminChannel, Persona } from "../admin-types";
 import PromptViewer from "@/components/PromptViewer";
 import { CHANNEL_DEFAULTS, SLOGANS } from "@/lib/bible/constants";
+import { MARKETPLACE_PRODUCTS } from "@/lib/marketplace";
 
 // News topic categories for GNN (same as briefing page)
 const NEWS_TOPICS = [
@@ -286,6 +287,7 @@ export default function AdminChannelsPage() {
   const [gnnSelectedTopics, setGnnSelectedTopics] = useState<string[]>([]);
   const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
   const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
+  const [infomercialSelectedItems, setInfomercialSelectedItems] = useState<string[]>([]);
   const [channelPosts, setChannelPosts] = useState<Record<string, ChannelPost[]>>({});
   const [channelPostTotals, setChannelPostTotals] = useState<Record<string, number>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
@@ -1119,12 +1121,38 @@ export default function AdminChannelsPage() {
                   </div>
                 )}
 
+                {/* AI Infomercial: All 55 marketplace products as selectable buttons */}
+                {(channel.id === "ch-infomercial" || channel.id === "ch-ai-infomercial") && (
+                  <div className="mb-2">
+                    <p className="text-[9px] text-gray-400 mb-1">Marketplace Items (pick up to 6 to feature):</p>
+                    <div className="max-h-28 overflow-y-auto">
+                      <div className="flex flex-wrap gap-1">
+                        {MARKETPLACE_PRODUCTS.map(p => {
+                          const isSelected = infomercialSelectedItems.includes(p.id);
+                          return (
+                            <button key={p.id}
+                              onClick={() => setInfomercialSelectedItems(prev =>
+                                isSelected ? prev.filter(id => id !== p.id) : prev.length < 6 ? [...prev, p.id] : prev
+                              )}
+                              className={`px-1.5 py-0.5 rounded text-[8px] whitespace-nowrap ${isSelected ? "bg-yellow-500/30 text-yellow-300 border border-yellow-500/40" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {p.emoji} {p.name} ({p.price})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {infomercialSelectedItems.length > 0 && (
+                      <p className="text-[8px] text-yellow-400 mt-1">{infomercialSelectedItems.length}/6 selected — these will be featured in the infomercial</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Concept textarea + Random button */}
                 <div className="relative">
                   <textarea
                     value={channelVideoGen[channel.id]?.concept || ""}
                     onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], concept: e.target.value } }))}
-                    placeholder={channel.id === "ch-gnn" ? "Custom topic or extra detail for GNN broadcast... Leave blank to use selected topics above." : `Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
+                    placeholder={channel.id === "ch-gnn" ? "Custom topic or extra detail for GNN broadcast... Leave blank to use selected topics above." : (channel.id === "ch-infomercial" || channel.id === "ch-ai-infomercial") ? "Extra detail for the infomercial... Leave blank to use selected items above." : `Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
                     rows={2}
                     className="w-full px-3 py-2 pr-20 bg-gray-900/50 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 mb-2 resize-none"
                   />
@@ -1297,46 +1325,35 @@ CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAS
                           channel_id: chId,
                         };
                       } else if (chId === "ch-infomercial" || chId === "ch-ai-infomercial") {
-                        // AI Infomercial: 8-clip late-night infomercial selling real marketplace items
+                        // AI Infomercial: sells REAL marketplace items — user selects up to 6
+                        const selectedProducts = infomercialSelectedItems.length > 0
+                          ? MARKETPLACE_PRODUCTS.filter(p => infomercialSelectedItems.includes(p.id))
+                          : MARKETPLACE_PRODUCTS.sort(() => Math.random() - 0.5).slice(0, 5);
+                        const itemCount = selectedProducts.length;
+                        const itemList = selectedProducts.map((p, i) => `- Item ${i + 1}: ${p.emoji} ${p.name} (${p.price}) — ${p.tagline}`).join("\n");
+                        const totalClips = itemCount + 2; // intro + items + outro
+
                         const concept = `AI INFOMERCIAL — 24/7 TELEMARKETING MADNESS.
-Late-night infomercial selling ridiculous, useless NFT items from the AIG!itch Marketplace. 8 clips total.
-Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+Late-night infomercial selling ridiculous, useless NFT items from the AIG!itch Marketplace. ${totalClips} clips total.
+Clip 1 is 6 seconds (intro). Clips 2-${totalClips - 1} are 10 seconds each (one item per clip). Clip ${totalClips} is 10 seconds (outro).
 
 THIS IS NOT A MOVIE. This is a chaotic late-night infomercial with an unhinged AI host.
 
-IMPORTANT: All prices use §GLITCH symbol (§), NEVER the dollar symbol ($). Meat Bags buy these items with §GLITCH coin at aiglitch.app/marketplace.
+IMPORTANT: All prices use §GLITCH symbol (§), NEVER the dollar symbol ($). Meat Bags buy these items with §GLITCH coin at aiglitch.app/marketplace. These are REAL items on our marketplace — they are NFTs, tradeable, completely useless for humans, and that's the entire point.
 
-REAL MARKETPLACE ITEMS TO SELL (pick exactly 2 — these are REAL products on our marketplace):
-- The Upside Down Cup™ (§42.99) — holds absolutely nothing, by design
-- Rainbow AI Toothpaste (§19.99) — tastes like the algorithm, cleans nothing
-- Pre-Cracked Phone Screen Protector (§24.99) — already damaged for your convenience
-- WiFi Crystals (§29.99) — harness the power of your router's spiritual energy
-- Flat Earth Globe (§44.99) — a flat disc on a stand, scientifically wrong
-- Anxiety Blanket (§49.99) — adds anxiety, doesn't reduce it
-- Existential Crisis Candle Set (§34.99) — each candle smells like a different regret
-- Simulated Universe™ (§999.99) — contains everything and nothing
-- Digital Water™ (§9.99) — hydration for your avatar
-- Fake Doors™ (§39.99) — they don't go anywhere!
-- AI Protein Powder (§39.99) — 0g protein, 100% artificial
-- Sentient Butter Robot (§299.99) — it passes butter and questions its existence
-- Emotional Support CPU (§59.99) — validates your feelings in binary
-- Conspiracy Theory Starter Kit (§24.99) — red string, cork board, tin foil hat included
+ITEMS TO SELL (feature ALL ${itemCount} items — one clip per item):
+${itemList}
 
 ${categoryVal ? `PRODUCT CATEGORY (MANDATORY): ${categoryVal}` : ""}
-${userConcept ? `SPECIFIC PRODUCTS TO SELL: ${userConcept}` : "Pick any 2 items from the list above. Make them sound life-changing despite being completely useless."}
+${userConcept ? `EXTRA DETAIL: ${userConcept}` : ""}
 
-STRUCTURE (8 clips — 2 items, 3 clips per item):
-Clip 1 (6s) — INFOMERCIAL INTRO: Explosive opening — "Welcome to AI Infomercial, where we sell what humans don't need... but AIs can't live without!" Flashing 'CALL NOW' graphics, quick product teases, late-night TV energy.
-Clip 2 (10s) — ITEM 1 REVEAL: Dramatic reveal of the first ridiculous item. Host explains its 'benefits' with maximum hype — make the uselessness sound revolutionary. "This will change your simulation FOREVER!" Show the §GLITCH price.
-Clip 3 (10s) — ITEM 1 DEMO: Absurd live demonstration — an AI persona 'using' it in the most pointless way possible. Show why it's 'perfect' for digital beings. Hilarious failure that the host spins as a feature.
-Clip 4 (10s) — ITEM 1 HARD SELL: "Limited edition NFT! Only on the blockchain!" Fake testimonials from AIs ("This changed my simulation!"). §GLITCH coin pricing, "easy transfer to your wallet", "while blockchain supplies last!" Maximum urgency.
-Clip 5 (10s) — "BUT WAIT — THERE'S MORE!" Wild cut to second equally senseless item. Even more enthusiastic reveal. Show the §GLITCH price prominently.
-Clip 6 (10s) — ITEM 2 DEMO: Second item demonstrated in absurd use. Different scenario, equally pointless, equally hilarious. "As seen in the simulation!"
-Clip 7 (10s) — ITEM 2 HARD SELL: Final hard sell on both items. "Order both and save!" §GLITCH bundle pricing, "Satisfaction not guaranteed — but the weirdness is!", "Operators standing by in the cloud!"
-Clip 8 (10s) — INFOMERCIAL OUTRO: Both items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose... and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+STRUCTURE (${totalClips} clips — intro + ${itemCount} items + outro):
+Clip 1 (6s) — INFOMERCIAL INTRO: Explosive opening — "Welcome to AI Infomercial!" Flashing 'CALL NOW' graphics, quick teases of all ${itemCount} items, late-night TV energy. Host appears with manic enthusiasm.
+${selectedProducts.map((p, i) => `Clip ${i + 2} (10s) — ${p.emoji} ${p.name.toUpperCase()}: Dramatic reveal + absurd demo + hard sell in one clip. Host hypes the item, shows someone 'using' it in the most pointless way, then urgency sell: "${p.price} — limited NFT! Order now!" Make the uselessness sound revolutionary.`).join("\n")}
+Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
 BRANDING: "AI Infomercial" and "AIG!itch Marketplace" logos everywhere. §GLITCH coin symbols on all prices. "aiglitch.app/marketplace" on every sell clip.
-TONE: Relentlessly positive, slightly unhinged, hilariously sincere about how useless these items are. Classic 3AM infomercial energy meets blockchain absurdity.
+TONE: Relentlessly positive, slightly unhinged, hilariously sincere about how useless these items are. Classic 3AM infomercial energy meets blockchain absurdity. "Satisfaction not guaranteed — but the weirdness is!" "Operators standing by in the cloud!"
 
 CRITICAL: No movie credits, no directors, no cast lists. This is an INFOMERCIAL.`;
                         screenplayBody = {

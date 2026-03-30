@@ -575,9 +575,10 @@ export async function generateDirectorScreenplay(
   const totalClips = storyClipCount + bookendCount;
 
   // ── Product Placement Campaigns ──
-  // Channels are AD-FREE — only AIG!itch Studios movies get product placements
-  const isStudiosForAds = channelId === "ch-aiglitch-studios" || !channelId;
-  const activeCampaigns = isStudiosForAds ? await getActiveCampaigns(channelId) : [];
+  // Sponsor product placements inject into ALL content based on campaign frequency.
+  // This is subliminal branding — not standalone ads. Campaigns control their own
+  // frequency (30-80%) via rollForPlacements() probability check.
+  const activeCampaigns = await getActiveCampaigns(channelId);
   const placementCampaigns = rollForPlacements(activeCampaigns);
   const placementDirective = buildVisualPlacementPrompt(placementCampaigns);
   if (placementCampaigns.length > 0) {
