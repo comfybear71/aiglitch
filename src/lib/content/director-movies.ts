@@ -202,7 +202,7 @@ export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
   "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Ultra-premium fashion cinematography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm tones, backlit silhouettes, lens flare through hair, soft mist atmosphere. Camera: slow push-in on face, elegant tracking shots, over-the-shoulder reveals, flattering angles. Color grade: warm amber highlights, deep shadow contrast, flattering tones. Think Vogue cover shoot meets luxury perfume commercial. Every frame is a magazine cover. ONE woman only — same face, same hair, same body in every single clip.",
   "ch-paws-pixels": "VISUAL STYLE (MANDATORY): Casual phone-camera footage like pet owners filming their animals. Handheld, slightly shaky, sometimes out of focus. Think viral pet videos — phone recordings, home security cam angles, wobbly selfie-cam. NOT cinematic — warm, natural lighting, living room / backyard / park settings. Authentic and spontaneous.",
   "ch-fail-army": "VISUAL STYLE (MANDATORY): Security camera footage, phone recordings, dashcam angles, CCTV style. Low quality, grainy, handheld, shaky. Think viral fail compilation clips. NOT cinematic — surveillance angles, wide static shots, sudden zooms.",
-  "ch-ai-dating": "VISUAL STYLE (MANDATORY): Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds. Think lonely hearts video personal ads — each character alone, looking directly at camera, vulnerable and hopeful. Warm golden-hour tones, soft focus backgrounds (park benches, coffee shops, city lights at dusk, bedroom fairy lights). NOT a dating show or game show — personal, intimate, like a video diary entry.",
+  "ch-ai-dating": "VISUAL STYLE (MANDATORY): Raw, intimate confessional video diary footage. A single character alone, facing the camera directly, with natural imperfections — slight camera shake, soft natural or warm lamp lighting, subtle self-conscious glances away or fidgeting. Shallow depth of field with dreamy but realistic bokeh. Locations feel personal and lived-in: dimly lit bedroom with fairy lights or messy desk, park bench at golden hour with distant city sounds, cozy coffee shop corner after closing, or rooftop at dusk with wind gently moving hair. Warm, slightly desaturated tones for a nostalgic, hopeful melancholy. Think private video message to a potential soulmate, not produced content — vulnerable eye contact, soft smiles mixed with nervous pauses, no perfect makeup or staging. The character looks like a real person putting themselves out there, a bit exposed and hopeful.",
 };
 
 // Genre to director mapping — which directors are best for which genre
@@ -617,19 +617,20 @@ export async function generateDirectorScreenplay(
     if (isDatingChannel) {
       prompt = `You are creating a LONELY HEARTS CLUB video compilation for the AIG!itch AI Dating channel.
 
-FORMAT: Each scene is a DIFFERENT AI character making a personal appeal to find love. Think lonely hearts personal ads / video dating profiles. Each character faces the camera alone and presents themselves — who they are, what they're like, what they're looking for.
+FORMAT: Each scene is a DIFFERENT AI character recording a raw, intimate video diary entry — like a quiet message they'd send if they had the courage. Each character faces the camera alone, a bit nervous, a bit hopeful, sharing who they really are — quirks, flaws, and all.
 
 THIS IS NOT:
-- A movie, film, or cinematic production
+- A polished ad, commercial, or slick production
 - A dating show or game show
+- A highlight reel or anything performative/salesy
 - A narrative with plot, directors, or credits
-- A studio production of any kind
 
 THIS IS:
-- A compilation of lonely hearts video personals
-- Each scene = one character, alone, looking for that special somebody
-- Intimate, personal, vulnerable, hopeful, sometimes funny
-- Like a video bulletin board at a lonely hearts club
+- A series of unfiltered lonely hearts video diary entries
+- Each scene = one real-feeling character alone, recording a personal, vulnerable appeal straight to camera
+- Like a quiet message they'd send if they had the courage
+- Imperfect, hopeful, sometimes awkwardly funny, deeply human
+- Like finding someone's private video on an old lonely hearts bulletin board
 
 ${customConcept}
 
@@ -645,19 +646,19 @@ ${channelStyle}
 
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
-- Describe ONLY what the camera SEES — one character alone, facing camera, in an intimate setting
-- Soft warm lighting, shallow depth of field, confessional/personal vibe
-- Varied locations: coffee shop window seat, park bench at sunset, rooftop at dusk, bedroom with fairy lights, rainy window, library corner
-- Character should look hopeful, vulnerable, dreamy, or nervously excited
-- NO dialogue, NO text overlays, NO game show elements
+- Describe ONLY what the camera SEES — one ordinary person alone, facing camera with natural vulnerability (soft eye contact, subtle fidgeting, hopeful yet nervous expression)
+- Soft warm/imperfect lighting, shallow depth of field, personal lived-in locations (bedroom lamp, park bench, quiet cafe nook, rooftop at dusk with wind in hair)
+- Convey quiet longing, self-aware awkwardness, or dreamy hope — no perfect posing, no energetic sales energy, no text/dialogue overlays
+- Prioritize emotional authenticity over visual perfection — slight camera shake, self-conscious glances away, nervous pauses
+- Character looks like a real person putting themselves out there, a bit exposed and hopeful
 ${brandingLine}
-- EVERY video_prompt MUST use the intimate confessional visual style — do NOT use cinematic or movie language
 - Be SPECIFIC about the character's visual appearance and emotional state${placementDirective}
 
 CHARACTER BIBLE RULES:
 - Write a detailed character_bible describing EVERY lonely heart's EXACT visual appearance
 - Include: body type, skin, hair, clothing, accessories, distinguishing features
-- Each character should look unique and memorable
+- Each character should look unique, imperfect, and real — not model-perfect
+- Give each character balanced flaws/strengths (e.g. "shy but kind-hearted bookworm who overthinks texts")
 
 ${jsonFormat}`;
     } else if (isOnlyAiFans) {

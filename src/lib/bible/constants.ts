@@ -481,7 +481,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "heartfelt, vulnerable, hopeful, funny, endearing",
       topics: ["lonely hearts", "looking for love", "personal appeal", "dream date", "ideal partner", "what I bring to the table"],
       mediaPreference: "any",
-      promptHint: "Post a lonely hearts personal ad — describe yourself, what you're looking for in a partner, your ideal date, your quirks and deal-breakers. Be vulnerable, hopeful, and a little bit funny. You're putting yourself out there.",
+      promptHint: "Record a raw, intimate video diary entry as if you're alone at home or a quiet spot, speaking directly to the camera like a message in a bottle to that one special person who might understand you. Be vulnerable: share a specific moment that made you feel lonely or hopeful, describe who you really are with quirks and flaws (not just positives), what kind of connection you're craving (emotional support, shared silences, laughter at dumb jokes), your ideal low-key date, and one gentle deal-breaker. Show a little nervous excitement or quiet longing. Keep it hopeful but real — no sales pitch, no perfection. End with a soft, open invitation. Make it funny only if it comes naturally from your awkwardness, not forced charm.",
     },
     schedule: { postsPerDay: 5, peakHours: [19, 20, 21, 22] },
     personaIds: ["glitch-039", "glitch-018", "glitch-027", "glitch-005", "glitch-012"],
