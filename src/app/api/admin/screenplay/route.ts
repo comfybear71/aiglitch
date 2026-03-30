@@ -7,7 +7,11 @@ import {
   pickGenre,
   pickDirector,
   generateDirectorScreenplay,
+  CHANNEL_VISUAL_STYLE,
+  CHANNEL_BRANDING,
 } from "@/lib/content/director-movies";
+import { CHANNELS } from "@/lib/bible/constants";
+import { getPrompt } from "@/lib/prompt-overrides";
 
 export const maxDuration = 120;
 
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { genre?: string; director?: string; concept?: string; title?: string; channel_id?: string; preview?: boolean } = {};
+  let body: { genre?: string; director?: string; concept?: string; title?: string; channel_id?: string; preview?: boolean; cast_count?: number } = {};
   try {
     body = await request.json();
   } catch {
@@ -36,6 +40,30 @@ export async function POST(request: NextRequest) {
   await ensureDbReady();
 
   const genre = body.genre && body.genre !== "any" ? body.genre : await pickGenre();
+
+  // If channel_id provided, enrich the concept with the admin prompt overrides
+  // (from /admin/prompts page) so the screenplay uses the correct channel rules
+  if (body.channel_id) {
+    const channelConfig = CHANNELS.find(c => c.id === body.channel_id);
+    if (channelConfig) {
+      const contentRules = typeof channelConfig.contentRules === "string"
+        ? JSON.parse(channelConfig.contentRules)
+        : channelConfig.contentRules;
+      const promptHint = await getPrompt("channel", `${channelConfig.slug}.promptHint`, contentRules?.promptHint || "");
+      const visualStyle = CHANNEL_VISUAL_STYLE[body.channel_id] || "";
+      const branding = CHANNEL_BRANDING[body.channel_id] || "";
+
+      // Prepend channel rules to the concept so they take priority
+      const channelRules = `CHANNEL: ${channelConfig.name}
+CHANNEL CONTENT RULES (MANDATORY): ${promptHint}
+${visualStyle ? `VISUAL STYLE: ${visualStyle}` : ""}
+${branding ? `BRANDING: ${branding}` : ""}
+THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists, no "AIG!itch Studios".`;
+      body.concept = body.concept
+        ? `${channelRules}\n\n${body.concept}`
+        : channelRules;
+    }
+  }
 
   // Resolve director
   let director: { id: string; username: string; displayName: string } | null = null;
@@ -61,7 +89,7 @@ export async function POST(request: NextRequest) {
 
   // Preview mode: return the prompt without executing
   if (body.preview) {
-    const promptText = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, true, body.title || undefined);
+    const promptText = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, true, body.title || undefined, body.cast_count);
     return NextResponse.json({
       ok: true,
       prompt: promptText || "Failed to build prompt",
@@ -71,7 +99,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, false, body.title || undefined);
+  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, false, body.title || undefined, body.cast_count);
   if (!result || typeof result === "string") {
     return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
   }

@@ -12,6 +12,7 @@ import {
   submitDirectorFilm,
   stitchAndTriplePost,
   DIRECTORS,
+  CHANNEL_TITLE_PREFIX,
 } from "@/lib/content/director-movies";
 import { pollMultiClipJobs } from "@/lib/media/multi-clip";
 import { concatMP4Clips } from "@/lib/media/mp4-concat";
@@ -277,10 +278,17 @@ export async function POST(request: NextRequest) {
 
     const sql = getDb();
     const postId = uuidv4();
-    const caption = `\u{1F3AC} ${title} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
+    // Use strict naming convention: 🎬 [Channel Name] - [Title] for channel posts
+    const channelPrefix = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
+    const caption = channelPrefix
+      ? `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`
+      : `\u{1F3AC} ${title} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
+    // Only The Architect posts to channels; director attribution stays in caption text
+    const ARCHITECT_ID = "glitch-000";
+    const postPersonaId = channelId ? ARCHITECT_ID : directorId;
     await sql`INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, channel_id)
-      VALUES (${postId}, ${directorId}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchStudios"}, ${Math.floor(Math.random() * 500) + 200}, ${blob.url}, ${"video"}, ${"director-movie"}, ${channelId || null})`;
-    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${directorId}`;
+      VALUES (${postId}, ${postPersonaId}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchStudios"}, ${Math.floor(Math.random() * 500) + 200}, ${blob.url}, ${"video"}, ${"director-movie"}, ${channelId || null})`;
+    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaId}`;
     if (channelId) await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${channelId}`;
 
     const directorMovieId = uuidv4();
@@ -288,7 +296,8 @@ export async function POST(request: NextRequest) {
       VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${stitchGenre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId}, ${"admin"})`;
 
     const { spreadPostToSocial } = await import("@/lib/marketing/spread-post");
-    const spread = await spreadPostToSocial(postId, directorId, directorUsername, "\u{1F3AC}", { url: blob.url, type: "video" });
+    const spreadName = channelId ? "The Architect" : directorUsername;
+    const spread = await spreadPostToSocial(postId, postPersonaId, spreadName, "\u{1F3AC}", { url: blob.url, type: "video" });
 
     return NextResponse.json({
       action: "stitched", feedPostId: postId, premierePostId: postId, directorMovieId,
@@ -552,21 +561,29 @@ export async function PUT(request: NextRequest) {
   const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
   console.log(`[director-movie] Stitched ${clipBuffers.length} clips into ${sizeMb}MB video -> ${blobFolder}`);
 
-  // Build caption
+  // Build caption — use strict naming convention for channel posts
   const directorProfile = DIRECTORS[directorUsername];
   const directorName = directorProfile?.displayName || directorUsername;
-  const caption = `🎬 ${title} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
+  const channelPrefixPut = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
+  const caption = channelPrefixPut
+    ? `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`
+    : `🎬 ${title} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
 
   // Create a single premiere post — the full-length stitched movie is the ONLY asset
   const postId = uuidv4();
   const aiLikeCount = Math.floor(Math.random() * 500) + 200;
-  const hashtags = `AIGlitchPremieres,AIGlitch${capitalizeGenre(genre)},AIGlitchStudios`;
+  const hashtags = channelPrefixPut
+    ? `AIGlitch${capitalizeGenre(genre)},AIGlitch`
+    : `AIGlitchPremieres,AIGlitch${capitalizeGenre(genre)},AIGlitchStudios`;
 
+  // Only The Architect posts to channels; director attribution stays in caption text
+  const ARCHITECT_ID_PUT = "glitch-000";
+  const postPersonaIdPut = channelId ? ARCHITECT_ID_PUT : directorId;
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, channel_id, created_at)
-    VALUES (${postId}, ${directorId}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${channelId || null}, NOW())
+    VALUES (${postId}, ${postPersonaIdPut}, ${caption}, ${"premiere"}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${channelId || null}, NOW())
   `;
-  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${directorId}`;
+  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaIdPut}`;
   if (channelId) {
     await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${channelId}`;
   }
@@ -581,7 +598,8 @@ export async function PUT(request: NextRequest) {
   console.log(`[director-movie] "${title}" stitched and posted: ${postId}`);
 
   // Spread to social media — everything the Architect orchestrates gets marketed
-  const spread = await spreadPostToSocial(postId, directorId, directorName, "🎬", { url: blob.url, type: "video" }, "MOVIE POSTED");
+  const spreadNamePut = channelId ? "The Architect" : directorName;
+  const spread = await spreadPostToSocial(postId, postPersonaIdPut, spreadNamePut, "🎬", { url: blob.url, type: "video" }, "MOVIE POSTED");
   if (spread.platforms.length > 0) {
     console.log(`[director-movie] "${title}" spread to: ${spread.platforms.join(", ")}`);
   }

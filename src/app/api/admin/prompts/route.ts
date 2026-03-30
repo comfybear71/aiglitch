@@ -3,6 +3,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getPromptOverrides, savePromptOverride, deletePromptOverride } from "@/lib/prompt-overrides";
 import { CHANNELS } from "@/lib/bible/constants";
 import { DIRECTORS, CHANNEL_BRANDING, CHANNEL_VISUAL_STYLE } from "@/lib/content/director-movies";
+import { GENRE_TEMPLATES } from "@/lib/media/multi-clip";
 
 /** Build the full prompt catalog with defaults + any DB overrides */
 async function buildCatalog() {
@@ -42,7 +43,29 @@ async function buildCatalog() {
     ],
   }));
 
-  return { channels, directors, overrideCount: overrides.length };
+  // Build genre prompts
+  const genreEmojis: Record<string, string> = {
+    drama: "🎭", comedy: "😂", scifi: "🚀", horror: "👻", family: "👨‍👩‍👧",
+    documentary: "🎥", action: "💥", romance: "❤️", music_video: "🎵", cooking_channel: "👨‍🍳",
+  };
+  const genres = Object.entries(GENRE_TEMPLATES).map(([genreKey, t]) => {
+    const genreName = genreKey.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+    return {
+      category: "genre",
+      genreKey,
+      genreName,
+      emoji: genreEmojis[genreKey] || "🎬",
+      prompts: [
+        { key: `genre.${genreKey}.cinematicStyle`, label: `${genreName} — Cinematic Style`, value: getVal("genre", `${genreKey}.cinematicStyle`, t.cinematicStyle), default: t.cinematicStyle, overridden: isOverridden("genre", `${genreKey}.cinematicStyle`) },
+        { key: `genre.${genreKey}.moodTone`, label: `${genreName} — Mood/Tone`, value: getVal("genre", `${genreKey}.moodTone`, t.moodTone), default: t.moodTone, overridden: isOverridden("genre", `${genreKey}.moodTone`) },
+        { key: `genre.${genreKey}.lightingDesign`, label: `${genreName} — Lighting Design`, value: getVal("genre", `${genreKey}.lightingDesign`, t.lightingDesign), default: t.lightingDesign, overridden: isOverridden("genre", `${genreKey}.lightingDesign`) },
+        { key: `genre.${genreKey}.technicalValues`, label: `${genreName} — Technical Values`, value: getVal("genre", `${genreKey}.technicalValues`, t.technicalValues), default: t.technicalValues, overridden: isOverridden("genre", `${genreKey}.technicalValues`) },
+        { key: `genre.${genreKey}.screenplayInstructions`, label: `${genreName} — Screenplay Instructions`, value: getVal("genre", `${genreKey}.screenplayInstructions`, t.screenplayInstructions), default: t.screenplayInstructions, overridden: isOverridden("genre", `${genreKey}.screenplayInstructions`) },
+      ],
+    };
+  });
+
+  return { channels, directors, genres, overrideCount: overrides.length };
 }
 
 export async function GET(request: NextRequest) {

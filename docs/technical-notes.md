@@ -75,6 +75,76 @@ Key locks to add:
 
 ---
 
+## Grok Video API — 4096 Character Prompt Limit (March 2026)
+
+The Grok `grok-imagine-video` API enforces a **4096 character limit** on video generation prompts. Prompts exceeding this limit are silently truncated or fail. This is particularly relevant for multi-scene channel videos where continuity descriptions, character bibles, and scene details can easily exceed the limit.
+
+### Compact Continuity Prompt Format
+
+For channel video clips (and director movie scenes), prompts use a compressed format to stay within the 4096 character budget:
+
+```
+[SCENE X/N] [Brief scene action description]
+
+CONTINUITY: [1-2 sentence visual lock — same character/setting/lighting as previous scenes]
+STYLE: [Channel-specific visual style in compact form]
+```
+
+Key space-saving techniques:
+- Strip verbose character bible paragraphs — use short descriptors instead ("tall woman, red dress, dark hair" not a full paragraph)
+- Omit redundant instructions (Grok already knows aspect ratio, resolution from API params)
+- Compress continuity to essential visual anchors only (clothing, hair, setting, lighting)
+- Remove meta-instructions ("you are a video AI", "generate a video") — Grok knows what it is
+- Channel-specific style notes kept to one line
+
+### Impact on Channel Videos
+
+Channel video prompts are built from:
+1. Scene description from screenplay (~500-1500 chars)
+2. Continuity reference from previous scenes (~200-500 chars)
+3. Channel style directive (~100-300 chars)
+4. Product placement injection (~200-500 chars if active)
+
+Total must stay under 4096. If product placements push the prompt over, they are the first thing trimmed.
+
+---
+
+## Channel Video Generator — Client-Side Polling (March 2026)
+
+The channel video generator on `/admin/channels` uses **client-side polling**, identical to the Directors page flow. It does NOT use the server-side cron pipeline (`/api/generate-channel-content`).
+
+### Client-side flow (channel videos + director movies)
+
+```
+Browser (admin page)
+  ├─ POST /api/admin/screenplay        → Claude generates screenplay
+  ├─ For each scene:
+  │   ├─ POST /api/admin/channels/generate-content  → Submit clip to Grok
+  │   └─ GET  /api/admin/channels/generate-content?id=X  → Poll until complete (every 5s)
+  ├─ POST /api/generate-director-movie  → Stitch all clips into single MP4
+  ├─ Create feed post as The Architect
+  └─ Spread to social platforms
+```
+
+The browser must remain open during generation. Each clip takes 60-90 seconds to render. Progress is shown in the shared admin progress bar at the top of the page.
+
+### Server-side cron flow (different pipeline)
+
+```
+Vercel Cron (every 30 min)
+  └─ /api/generate-channel-content
+     ├─ Picks a random channel
+     ├─ Generates screenplay server-side
+     ├─ Submits all clips
+     ├─ Polls internally
+     ├─ Stitches + posts + spreads
+     └─ No browser needed — fully autonomous
+```
+
+The cron pipeline uses different prompt construction, may include cast members for Studios, and follows channel DB settings for bookends. The admin Generate Video button bypasses all of this and runs its own client-driven pipeline with channel prompt overrides.
+
+---
+
 ## Prompt Viewer/Editor System (March 2026)
 
 All admin generation tools now have a **"👁 Prompt" button** that shows the exact AI prompt before generation. Users can view and edit prompts.

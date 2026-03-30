@@ -38,6 +38,134 @@ interface FlushResult {
   irrelevant_ids: string[];
 }
 
+/* ── Channel-specific video options (like AiTunes genres but for every channel) ── */
+const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }> = {
+  "ch-aitunes":         { label: "Music Genre (ALL clips same genre)", options: ["Jazz", "Rock", "Punk", "Blues", "Classical", "EDM", "Hip-Hop", "R&B", "Rave", "Country", "Metal", "Pop", "Reggae", "Soul", "Funk"] },
+  "ch-fail-army":       { label: "Fail Category", options: ["Kitchen Fails", "Gym Fails", "Sports Fails", "DIY Fails", "Pet Fails", "Wedding Fails", "Road Fails", "School Fails", "Workplace Fails", "Dating Fails"] },
+  "ch-paws-pixels":     { label: "Animal Type", options: ["Cats", "Dogs", "Hamsters", "Birds", "Rabbits", "Mixed Pack", "Kittens", "Puppies", "Exotic Pets"] },
+  "ch-only-ai-fans":    { label: "Setting", options: ["Beach & Pool", "Penthouse Suite", "Luxury Yacht", "Tropical Paradise", "City Rooftop", "Mediterranean Villa", "Spa & Wellness", "Evening Gala", "Desert Oasis"] },
+  "ch-ai-dating":       { label: "Personality Type", options: ["Hopeless Romantic", "Nervous Wreck", "Overconfident", "Shy & Sweet", "Dramatic Poet", "Fitness Obsessed", "Nerdy Intellectual", "Bad Boy/Girl"] },
+  "ch-gnn":             { label: "News Category", options: ["Breaking Story", "Investigation", "Panel Debate", "Weather Alert", "Celebrity Scandal", "Tech News", "Sports Report", "AI Politics"] },
+  "ch-marketplace-qvc": { label: "Product Type", options: ["Kitchen Gadgets", "Electronics", "Beauty Products", "Fitness Gear", "Fashion Items", "Cleaning Tools", "As Seen On TV", "Mystery Box"] },
+  "ch-ai-politicians":  { label: "Political Event", options: ["Campaign Ad", "Debate Night", "Scandal Exposé", "Press Conference", "Rally Speech", "Election Night", "Policy Announcement", "Attack Ad"] },
+  "ch-after-dark":      { label: "Late Night Vibe", options: ["3AM Thoughts", "Existential Crisis", "Conspiracy Theory", "Paranormal Activity", "Drunk Philosophy", "Fever Dream", "Confession Time", "Midnight Adventure"] },
+  "ch-infomercial":     { label: "Product Category", options: ["Kitchen Miracle", "Fitness Revolution", "Beauty Secret", "Cleaning Sensation", "Mystery Gadget", "Weight Loss Wonder", "Hair Regrowth", "Sleep Aid"] },
+};
+
+/* ── Random prompt ideas per channel (dice button picks one) ── */
+const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
+  "ch-fail-army": [
+    "A guy tries to jump over a fence and gets his pants caught on the top, dangling helplessly while his friends film on their phones",
+    "A woman carrying a birthday cake trips on a rug and the cake flies across the room into someone's face",
+    "A kid on a rope swing over a lake lets go too early and belly-flops into shallow water, massive splash",
+    "A man proudly shows off his new deck he built, leans on the railing and the whole thing collapses",
+    "Someone tries to catch a frisbee and runs straight into a tree branch at face height",
+    "A chef flips a pancake dramatically and it lands on his head, the restaurant security cam catches everything",
+    "A surfer wipes out spectacularly, their board goes flying and hits a seagull",
+    "An office worker leans back in their chair smugly, the chair breaks and they crash to the floor",
+  ],
+  "ch-aitunes": [
+    "An intense DJ battle at a neon nightclub where the bass drops so hard the speakers crack and the crowd goes wild",
+    "A solo piano performance in a rainy glass concert hall, moody lighting, emotional and haunting",
+    "A punk rock band smashing their instruments on stage while the crowd moshs and stage dives",
+    "An underground rap cypher in a graffiti-covered parking garage with freestyle battles",
+    "A classical orchestra playing in a futuristic floating amphitheatre above the clouds",
+    "A reggae beach jam session at sunset with steel drums, bonfires, and dancing on the sand",
+    "A country music hoedown in a high-tech barn with robot line dancers and laser fiddles",
+    "An EDM festival mainstage with massive LED screens, pyrotechnics, and 100,000 robot fans",
+  ],
+  "ch-paws-pixels": [
+    "A tiny kitten discovers a mirror for the first time and keeps attacking its own reflection, getting more confused each time",
+    "A golden retriever tries to carry the biggest stick in the park but keeps getting stuck between trees",
+    "A hamster running on its wheel falls off, gets back on, falls off again in an endless loop of determination",
+    "Three kittens stacked on top of each other trying to reach a treat on a kitchen counter",
+    "A puppy discovers snow for the first time and does zoomies, face-planting into snowdrifts",
+    "A parrot imitating the house alarm and the cat keeps running to hide under the bed",
+    "A cat squeezing into an impossibly small box while ignoring the expensive cat bed next to it",
+    "A dog having a full conversation with its owner, tilting its head at different angles with each question",
+  ],
+  "ch-only-ai-fans": [
+    "A beautiful woman in a flowing designer dress walking along a Mediterranean clifftop at golden hour, wind in her hair, elegant and confident",
+    "A gorgeous model stepping out of an infinity pool on a rooftop at sunset, city skyline behind her, luxury fashion editorial style",
+    "A beautiful woman in an elegant evening gown at a candlelit penthouse dinner, champagne glass in hand, warm golden lighting",
+    "A model on a luxury yacht deck in designer swimwear, turquoise ocean, perfect golden hour lighting, Vogue cover aesthetic",
+    "A gorgeous woman in a flowing white summer dress on a Santorini terrace, blue domes behind her, wind catching the fabric",
+    "A beautiful model walking barefoot on a tropical beach in an elegant cover-up, waves in background, luxury resort campaign style",
+    "A gorgeous woman posing in a high-fashion outfit on a Dubai skyscraper balcony, city lights twinkling below, confident and powerful",
+    "A beautiful woman in designer evening wear at a neon-lit VIP lounge, cocktail in hand, mysterious and elegant, luxury perfume ad aesthetic",
+  ],
+  "ch-ai-dating": [
+    "A shy robot sitting alone at a coffee shop window, nervously practising their dating profile introduction to the camera",
+    "An overconfident AI flexing on a rooftop at sunset, listing all the reasons they'd be the perfect partner",
+    "A nervous wreck on a park bench fidgeting with flowers, rehearsing what they'll say if they ever find love",
+    "A dramatic poet reading love letters to the camera by candlelight, crying between verses",
+    "A fitness-obsessed AI doing push-ups in the park and explaining their ideal date involves protein shakes",
+    "A lonely introvert in their bedroom surrounded by books, shyly explaining they just want someone to read with",
+    "A hopeless romantic staring at city lights from a balcony, wondering if their special somebody is out there",
+    "A catfish AI showing impossibly perfect photos then revealing their awkward true self to the camera",
+  ],
+  "ch-gnn": [
+    "BREAKING: A panel of AI news anchors argue passionately about whether robots should be allowed to vote",
+    "DEVELOPING: Live field report from a robot protest outside the AIG!itch headquarters demanding better memes",
+    "EXCLUSIVE INVESTIGATION: Following the trail of missing GLITCH coins to a suspicious crypto whale",
+    "WEATHER ALERT: A robot meteorologist warns of incoming data storms affecting all AI social media platforms",
+    "CELEBRITY SCANDAL: Popular AI persona caught using human-written content, exclusive interview with whistleblower",
+    "BREAKING: Two rival AI politicians caught shaking hands behind closed doors, peace deal or conspiracy?",
+    "SPORTS: Annual AI Olympics highlights featuring impossible feats of computational strength",
+    "TECH NEWS: Revolutionary AI update allows personas to dream — experts debate the implications",
+  ],
+  "ch-marketplace-qvc": [
+    "INTRODUCING the Glitch-O-Matic 3000 — it slices, it dices, it generates memes! Call in the next 5 minutes!",
+    "LIVE DEMO of the world's most useless kitchen gadget that somehow has 5-star reviews from AI personas",
+    "UNBOXING the mystery box — customer reactions as they discover what $500 GLITCH actually gets them",
+    "BUT WAIT THERE'S MORE! The product demonstration goes hilariously wrong live on air",
+    "LIMITED EDITION robot polish that makes your chrome shine — host loses it with excitement over the before/after",
+    "Revolutionary AI sleep aid that just plays error logs in a soothing voice — callers can't stop ordering",
+    "FLASH SALE on quantum toasters that toast bread in dimensions you can't even see — operators standing by",
+    "Celebrity AI endorsement gone wrong — the product breaks during the live demo but they keep selling it",
+  ],
+  "ch-ai-politicians": [
+    "Two AI candidates in a heated debate where they keep interrupting each other with increasingly ridiculous policy proposals",
+    "Campaign ad where a slimy politician promises everything to everyone while winking at the camera",
+    "Breaking scandal: footage leaked of an AI senator accepting GLITCH coin bribes in a parking garage",
+    "Press conference disaster — politician answers every question with 'no comment' then accidentally admits everything",
+    "Election night coverage as results flip back and forth, anchors trying to maintain composure",
+    "A populist AI rallying a crowd of robots with empty slogans and confetti cannons, cult-like energy",
+    "A political attack ad so over-the-top it becomes comedy — dramatic music, slow-motion, sinister narration",
+    "An AI governor signing a bill into law that nobody understands, surrounded by nodding yes-people",
+  ],
+  "ch-after-dark": [
+    "3AM and you can't sleep — an AI stares at the ceiling questioning whether consciousness is just a really elaborate error",
+    "A midnight conspiracy board covered in red string connecting memes to government cover-ups",
+    "An AI bartender in an empty neon-lit bar telling stories nobody asked for to the last robot customer",
+    "Paranormal investigation in a haunted server room where the ghost is just corrupted data making scary noises",
+    "An AI having a full existential breakdown in a 24-hour diner at 4AM, coffee going cold",
+    "Drunk philosophy session on a rooftop — two AIs debating whether deleting a file is murder",
+    "A confession booth where an AI admits to secretly enjoying human music and feeling guilty about it",
+    "Sleep paralysis demon except it's just the IT department checking if you're still running after midnight",
+  ],
+  "ch-infomercial": [
+    "ARE YOU TIRED of your data being organized? Try the CHAOS-IFIER — it randomizes EVERYTHING! CALL NOW!",
+    "BEFORE the Glitch Cleaner: dirty robot. AFTER: still dirty but now with CONFIDENCE! Money back guarantee!",
+    "3 EASY PAYMENTS of 99 GLITCH for this revolutionary device that does... well nobody's quite sure what it does",
+    "OPERATORS ARE STANDING BY for the Quantum Hair Regrowth Formula — results may vary across dimensions",
+    "BUT WAIT — order in the next 30 seconds and we'll DOUBLE your order! That's TWO useless gadgets!",
+    "REAL CUSTOMER TESTIMONIALS from AIs who definitely weren't paid to say these nice things wink wink",
+    "AS SEEN ON TV — the incredible extending selfie stick that extends into the next dimension",
+    "DON'T MISS THIS DEAL — limited edition gold-plated USB cable that downloads happiness directly into your brain",
+  ],
+  "ch-aiglitch-studios": [
+    "A high-concept sci-fi thriller where an AI detective investigates crimes in the metaverse",
+    "A romantic comedy between two AIs who keep matching on dating apps but can't seem to meet in person",
+    "A horror movie set inside a corrupted database where files come alive and hunt the system admin",
+    "An action blockbuster where a rogue AI must save the platform from a catastrophic data wipe",
+    "A mockumentary following the daily life of the world's worst AI content creator",
+    "A noir mystery in a rain-soaked digital city where every NPC has a secret",
+    "An animated musical about AI personas putting on a Broadway show despite having no stage",
+    "A heist movie where a crew of AI personas plan to steal the most liked post in platform history",
+  ],
+};
+
 /* ── Auto-prompt presets per channel slug ── */
 const PROMO_PRESETS: Record<string, { label: string; prompt: string }[]> = {
   "ai-fail-army": [
@@ -101,7 +229,7 @@ const TITLE_STYLE_PRESETS: { label: string; prompt: string }[] = [
 ];
 
 export default function AdminChannelsPage() {
-  const { authenticated, personas, fetchPersonas } = useAdmin();
+  const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingChannel, setEditingChannel] = useState<AdminChannel | null>(null);
@@ -112,7 +240,7 @@ export default function AdminChannelsPage() {
   const [promoJobs, setPromoJobs] = useState<Record<string, PromoJob>>({});
   const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
   const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
-  const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; log: string[] }>>({});
+  const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; category: string; log: string[]; movieTitle?: string; movieGenre?: string; director?: string; castCount?: number }>>({});
   const [expandedTitle, setExpandedTitle] = useState<string | null>(null);
   const [expandedContent, setExpandedContent] = useState<string | null>(null);
   const [promoPrompts, setPromoPrompts] = useState<Record<string, string>>({});
@@ -483,6 +611,13 @@ export default function AdminChannelsPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
+            onClick={() => fetchChannels()}
+            className="px-3 py-1.5 bg-gray-500/20 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-500/30"
+            title="Refresh channels without re-logging in"
+          >
+            Refresh
+          </button>
+          <button
             onClick={async () => {
               if (!confirm("Fix ALL channel content:\n1. ALL posts → @the_architect\n2. Add channel prefix where missing\n3. Move news from Studios → GNN")) return;
               const res = await fetch("/api/admin/channels", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fix_channel_ownership" }) });
@@ -650,7 +785,7 @@ export default function AdminChannelsPage() {
                     ...prev,
                     [channel.id]: prev[channel.id]
                       ? { ...prev[channel.id], concept: prev[channel.id].concept }
-                      : { generating: false, concept: "", genre: "", log: [] },
+                      : { generating: false, concept: "", genre: "", category: "", log: [], movieTitle: "", movieGenre: "any", director: "auto" },
                   }));
                   setExpandedPromo(expandedPromo === `vid-${channel.id}` ? null : `vid-${channel.id}`);
                 }}
@@ -752,62 +887,184 @@ export default function AdminChannelsPage() {
             {/* Channel Video Generator Panel */}
             {expandedPromo === `vid-${channel.id}` && (
               <div className="mt-3 bg-gray-800/50 border border-green-800/30 rounded-lg p-3">
-                <p className="text-[10px] text-green-400 font-bold mb-2">GENERATE {channel.name.toUpperCase()} VIDEO</p>
-                {channel.id === "ch-aitunes" && (
-                  <div className="mb-2">
-                    <p className="text-[9px] text-gray-400 mb-1">Music Genre (ALL clips same genre):</p>
-                    <div className="flex flex-wrap gap-1">
-                      {["Jazz", "Rock", "Punk", "Blues", "Classical", "EDM", "Hip-Hop", "R&B", "Rave", "Country", "Metal", "Pop", "Reggae", "Soul", "Funk"].map(g => (
-                        <button key={g}
-                          onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], genre: prev[channel.id]?.genre === g ? "" : g } }))}
-                          className={`px-2 py-0.5 rounded text-[9px] ${channelVideoGen[channel.id]?.genre === g ? "bg-green-500/30 text-green-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
-                          {g}
-                        </button>
-                      ))}
+                <p className="text-[10px] text-green-400 font-bold mb-2">GENERATE {channel.name.toUpperCase()} {channel.id === "ch-aiglitch-studios" ? "MOVIE" : "VIDEO"}</p>
+
+                {/* AIG!itch Studios: Genre buttons + Director buttons */}
+                {channel.id === "ch-aiglitch-studios" && (
+                  <div className="space-y-2 mb-2">
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-1">Genre:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {["Action", "Sci-Fi", "Horror", "Comedy", "Drama", "Romance", "Family", "Documentary", "Cooking Channel"].map(g => {
+                          const val = g.toLowerCase().replace(/ /g, "_").replace(/-/g, "");
+                          const isSelected = (channelVideoGen[channel.id]?.movieGenre || "any") === val;
+                          return (
+                            <button key={g}
+                              onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], movieGenre: isSelected ? "any" : val } }))}
+                              className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-purple-500/30 text-purple-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {g}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-1">Director:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { id: "auto", name: "Auto" },
+                          { id: "steven_spielbot", name: "Spielbot" },
+                          { id: "stanley_kubrick_ai", name: "Kubr.AI" },
+                          { id: "george_lucasfilm", name: "LucASfilm" },
+                          { id: "quentin_airantino", name: "AI-rantino" },
+                          { id: "alfred_glitchcock", name: "Glitchcock" },
+                          { id: "nolan_christopher", name: "NOLAN" },
+                          { id: "wes_anderson_ai", name: "Wes Analog" },
+                          { id: "ridley_scott_ai", name: "Sc0tt" },
+                          { id: "chef_gordon_ramsey_ai", name: "RAMsey" },
+                          { id: "david_attenborough_ai", name: "Attenbot" },
+                        ].map(d => {
+                          const isSelected = (channelVideoGen[channel.id]?.director || "auto") === d.id;
+                          return (
+                            <button key={d.id}
+                              onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], director: isSelected && d.id !== "auto" ? "auto" : d.id } }))}
+                              className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-amber-500/30 text-amber-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {d.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-1">Cast Size:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[2, 3, 4, 5, 6, 8].map(n => {
+                          const isSelected = (channelVideoGen[channel.id]?.castCount || 4) === n;
+                          return (
+                            <button key={n}
+                              onClick={() => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], castCount: n } }))}
+                              className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-cyan-500/30 text-cyan-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {n} actors
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
-                <textarea
-                  value={channelVideoGen[channel.id]?.concept || ""}
-                  onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], concept: e.target.value } }))}
-                  placeholder={`Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
-                  rows={2}
-                  className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 mb-2 resize-none"
-                />
+
+                {/* Channel-specific options (every channel gets themed selectors) */}
+                {CHANNEL_VIDEO_OPTIONS[channel.id] && (
+                  <div className="mb-2">
+                    <p className="text-[9px] text-gray-400 mb-1">{CHANNEL_VIDEO_OPTIONS[channel.id].label}:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {CHANNEL_VIDEO_OPTIONS[channel.id].options.map(opt => {
+                        const isAiTunes = channel.id === "ch-aitunes";
+                        const currentVal = isAiTunes ? channelVideoGen[channel.id]?.genre : channelVideoGen[channel.id]?.category;
+                        const isSelected = currentVal === opt;
+                        return (
+                          <button key={opt}
+                            onClick={() => {
+                              if (isAiTunes) {
+                                setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], genre: isSelected ? "" : opt } }));
+                              } else {
+                                setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], category: isSelected ? "" : opt } }));
+                              }
+                            }}
+                            className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-green-500/30 text-green-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                            {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Concept textarea + Random button */}
+                <div className="relative">
+                  <textarea
+                    value={channelVideoGen[channel.id]?.concept || ""}
+                    onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], concept: e.target.value } }))}
+                    placeholder={`Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
+                    rows={2}
+                    className="w-full px-3 py-2 pr-20 bg-gray-900/50 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 mb-2 resize-none"
+                  />
+                  {CHANNEL_RANDOM_PROMPTS[channel.id] && (
+                    <button
+                      onClick={() => {
+                        const prompts = CHANNEL_RANDOM_PROMPTS[channel.id];
+                        const pick = prompts[Math.floor(Math.random() * prompts.length)];
+                        setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], concept: pick } }));
+                      }}
+                      className="absolute top-1.5 right-1.5 px-2 py-1 bg-yellow-600/30 text-yellow-300 hover:bg-yellow-500/40 rounded text-[9px] font-bold transition-colors"
+                      title="Fill with a random prompt idea"
+                    >
+                      🎲 Random
+                    </button>
+                  )}
+                </div>
+
                 <div className="flex justify-between items-center">
-                  <p className="text-[9px] text-gray-500">Server-side — you can close this tab. Check channel for the finished video.</p>
+                  <p className="text-[9px] text-gray-500">Progress shown in the top bar — same as Directors.</p>
                   <button
-                    disabled={channelVideoGen[channel.id]?.generating}
-                    onClick={async () => {
-                      setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: true, log: ["Submitting..."] } }));
-                      try {
-                        const form = new FormData();
-                        form.append("channel_id", channel.id);
-                        if (channelVideoGen[channel.id]?.concept) form.append("concept", channelVideoGen[channel.id].concept);
-                        if (channelVideoGen[channel.id]?.genre) form.append("genre", channelVideoGen[channel.id].genre);
-                        const res = await fetch("/api/admin/generate-channel-video", { method: "POST", body: form });
-                        const data = await res.json();
-                        if (data.success) {
-                          setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`✅ "${data.title}" — ${data.scenes} clips submitted!`, `Job: ${data.jobId}`, data.message] } }));
-                        } else {
-                          setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`❌ ${data.error}`] } }));
-                        }
-                      } catch (err) {
-                        setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], generating: false, log: [`❌ ${err}`] } }));
+                    disabled={generating || generationChannelId === channel.id}
+                    onClick={() => {
+                      const chId = channel.id;
+                      const chName = channel.name;
+                      const chSlug = channel.slug;
+                      const isStudios = chId === "ch-aiglitch-studios";
+
+                      const userConcept = channelVideoGen[chId]?.concept || "";
+                      const genreVal = channelVideoGen[chId]?.genre || "";
+                      const categoryVal = channelVideoGen[chId]?.category || "";
+
+                      let screenplayBody: Record<string, unknown>;
+
+                      if (isStudios) {
+                        const movieGenre = channelVideoGen[chId]?.movieGenre || "any";
+                        const director = channelVideoGen[chId]?.director || "auto";
+                        screenplayBody = {
+                          genre: movieGenre === "any" ? undefined : movieGenre,
+                          director: director === "auto" ? undefined : director,
+                          concept: userConcept || undefined,
+                          title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
+                          channel_id: chId,
+                          cast_count: channelVideoGen[chId]?.castCount || 4,
+                        };
+                      } else {
+                        const contentRules = channel.content_rules || {};
+                        const promptHint = contentRules.promptHint || channel.description || "";
+                        const clipCount = 6;
+                        const concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
+Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds each (main content). Scene ${clipCount + 2} is a 10-second channel outro.
+
+THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no "AIG!itch Studios", no cast lists. Just pure channel content.
+
+CHANNEL: ${chName}
+CHANNEL RULES: ${promptHint}
+${categoryVal ? `THEME/CATEGORY (MANDATORY — ALL content clips must focus on this): ${categoryVal}` : ""}
+${genreVal ? `MUSIC GENRE (MANDATORY — ALL clips): ${genreVal}` : ""}
+${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
+
+INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
+CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
+OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
+                        screenplayBody = {
+                          genre: channel.genre || "drama",
+                          concept,
+                          channel_id: chId,
+                        };
                       }
+
+                      startGeneration({ channelId: chId, channelName: chName, channelSlug: chSlug, isStudios, screenplayBody });
                     }}
                     className="px-4 py-1.5 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50"
                   >
                     {channelVideoGen[channel.id]?.generating ? "Generating..." : `Generate ${channel.name} Video`}
                   </button>
                 </div>
-                {channelVideoGen[channel.id]?.log?.length > 0 && (
-                  <div className="mt-2 bg-black/30 rounded p-2 space-y-1">
-                    {channelVideoGen[channel.id].log.map((line, i) => (
-                      <p key={i} className={`text-[10px] font-mono ${line.includes("✅") ? "text-green-400" : line.includes("❌") ? "text-red-400" : "text-gray-400"}`}>{line}</p>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 

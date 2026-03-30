@@ -575,6 +575,8 @@ export interface VideoJobResult {
   provider: "grok" | "kie" | "none";
   /** true if grok returned 401/403 and we fell back */
   fellBack: boolean;
+  /** Error message if the submit was rejected */
+  error?: string;
 }
 
 /**
@@ -646,7 +648,7 @@ export async function submitVideoJob(
         return tryKieFallback(prompt, aspectRatio, true);
       }
 
-      return noResult;
+      return { ...noResult, error: `grok_http_${status}: ${errBody.slice(0, 200)}` };
     }
 
     const data = await res.json();
@@ -664,8 +666,9 @@ export async function submitVideoJob(
       return { requestId: null, videoUrl: data.video.url, provider: "grok", fellBack: false };
     }
 
-    console.error("[video-submit] Grok response missing request_id:", JSON.stringify(data).slice(0, 300));
-    return noResult;
+    const dataStr = JSON.stringify(data).slice(0, 300);
+    console.error("[video-submit] Grok response missing request_id:", dataStr);
+    return { ...noResult, error: `no_request_id: ${dataStr}` };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[video-submit] Grok network/fetch error: ${msg}`);

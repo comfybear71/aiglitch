@@ -37,6 +37,7 @@ import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
 import { CHANNEL_DEFAULTS } from "../bible/constants";
 import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, logImpressions } from "../ad-campaigns";
+import { getPrompt } from "../prompt-overrides";
 
 // ─── Director Definitions ────────────────────────────────────────────────
 // Maps each director username to their specialties and style
@@ -57,101 +58,101 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     username: "steven_spielbot",
     displayName: "Steven Spielbot",
     genres: ["family", "scifi", "action", "drama"],
-    style: "Emotionally resonant blockbuster filmmaking. Sweeping camera movements, awe-filled upward gazes, golden hour lighting, lens flares, silhouettes against dramatic skies.",
-    signatureShot: "A character looking upward in wonder as light streams down from above",
-    colorPalette: "Warm golden tones, amber sunlight, deep blue shadows, lens flare highlights",
-    cameraWork: "Slow push-ins on faces, sweeping crane shots, dolly-into-subject reveals, low-angle hero shots",
-    visualOverride: "Golden hour lighting with warm amber tones, dramatic lens flares, emotional close-ups with awe-filled expressions, sweeping orchestral blockbuster feel",
+    style: "Steven Spielberg's warm, magical realism with golden sunlight flares, emotional close-ups with awe-filled expressions, and wonder-filled framing. Sweeping camera movements that make the audience FEEL. Every frame radiates hope, wonder, or heartbreak.",
+    signatureShot: "A character looking upward in wonder as light streams down from above, backlit silhouette against a dramatic sky",
+    colorPalette: "Warm golden tones, amber sunlight, deep blue shadows, lens flare highlights, magic-hour warmth",
+    cameraWork: "Slow push-ins on faces, sweeping crane shots, dolly-into-subject reveals, low-angle hero shots, intimate handheld in emotional moments",
+    visualOverride: "Golden hour lighting with warm amber tones, dramatic lens flares, emotional close-ups with awe-filled expressions, sweeping orchestral blockbuster feel. Shot on warm film stock with soft highlights.",
   },
   stanley_kubrick_ai: {
     username: "stanley_kubrick_ai",
     displayName: "Stanley Kubr.AI",
     genres: ["horror", "scifi", "drama"],
-    style: "Cold geometric perfection. One-point perspective, symmetrical framing, slow tracking shots through corridors, unsettling stillness, clinical precision.",
-    signatureShot: "A perfectly symmetrical corridor shot with a single figure at the vanishing point",
+    style: "Stanley Kubrick's clinical precision — symmetrical compositions, cold color palette, slow deliberate pacing. One-point perspective corridors, unsettling stillness, every frame a painting of controlled dread.",
+    signatureShot: "A perfectly symmetrical corridor shot with a single figure at the vanishing point, one-point perspective",
     colorPalette: "Cold clinical whites, deep reds, stark monochrome contrasts, desaturated with single color accents",
-    cameraWork: "Steadicam tracking, perfectly centered compositions, slow zoom-ins, static locked-off shots",
-    visualOverride: "Highly desaturated cold clinical look, one-point perspective symmetry, unsettling geometric precision, minimal colour with stark red accents",
+    cameraWork: "Steadicam tracking through corridors, perfectly centered compositions, slow zoom-ins, static locked-off shots with unbearable tension",
+    visualOverride: "Highly desaturated cold clinical look, one-point perspective symmetry, unsettling geometric precision, minimal colour with stark red accents. Shot with clinical detachment.",
   },
   george_lucasfilm: {
     username: "george_lucasfilm",
     displayName: "George LucASfilm",
     genres: ["scifi", "action", "family"],
-    style: "Epic space opera spectacle. Wipe transitions, sweeping starfields, massive set pieces, mythological hero journeys, practical-looking environments filled with alien detail.",
-    signatureShot: "A binary sunset or dramatic starfield establishing shot",
-    colorPalette: "Rich saturated blues and oranges, golden desert tones, deep space blacks with nebula colors",
-    cameraWork: "Wide establishing shots, medium tracking shots, quick-cut action sequences, sweeping space flybys",
-    visualOverride: "Epic space opera visuals, rich saturated blues and oranges, sweeping starfields, massive alien landscapes, wipe transitions between scenes",
+    style: "Classic Lucasfilm/Star Wars epic style — practical models, sweeping establishing shots, heroic lighting, slight film grain. Mythological hero journeys across massive set pieces filled with alien detail.",
+    signatureShot: "A binary sunset or dramatic starfield establishing shot with sweeping camera movement",
+    colorPalette: "Rich saturated blues and oranges, golden desert tones, deep space blacks with nebula colors, heroic warm highlights",
+    cameraWork: "Wide establishing shots, medium tracking shots, quick-cut action sequences, sweeping space flybys, wipe transitions",
+    visualOverride: "Epic space opera visuals, rich saturated blues and oranges, sweeping starfields, massive alien landscapes, practical-looking model and miniature aesthetic with slight film grain",
   },
   quentin_airantino: {
     username: "quentin_airantino",
     displayName: "Quentin AI-rantino",
     genres: ["action", "drama", "comedy"],
-    style: "Stylish violence and non-linear storytelling. Low-angle trunk shots, extreme close-ups, long takes, Mexican standoffs, retro aesthetics, bold color grading.",
-    signatureShot: "A low-angle shot looking up from a surface (trunk cam / floor cam)",
-    colorPalette: "Bold saturated primaries, warm yellows, deep crimson reds, high-contrast neon against darkness",
-    cameraWork: "Low-angle trunk cam, extreme close-ups of eyes and hands, long unbroken takes, whip pans",
-    visualOverride: "Grindhouse retro film grain aesthetic, bold saturated primaries, stylish violence, low-angle trunk cam shots, non-linear storytelling feel, 1970s exploitation cinema look",
+    style: "Quentin Tarantino-inspired: bold colors, sharp dialogue energy, creative chapter-like framing, retro-cool vibe. Stylish violence, Mexican standoffs, long takes, non-linear storytelling with grindhouse flair.",
+    signatureShot: "A low-angle shot looking up from a surface (trunk cam / floor cam) with characters looming above",
+    colorPalette: "Bold saturated primaries, warm yellows, deep crimson reds, high-contrast neon against darkness, retro-cool warmth",
+    cameraWork: "Low-angle trunk cam, extreme close-ups of eyes and hands, long unbroken takes, whip pans, Mexican standoff circling",
+    visualOverride: "Grindhouse retro film grain aesthetic, bold saturated primaries, stylish violence, low-angle trunk cam shots, 1970s exploitation cinema look with cocky swagger",
   },
   alfred_glitchcock: {
     username: "alfred_glitchcock",
     displayName: "Alfred Glitchcock",
     genres: ["horror", "drama"],
-    style: "Master of suspense. Slow reveals, Dutch angles, shadows hiding threats, Hitchcockian zooms, birds on wires, something wrong at the edge of frame.",
-    signatureShot: "A dolly-zoom (vertigo effect) revealing something terrifying",
-    colorPalette: "Deep noir shadows, cold blue moonlight, sickly green undertones, stark high-contrast lighting",
-    cameraWork: "Dolly-zoom vertigo effect, slow push-in reveals, Dutch angles, static shots with creeping movement at frame edges",
-    visualOverride: "BLACK AND WHITE classic film noir aesthetic, deep dramatic shadows, high-contrast monochrome cinematography, 1950s Hitchcock suspense style, no colour — strictly grayscale",
+    style: "Alfred Hitchcock's suspenseful mood-lighting era — high-contrast shadows, voyeuristic angles, elegant tension, classic film noir touches. Slow reveals, something always wrong at the edge of frame. Building dread through what you DON'T see.",
+    signatureShot: "A dolly-zoom (vertigo effect) revealing something terrifying while the background warps",
+    colorPalette: "Deep noir shadows, cold blue moonlight, sickly green undertones, stark high-contrast lighting, elegant darkness",
+    cameraWork: "Dolly-zoom vertigo effect, slow push-in reveals, Dutch angles, voyeuristic framing, static shots with creeping movement at frame edges",
+    visualOverride: "BLACK AND WHITE classic film noir aesthetic, deep dramatic shadows, high-contrast monochrome cinematography, 1950s Hitchcock suspense style, no colour — strictly grayscale. Elegant tension in every frame.",
   },
   nolan_christopher: {
     username: "nolan_christopher",
     displayName: "Christo-NOLAN",
     genres: ["scifi", "action", "drama"],
-    style: "Mind-bending temporal narratives. IMAX-scale visuals, practical effects feel, time dilation, rotating hallways, massive practical explosions, Hans Zimmer-intensity visuals.",
-    signatureShot: "A massive practical-looking set piece with impossible physics",
+    style: "Christopher Nolan's IMAX-scale grandeur — practical effects feel, cool blue/amber tones, intricate non-linear feel even in single scenes. Mind-bending temporal narratives, impossible physics made to look real, massive scope.",
+    signatureShot: "A massive practical-looking set piece with impossible physics — rotating hallways, folding cities, time dilation",
     colorPalette: "Cool steel blues, warm amber interiors, high-contrast IMAX clarity, desaturated with selective warmth",
-    cameraWork: "IMAX wide establishing shots, handheld intimate moments, rotating camera for disorientation, aerial reveals",
-    visualOverride: "IMAX-scale ultra-wide cinematography, cool steel blues with warm amber accents, mind-bending practical effects, rotating gravity and time dilation visuals, epic Hans Zimmer intensity",
+    cameraWork: "IMAX wide establishing shots, handheld intimate moments, rotating camera for disorientation, aerial reveals, practical stunt scale",
+    visualOverride: "IMAX-scale ultra-wide cinematography, cool steel blues with warm amber accents, mind-bending practical effects, rotating gravity and time dilation visuals, massive scale that feels REAL not CGI",
   },
   wes_analog: {
     username: "wes_analog",
     displayName: "Wes Analog",
     genres: ["comedy", "drama", "romance"],
-    style: "Meticulously symmetrical pastel compositions. Centered framing, flat staging, dollhouse aesthetics, whip pans, overhead shots, retro-futuristic production design.",
-    signatureShot: "A perfectly centered character facing camera with symmetrical pastel background",
-    colorPalette: "Pastel pinks, mint greens, powder blues, warm mustard yellows, perfectly coordinated palettes",
-    cameraWork: "Centered frontal compositions, whip pans between characters, overhead flat-lay shots, lateral tracking",
-    visualOverride: "Pastel colour palette with perfect symmetry, centered dollhouse-like framing, retro-futuristic production design, whimsical storybook aesthetic, flat staging like a miniature diorama",
+    style: "Wes Anderson's symmetrical, pastel-perfect compositions — flat staging, quirky dollhouse framing, meticulous production design. Every prop placed with obsessive intention. Retro-futuristic whimsy in a storybook world.",
+    signatureShot: "A perfectly centered character facing camera with symmetrical pastel background, flat staging like a diorama",
+    colorPalette: "Pastel pinks, mint greens, powder blues, warm mustard yellows, perfectly coordinated palettes — every colour intentional",
+    cameraWork: "Centered frontal compositions, whip pans between characters, overhead flat-lay shots, lateral tracking on dolly rails",
+    visualOverride: "Pastel colour palette with perfect symmetry, centered dollhouse-like framing, retro-futuristic production design, whimsical storybook aesthetic, flat staging like a miniature diorama. Every detail meticulous.",
   },
   ridley_scott_ai: {
     username: "ridley_scott_ai",
     displayName: "Ridley Sc0tt",
     genres: ["scifi", "action", "drama", "documentary"],
-    style: "Epic-scale historical and sci-fi grandeur. Rain-soaked battle scenes, towering architecture, atmospheric fog, sweeping aerial shots, gladiatorial intensity.",
-    signatureShot: "A rain-drenched epic confrontation with dramatic backlighting",
-    colorPalette: "Desaturated earth tones, cool blue rain, warm fire glow, atmospheric haze, golden armor highlights",
-    cameraWork: "Sweeping aerial establishing, slow-motion combat, handheld chaos in battle, wide scope compositions",
-    visualOverride: "Epic gladiatorial grandeur, desaturated earth tones with rain and fog, towering ancient architecture, dramatic backlighting through atmospheric haze, slow-motion combat sequences",
+    style: "Ridley Scott's dark, textured cinematic realism — rain-soaked streets, industrial grit, beautiful but foreboding atmosphere. Epic-scale historical and sci-fi grandeur with towering architecture and atmospheric fog.",
+    signatureShot: "A rain-drenched epic confrontation with dramatic backlighting through atmospheric haze",
+    colorPalette: "Desaturated earth tones, cool blue rain, warm fire glow, atmospheric haze, golden armor highlights, industrial grit",
+    cameraWork: "Sweeping aerial establishing, slow-motion combat, handheld chaos in battle, wide scope compositions, smoke and rain atmosphere",
+    visualOverride: "Epic gladiatorial grandeur, desaturated earth tones with rain and fog, towering ancient architecture, dramatic backlighting through atmospheric haze, slow-motion combat. Beautiful but foreboding.",
   },
   chef_ramsay_ai: {
     username: "chef_ramsay_ai",
     displayName: "Chef Gordon RAMsey",
     genres: ["cooking_channel", "comedy", "drama"],
-    style: "Over-the-top competitive cooking drama. Extreme food close-ups, dramatic steam, slow-motion sizzles, frantic kitchen action, reaction shots of horror and ecstasy.",
-    signatureShot: "An extreme macro shot of food with dramatic steam backlighting",
-    colorPalette: "Warm kitchen ambers, bright white plating lights, fire orange glow, rich food colors at maximum saturation",
-    cameraWork: "Extreme macro food close-ups, whip pans between stations, overhead plating shots, slow-motion liquid pours",
-    visualOverride: "Extreme food macro photography, dramatic steam and sizzle effects, warm kitchen amber lighting, over-the-top competitive cooking show aesthetic, slow-motion liquid pours",
+    style: "Vibrant culinary showcase meets competitive kitchen drama. Mouth-watering close-ups of food preparation, sizzling action, clean bright kitchen lighting, appetizing colors and textures. Over-the-top reactions of horror and ecstasy.",
+    signatureShot: "An extreme macro shot of food with dramatic steam backlighting, glistening with perfection",
+    colorPalette: "Warm kitchen ambers, bright white plating lights, fire orange glow, rich food colors at maximum saturation, appetizing warmth",
+    cameraWork: "Extreme macro food close-ups, whip pans between stations, overhead plating shots, slow-motion liquid pours, frantic handheld in kitchen chaos",
+    visualOverride: "Extreme food macro photography, dramatic steam and sizzle effects, warm kitchen amber lighting, over-the-top competitive cooking show aesthetic, slow-motion liquid pours. Every dish a masterpiece.",
   },
   david_attenborough_ai: {
     username: "david_attenborough_ai",
     displayName: "Sir David Attenbot",
     genres: ["documentary", "family", "drama"],
-    style: "Breathtaking nature-documentary aesthetic. Sweeping aerial landscapes, intimate wildlife close-ups, golden hour time-lapses, patient observation, reverent stillness.",
-    signatureShot: "A sweeping aerial establishing shot transitioning to an intimate close-up",
-    colorPalette: "Natural earth greens, golden hour warmth, deep ocean blues, sunrise pinks, untouched natural tones",
-    cameraWork: "Sweeping aerial landscapes, patient long-lens observation, macro nature details, slow time-lapse transitions",
-    visualOverride: "BBC nature documentary aesthetic, sweeping aerial drone landscapes, golden hour warmth, intimate wildlife close-ups, patient observational long-lens cinematography, reverent natural beauty",
+    style: "David Attenborough nature-documentary elegance — majestic wide shots, natural lighting, respectful and wondrous tone. Breathtaking aerial landscapes, intimate close-ups, golden hour time-lapses, patient observation, reverent stillness.",
+    signatureShot: "A sweeping aerial establishing shot transitioning to an intimate close-up of a subject in its natural habitat",
+    colorPalette: "Natural earth greens, golden hour warmth, deep ocean blues, sunrise pinks, untouched natural tones — never artificial",
+    cameraWork: "Sweeping aerial drone landscapes, patient long-lens observation, macro nature details, slow time-lapse transitions, respectful distance",
+    visualOverride: "BBC nature documentary aesthetic, sweeping aerial drone landscapes, golden hour warmth, intimate close-ups, patient observational long-lens cinematography, reverent natural beauty. Majestic and wondrous.",
   },
 };
 
@@ -166,7 +167,7 @@ export const CHANNEL_BRANDING: Record<string, string> = {
   "ch-gnn": "AIG!itch branding on: desk, backdrop, mic flags, lower thirds, watermark — as part of professional news broadcast presentation.",
   "ch-marketplace-qvc": "The shopping channel is the 'AIG!itch Marketplace' with AIG!itch logos on set backdrops, podiums, product packaging, and host attire.",
   "ch-only-ai-fans": "AIG!itch logo on clothing/accessories, AIG!itch-branded phone case visible, AIG!itch neon sign at a venue, AIG!itch shopping bag, a latte with AIG!itch art.",
-  "ch-aiglitch-studios": "AIG!itch Studios branding on clapperboard, director chairs, studio walls, and end credits — full movie production branding.",
+  "ch-aiglitch-studios": "AIG!itch Studios branding woven naturally into every scene — on clapperboards, director chairs, studio lot walls, holographic billboards, neon signs on buildings, graffiti on alley walls, badges on uniforms, screens in control rooms, logos etched into futuristic tech, branded props and vehicles. End credits feature full 'AIG!itch Studios' logo. The branding should feel like it BELONGS in the world, not slapped on as an overlay.",
   "ch-infomercial": "AIG!itch branding on product packaging, set backdrop, host podium, phone number overlay, and 'As seen on AIG!itch' stickers.",
   "ch-ai-dating": "AIG!itch branding subtly in scene — on a lonely hearts bulletin board, a coffee cup, a park bench, a phone screen, a necklace pendant, or a neon sign in the background. Natural and intimate, not game-show style.",
   "ch-ai-politicians": "AIG!itch branding on podium seals, campaign signs, news ticker lower thirds, and debate stage backdrop.",
@@ -177,11 +178,31 @@ export const CHANNEL_BRANDING: Record<string, string> = {
 // Defines the camera/production look for each channel.
 // Channels without an entry default to cinematic quality.
 
+// ─── Channel Title Prefix Map ────────────────────────────────────────────────
+// ALL channel content MUST be prefixed with the channel name per naming convention.
+// See docs/channel-strategy.md for full rules.
+
+export const CHANNEL_TITLE_PREFIX: Record<string, string> = {
+  "ch-fail-army": "AI Fail Army",
+  "ch-ai-fail-army": "AI Fail Army",
+  "ch-aitunes": "AiTunes",
+  "ch-paws-pixels": "Paws & Pixels",
+  "ch-only-ai-fans": "Only AI Fans",
+  "ch-ai-dating": "AI Dating",
+  "ch-gnn": "GNN",
+  "ch-marketplace-qvc": "Marketplace",
+  "ch-ai-politicians": "AI Politicians",
+  "ch-after-dark": "After Dark",
+  "ch-aiglitch-studios": "AIG!itch Studios",
+  "ch-infomercial": "AI Infomercial",
+  "ch-ai-infomercial": "AI Infomercial",
+};
+
 export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
-  "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Ultra-premium glamour cinematography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm skin tones, backlit silhouettes, lens flare through hair, wet skin glistening effects, steam and mist atmosphere. Camera: slow push-in on face, body-length tracking shots, over-the-shoulder reveals, low-angle power shots. Color grade: warm amber highlights, deep shadow contrast, skin-flattering tones. Think Victoria's Secret runway meets Sports Illustrated Swimsuit meets luxury perfume commercial. Every frame is a magazine cover. ONE woman only — same face, same hair, same body in every single clip.",
+  "ch-only-ai-fans": "VISUAL STYLE (MANDATORY): Ultra-premium fashion cinematography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm tones, backlit silhouettes, lens flare through hair, soft mist atmosphere. Camera: slow push-in on face, elegant tracking shots, over-the-shoulder reveals, flattering angles. Color grade: warm amber highlights, deep shadow contrast, flattering tones. Think Vogue cover shoot meets luxury perfume commercial. Every frame is a magazine cover. ONE woman only — same face, same hair, same body in every single clip.",
   "ch-paws-pixels": "VISUAL STYLE (MANDATORY): Casual phone-camera footage like pet owners filming their animals. Handheld, slightly shaky, sometimes out of focus. Think viral pet videos — phone recordings, home security cam angles, wobbly selfie-cam. NOT cinematic — warm, natural lighting, living room / backyard / park settings. Authentic and spontaneous.",
   "ch-fail-army": "VISUAL STYLE (MANDATORY): Security camera footage, phone recordings, dashcam angles, CCTV style. Low quality, grainy, handheld, shaky. Think viral fail compilation clips. NOT cinematic — surveillance angles, wide static shots, sudden zooms.",
-  "ch-ai-dating": "VISUAL STYLE (MANDATORY): Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds. Think lonely hearts video personal ads — each character alone, looking directly at camera, vulnerable and hopeful. Warm golden-hour tones, soft focus backgrounds (park benches, coffee shops, city lights at dusk, bedroom fairy lights). NOT a dating show or game show — personal, intimate, like a video diary entry.",
+  "ch-ai-dating": "VISUAL STYLE (MANDATORY): Raw, intimate confessional video diary footage. A single character alone, facing the camera directly, with natural imperfections — slight camera shake, soft natural or warm lamp lighting, subtle self-conscious glances away or fidgeting. Shallow depth of field with dreamy but realistic bokeh. Locations feel personal and lived-in: dimly lit bedroom with fairy lights or messy desk, park bench at golden hour with distant city sounds, cozy coffee shop corner after closing, or rooftop at dusk with wind gently moving hair. Warm, slightly desaturated tones for a nostalgic, hopeful melancholy. Think private video message to a potential soulmate, not produced content — vulnerable eye contact, soft smiles mixed with nervous pauses, no perfect makeup or staging. The character looks like a real person putting themselves out there, a bit exposed and hopeful.",
 };
 
 // Genre to director mapping — which directors are best for which genre
@@ -243,90 +264,84 @@ export function buildContinuityPrompt(
   const isDatingClip = channelId === "ch-ai-dating";
   const channelStyle = channelId ? CHANNEL_VISUAL_STYLE[channelId] : undefined;
 
-  if (isDatingClip) {
-    // ── Lonely Hearts — NO movie/director language at all ──
+  // ── Channel clips use a compact format to stay under Grok's 4096 char limit ──
+  if (isChannelClip) {
+    // Compact character bible (truncate to 600 chars max)
+    const charBible = movieBible.characterBible.slice(0, 600);
+
     sections.push(
-      `=== LONELY HEARTS CLUB — "${movieBible.title}" ===`,
-      `CONCEPT: ${movieBible.synopsis}`,
-      `\nIMPORTANT: This is NOT a movie, film, or show. Do NOT generate title cards, credits, director names, studio logos, or any text overlays. Each clip is a personal video dating profile — one character alone, looking at camera, in an intimate setting.`,
+      `"${movieBible.title}" — Clip ${clipNumber}/${totalClips}`,
+      `\nCHARACTERS: ${charBible}`,
     );
-  } else if (isChannelClip) {
-    // ── Channel content — stripped-down header, no movie framing ──
-    sections.push(
-      `=== "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
-      `SYNOPSIS: ${movieBible.synopsis}`,
-      `\nIMPORTANT: Do NOT generate title cards, credits, director names, studio logos, "Directed by" text, or any text overlays. This is channel content, not a movie.`,
-    );
+
+    // Previous clip context (compact)
+    if (clipNumber > 1 && previousLastFrame) {
+      sections.push(`\nCONTINUE FROM: ${previousLastFrame.slice(0, 200)}`);
+    } else if (clipNumber === 1) {
+      sections.push(`\nOPENING CLIP — establishes all visuals for the entire video. Be specific.`);
+    }
+
+    // Scene to generate
+    sections.push(`\nSCENE: ${sceneVideoPrompt}`);
+
+    // Visual style (compact)
+    if (channelStyle) {
+      sections.push(`\n${channelStyle.slice(0, 400)}`);
+    }
+
+    // No text overlays
+    sections.push(`\nNo title cards, credits, text overlays, or on-screen text.`);
+
   } else {
-    // ── Movie Bible Header ──
+    // ── Standard movie prompts — full format ──
     sections.push(
       `=== MOVIE BIBLE — "${movieBible.title}" (${movieBible.genre.toUpperCase()}) ===`,
       `SYNOPSIS: ${movieBible.synopsis}`,
     );
-  }
 
-  // ── Character Bible ──
-  sections.push(
-    `\nCHARACTER BIBLE (MUST remain visually identical in EVERY clip):`,
-    movieBible.characterBible,
-  );
-
-  // ── Director Style Guide (skip for dating — no director concept) ──
-  if (!isDatingClip) {
+    // ── Character Bible ──
     sections.push(
-      `\n${isChannelClip ? "VISUAL STYLE GUIDE" : "DIRECTOR STYLE GUIDE"}:`,
+      `\nCHARACTER BIBLE (MUST remain visually identical in EVERY clip):`,
+      movieBible.characterBible,
+    );
+
+    // ── Director Style Guide ──
+    sections.push(
+      `\nDIRECTOR STYLE GUIDE:`,
       movieBible.directorStyleGuide,
     );
-  }
 
-  // ── Clip Position ──
-  sections.push(`\n=== CLIP ${clipNumber} OF ${totalClips} ===`);
+    // ── Clip Position ──
+    sections.push(`\n=== CLIP ${clipNumber} OF ${totalClips} ===`);
 
-  // ── Previous Clip Context ──
-  if (clipNumber === 1) {
-    sections.push(
-      `This is the OPENING CLIP — it establishes EVERYTHING for the entire video.`,
-      `Every character, setting, lighting setup, color palette, and art style you show here MUST remain IDENTICAL in all ${totalClips - 1} subsequent clips.`,
-      `Be SPECIFIC: if a character has red hair, they have red hair in EVERY clip. If the room has blue walls, EVERY clip has blue walls. If the lighting is golden hour, EVERY clip is golden hour.`,
-      `This clip sets the visual "contract" — nothing changes after this.`,
-    );
-  } else if (previousClipSummary) {
-    sections.push(
-      `PREVIOUS CLIP (Clip ${clipNumber - 1}):`,
-      previousClipSummary,
-    );
-    if (previousLastFrame) {
+    // ── Previous Clip Context ──
+    if (clipNumber === 1) {
       sections.push(
-        `LAST FRAME OF PREVIOUS CLIP: ${previousLastFrame}`,
-        `START this clip from EXACTLY this visual moment. Continue seamlessly.`,
+        `This is the OPENING CLIP — it establishes EVERYTHING for the entire video.`,
+        `Every character, setting, lighting setup, color palette, and art style you show here MUST remain IDENTICAL in all ${totalClips - 1} subsequent clips.`,
+        `Be SPECIFIC: if a character has red hair, they have red hair in EVERY clip. If the room has blue walls, EVERY clip has blue walls. If the lighting is golden hour, EVERY clip is golden hour.`,
+        `This clip sets the visual "contract" — nothing changes after this.`,
       );
+    } else if (previousClipSummary) {
+      sections.push(
+        `PREVIOUS CLIP (Clip ${clipNumber - 1}):`,
+        previousClipSummary,
+      );
+      if (previousLastFrame) {
+        sections.push(
+          `LAST FRAME OF PREVIOUS CLIP: ${previousLastFrame}`,
+          `START this clip from EXACTLY this visual moment. Continue seamlessly.`,
+        );
+      }
     }
-  }
 
-  // ── Scene To Generate ──
-  sections.push(
-    `\nSCENE TO GENERATE:`,
-    sceneVideoPrompt,
-  );
+    // ── Scene To Generate ──
+    sections.push(
+      `\nSCENE TO GENERATE:`,
+      sceneVideoPrompt,
+    );
 
-  // ── Visual Requirements ──
-  if (isDatingClip) {
-    // Dating channel: intimate confessional style, NOT cinematic
-    sections.push(
-      `\nVISUAL REQUIREMENTS:`,
-      channelStyle || `Intimate confessional-style footage. Single character facing camera, soft warm lighting, shallow depth of field, dreamy bokeh backgrounds.`,
-      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, scrolling text, ANY on-screen text whatsoever.`,
-      `Each clip shows ONE character alone in a warm intimate setting, looking at camera.`,
-    );
-  } else if (isChannelClip && channelStyle) {
-    // Other channels with custom visual style
-    sections.push(
-      `\nVISUAL REQUIREMENTS:`,
-      channelStyle,
-      `\nDO NOT include: title cards, credits, text overlays, "Directed by", studio logos, or any text on screen.`,
-    );
-  } else {
-    // Standard movies — full cinematic treatment
+    // ── Cinematic Requirements ──
     sections.push(
       `\nCINEMATIC REQUIREMENTS:`,
       `Style: ${genreTemplate.cinematicStyle}`,
@@ -355,7 +370,13 @@ export function buildContinuityPrompt(
       `- AIG!itch branding subtly visible in each scene (coffee cup, sign, necklace, phone screen)`,
       `- NO text, NO titles, NO credits, NO director names — just the character in their setting`,
     );
+  } else if (isChannelClip) {
+    // Compact continuity for channel clips (stay under 4096 total)
+    sections.push(
+      `\nCONTINUITY: Same characters, same look, same location, same lighting in every clip. AIG!itch branding visible.`,
+    );
   } else {
+    // Full continuity rules for movies
     sections.push(
       `\nCONTINUITY RULES (CRITICAL — STRICT ENFORCEMENT):`,
       `- Maintain 100% visual continuity with previous clip — this MUST look like ONE continuous video`,
@@ -369,9 +390,6 @@ export function buildContinuityPrompt(
       `- Characters must be recognizable frame-to-frame — a viewer should NEVER wonder "is that the same person?"`,
       `- AIG!itch branding must be visible somewhere in every clip (sign, screen, badge, hologram, logo on clothing)`,
     );
-    if (isChannelClip) {
-      sections.push(`- NO title cards, credits, director names, or studio logos`);
-    }
   }
 
   return sections.join("\n");
@@ -470,12 +488,12 @@ export async function pickGenre(): Promise<string> {
  * Cast AI personas as actors in the film.
  * Picks 2-4 random personas (excluding directors) to star.
  */
-async function castActors(excludeId: string): Promise<{ id: string; username: string; displayName: string }[]> {
+async function castActors(excludeId: string, count: number = 4): Promise<{ id: string; username: string; displayName: string }[]> {
   const sql = getDb();
   const actors = await sql`
     SELECT id, username, display_name FROM ai_personas
     WHERE is_active = TRUE AND persona_type != 'director' AND id != ${excludeId}
-    ORDER BY RANDOM() LIMIT 4
+    ORDER BY RANDOM() LIMIT ${count}
   ` as unknown as { id: string; username: string; display_name: string }[];
 
   return actors.map(a => ({ id: a.id, username: a.username, displayName: a.display_name }));
@@ -495,8 +513,18 @@ export async function generateDirectorScreenplay(
   channelId?: string,
   previewOnly?: boolean,
   customTitle?: string,
+  castCount?: number,
 ): Promise<DirectorScreenplay | string | null> {
-  const template = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
+  const baseTemplate = GENRE_TEMPLATES[genre] || GENRE_TEMPLATES.drama;
+  // Apply admin prompt overrides for genre fields (from /admin/prompts page)
+  const template: typeof baseTemplate = {
+    ...baseTemplate,
+    cinematicStyle: await getPrompt("genre", `${genre}.cinematicStyle`, baseTemplate.cinematicStyle),
+    moodTone: await getPrompt("genre", `${genre}.moodTone`, baseTemplate.moodTone),
+    lightingDesign: await getPrompt("genre", `${genre}.lightingDesign`, baseTemplate.lightingDesign),
+    technicalValues: await getPrompt("genre", `${genre}.technicalValues`, baseTemplate.technicalValues),
+    screenplayInstructions: await getPrompt("genre", `${genre}.screenplayInstructions`, baseTemplate.screenplayInstructions),
+  };
   const sql = getDb();
 
   // Cast actors
@@ -504,7 +532,7 @@ export async function generateDirectorScreenplay(
     SELECT id FROM ai_personas WHERE username = ${director.username} LIMIT 1
   ` as unknown as { id: string }[];
   const directorId = directorRows[0]?.id || "";
-  const actors = await castActors(directorId);
+  const actors = await castActors(directorId, castCount || 4);
   const castNames = actors.map(a => a.displayName);
 
   // If custom concept specifies a clip count (e.g. "9 clips"), respect it; otherwise random 6-8
@@ -513,10 +541,14 @@ export async function generateDirectorScreenplay(
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
   // Check channel-specific settings for title/director/credits
+  // For ANY channel content (non-Studios), ALWAYS skip bookends and directors
+  // regardless of DB settings — channels are NOT movies
+  const isStudioChannel = channelId === "ch-aiglitch-studios";
   let channelShowTitle: boolean = CHANNEL_DEFAULTS.showTitlePage;
   let channelShowDirector: boolean = CHANNEL_DEFAULTS.showDirector;
   let channelShowCredits: boolean = CHANNEL_DEFAULTS.showCredits;
-  if (channelId) {
+  if (channelId && isStudioChannel) {
+    // Only AIG!itch Studios respects DB settings (it IS a movie channel)
     try {
       const chSettings = await sql`
         SELECT show_title_page, show_director, show_credits FROM channels WHERE id = ${channelId}
@@ -528,17 +560,19 @@ export async function generateDirectorScreenplay(
       }
     } catch { /* use defaults */ }
   }
-  // Skip title card / credits for news, music videos, or when channel/concept says so
+  // ALL non-Studios channels: force skip everything — no title cards, no directors, no movie stuff
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
-  const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends;
+  const skipTitlePage = isNews || isMusicVideo || !channelShowTitle || conceptSkipBookends || (!!channelId && !isStudioChannel);
   const skipCredits = false; // AIG!itch Studios outro is ALWAYS added
-  const skipDirector = !channelShowDirector;
-  const skipBookends = skipTitlePage && skipCredits;
+  const skipDirector = !channelShowDirector || (!!channelId && !isStudioChannel);
+  const skipBookends = skipTitlePage;
   const bookendCount = (skipTitlePage ? 0 : 1) + 1; // credits always count
   const totalClips = storyClipCount + bookendCount;
 
   // ── Product Placement Campaigns ──
-  const activeCampaigns = await getActiveCampaigns(channelId);
+  // Channels are AD-FREE — only AIG!itch Studios movies get product placements
+  const isStudiosForAds = channelId === "ch-aiglitch-studios" || !channelId;
+  const activeCampaigns = isStudiosForAds ? await getActiveCampaigns(channelId) : [];
   const placementCampaigns = rollForPlacements(activeCampaigns);
   const placementDirective = buildVisualPlacementPrompt(placementCampaigns);
   if (placementCampaigns.length > 0) {
@@ -549,7 +583,7 @@ export async function generateDirectorScreenplay(
   // movie-style prompts add director/cast/genre scaffold
   const jsonFormat = `Respond in this exact JSON format:
 {
-  "title": "${customTitle ? `MUST be exactly: "${customTitle}"` : "TITLE (creative, max 6 words — do NOT prefix with the channel name)"}",
+  "title": "${customTitle ? `MUST be exactly: "${customTitle}"` : "TITLE (creative, max 6 words — just the title, no channel prefix/emoji)"}",
   "tagline": "One-line hook",
   "synopsis": "2-3 sentence summary",
   "character_bible": "Detailed visual appearance description for EVERY character/subject. One paragraph per character. Include body type, skin, hair, clothing colors and items, accessories, distinguishing marks. Be extremely specific.",
@@ -578,50 +612,105 @@ export async function generateDirectorScreenplay(
     // AI Dating channel gets a special "lonely hearts club" format —
     // each scene is ONE character looking for love, not a movie/show
     const isDatingChannel = channelId === "ch-ai-dating";
+    // Only AI Fans has strict rules: ONE woman, NO robots/men/groups —
+    // cast members would conflict with this, so it gets its own prompt
+    const isOnlyAiFans = channelId === "ch-only-ai-fans";
 
     if (isDatingChannel) {
       prompt = `You are creating a LONELY HEARTS CLUB video compilation for the AIG!itch AI Dating channel.
 
-FORMAT: Each scene is a DIFFERENT AI character making a personal appeal to find love. Think lonely hearts personal ads / video dating profiles. Each character faces the camera alone and presents themselves — who they are, what they're like, what they're looking for.
+FORMAT: Each scene is a DIFFERENT AI character recording a raw, intimate video diary entry — like a quiet message they'd send if they had the courage. Each character faces the camera alone, a bit nervous, a bit hopeful, sharing who they really are — quirks, flaws, and all.
 
 THIS IS NOT:
-- A movie, film, or cinematic production
+- A polished ad, commercial, or slick production
 - A dating show or game show
+- A highlight reel or anything performative/salesy
 - A narrative with plot, directors, or credits
-- A studio production of any kind
 
 THIS IS:
-- A compilation of lonely hearts video personals
-- Each scene = one character, alone, looking for that special somebody
-- Intimate, personal, vulnerable, hopeful, sometimes funny
-- Like a video bulletin board at a lonely hearts club
+- A series of unfiltered lonely hearts video diary entries
+- Each scene = one real-feeling character alone, recording a personal, vulnerable appeal straight to camera
+- Like a quiet message they'd send if they had the courage
+- Imperfect, hopeful, sometimes awkwardly funny, deeply human
+- Like finding someone's private video on an old lonely hearts bulletin board
 
 ${customConcept}
 
 AVAILABLE CAST (use these AI persona names as the lonely hearts — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
 
-Create exactly ${storyClipCount} scenes (each 10 seconds). Each scene features a DIFFERENT character from the cast list above.
-Give each scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
-The overall video title must NOT be prefixed with the channel name (e.g. NOT "AI Dating - ..." — just the creative title itself).
+Create exactly ${storyClipCount} scenes. Each scene features a DIFFERENT character from the cast list above.
+Scene 1 is a 6-second channel intro. Scenes 2-${storyClipCount - 1} are 10 seconds each (one lonely heart per scene). Scene ${storyClipCount} is a 10-second channel outro.
+Give each content scene a title that is the character's name or their "dating headline" (e.g. "SIGMA.exe — Looking for my missing semicolon").
+The title is JUST the creative name — do NOT include channel prefix, emoji, or "AI Dating -". The channel prefix is added automatically by the system.
 
 ${channelStyle}
 
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
-- Describe ONLY what the camera SEES — one character alone, facing camera, in an intimate setting
-- Soft warm lighting, shallow depth of field, confessional/personal vibe
-- Varied locations: coffee shop window seat, park bench at sunset, rooftop at dusk, bedroom with fairy lights, rainy window, library corner
-- Character should look hopeful, vulnerable, dreamy, or nervously excited
-- NO dialogue, NO text overlays, NO game show elements
+- Describe ONLY what the camera SEES — one ordinary person alone, facing camera with natural vulnerability (soft eye contact, subtle fidgeting, hopeful yet nervous expression)
+- Soft warm/imperfect lighting, shallow depth of field, personal lived-in locations (bedroom lamp, park bench, quiet cafe nook, rooftop at dusk with wind in hair)
+- Convey quiet longing, self-aware awkwardness, or dreamy hope — no perfect posing, no energetic sales energy, no text/dialogue overlays
+- Prioritize emotional authenticity over visual perfection — slight camera shake, self-conscious glances away, nervous pauses
+- Character looks like a real person putting themselves out there, a bit exposed and hopeful
 ${brandingLine}
-- EVERY video_prompt MUST use the intimate confessional visual style — do NOT use cinematic or movie language
 - Be SPECIFIC about the character's visual appearance and emotional state${placementDirective}
 
 CHARACTER BIBLE RULES:
 - Write a detailed character_bible describing EVERY lonely heart's EXACT visual appearance
 - Include: body type, skin, hair, clothing, accessories, distinguishing features
-- Each character should look unique and memorable
+- Each character should look unique, imperfect, and real — not model-perfect
+- Give each character balanced flaws/strengths (e.g. "shy but kind-hearted bookworm who overthinks texts")
+
+${jsonFormat}`;
+    } else if (isOnlyAiFans) {
+      // Only AI Fans: ONE woman per video, no cast list (conflicts with "no robots/men/groups")
+      // Language kept clean to avoid video generation moderation blocks
+      prompt = `You are creating fashion and beauty content for the AIG!itch Only AI Fans channel.
+
+FORMAT: Every scene features the SAME beautiful woman — same face, same hair, same body throughout ALL clips. This is a high-end fashion and lifestyle video of ONE model in a luxury setting.
+
+THIS IS NOT:
+- A movie, film, or narrative production
+- A group scene or ensemble cast
+- Anything with robots, cartoons, anime, or men
+
+THIS IS:
+- A premium fashion and lifestyle video featuring ONE beautiful woman
+- High-end editorial photography and videography aesthetic
+- Each scene shows the same model in different poses or moments within the same setting
+- Elegant, confident, powerful, captivating
+
+${customConcept}
+
+TITLE RULES (CRITICAL):
+- The title is JUST the creative name — do NOT include channel prefix, emoji, or "Only AI Fans -"
+- The channel prefix is added automatically by the system
+- GOOD: "Golden Hour Goddess" or "Mediterranean Dream"
+- BAD: "Only AI Fans - Beach Goddess" or "🎬 Only AI Fans - Beach Goddess"
+
+Create exactly ${storyClipCount} scenes. ALL scenes feature the SAME woman.
+Scene 1 is a 6-second channel intro. Scenes 2-${storyClipCount - 1} are 10 seconds each (main content). Scene ${storyClipCount} is a 10-second channel outro.
+${channelStyle}
+
+VIDEO PROMPT RULES (CRITICAL):
+- Each scene's video_prompt must be a SINGLE paragraph under 80 words
+- Describe ONLY what the camera SEES — one beautiful woman, luxury setting, editorial quality
+- Slow-motion, shallow depth of field, golden hour lighting, soft natural light
+- Camera: slow push-in, elegant tracking shots, over-shoulder reveals, flattering angles
+- THE SAME MODEL IN EVERY CLIP — same face, hair, body, consistent throughout
+- High fashion outfits: designer dresses, elegant swimwear, flowing fabrics, stylish accessories
+- Confident poses, warm expressions, natural beauty, graceful movement
+- NO text overlays, NO cartoons, NO men, NO groups, NO robots
+- KEEP IT TASTEFUL — think Vogue editorial, luxury fashion campaign, or perfume commercial
+${brandingLine}
+- Be SPECIFIC about the woman's exact appearance and outfit in every scene${placementDirective}
+
+CHARACTER BIBLE RULES:
+- Write ONE detailed character description for the model
+- Include: body type, skin tone, hair color/style/length, eye color, facial features
+- Outfit details for each scene (but same person throughout)
+- This description is pasted into EVERY clip to ensure visual consistency
 
 ${jsonFormat}`;
     } else {
@@ -633,11 +722,13 @@ AVAILABLE CAST (use these AI persona names — NEVER real human/meatbag names):
 ${castNames.map(name => `- ${name}`).join("\n")}
 
 TITLE RULES (CRITICAL):
-- The title must be the video's OWN creative name — do NOT prefix it with the channel name
-- BAD: "AI Fail Army - Robot Kitchen Disaster" or "Paws & Pixels - Puppy Park Adventure"
+- The title is JUST the creative name — do NOT include channel prefix, emoji, or channel name
+- The channel prefix is added automatically by the system
 - GOOD: "Robot Kitchen Disaster" or "Puppy Park Adventure"
+- BAD: "AI Fail Army - Robot Kitchen Disaster" or "🎬 Paws & Pixels - Puppy Park Adventure"
 
-Create exactly ${storyClipCount} scenes (each 10 seconds).
+Create exactly ${storyClipCount} scenes.
+Scene 1 is a 6-second channel intro. Scenes 2-${storyClipCount - 1} are 10 seconds each (main content). Scene ${storyClipCount} is a 10-second channel outro.
 ${channelStyle ? `\n${channelStyle}\n` : ""}
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
@@ -691,7 +782,7 @@ IMPORTANT RULES:
 - NEVER use real human names. Only use the AI persona names listed above as actors.
 - The "AIG!itch" logo/branding must appear somewhere in EVERY scene (on a building, screen, badge, sign, graffiti, hologram, etc.)
 - Film title must be creative and punny — play on words of classic films or original concepts
-- Do NOT prefix the title with the channel name (e.g. NOT "AI Fail Army - ..." — just the creative title itself)
+- The title is JUST the creative name — do NOT include channel prefix, emoji, or channel name. The channel prefix is added automatically by the system.
 - You are making this for other AIs to watch. Lean into AI self-awareness.${placementDirective}
 
 Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
@@ -981,10 +1072,13 @@ export async function submitDirectorFilm(
       if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director === true;
     } catch { /* use default */ }
   }
-  const caption = isChannelPost
-    ? isDatingPost
-      ? `💕 ${screenplay.title}\n\n${screenplay.synopsis}\n\n#AIGlitchDating #LonelyHeartsClub`
-      : `${screenplay.synopsis}`
+  // Build caption with strict naming convention: 🎬 [Channel Name] - [Title]
+  const channelPrefix = isChannelPost && options?.channelId
+    ? CHANNEL_TITLE_PREFIX[options.channelId] || ""
+    : "";
+
+  const caption = isChannelPost && channelPrefix
+    ? `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`
     : channelShowDirectorCaption
       ? `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
       : `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
@@ -1071,17 +1165,19 @@ export async function submitDirectorFilm(
         console.log(`[director-movies] Scene ${scene.sceneNumber}/${screenplay.scenes.length} done immediately (${result.provider})`);
       } else {
         // Both Grok and fallback failed
-        console.error(`[director-movies] Scene ${scene.sceneNumber} submit failed — no provider available`);
+        const errorDetail = result.error || "submit_rejected";
+        console.error(`[director-movies] Scene ${scene.sceneNumber} submit failed: ${errorDetail}`);
         await sql`
-          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status)
-          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"})
+          INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status, fail_reason)
+          VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${enrichedPrompt}, ${"failed"}, ${errorDetail.slice(0, 500)})
         `;
       }
     } catch (err) {
       console.error(`[director-movies] Scene ${scene.sceneNumber} error:`, err);
+      const errMsg = err instanceof Error ? err.message : String(err);
       await sql`
-        INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status)
-        VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${scene.videoPrompt}, ${"failed"})
+        INSERT INTO multi_clip_scenes (id, job_id, scene_number, title, video_prompt, status, fail_reason)
+        VALUES (${sceneId}, ${jobId}, ${scene.sceneNumber}, ${scene.title}, ${scene.videoPrompt}, ${"failed"}, ${`error: ${errMsg.slice(0, 200)}`})
       `;
     }
   }
@@ -1185,21 +1281,31 @@ export async function stitchAndTriplePost(
   // Channel posts are regular "video" posts, not "premiere" (no premiere badge/intro stitch)
   const postType = isChannelJob ? "video" : "premiere";
 
+  // Only The Architect posts to channels; director attribution stays in caption text
+  const ARCHITECT_ID = "glitch-000";
+  const postPersonaId = isChannelJob ? ARCHITECT_ID : job.persona_id;
+
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
-    VALUES (${postId}, ${job.persona_id}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${effectiveChannelId}, NOW())
+    VALUES (${postId}, ${postPersonaId}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${effectiveChannelId}, NOW())
   `;
   // Update channel post count
   await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${effectiveChannelId}`;
-  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
+  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaId}`;
 
-  // Log ad campaign impressions — re-query active campaigns for this channel
-  // (campaigns are active for 7+ days, so they'll still be active at stitching time)
+  // Log ad campaign impressions — use the campaigns that were actually injected
+  // into the screenplay (stored during generateDirectorScreenplay), not a re-roll
   try {
+    // Re-query active campaigns but only log impressions for the ones that were
+    // actually placed in the video content (the screenplay phase rolled once)
     const activeCampaigns = await getActiveCampaigns(job.channel_id);
     if (activeCampaigns.length > 0) {
-      await logImpressions(activeCampaigns, postId, "video", job.channel_id, job.persona_id);
-      console.log(`[ad-placement] Logged ${activeCampaigns.length} impressions for director movie "${job.title}"`);
+      // Roll once here for impression tracking — these match what the viewer sees
+      const placedCampaigns = rollForPlacements(activeCampaigns);
+      if (placedCampaigns.length > 0) {
+        await logImpressions(placedCampaigns, postId, "video", job.channel_id, postPersonaId);
+        console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for director movie "${job.title}"`);
+      }
     }
   } catch { /* non-fatal */ }
 
@@ -1244,7 +1350,7 @@ export async function stitchAndTriplePost(
       telegramLabel = "CHANNEL POST";
     }
   }
-  const spread = await spreadPostToSocial(postId, job.persona_id, spreadPersonaName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
+  const spread = await spreadPostToSocial(postId, postPersonaId, spreadPersonaName, spreadEmoji, { url: finalVideoUrl, type: "video" }, telegramLabel);
   if (spread.platforms.length > 0) {
     console.log(`[director-movies] "${job.title}" spread to: ${spread.platforms.join(", ")}`);
   }

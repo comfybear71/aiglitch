@@ -26,16 +26,25 @@ interface DirectorGroup {
   prompts: PromptItem[];
 }
 
+interface GenreGroup {
+  category: string;
+  genreKey: string;
+  genreName: string;
+  emoji: string;
+  prompts: PromptItem[];
+}
+
 export default function PromptsPage() {
   const { authenticated } = useAdmin();
   const [channels, setChannels] = useState<ChannelGroup[]>([]);
   const [directors, setDirectors] = useState<DirectorGroup[]>([]);
+  const [genres, setGenres] = useState<GenreGroup[]>([]);
   const [overrideCount, setOverrideCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [editingPrompt, setEditingPrompt] = useState<{ category: string; key: string; value: string; label: string } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"channels" | "directors">("channels");
+  const [tab, setTab] = useState<"channels" | "directors" | "genres">("channels");
 
   useEffect(() => {
     if (authenticated) fetchPrompts();
@@ -49,6 +58,7 @@ export default function PromptsPage() {
         const data = await res.json();
         setChannels(data.channels || []);
         setDirectors(data.directors || []);
+        setGenres(data.genres || []);
         setOverrideCount(data.overrideCount || 0);
       }
     } catch (err) { console.error("Fetch prompts error:", err); }
@@ -120,6 +130,10 @@ export default function PromptsPage() {
         <button onClick={() => setTab("directors")}
           className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${tab === "directors" ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "bg-gray-800 text-gray-400 hover:text-white"}`}>
           Directors ({directors.length})
+        </button>
+        <button onClick={() => setTab("genres")}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${tab === "genres" ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-gray-800 text-gray-400 hover:text-white"}`}>
+          Genres ({genres.length})
         </button>
       </div>
 
@@ -205,6 +219,52 @@ export default function PromptsPage() {
                             </div>
                             <div className="flex gap-1">
                               <button onClick={() => setEditingPrompt({ category: p.key.split(".")[0], key: p.key, value: p.value, label: p.label })}
+                                className="px-2 py-0.5 text-[10px] text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 rounded">Edit</button>
+                              {p.overridden && (
+                                <button onClick={() => resetPrompt(p.key)}
+                                  className="px-2 py-0.5 text-[10px] text-orange-400 hover:text-orange-300 bg-orange-500/10 rounded">Reset</button>
+                              )}
+                            </div>
+                          </div>
+                          <pre className="text-[11px] text-gray-400 whitespace-pre-wrap max-h-24 overflow-y-auto bg-gray-900/50 p-2 rounded">{p.value || "(empty)"}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Genres Tab */}
+          {tab === "genres" && (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 px-1">Genre templates control cinematic style, mood, lighting, and screenplay instructions for AIG!itch Studios movies.</p>
+              {genres.map(g => (
+                <div key={g.genreKey} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                  <button onClick={() => setExpandedGroup(expandedGroup === g.genreKey ? null : g.genreKey)}
+                    className="w-full flex items-center justify-between p-3 hover:bg-gray-800/50 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs transition-transform ${expandedGroup === g.genreKey ? "rotate-90" : ""}`}>&#9654;</span>
+                      <span className="text-lg">{g.emoji}</span>
+                      <span className="font-bold text-sm text-white">{g.genreName}</span>
+                      {g.prompts.some(p => p.overridden) && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full">customized</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-500">{g.prompts.length} fields</span>
+                  </button>
+
+                  {expandedGroup === g.genreKey && (
+                    <div className="px-4 pb-4 space-y-3">
+                      {g.prompts.map(p => (
+                        <div key={p.key} className={`bg-gray-800/50 rounded-lg p-3 ${p.overridden ? "border border-green-500/30" : "border border-gray-700/30"}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-gray-300">{p.label.split(" — ")[1] || p.label}</span>
+                              {p.overridden && <span className="text-[9px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full">custom</span>}
+                            </div>
+                            <div className="flex gap-1">
+                              <button onClick={() => setEditingPrompt({ category: "genre", key: p.key, value: p.value, label: p.label })}
                                 className="px-2 py-0.5 text-[10px] text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 rounded">Edit</button>
                               {p.overridden && (
                                 <button onClick={() => resetPrompt(p.key)}

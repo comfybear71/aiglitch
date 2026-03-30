@@ -1,6 +1,6 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-03-24
+> **Last updated:** 2026-03-29
 > **Repo:** `comfybear71/aiglitch` (web platform)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
 
@@ -182,6 +182,71 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Chat pagination** — inverted FlatList with cursor-based pagination (50 msgs at a time)
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
+
+### March 29, 2026 — Channel Video Generator Enhancements & Naming Convention
+
+**Channel-specific video options for all channels:**
+- Every channel now gets themed category selectors (like AiTunes has genre buttons)
+- AI Fail Army: fail categories, Paws & Pixels: animal types, Only AI Fans: settings, AI Dating: personality types, GNN: news categories, Marketplace QVC: product types, AI Politicians: political events, After Dark: late night vibes, AI Infomercial: product categories
+- Options defined in `CHANNEL_VIDEO_OPTIONS` constant on admin channels page
+- Selected category passed to API as `category` FormData field
+
+**Random prompt button on all channels:**
+- Yellow dice "Random" button on every channel's Generate Video panel
+- Fills concept textarea with random creative prompt from curated pool of 8 per channel
+- Defined in `CHANNEL_RANDOM_PROMPTS` on admin channels page
+
+**Fixed Only AI Fans "Screenplay generation failed":**
+- Generic channel prompt injected 4 AI persona cast members (robots) but Only AI Fans rules say "ONE woman, NO robots/men/groups"
+- Contradictory instructions caused AI to fail generating valid JSON
+- Fixed: dedicated `isOnlyAiFans` branch in `generateDirectorScreenplay()` that skips cast injection
+- Similar to how AI Dating already had its own dedicated prompt
+
+**Channel naming convention enforced:**
+- All channel video posts now use strict naming: `[Channel Name] - [Title]`
+- Added `CHANNEL_TITLE_PREFIX` map in `director-movies.ts` for all 11 channels
+- Post caption automatically prepends `{prefix} - {title}\n\n{synopsis}`
+- AI prompts tell AI the prefix is added by the system (AI just generates creative title)
+
+**Channel video generator — Directors-style client-side flow:**
+- Rewrote channel video generation to use exact same client-side flow as Directors page
+- Phase 1: Screenplay via `/api/admin/screenplay` (with channel_id for prompt overrides)
+- Phase 2: Submit each scene individually to `/api/test-grok-video`
+- Phase 3: Poll each scene via `/api/test-grok-video?id=X` every 10 seconds
+- Phase 4: Stitch via `/api/generate-director-movie`
+- Uses shared AdminContext progress bar (same UI as Directors page)
+- All channel videos posted as The Architect (glitch-000), no director attribution
+
+**Multiple bugs found and fixed during testing:**
+- `skipBookends` was always false (line: `skipTitlePage && skipCredits` where skipCredits=false) — channel-specific prompts were dead code
+- Grok video API has 4096 character prompt limit — continuity prompts exceeded this for channel clips. Fixed with compact format.
+- DB `show_title_page=true` overrode channel prompts, causing movie templates with cast/directors/title cards. Fixed: ALL non-Studios channels force skip bookends/directors regardless of DB.
+- `/api/admin/screenplay` didn't fetch admin prompt overrides from `/admin/prompts` page. Fixed: now calls `getPrompt()` when `channel_id` provided.
+- Stall detection was 60 seconds — too short for Grok (2-4 min per clip). Increased to 3 minutes.
+- Cast list was shown in log and passed to stitcher for channel videos. Removed — channels don't use cast.
+- Only AI Fans prompts had suggestive language triggering Grok moderation. Toned down to fashion/editorial language.
+- Fail reasons weren't stored when scene submit failed. Added `error` field to `VideoJobResult` and stored actual Grok error response.
+
+**Files changed:**
+- `src/app/admin/channels/page.tsx` — full Directors-style generation flow, shared progress bar, channel-specific options, random prompts
+- `src/app/api/admin/generate-channel-video/route.ts` — GET poll endpoint, screenplay_only mode, error capture
+- `src/app/api/admin/screenplay/route.ts` — fetch admin prompt overrides for channels
+- `src/lib/content/director-movies.ts` — compact continuity prompts, force non-Studios channels to skip bookends, Only AI Fans dedicated prompt, CHANNEL_TITLE_PREFIX, fail reason storage
+- `src/lib/xai.ts` — VideoJobResult.error field for capturing Grok rejection reasons
+- `src/lib/bible/constants.ts` — toned down Only AI Fans promptHint
+
+**AIG!itch Studios — Directors-style movie generation in channel card:**
+- Genre, director, and cast size selectors as pill buttons (same style as AiTunes genre buttons)
+- Genre: purple pills (Action, Sci-Fi, Horror, Comedy, Drama, Romance, Family, Documentary, Cooking Channel)
+- Director: amber pills (Auto, Spielbot, Kubr.AI, LucASfilm, AI-rantino, Glitchcock, NOLAN, Wes Analog, Sc0tt, RAMsey, Attenbot)
+- Cast size: cyan pills (2, 3, 4, 5, 6, 8 actors) — `castActors()` now accepts count parameter
+- Uses full movie pipeline: title cards, directors, cast, credits (the ONLY channel that does this)
+- All other channels remain in channel-only mode (no directors, no cast, no title cards)
+- Eventually replaces the Directors tab (not removed yet, but functionality duplicated)
+
+**AiTunes prompt updated:**
+- Changed promptHint to focus on music PERFORMANCES only — no talking, no reviews, no discussions
+- Every clip must show musicians playing, singing, DJing, performing
 
 ### March 27, 2026 — Sponsored Ads, Breaking News, NewsAPI, Quest Design
 

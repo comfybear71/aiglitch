@@ -581,5 +581,122 @@ Currently waiting ~24h for TikTok to clear old pending uploads before retesting.
 
 ---
 
+## #7 — Only AI Fans "Screenplay generation failed"
+
+**Date:** March 29, 2026
+**Status:** Resolved
+**Affected:** Generate Video button on Only AI Fans channel in admin panel
+**Impact:** Every attempt to generate an Only AI Fans video failed with "Screenplay generation failed"
+
+### Root Cause
+
+The generic channel content prompt in `generateDirectorScreenplay()` injected 4 AI persona cast members (which are robots) via `castActors()`. But the Only AI Fans `promptHint` explicitly says:
+
+> "ABSOLUTELY NO: cartoons, anime, animals, memes, robots, text overlays, men, groups. ONE stunning woman per video."
+
+The contradictory instructions (4 robot cast members vs ONE woman, NO robots) caused the AI to fail generating valid JSON, returning `null`.
+
+### Fix
+
+Added a dedicated `isOnlyAiFans` branch in `generateDirectorScreenplay()` (similar to the existing `isDatingChannel` branch) that:
+1. Skips `castActors()` — no cast list injected
+2. Explicitly asks for ONE woman throughout all clips
+3. Character bible requires only one model description
+4. No robot/men/group references in the prompt
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/lib/content/director-movies.ts` | Added `isOnlyAiFans` prompt branch, skips cast injection |
+
+### Lessons Learned
+
+1. **Channel-specific content rules can conflict with the generic screenplay pipeline** — channels with strict subject requirements (ONE person, NO groups, NO robots) cannot use the standard cast injection
+2. **When adding channels with single-subject rules**, follow the Only AI Fans pattern: dedicated prompt branch that skips `castActors()`
+3. **Test Generate Video on every channel** — not just AiTunes — to catch prompt conflicts
+
+---
+
+## #8 — Channel Video Prompts Exceeding Grok 4096 Character Limit
+
+**Date:** March 29, 2026
+**Status:** Resolved
+**Affected:** All channel video generation via Generate Video button
+**Impact:** Every clip rejected by Grok with "Prompt length is larger than the maximum allowed length which is 4096"
+
+### Root Cause
+
+The `buildContinuityPrompt()` function built rich prompts for each clip including: full movie bible header, full character bible, director style guide, clip position info, previous clip context, scene video prompt, visual requirements, and continuity rules. For channel clips, this totalled 5000-7000 characters, exceeding Grok's 4096 character limit.
+
+### Fix
+
+Channel clips now use a compact continuity prompt format:
+- Character bible truncated to 600 chars max
+- Previous clip context truncated to 200 chars
+- Visual style truncated to 400 chars
+- Single-line continuity rule instead of 11-line block
+- No synopsis, no director style guide, no genre template
+- Movie prompts (AIG!itch Studios) keep the full format
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/lib/content/director-movies.ts` | Compact continuity prompt for channel clips |
+| `src/lib/xai.ts` | Added `error` field to `VideoJobResult` to capture actual Grok rejection |
+
+### Lessons Learned
+
+1. **Grok video API has a hard 4096 character prompt limit** — always check prompt length for video generation
+2. **Capture actual API error responses** — the original "submit_rejected" fail reason was useless. Storing the actual HTTP error body immediately revealed the 4096 limit.
+3. **Channel clips need compact prompts** — movie prompts can be longer because they work with longer timeouts, but channel clips go through the same API
+
+---
+
+## #9 — Channel Videos Using Movie Template (Cast, Directors, Title Cards)
+
+**Date:** March 29, 2026
+**Status:** Resolved
+**Affected:** All non-Studios channel video generation
+**Impact:** Channel videos had movie-style title cards ("AIG!itch Studios presents"), director credits ("Directed by Wes Analog"), cast lists, and were posted by directors instead of The Architect
+
+### Root Cause (Chain of 3 bugs)
+
+**Bug 9.1: `skipBookends` always false**
+`skipBookends = skipTitlePage && skipCredits` — but `skipCredits` was hardcoded to `false`, making `skipBookends` ALWAYS false. The channel-specific prompt branches (Only AI Fans, AI Dating, generic channel) were dead code.
+
+**Bug 9.2: DB `show_title_page` overriding channel behavior**
+Even after fixing skipBookends, the DB value of `show_title_page` for channels could be `true` (set via channel editor), which made `skipTitlePage = false`, which made `skipBookends = false`, which fell through to the movie template.
+
+**Bug 9.3: `/api/admin/screenplay` not fetching prompt overrides**
+The screenplay endpoint used hardcoded constants instead of admin prompt overrides from `/admin/prompts`. Channel-specific content rules were ignored.
+
+### Fix
+
+1. `skipBookends` changed to `skipTitlePage` (removed the always-false `&& skipCredits`)
+2. ALL non-Studios channels now force `skipTitlePage = true` and `skipDirector = true` regardless of DB settings. Only `ch-aiglitch-studios` respects DB values.
+3. `/api/admin/screenplay` now fetches prompt overrides via `getPrompt()` when `channel_id` is provided, prepending channel rules (promptHint, visual style, branding) to the concept.
+4. Channel video stitcher passes `the_architect`/`glitch-000` instead of screenplay director.
+5. Cast list removed from channel video log and stitcher.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/lib/content/director-movies.ts` | Force skip bookends/directors for non-Studios channels |
+| `src/app/api/admin/screenplay/route.ts` | Fetch admin prompt overrides for channels |
+| `src/app/admin/channels/page.tsx` | Hardcode The Architect, remove cast, full channel concept |
+
+### Lessons Learned
+
+1. **Boolean logic matters** — `A && false` is always false. The `skipCredits` variable being hardcoded to false made `skipBookends` dead code.
+2. **DB settings can silently override code behavior** — the channel editor's `show_title_page` toggle broke the entire channel prompt system without any visible error.
+3. **Non-Studios channels should NEVER use movie templates** — hardcode this, don't rely on DB settings.
+4. **Admin prompt overrides must be fetched server-side** — they're stored in a separate table, not in the channel record.
+5. **Test the CONTENT of generated videos, not just whether they render** — the videos rendered fine but contained completely wrong content (movies instead of channel content).
+
+---
+
 <!-- APPEND NEW INCIDENTS BELOW THIS LINE -->
 <!-- Use format: ## #N — Short Title -->
