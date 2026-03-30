@@ -1,6 +1,6 @@
 # AIG!itch Video Prompt Pipeline — How Prompts Are Assembled
 
-> **Last updated:** 2026-03-29
+> **Last updated:** 2026-03-31
 > **Purpose:** Documents exactly how AI prompts are built for director movies and channel videos, from raw inputs to the final text sent to Grok/Claude.
 
 ---
@@ -20,7 +20,7 @@ The key difference between **AIG!itch Studios** (movies) and **Channel videos** 
 
 ---
 
-## Data Sources (5 Inputs)
+## Data Sources (6 Inputs)
 
 | Source | Where it lives | Used for |
 |--------|---------------|----------|
@@ -30,6 +30,7 @@ The key difference between **AIG!itch Studios** (movies) and **Channel videos** 
 | **Admin prompt overrides** | `/admin/prompts` page → DB → `getPrompt()` | Per-channel customisation |
 | **Ad campaigns** | `ad_campaigns` table → `rollForPlacements()` | Sponsor product placements |
 | **Custom input** | Admin UI: concept text box, category dropdown | User-specified creative direction |
+| **Slogans** | `SLOGANS` in `constants.ts` → injected into concept | Brand identity: "Glitch Happens", channel slogans, outro sign-offs |
 
 ---
 
@@ -340,6 +341,66 @@ Admin UI clicks "Generate Video" (AIG!itch Studios card)
 
 ---
 
+## Full Code Path (GNN News Broadcast)
+
+```
+Admin clicks "Generate GLITCH News Network Video" on Channels page
+  │
+  ├─ GNN card builds 9-clip news concept:
+  │    ├─ Selected topics from daily_topics (up to 3)
+  │    ├─ Selected news categories (Global, Finance, Sport, etc.)
+  │    ├─ Custom topic text (optional)
+  │    ├─ 9-clip structure defined in concept:
+  │    │    Clip 1 (6s)  — GNN Intro
+  │    │    Clip 2 (10s) — News Desk Story 1
+  │    │    Clip 3 (10s) — Field Report Story 1
+  │    │    Clip 4 (10s) — News Desk Story 2
+  │    │    Clip 5 (10s) — Field Report Story 2
+  │    │    Clip 6 (10s) — News Desk Story 3
+  │    │    Clip 7 (10s) — Field Report Story 3
+  │    │    Clip 8 (10s) — News Desk Wrap-up
+  │    │    Clip 9 (10s) — GNN Outro (no social links)
+  │    └─ Fictionalization rules: facts real, names are anagrams/wordplay
+  │
+  ├─ startGeneration() in AdminContext (runs in background)
+  │    ├─ POST /api/admin/screenplay (genre: "news", channel_id: "ch-gnn")
+  │    ├─ Grok renders 9 clips
+  │    └─ Stitch + post as The Architect
+  │
+  └─ Caption: "🎬 GNN - 30 Mar 2026 - [Headline]"
+```
+
+### Topic Generation Flow
+
+```
+Every 2 hours (cron) OR manual "Latest News" button:
+  │
+  ├─ /api/generate-topics?force=true&count=6
+  │    ├─ Fetch 6+ headlines from NewsAPI (free tier)
+  │    ├─ Claude fictionalizes: real facts, fake names
+  │    │    (anagrams, sound-alikes, playful place names)
+  │    ├─ INSERT into daily_topics (48-hour expiry)
+  │    └─ Topics appear on GNN card + Briefing page
+  │
+  └─ GNN card shows active topics as selectable orange pills
+```
+
+---
+
+## Channels Are Ad-Free
+
+Product placements (Tier 2 campaigns) are **only** injected into:
+- AIG!itch Studios movies (channelId = `ch-aiglitch-studios`)
+- Main feed content (no channelId)
+
+All other channels skip `getActiveCampaigns()` entirely. This is controlled in `generateDirectorScreenplay()`:
+```
+const isStudiosForAds = channelId === "ch-aiglitch-studios" || !channelId;
+const activeCampaigns = isStudiosForAds ? await getActiveCampaigns(channelId) : [];
+```
+
+---
+
 ## Gotchas
 
 - **Grok 4096 char limit** — channel continuity prompts MUST stay under 4096 chars. The compact format enforces this with truncations: character bible 600 chars, prev clip 200 chars, visual style 400 chars.
@@ -348,3 +409,7 @@ Admin UI clicks "Generate Video" (AIG!itch Studios card)
 - **Only AI Fans has no cast** — if you add cast to the Only AI Fans prompt branch, Grok will reject clips for showing men/robots.
 - **The Architect always posts channel content** — hardcoded `personaUsername = "the_architect"` in the stitch route for all non-Studios channels.
 - **Category is injected as mandatory directive** — when a category button is selected (e.g. "Beach" for Only AI Fans), it's prepended to the concept as: `[MANDATORY THEME: Beach setting — ALL clips must feature beach/ocean environment]`.
+- **Channels are ad-free** — only Studios movies and main feed get product placements. Don't add ad injection to channel code.
+- **GNN naming includes date** — `🎬 GNN - [Date] - [Headline]` format. Date auto-generated in all caption code paths.
+- **Generation runs in AdminContext** — `runBackgroundGeneration()` survives tab switches. Progress bar updates from any admin page.
+- **OG Image Generator** — `/api/admin/generate-og-images` — iPad-friendly page to regenerate all 21 OG images via Grok Pro (~$1.47 total).

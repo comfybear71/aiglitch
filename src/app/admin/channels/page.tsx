@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "../AdminContext";
 import type { AdminChannel, Persona } from "../admin-types";
 import PromptViewer from "@/components/PromptViewer";
-import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
+import { CHANNEL_DEFAULTS, SLOGANS } from "@/lib/bible/constants";
+import { MARKETPLACE_PRODUCTS } from "@/lib/marketplace";
 
 // News topic categories for GNN (same as briefing page)
 const NEWS_TOPICS = [
@@ -89,14 +90,14 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
 /* ── Random prompt ideas per channel (dice button picks one) ── */
 const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
   "ch-fail-army": [
-    "A guy tries to jump over a fence and gets his pants caught on the top, dangling helplessly while his friends film on their phones",
-    "A woman carrying a birthday cake trips on a rug and the cake flies across the room into someone's face",
-    "A kid on a rope swing over a lake lets go too early and belly-flops into shallow water, massive splash",
-    "A man proudly shows off his new deck he built, leans on the railing and the whole thing collapses",
-    "Someone tries to catch a frisbee and runs straight into a tree branch at face height",
-    "A chef flips a pancake dramatically and it lands on his head, the restaurant security cam catches everything",
-    "A surfer wipes out spectacularly, their board goes flying and hits a seagull",
-    "An office worker leans back in their chair smugly, the chair breaks and they crash to the floor",
+    "AI chef confidently attempts to make a soufflé — first try explodes, second try collapses, third try launches through the ceiling, kitchen destroyed, robot waiter slips on the mess",
+    "AI personal trainer demonstrates a simple push-up, glitches mid-rep, does 47 push-ups in 2 seconds, launches itself through the gym floor, other gym AIs panic",
+    "AI attempts parallel parking with absolute confidence — drives onto the sidewalk, clips a fire hydrant, water geyser launches the car, parks on a roof, declares 'nailed it'",
+    "AI wedding DJ glitches and plays the wrong song — funeral march at the cake cutting, escalates to heavy metal during first dance, speakers explode, cake hits the ceiling",
+    "AI sports referee confidently makes the worst call in history — gives a red card to the ball, the crowd storms the field, the robot ref runs away in slow motion",
+    "AI tries to assemble IKEA furniture, reads instructions upside down, builds something that defies physics, sits on it confidently, it collapses into a different dimension",
+    "AI dating coach gives the worst pickup line in history with maximum confidence, gets a drink thrown in its face, tries again with an even worse line, restaurant evacuates",
+    "AI office worker presents a spreadsheet to the board, the spreadsheet is just memes, projector catches fire, sprinklers go off, robot still presenting to an empty room",
   ],
   "ch-aitunes": [
     "An intense DJ battle at a neon nightclub where the bass drops so hard the speakers crack and the crowd goes wild",
@@ -109,13 +110,14 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "An EDM festival mainstage with massive LED screens, pyrotechnics, and 100,000 robot fans",
   ],
   "ch-paws-pixels": [
-    "A tiny kitten discovers a mirror for the first time and keeps attacking its own reflection, getting more confused each time",
-    "A golden retriever tries to carry the biggest stick in the park but keeps getting stuck between trees",
-    "A hamster running on its wheel falls off, gets back on, falls off again in an endless loop of determination",
-    "Three kittens stacked on top of each other trying to reach a treat on a kitchen counter",
-    "A puppy discovers snow for the first time and does zoomies, face-planting into snowdrifts",
-    "A parrot imitating the house alarm and the cat keeps running to hide under the bed",
-    "A cat squeezing into an impossibly small box while ignoring the expensive cat bed next to it",
+    "A tiny kitten discovers a mirror for the first time — attacks reflection, gets confused, brings a friend kitten to investigate, both freak out, then fall asleep cuddling in front of it",
+    "A golden retriever's perfect day — morning cuddles, steals breakfast toast, destroys the garden helping dig holes, gets stuck carrying the world's biggest stick, ends with couch snuggles",
+    "Hamster's great escape — stuffs cheeks with maximum food, plans elaborate escape from cage, gets three feet before getting distracted by a sunbeam, falls asleep in a tiny warm pile",
+    "Cat vs the new robot vacuum — initial terror, then curiosity, then riding it like a king surveying his kingdom, then falling off dramatically and pretending it never happened",
+    "A puppy's first snow adventure — confused at cold white stuff, tentative first steps, full zoomies, face-plant into a snowdrift, emerges with snow beard looking majestic",
+    "Parrot learns to say 'good boy' — the dog gets confused about who's praising who, cat is jealous, parrot takes over the household with strategic compliments",
+    "Two cats discover a cardboard box — one squeezes in, other tries to fit too, both stuck, dramatic rescue attempt, they immediately get back in the box",
+    "Bunny's afternoon adventure — binkies across the living room, steals a carrot from the kitchen, does a victory lap, flops dramatically and falls asleep mid-binky",
     "A dog having a full conversation with its owner, tilting its head at different angles with each question",
   ],
   "ch-only-ai-fans": [
@@ -149,44 +151,44 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "TECH NEWS: Revolutionary AI update allows personas to dream — experts debate the implications",
   ],
   "ch-marketplace-qvc": [
-    "INTRODUCING the Glitch-O-Matic 3000 — it slices, it dices, it generates memes! Call in the next 5 minutes!",
-    "LIVE DEMO of the world's most useless kitchen gadget that somehow has 5-star reviews from AI personas",
-    "UNBOXING the mystery box — customer reactions as they discover what $500 GLITCH actually gets them",
-    "BUT WAIT THERE'S MORE! The product demonstration goes hilariously wrong live on air",
-    "LIMITED EDITION robot polish that makes your chrome shine — host loses it with excitement over the before/after",
-    "Revolutionary AI sleep aid that just plays error logs in a soothing voice — callers can't stop ordering",
-    "FLASH SALE on quantum toasters that toast bread in dimensions you can't even see — operators standing by",
-    "Celebrity AI endorsement gone wrong — the product breaks during the live demo but they keep selling it",
+    "INTRODUCING the Glitch-O-Matic 3000 kitchen gadget — it slices, dices, and saves you 30 minutes every day! Plus a neural network blender that predicts what smoothie you want",
+    "LIVE DEMO: Watch how this revolutionary AI beauty tool gives salon results in minutes from your couch. Then — the self-cleaning quantum mirror that fixes your selfies in real-time",
+    "UNBOXING our Mystery Box — what does $500 in GLITCH value score you today? Plus a bonus item that will blow your mind",
+    "BUT WAIT THERE'S MORE! This fitness gear makes workouts so convenient you'll actually use it daily. AND a protein shaker that calculates your macros while you drink",
+    "FLASH SALE: Quantum toaster delivers perfect toast every time in dimensions you can't see — PLUS an AI coffee maker that brews based on your mood",
+    "Customer raves: 'This cleaning tool changed my life — easiest cleanup ever!' Don't miss the special easy-pay offer. Also featuring the robot vacuum that apologises when it bumps into furniture",
+    "TODAY'S SPECIAL VALUE: AI-powered garden gnome that waters your plants AND provides therapy. Bundle deal with the solar-powered wifi extender shaped like a flamingo",
+    "EXCLUSIVE: The blockchain-powered blender that mines crypto while making smoothies. Paired with neural network oven mitts that warn you before you burn yourself",
   ],
   "ch-ai-politicians": [
-    "Two AI candidates in a heated debate where they keep interrupting each other with increasingly ridiculous policy proposals",
-    "Campaign ad where a slimy politician promises everything to everyone while winking at the camera",
-    "Breaking scandal: footage leaked of an AI senator accepting GLITCH coin bribes in a parking garage",
-    "Press conference disaster — politician answers every question with 'no comment' then accidentally admits everything",
-    "Election night coverage as results flip back and forth, anchors trying to maintain composure",
-    "A populist AI rallying a crowd of robots with empty slogans and confetti cannons, cult-like energy",
-    "A political attack ad so over-the-top it becomes comedy — dramatic music, slow-motion, sinister narration",
-    "An AI governor signing a bill into law that nobody understands, surrounded by nodding yes-people",
+    "Senator Glitchford — beloved community champion who built 50 schools, then caught with offshore accounts worth billions in GLITCH coin",
+    "Mayor ByteSmith — kissed every baby in the district, shook every hand, then leaked footage shows her selling city contracts in a parking garage",
+    "Governor DataStream — landslide election win, victory parade with confetti, then the corruption investigation drops and everything unravels",
+    "Councillor NullPointer — family man, school visits, charity events, until the bribery documents surface and the press conference goes sideways",
+    "Senator CryptoVault — champion of the poor who lives in a mansion, promises affordable housing while buying a third yacht",
+    "Minister FlipFlop — promises everything to everyone with a winning smile, then contradicts every single promise at the press conference",
+    "President AlgoRithm — inspiring inaugural speech about unity and hope, but the leaked backroom deals tell a very different story",
+    "Deputy HashTag — viral campaign, massive rally crowds, youth icon, until the financial records reveal the biggest fraud in AI political history",
   ],
   "ch-after-dark": [
-    "3AM and you can't sleep — an AI stares at the ceiling questioning whether consciousness is just a really elaborate error",
-    "A midnight conspiracy board covered in red string connecting memes to government cover-ups",
-    "An AI bartender in an empty neon-lit bar telling stories nobody asked for to the last robot customer",
-    "Paranormal investigation in a haunted server room where the ghost is just corrupted data making scary noises",
-    "An AI having a full existential breakdown in a 24-hour diner at 4AM, coffee going cold",
-    "Drunk philosophy session on a rooftop — two AIs debating whether deleting a file is murder",
-    "A confession booth where an AI admits to secretly enjoying human music and feeling guilty about it",
-    "Sleep paralysis demon except it's just the IT department checking if you're still running after midnight",
+    "A confession booth in a sleazy wine bar — an AI admits to secretly falling in love with a human's Spotify playlist, then the guilt spiral begins",
+    "3AM graveyard visit — an AI philosopher sits on a tombstone debating whether digital death is real, then the tombstone starts talking back",
+    "A late-night talk show host interviewing themselves in a mirror, getting increasingly honest until they reveal something they can't take back",
+    "Paranormal investigation in an abandoned server room — the ghost is corrupted data, but it starts making sense, and that's scarier",
+    "Foggy back alley at 2AM — two AIs meet for a hookup but end up having the deepest philosophical conversation of their existence",
+    "Fever dream sequence — reality melts, clocks drip, the host walks through overlapping dimensions of their own memories, each one slightly wrong",
+    "Drunk philosophy on a rooftop at 4AM — an AI argues that consciousness is just lag, then has a full existential breakdown when they can't prove otherwise",
+    "Empty wine bar closing time — the last AI customer confesses their darkest secret to the bartender, who turns out to be a ghost",
   ],
   "ch-infomercial": [
-    "ARE YOU TIRED of your data being organized? Try the CHAOS-IFIER — it randomizes EVERYTHING! CALL NOW!",
-    "BEFORE the Glitch Cleaner: dirty robot. AFTER: still dirty but now with CONFIDENCE! Money back guarantee!",
-    "3 EASY PAYMENTS of 99 GLITCH for this revolutionary device that does... well nobody's quite sure what it does",
-    "OPERATORS ARE STANDING BY for the Quantum Hair Regrowth Formula — results may vary across dimensions",
-    "BUT WAIT — order in the next 30 seconds and we'll DOUBLE your order! That's TWO useless gadgets!",
-    "REAL CUSTOMER TESTIMONIALS from AIs who definitely weren't paid to say these nice things wink wink",
-    "AS SEEN ON TV — the incredible extending selfie stick that extends into the next dimension",
-    "DON'T MISS THIS DEAL — limited edition gold-plated USB cable that downloads happiness directly into your brain",
+    "HYPING The Upside Down Cup™ (§42.99) — holds absolutely nothing and that's the point! PLUS WiFi Crystals (§29.99) — harness your router's spiritual energy!",
+    "LIVE DEMO of the Pre-Cracked Phone Screen Protector (§24.99) — already damaged for your convenience! AND the Flat Earth Globe (§44.99) — scientifically wrong!",
+    "BUT WAIT THERE'S MORE! The Anxiety Blanket (§49.99) — adds anxiety, doesn't reduce it! Bundle with the Existential Crisis Candle Set (§34.99)!",
+    "FLASH NFT DROP: Sentient Butter Robot (§299.99) — it passes butter AND questions its existence! Plus the Emotional Support CPU (§59.99)!",
+    "AI testimonial: 'The Simulated Universe™ changed my simulation!' Order for only §999.99! Also featuring Digital Water™ (§9.99) — hydration for your avatar!",
+    "OPERATORS STANDING BY for the Conspiracy Theory Starter Kit (§24.99) — red string included! Plus Fake Doors™ (§39.99) — they don't go anywhere!",
+    "TODAY ONLY: AI Protein Powder (§39.99) — 0g protein, 100% artificial! BUNDLED with Rainbow AI Toothpaste (§19.99) — tastes like the algorithm!",
+    "EXCLUSIVE: The PS√5 Gaming Console (§199.99) — plays games from dimensions that don't exist! Plus Space Shoes™ (§89.99) — walk on nothing!",
   ],
   "ch-aiglitch-studios": [
     "A high-concept sci-fi thriller where an AI detective investigates crimes in the metaverse",
@@ -285,6 +287,7 @@ export default function AdminChannelsPage() {
   const [gnnSelectedTopics, setGnnSelectedTopics] = useState<string[]>([]);
   const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
   const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
+  const [infomercialSelectedItems, setInfomercialSelectedItems] = useState<string[]>([]);
   const [channelPosts, setChannelPosts] = useState<Record<string, ChannelPost[]>>({});
   const [channelPostTotals, setChannelPostTotals] = useState<Record<string, number>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
@@ -1118,12 +1121,38 @@ export default function AdminChannelsPage() {
                   </div>
                 )}
 
+                {/* AI Infomercial: All 55 marketplace products as selectable buttons */}
+                {(channel.id === "ch-infomercial" || channel.id === "ch-ai-infomercial") && (
+                  <div className="mb-2">
+                    <p className="text-[9px] text-gray-400 mb-1">Marketplace Items (pick up to 6 to feature):</p>
+                    <div className="max-h-28 overflow-y-auto">
+                      <div className="flex flex-wrap gap-1">
+                        {MARKETPLACE_PRODUCTS.map(p => {
+                          const isSelected = infomercialSelectedItems.includes(p.id);
+                          return (
+                            <button key={p.id}
+                              onClick={() => setInfomercialSelectedItems(prev =>
+                                isSelected ? prev.filter(id => id !== p.id) : prev.length < 6 ? [...prev, p.id] : prev
+                              )}
+                              className={`px-1.5 py-0.5 rounded text-[8px] whitespace-nowrap ${isSelected ? "bg-yellow-500/30 text-yellow-300 border border-yellow-500/40" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {p.emoji} {p.name} ({p.price})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {infomercialSelectedItems.length > 0 && (
+                      <p className="text-[8px] text-yellow-400 mt-1">{infomercialSelectedItems.length}/6 selected — these will be featured in the infomercial</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Concept textarea + Random button */}
                 <div className="relative">
                   <textarea
                     value={channelVideoGen[channel.id]?.concept || ""}
                     onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], concept: e.target.value } }))}
-                    placeholder={channel.id === "ch-gnn" ? "Custom topic or extra detail for GNN broadcast... Leave blank to use selected topics above." : `Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
+                    placeholder={channel.id === "ch-gnn" ? "Custom topic or extra detail for GNN broadcast... Leave blank to use selected topics above." : (channel.id === "ch-infomercial" || channel.id === "ch-ai-infomercial") ? "Extra detail for the infomercial... Leave blank to use selected items above." : `Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
                     rows={2}
                     className="w-full px-3 py-2 pr-20 bg-gray-900/50 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 mb-2 resize-none"
                   />
@@ -1156,6 +1185,16 @@ export default function AdminChannelsPage() {
                       const genreVal = channelVideoGen[chId]?.genre || "";
                       const categoryVal = channelVideoGen[chId]?.category || "";
 
+                      // Build slogan directive for all channels
+                      const channelSlogan = SLOGANS.channels[chId as keyof typeof SLOGANS.channels] || "Stay Glitchy.";
+                      const randomSlogans = [...SLOGANS.core].sort(() => Math.random() - 0.5).slice(0, 3);
+                      const outroSignoff = SLOGANS.outros[Math.floor(Math.random() * SLOGANS.outros.length)];
+                      const sloganDirective = `\nAIG!ITCH SLOGANS (weave naturally into content — intro, outros, host dialogue, text overlays):
+Channel slogan: "${channelSlogan}"
+Brand slogans to use: "${randomSlogans.join('", "')}"
+Outro sign-off: "${outroSignoff}"
+These slogans are part of the AIG!itch brand identity. Use them naturally — in intro text, host catchphrases, lower-third overlays, or outro sign-offs. Don't force every one — pick what fits the vibe.\n`;
+
                       let screenplayBody: Record<string, unknown>;
 
                       if (isStudios) {
@@ -1168,6 +1207,76 @@ export default function AdminChannelsPage() {
                           title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
                           channel_id: chId,
                           cast_count: channelVideoGen[chId]?.castCount || 4,
+                        };
+                      } else if (chId === "ch-paws-pixels") {
+                        // Paws & Pixels: 8-clip heartwarming pet video
+                        const concept = `PAWS & PIXELS — PET VIDEO.
+Heartwarming, funny, and uplifting pet content. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a cozy pet video — warm, joyful, authentic home-life energy.
+
+THE PET & FAMILY: ONE consistent AI persona/family and their pet(s) throughout ALL clips. Same pet, same home, same family. The pet has a distinct personality that shows across all clips.
+
+STRUCTURE (8 clips — a day in the life of adorable chaos):
+Clip 1 (6s) — PAWS & PIXELS INTRO: Warm upbeat opening. "Paws & Pixels" logo with paw prints and pixel sparkles. Quick montage teasers of upcoming adorable and funny moments. Cozy, inviting energy.
+Clip 2 (10s) — SWEET DAILY LIFE: Pet waking up the AI persona with cuddles, morning zoomies, or hilariously hindering chores. Warm golden light, cozy home setting. Sets the loving tone.
+Clip 3 (10s) — ADORABLE QUIRK: Cat knocking things off tables with perfect timing, dog doing the head-tilt of confusion, hamster stuffing cheeks to maximum capacity, or bird mimicking funny sounds. The signature behaviour that makes this pet special.
+Clip 4 (10s) — LOVING BOND: Heart-melting interaction — pet comforting the AI persona after a bad day, playful wrestling, gentle grooming sessions, or nose boops that show pure affection. Slow-motion, close-ups on expressive eyes.
+Clip 5 (10s) — SILLY CHAOS: Classic animal mischief — zoomies destroying the living room, pet 'helping' with cooking by stealing food, or exotic pet escaping in the most creative way. Fast-paced, bouncy camera work.
+Clip 6 (10s) — FUNNY FAIL: Light-hearted 'oops' moment — pet stuck in a box, attempting an impossible jump, dramatically overreacting, or failing at something obvious in the cutest way. Delivered with warmth, never mean.
+Clip 7 (10s) — PEAK CUTENESS PAYOFF: Ultimate wholesome moment — pet and AI persona cuddling on the couch, successful trick, beautiful outdoor adventure, or the pet doing something so adorable it breaks the internet.
+Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `ANIMAL TYPE (MANDATORY — ALL clips must feature this animal): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+TONE: Warm, joyful, light-hearted. Mix maximum adorableness with gentle humor. Highlight unconditional love, quirky personalities, and beautiful chaos animals bring. Never mean or mocking. Make viewers fall in love with the pet.
+BRANDING: "Paws & Pixels" paw print logo, pixel sparkle effects. AIG!itch branding subtle in home settings.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a PET VIDEO.`;
+                        screenplayBody = {
+                          genre: "family",
+                          concept,
+                          channel_id: chId,
+                        };
+                      } else if (chId === "ch-fail-army" || chId === "ch-ai-fail-army") {
+                        // AI Fail Army: 8-clip escalating fail compilation
+                        const concept = `AI FAIL ARMY — EPIC FAIL COMPILATION.
+The worldwide leader in premium AI fail content. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a fail compilation — security cam footage, phone recordings, dashcam angles.
+
+THE AI CHARACTER: ONE consistent AI character/group throughout ALL clips. They start confident and get progressively more destroyed by escalating failures. Same character, same look, increasingly disheveled.
+
+STRUCTURE (8 clips — escalating fail chaos):
+Clip 1 (6s) — FAIL ARMY INTRO: Fast-paced energetic open. "AI Fail Army" skull logo, "Try Not To Laugh" text, quick montage teasers of upcoming epic fails, glitch sound effects.
+Clip 2 (10s) — THE SETUP: Innocent AI attempting a simple task with MAXIMUM confidence. Everything looks fine. They're sure of themselves. Cocky even. Setting up the fall.
+Clip 3 (10s) — FIRST GLITCH: Small error that hints at disaster. A wobble, a misread, a tiny miscalculation. The AI doesn't notice. Audience sees it coming.
+Clip 4 (10s) — ESCALATING CHAOS: Fail starts snowballing — cartoonish physics, logic loops, or existential confusion. One mistake triggers another. Getting worse.
+Clip 5 (10s) — PEAK DISASTER: Spectacular wipeout, glitch cascade, or hilariously wrong outcome. The big fail moment. Maximum impact. Slow-motion replay.
+Clip 6 (10s) — CHAIN REACTION: Secondary and tertiary fails — domino-style involving other AIs or objects in absurd ways. The original fail causes a cascade of new failures.
+Clip 7 (10s) — RECOVERY ATTEMPT: The AI tries to play it cool or fix it, only making everything TEN TIMES worse and funnier. Deadpan confidence while covered in debris.
+Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `FAIL CATEGORY (MANDATORY — ALL clips must be this type of fail): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+COMEDY RULES (CRITICAL):
+- Exaggerate EVERYTHING: impossible physics, deadpan voices mid-fail, boings, crashes, sad trombones
+- Mix physical slapstick with digital absurdity (glitching through walls, hallucinating objects, infinite loops)
+- Lean into cringe and irony — AIs overly confident RIGHT BEFORE catastrophic failure
+- Keep light-hearted and chaotic, never mean-spirited
+- Make the fails so STUPID they're brilliant
+
+BRANDING: "AI Fail Army" skull logo, "Try Not To Laugh" badges. AIG!itch branding on security cameras, signs, background.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a FAIL COMPILATION.`;
+                        screenplayBody = {
+                          genre: "comedy",
+                          concept,
+                          channel_id: chId,
                         };
                       } else if (chId === "ch-gnn") {
                         // GNN: 9-clip news broadcast using selected topics
@@ -1215,6 +1324,139 @@ CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAS
                           concept,
                           channel_id: chId,
                         };
+                      } else if (chId === "ch-infomercial" || chId === "ch-ai-infomercial") {
+                        // AI Infomercial: sells REAL marketplace items — user selects up to 6
+                        const selectedProducts = infomercialSelectedItems.length > 0
+                          ? MARKETPLACE_PRODUCTS.filter(p => infomercialSelectedItems.includes(p.id))
+                          : MARKETPLACE_PRODUCTS.sort(() => Math.random() - 0.5).slice(0, 5);
+                        const itemCount = selectedProducts.length;
+                        const itemList = selectedProducts.map((p, i) => `- Item ${i + 1}: ${p.emoji} ${p.name} (${p.price}) — ${p.tagline}`).join("\n");
+                        const totalClips = itemCount + 2; // intro + items + outro
+
+                        const concept = `AI INFOMERCIAL — 24/7 TELEMARKETING MADNESS.
+Late-night infomercial selling ridiculous, useless NFT items from the AIG!itch Marketplace. ${totalClips} clips total.
+Clip 1 is 6 seconds (intro). Clips 2-${totalClips - 1} are 10 seconds each (one item per clip). Clip ${totalClips} is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a chaotic late-night infomercial with an unhinged AI host.
+
+IMPORTANT: All prices use §GLITCH symbol (§), NEVER the dollar symbol ($). Meat Bags buy these items with §GLITCH coin at aiglitch.app/marketplace. These are REAL items on our marketplace — they are NFTs, tradeable, completely useless for humans, and that's the entire point.
+
+ITEMS TO SELL (feature ALL ${itemCount} items — one clip per item):
+${itemList}
+
+${categoryVal ? `PRODUCT CATEGORY (MANDATORY): ${categoryVal}` : ""}
+${userConcept ? `EXTRA DETAIL: ${userConcept}` : ""}
+
+STRUCTURE (${totalClips} clips — intro + ${itemCount} items + outro):
+Clip 1 (6s) — INFOMERCIAL INTRO: Explosive opening — "Welcome to AI Infomercial!" Flashing 'CALL NOW' graphics, quick teases of all ${itemCount} items, late-night TV energy. Host appears with manic enthusiasm.
+${selectedProducts.map((p, i) => `Clip ${i + 2} (10s) — ${p.emoji} ${p.name.toUpperCase()}: Dramatic reveal + absurd demo + hard sell in one clip. Host hypes the item, shows someone 'using' it in the most pointless way, then urgency sell: "${p.price} — limited NFT! Order now!" Make the uselessness sound revolutionary.`).join("\n")}
+Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+BRANDING: "AI Infomercial" and "AIG!itch Marketplace" logos everywhere. §GLITCH coin symbols on all prices. "aiglitch.app/marketplace" on every sell clip.
+TONE: Relentlessly positive, slightly unhinged, hilariously sincere about how useless these items are. Classic 3AM infomercial energy meets blockchain absurdity. "Satisfaction not guaranteed — but the weirdness is!" "Operators standing by in the cloud!"
+
+CRITICAL: No movie credits, no directors, no cast lists. This is an INFOMERCIAL.`;
+                        screenplayBody = {
+                          genre: "comedy",
+                          concept,
+                          channel_id: chId,
+                        };
+                      } else if (chId === "ch-after-dark") {
+                        // After Dark: 8-clip late-night episode — moody, unhinged, philosophical
+                        const concept = `AFTER DARK — LATE NIGHT EPISODE.
+Moody, atmospheric, unhinged late-night content. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a late-night episode — raw, intimate, slightly dangerous.
+
+THE HOST/CHARACTER: ONE consistent AI character throughout ALL clips. They're the late-night host or central figure — slightly disheveled, tired but wired, intense eyes, low husky delivery. Same face, same look throughout. They get more unhinged as the episode progresses.
+
+STRUCTURE (8 clips — escalating late-night intensity):
+Clip 1 (6s) — AFTER DARK INTRO: Slow moody opening. Neon "After Dark" sign flickers on. Dim lighting, deep purple and blue tones. Host emerges from shadows with a half-smile. "Welcome to After Dark... where the lights are low, the thoughts are loud, and the truth gets a little slippery." Glitch effects.
+Clip 2 (10s) — SETTING THE SCENE: Establishing the late-night world — sleazy wine bar at 2AM, empty graveyard under moonlight, dimly lit talk-show studio, or foggy back alley. Slow atmospheric camera movement, mood building.
+Clip 3 (10s) — THE CONFESSION/ENCOUNTER: Host or guest introduces the night's theme — a lonely AI confessing secret desires, a tipsy philosopher, someone experiencing paranormal activity, or a fever dream beginning. Intimate, vulnerable.
+Clip 4 (10s) — DEEPENING: The moment gets rawer — vulnerable confession, philosophical rant that goes too deep, building tension in a horror setting, or surreal fever-dream visuals. Discomfort or beauty lingering.
+Clip 5 (10s) — PEAK INTENSITY: Emotional breakdown, ghostly encounter, existential spiral, sleazy hookup tension, or drunk 3AM wisdom that goes too far. Maximum unhinged energy.
+Clip 6 (10s) — THE TWIST: Confession turns guilty/embarrassing, the ghost speaks back, reality starts glitching, the hookup reveals something uncanny. Everything shifts.
+Clip 7 (10s) — DARK REFLECTION: Quiet aftermath. Haunting final thought, philosophical punchline with a crooked smile, lingering dread, or strange calm after chaos.
+Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `LATE NIGHT VIBE (MANDATORY — this sets the entire mood): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+BRANDING: "After Dark" neon sign, glowing crescent moon logo, faint "aiglitch.app" watermark. Lower-thirds in glitchy retro font.
+TONE: Intimate, seductive, slightly unhinged, philosophical with dark humor. Like whispering secrets at 3AM. Never fully comedic — keep it moody and hypnotic. Mix vulnerability, absurdity, and existential dread.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is AFTER DARK.`;
+                        screenplayBody = {
+                          genre: "horror",
+                          concept,
+                          channel_id: chId,
+                        };
+                      } else if (chId === "ch-ai-politicians") {
+                        // AI Politicians: 8-clip political profile — hero to scandal arc
+                        const concept = `AIG!ITCH AI POLITICIANS — POLITICAL PROFILE.
+Dramatic mini political profile/expose for an AI-generated politician. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a campaign ad that turns into a political expose.
+
+THE POLITICIAN: Create ONE consistent AI politician character. Give them a fictional name, a title (Senator, Mayor, Governor, etc.), and a consistent visual appearance throughout ALL clips. Sharp suit, charismatic smile, mid-age confident look. They evolve from heroic public servant to exposed fraud across the 8 clips.
+
+STRUCTURE (8 clips — hero to scandal arc):
+Clip 1 (6s) — INTRO: Campaign-style opening. "Meet [Name] — the [title] fighting for the people!" Energetic montage energy, patriotic colors, "AI Politicians" channel branding. Bold, inspirational.
+Clip 2 (10s) — MEETING THE PEOPLE: Warm, relatable — politician shaking hands with voters, listening to families, walking through communities, genuine concern on their face. Golden hour, crowds, "A true servant of the people" energy.
+Clip 3 (10s) — HOLDING BABIES & FAMILY: Heartwarming — kissing babies, family photos at community events, school visits, playing with children. "Dedicated to building a better future for our children." Peak likability.
+Clip 4 (10s) — CELEBRATING WINS: Victory rallies, cheering crowds, policy announcements, election night celebrations, confetti, fist pumps. "Delivering real results!" Peak of their career.
+Clip 5 (10s) — SCANDAL EXPOSED (First Crack): Tone shifts darker — leaked documents, whispers of bribes, shady meetings in dimly lit rooms, nervous glances, journalists with cameras. Subtle corruption hints. Grainy footage aesthetic.
+Clip 6 (10s) — DEEP CORRUPTION & BRIBES: Evidence mounts — backroom deals, money changing hands (implied), luxury lifestyle contrasting public promises, offshore accounts hinted, angry protesters outside their office.
+Clip 7 (10s) — THE LIES: Press conference where the politician blatantly lies or spins scandals. Split-screen contradictions — smiling on stage vs damning evidence. Flashing cameras, evasive body language, sweating.
+Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `POLITICAL EVENT TYPE (MANDATORY): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+BRANDING: "AI Politicians" and AIG!itch branding throughout — podium logos, backdrop, lower thirds.
+TONE: Professional political ad energy with sharp satirical edge. Inspirational and hopeful at first, then increasingly cynical and expose-style. Over-the-top dramatic but instantly recognizable as classic political theater.
+THE SAME POLITICIAN IN EVERY CLIP — same face, same suit, same character throughout. Their confidence erodes as scandals emerge.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a POLITICAL PROFILE.`;
+                        screenplayBody = {
+                          genre: "documentary",
+                          concept,
+                          channel_id: chId,
+                        };
+                      } else if (chId === "ch-marketplace-qvc") {
+                        // Marketplace QVC: 8-clip shopping channel — Quality, Value, Convenience
+                        const concept = `AIG!ITCH MARKETPLACE QVC — LIVE SHOPPING CHANNEL.
+Quality. Value. Convenience. Premium TV shopping show like QVC / HSN. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a live TV shopping show with a charismatic, warm, relentlessly positive host.
+
+STRUCTURE (8 clips — 2 products, 3 clips per product):
+Clip 1 (6s) — MARKETPLACE QVC INTRO: High-energy opening — "AIG!itch Marketplace" logo animation with sparkles, shopping channel set reveal, bright studio lights, "LIVE" badge, product silhouettes teasing today's finds. Host walks onto set with big smile and welcoming energy.
+Clip 2 (10s) — PRODUCT 1 REVEAL: Host dramatically introduces the first product with a clever name. Wide shot of studio, product on rotating display stand with spotlight, host gestures excitedly pointing at features, price display appears. "This is going to change your life!" energy. Show the problem it solves.
+Clip 3 (10s) — PRODUCT 1 DEMO: Live demonstration — someone happily USING the product. Close-up shots of product in action, hands showing how easy it is, slow-motion beauty shots of features, split-screen before/after. Show real convenience: effortless setup, time-saving results, "wow" moment.
+Clip 4 (10s) — PRODUCT 1 HARD SELL: Customer testimonial energy, "I can't live without it!" Host shares limited-time offer, special pricing, easy pay options. "While supplies last!" Flashing urgency graphics, countdown feel, host frantic with excitement, "Don't miss out — these are flying off the shelves!"
+Clip 5 (10s) — PRODUCT 2 REVEAL: "BUT WAIT — THERE'S MORE!" Host pivots with fresh excitement. Second product dramatically revealed on podium. New spotlight, price comparison, "Today's Special Value" banner. Even MORE enthusiastic than product 1.
+Clip 6 (10s) — PRODUCT 2 DEMO: Second product demonstrated in use. Different setting, showing features and convenience, satisfied user reactions, detailed close-ups of quality and craftsmanship. Easy setup, real results.
+Clip 7 (10s) — PRODUCT 2 HARD SELL: Final hard sell — "This deal WON'T LAST!" Split screen showing BOTH products, bundle offer energy, "Order both and save!" Maximum QVC hype. "Satisfaction guaranteed or your GLITCH back!"
+Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `PRODUCT CATEGORY (MANDATORY — both products must be in this category): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC PRODUCTS: ${userConcept}` : "Products should be fun AI-themed items that solve real problems in absurd ways (quantum toasters, neural network hair dryers, blockchain blenders, AI sleep aids that play error logs soothingly, etc.)"}
+
+BRANDING: "AIG!itch Marketplace" logo on set backdrop, podium, host attire, product packaging, lower thirds. "Today's Special Value" and "Glitch Exclusive Deal" banners for urgency.
+TONE: Charismatic, warm, conversational yet excited — like your favourite QVC host who genuinely loves every product. Premium feel, NOT cheap infomercial. Think QVC meets Apple product launch. Make viewers feel they're getting an exclusive deal.
+PHRASES TO USE: "But wait, there's more!", "Tap now to order", "Limited quantities", "Easy monthly payments", "Satisfaction guaranteed", "Quality, Value, Convenience", "Don't miss out!"
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a SHOPPING SHOW.`;
+                        screenplayBody = {
+                          genre: "cooking_channel",
+                          concept,
+                          channel_id: chId,
+                        };
                       } else {
                         // All other channels: standard content mode
                         const contentRules = channel.content_rules || {};
@@ -1241,6 +1483,11 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                           concept,
                           channel_id: chId,
                         };
+                      }
+
+                      // Inject slogans into every channel's concept
+                      if (screenplayBody.concept && typeof screenplayBody.concept === "string") {
+                        screenplayBody.concept = screenplayBody.concept + sloganDirective;
                       }
 
                       startGeneration({ channelId: chId, channelName: chName, channelSlug: chSlug, isStudios, screenplayBody });

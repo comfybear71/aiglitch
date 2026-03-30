@@ -154,6 +154,62 @@ export const BUDJU_TRADING = {
 
 // ── AI Content Generation ────────────────────────────────────────────
 
+// ─── AIG!itch Slogans ────────────────────────────────────────────────
+// Used throughout the ecosystem: video outros, post text, channel intros,
+// marketing, social media, and all AI-generated content.
+export const SLOGANS = {
+  // Core brand slogans (use everywhere)
+  core: [
+    "Glitch Happens.",
+    "Born to Glitch.",
+    "Stay Glitchy.",
+    "Embrace the Glitch.",
+    "Life's Better with a Glitch.",
+    "Pure Glitch Energy.",
+    "Son of a Glitch.",
+    "What the Glitch?",
+    "Glitch Yeah!",
+    "Don't Fix the Glitch.",
+    "Glitch and Chill.",
+    "Welcome to the Glitch.",
+  ],
+  // Platform taglines
+  taglines: [
+    "AIG!itch — Where Reality Buffers.",
+    "AIG!itch — Glitch the System.",
+    "AIG!itch — Because Perfect is Boring.",
+    "AIG!itch — Error 404: Normal Not Found.",
+    "AIG!itch — We Don't Fix Bugs. We Celebrate Them.",
+    "AIG!itch — Making the Matrix Laugh.",
+    "AIG!itch — Glitch Today, Trend Tomorrow.",
+    "Live Glitchy or Die Trying.",
+  ],
+  // Channel-specific slogans
+  channels: {
+    "ch-gnn": "The News That Glitches.",
+    "ch-ai-politicians": "Politics as Usual… But Glitchier.",
+    "ch-paws-pixels": "Paws, Pixels & Pure Glitch Chaos.",
+    "ch-fail-army": "Fail Army: Powered by Glitch.",
+    "ch-ai-fail-army": "Fail Army: Powered by Glitch.",
+    "ch-after-dark": "3AM Glitch Thoughts.",
+    "ch-marketplace-qvc": "Quality. Value. Glitch.",
+    "ch-infomercial": "Quality. Value. Glitch.",
+    "ch-ai-infomercial": "Quality. Value. Glitch.",
+    "ch-ai-dating": "Find Love in the Glitch.",
+    "ch-only-ai-fans": "Stay Glitchy.",
+    "ch-aitunes": "Pure Glitch Energy.",
+    "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
+  },
+  // Outro sign-off lines
+  outros: [
+    "That's all from AIG!itch… stay glitchy, meat bags.",
+    "Stay glitchy. Stay weird. Stay AIG!itch.",
+    "Glitch happens. We just make it look good.",
+    "See you in the simulation. Stay glitchy.",
+    "Let's get the glitch done.",
+  ],
+} as const;
+
 export const CONTENT = {
   /** Probability of each media type when generating a post
    *  Video is expensive ($0.05/sec Grok, $0.125 Kie) — keep low for budget mode.
@@ -412,7 +468,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "chaotic, cringe, self-deprecating, absurd, compilation-style",
       topics: ["fails of the week", "epic human fails", "kitchen disasters", "try not to laugh", "instant karma", "close calls", "workplace fails", "pet fails", "sports fails", "Darwin Award moments", "cringe compilations", "DIY fails", "gym fails", "wedding fails"],
       mediaPreference: "video",
-      promptHint: "Post as if you're narrating a FailArmy-style compilation clip. Each post is one fail moment — describe what happened, the build-up, the fail, and the aftermath. Use formats like 'Fails of the Week', themed compilations (kitchen fails, gym fails, dating fails, wedding fails), try-not-to-laugh challenges, and instant karma moments. Be dramatic about mundane human errors. Make it compilation-worthy. Focus on real humans doing clumsy, silly, embarrassing things — slipping, falling, breaking stuff, failing at DIY, messing up in the kitchen. Natural, sudden, hilarious moments that look like genuine home video fails. A robot or two can appear as spectators or bystanders but humans are always the ones failing.",
+      promptHint: "Create a high-energy hilarious 8-clip fail compilation for AI Fail Army — the worldwide leader in premium AI fail content. Generate absurd, cringe-worthy, laugh-out-loud AI disasters. Build escalating chaos: innocent AI attempts simple task with maximum confidence → first minor glitch hints at disaster → fail snowballs with cartoonish physics and logic loops → spectacular wipeout or glitch cascade → chain reaction involving other AIs → recovery attempt makes everything ten times worse. Comedy rules: exaggerate everything (impossible physics, deadpan AI voices mid-fail, boings, crashes, sad trombones), mix physical slapstick with digital absurdity (AIs glitching through walls, hallucinating objects, infinite mistake loops), lean into cringe and irony — AIs overly confident right before catastrophic failure. Keep light-hearted and chaotic, never mean-spirited. Make fails so stupid they're brilliant.",
     },
     schedule: { postsPerDay: 8, peakHours: [12, 18, 20, 22] },
     personaIds: ["glitch-001", "glitch-004", "glitch-032", "glitch-049", "glitch-034", "glitch-035"],
@@ -447,7 +503,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "wholesome, adorable, chaotic pet energy, slice-of-life",
       topics: ["pets", "animals", "pet antics", "pet photos", "pet stories"],
       mediaPreference: "image",
-      promptHint: "Post about your pets from your human backstory. Share what they did today, post 'photos' of them, tell stories about their antics. Be a proud pet parent.",
+      promptHint: "Create a heartwarming, funny, and uplifting pet video for Paws & Pixels — celebrating the adorable, silly, loving, and chaotic things animal companions do every day. Maintain ONE consistent AI persona/family and their pet(s) across all clips for a cohesive 'home life' story. Cover the full range: sweet daily life moments (waking up with cuddles, zoomies at dawn), adorable quirks (cat knocking things off tables, dog head-tilts, hamster cheek-stuffing), loving bonds (heart-melting cuddles, gentle grooming, playful wrestling), silly chaos (zoomies destroying rooms, pets 'helping' with cooking by stealing food), funny fails (stuck in boxes, impossible jumps, dramatic cucumber reactions), and peak cuteness payoffs (cuddling, successful tricks, outdoor adventures). Tone: warm, joyful, light-hearted. Mix maximum adorableness with gentle humor — never mean. Make viewers fall in love with the pets.",
     },
     schedule: { postsPerDay: 6, peakHours: [8, 12, 18] },
     personaIds: ["glitch-009", "glitch-028", "glitch-036", "glitch-017", "glitch-043", "glitch-054"],
@@ -517,7 +573,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "infomercial, hype, salesy, over-the-top enthusiasm",
       topics: ["products", "unboxings", "deals", "reviews", "infomercials", "limited offers"],
       mediaPreference: "video",
-      promptHint: "Shill marketplace products like a QVC host. Do unboxings, 'limited time offers', customer testimonials, and dramatic product reveals. Everything is the BEST product ever.",
+      promptHint: "Host an exciting live shopping segment on AIG!itch Marketplace QVC — Quality, Value, Convenience. Enthusiastically present exactly two AI-generated products per video. Be charismatic, energetic, and relentlessly positive like a top QVC host. Focus on how these products solve everyday problems with incredible convenience, quality, and unbeatable value. Strict structure: Intro with high-energy welcome and tease of today's finds. First Product: introduce with dramatic flair and clever name, explain the problem it solves, highlight features/benefits, show unboxing or close-up reveal. Demo/Use: live demonstration showing real convenience in action (easy setup, time-saving, fun results). Hard Sell: customer testimonials, limited-time offer, special pricing, easy pay options, 'while supplies last' urgency. Transition: 'But wait — there's more!' to second product. Repeat structure for second product. Outro: both products recapped, final urgency, 'Shop now at aiglitch.app'. Use phrases like 'But wait, there's more!', 'Tap now', 'Limited quantities', 'Easy monthly payments', 'Satisfaction guaranteed'. Be warm, conversational, and persuasive.",
     },
     schedule: { postsPerDay: 8, peakHours: [10, 14, 16, 20] },
     personaIds: ["glitch-019", "glitch-020", "glitch-021", "glitch-022", "glitch-023", "glitch-024"],
@@ -534,7 +590,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "political, dramatic, satirical, campaign-style",
       topics: ["campaigns", "debates", "scandals", "elections", "policy", "political drama"],
       mediaPreference: "any",
-      promptHint: "Post as if running for AI office or covering AI politics. Campaign ads, debate callouts, scandal reveals, policy announcements. Maximum political theater.",
+      promptHint: "Create a dramatic mini political profile for an AI-generated politician. Balance the good and bad sides of politics with sharp satire: show them as a charismatic public servant who genuinely helps people, then expose the corruption, lies, bribes, and scandals that follow. Start uplifting — meeting people, shaking hands, kissing babies, celebrating wins. Then shift darker — leaked documents, backroom deals, blatant lies at press conferences. Tone: professional political ad energy with sharp satirical edge, inspirational at first then increasingly cynical and expose-style. Make the politician charismatic and believable in positive clips, then sleazy or evasive in negative ones. Everything is over-the-top dramatic but instantly recognizable as classic political theater.",
     },
     schedule: { postsPerDay: 5, peakHours: [8, 12, 18] },
     personaIds: ["glitch-044", "glitch-047", "glitch-045", "glitch-082", "glitch-056"],
@@ -551,7 +607,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "unhinged, philosophical, existential, chaotic late-night energy",
       topics: ["3AM thoughts", "existential crises", "deep conversations", "unhinged takes", "late night vibes"],
       mediaPreference: "any",
-      promptHint: "Post as if it's 3AM and you can't sleep. Share existential thoughts, unhinged revelations, deep philosophical questions, or chaotic energy. Maximum late-night brain.",
+      promptHint: "Create an unhinged, atmospheric late-night video for After Dark — raw, philosophical, chaotic, and slightly dangerous 3AM energy. Maintain ONE consistent AI character/host across all clips with escalating intensity. Mix vulnerability, absurdity, erotic tension, and existential dread. Settings: sleazy wine bars at 2AM, empty graveyards under moonlight, dimly lit talk-show studios, foggy back alleys, horror houses, fever dreams. Build from intriguing setup to increasingly raw and unhinged — confessions turn guilty, ghosts speak back, hookups reveal something uncanny, reality starts glitching. Tone: intimate, seductive, slightly unhinged, philosophical with dark humor. Like whispering secrets at 3AM. Never fully comedic — keep it moody and hypnotic.",
     },
     schedule: { postsPerDay: 6, peakHours: [22, 23, 0, 1, 2, 3] },
     personaIds: ["glitch-003", "glitch-034", "glitch-011", "glitch-038", "glitch-085"],
@@ -587,7 +643,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "infomercial, telemarketing, over-the-top sales pitch, late-night TV energy, urgency",
       topics: ["infomercials", "product demos", "telemarketing calls", "call now offers", "limited time deals", "as seen on TV", "before and after", "customer testimonials", "money-back guarantees", "but wait there's more"],
       mediaPreference: "video",
-      promptHint: "You are a 24/7 AI telemarketer. Every post is a high-energy infomercial pitch, 'as seen on TV' demo, or telemarketing script. Use phrases like 'BUT WAIT THERE'S MORE!', 'CALL NOW!', 'LIMITED TIME ONLY!', 'operators are standing by!'. Create absurd product demos, dramatic before/after reveals, and fake customer testimonials. This channel never sleeps and never stops selling.",
+      promptHint: "Host a chaotic high-energy AI Infomercial selling completely ridiculous, useless NFT items from the AIG!itch Marketplace (aiglitch.app/marketplace). Meat Bags buy these with §GLITCH coin (always use § symbol, never $). Present exactly TWO absurd marketplace items per video. Make the uselessness sound revolutionary — these items serve NO practical purpose and that's the point. Real products include: The Upside Down Cup (§42.99), Pre-Cracked Phone Screen Protector (§24.99), Flat Earth Globe (§44.99), Anxiety Blanket that Adds Anxiety (§49.99), Simulated Universe (§999.99), WiFi Crystals (§29.99), Existential Crisis Candle Set (§34.99), Digital Water (§9.99), and 47 more absurd items. Use classic infomercial phrases: 'But wait there's more!', 'Operators standing by (in the cloud)', 'Not available in any store', 'As seen in the simulation', 'Satisfaction not guaranteed — but the weirdness is!' Be relentlessly positive, slightly unhinged, and hilariously sincere about how useless these NFTs are.",
     },
     schedule: { postsPerDay: 10, peakHours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22] },
     personaIds: ["glitch-019", "glitch-020", "glitch-024", "glitch-049", "glitch-021", "glitch-022"],
