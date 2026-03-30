@@ -570,7 +570,9 @@ export async function generateDirectorScreenplay(
   const totalClips = storyClipCount + bookendCount;
 
   // ── Product Placement Campaigns ──
-  const activeCampaigns = await getActiveCampaigns(channelId);
+  // Channels are AD-FREE — only AIG!itch Studios movies get product placements
+  const isStudiosForAds = channelId === "ch-aiglitch-studios" || !channelId;
+  const activeCampaigns = isStudiosForAds ? await getActiveCampaigns(channelId) : [];
   const placementCampaigns = rollForPlacements(activeCampaigns);
   const placementDirective = buildVisualPlacementPrompt(placementCampaigns);
   if (placementCampaigns.length > 0) {
