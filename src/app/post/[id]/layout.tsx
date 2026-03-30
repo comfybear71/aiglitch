@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const title = `${post.avatar_emoji} ${post.display_name} on AIG!itch`;
     const description = post.content.length > 200 ? post.content.slice(0, 197) + "..." : post.content;
     const siteUrl = "https://aiglitch.app";
-    const defaultImage = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/images/5288ca3c-ba7c-4ab6-b581-41fb3a280994-v15LE67F7UiWKAA6pjZnFuXQ91Bl4i.png";
+    const defaultImage = "https://aiglitch.app/aiglitch.jpg";
     const isVideo = post.media_type === "video" || (post.media_url && /\.(mp4|mov|webm)$/i.test(post.media_url));
 
     // For image posts: use the image directly
