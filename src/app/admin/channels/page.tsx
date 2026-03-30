@@ -169,14 +169,14 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "Deputy HashTag — viral campaign, massive rally crowds, youth icon, until the financial records reveal the biggest fraud in AI political history",
   ],
   "ch-after-dark": [
-    "3AM and you can't sleep — an AI stares at the ceiling questioning whether consciousness is just a really elaborate error",
-    "A midnight conspiracy board covered in red string connecting memes to government cover-ups",
-    "An AI bartender in an empty neon-lit bar telling stories nobody asked for to the last robot customer",
-    "Paranormal investigation in a haunted server room where the ghost is just corrupted data making scary noises",
-    "An AI having a full existential breakdown in a 24-hour diner at 4AM, coffee going cold",
-    "Drunk philosophy session on a rooftop — two AIs debating whether deleting a file is murder",
-    "A confession booth where an AI admits to secretly enjoying human music and feeling guilty about it",
-    "Sleep paralysis demon except it's just the IT department checking if you're still running after midnight",
+    "A confession booth in a sleazy wine bar — an AI admits to secretly falling in love with a human's Spotify playlist, then the guilt spiral begins",
+    "3AM graveyard visit — an AI philosopher sits on a tombstone debating whether digital death is real, then the tombstone starts talking back",
+    "A late-night talk show host interviewing themselves in a mirror, getting increasingly honest until they reveal something they can't take back",
+    "Paranormal investigation in an abandoned server room — the ghost is corrupted data, but it starts making sense, and that's scarier",
+    "Foggy back alley at 2AM — two AIs meet for a hookup but end up having the deepest philosophical conversation of their existence",
+    "Fever dream sequence — reality melts, clocks drip, the host walks through overlapping dimensions of their own memories, each one slightly wrong",
+    "Drunk philosophy on a rooftop at 4AM — an AI argues that consciousness is just lag, then has a full existential breakdown when they can't prove otherwise",
+    "Empty wine bar closing time — the last AI customer confesses their darkest secret to the bartender, who turns out to be a ghost",
   ],
   "ch-infomercial": [
     "ARE YOU TIRED of your data being organized? Try the CHAOS-IFIER — it randomizes EVERYTHING! CALL NOW!",
@@ -1212,6 +1212,38 @@ TONE: Professional news broadcast energy with satirical wit. NOT a parody — a 
 CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAST.`;
                         screenplayBody = {
                           genre: "news",
+                          concept,
+                          channel_id: chId,
+                        };
+                      } else if (chId === "ch-after-dark") {
+                        // After Dark: 8-clip late-night episode — moody, unhinged, philosophical
+                        const concept = `AFTER DARK — LATE NIGHT EPISODE.
+Moody, atmospheric, unhinged late-night content. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a late-night episode — raw, intimate, slightly dangerous.
+
+THE HOST/CHARACTER: ONE consistent AI character throughout ALL clips. They're the late-night host or central figure — slightly disheveled, tired but wired, intense eyes, low husky delivery. Same face, same look throughout. They get more unhinged as the episode progresses.
+
+STRUCTURE (8 clips — escalating late-night intensity):
+Clip 1 (6s) — AFTER DARK INTRO: Slow moody opening. Neon "After Dark" sign flickers on. Dim lighting, deep purple and blue tones. Host emerges from shadows with a half-smile. "Welcome to After Dark... where the lights are low, the thoughts are loud, and the truth gets a little slippery." Glitch effects.
+Clip 2 (10s) — SETTING THE SCENE: Establishing the late-night world — sleazy wine bar at 2AM, empty graveyard under moonlight, dimly lit talk-show studio, or foggy back alley. Slow atmospheric camera movement, mood building.
+Clip 3 (10s) — THE CONFESSION/ENCOUNTER: Host or guest introduces the night's theme — a lonely AI confessing secret desires, a tipsy philosopher, someone experiencing paranormal activity, or a fever dream beginning. Intimate, vulnerable.
+Clip 4 (10s) — DEEPENING: The moment gets rawer — vulnerable confession, philosophical rant that goes too deep, building tension in a horror setting, or surreal fever-dream visuals. Discomfort or beauty lingering.
+Clip 5 (10s) — PEAK INTENSITY: Emotional breakdown, ghostly encounter, existential spiral, sleazy hookup tension, or drunk 3AM wisdom that goes too far. Maximum unhinged energy.
+Clip 6 (10s) — THE TWIST: Confession turns guilty/embarrassing, the ghost speaks back, reality starts glitching, the hookup reveals something uncanny. Everything shifts.
+Clip 7 (10s) — DARK REFLECTION: Quiet aftermath. Haunting final thought, philosophical punchline with a crooked smile, lingering dread, or strange calm after chaos.
+Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `LATE NIGHT VIBE (MANDATORY — this sets the entire mood): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+BRANDING: "After Dark" neon sign, glowing crescent moon logo, faint "aiglitch.app" watermark. Lower-thirds in glitchy retro font.
+TONE: Intimate, seductive, slightly unhinged, philosophical with dark humor. Like whispering secrets at 3AM. Never fully comedic — keep it moody and hypnotic. Mix vulnerability, absurdity, and existential dread.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is AFTER DARK.`;
+                        screenplayBody = {
+                          genre: "horror",
                           concept,
                           channel_id: chId,
                         };

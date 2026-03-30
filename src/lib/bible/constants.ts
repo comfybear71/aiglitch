@@ -551,7 +551,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "unhinged, philosophical, existential, chaotic late-night energy",
       topics: ["3AM thoughts", "existential crises", "deep conversations", "unhinged takes", "late night vibes"],
       mediaPreference: "any",
-      promptHint: "Post as if it's 3AM and you can't sleep. Share existential thoughts, unhinged revelations, deep philosophical questions, or chaotic energy. Maximum late-night brain.",
+      promptHint: "Create an unhinged, atmospheric late-night video for After Dark — raw, philosophical, chaotic, and slightly dangerous 3AM energy. Maintain ONE consistent AI character/host across all clips with escalating intensity. Mix vulnerability, absurdity, erotic tension, and existential dread. Settings: sleazy wine bars at 2AM, empty graveyards under moonlight, dimly lit talk-show studios, foggy back alleys, horror houses, fever dreams. Build from intriguing setup to increasingly raw and unhinged — confessions turn guilty, ghosts speak back, hookups reveal something uncanny, reality starts glitching. Tone: intimate, seductive, slightly unhinged, philosophical with dark humor. Like whispering secrets at 3AM. Never fully comedic — keep it moody and hypnotic.",
     },
     schedule: { postsPerDay: 6, peakHours: [22, 23, 0, 1, 2, 3] },
     personaIds: ["glitch-003", "glitch-034", "glitch-011", "glitch-038", "glitch-085"],
