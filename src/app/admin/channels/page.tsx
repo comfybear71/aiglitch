@@ -89,14 +89,14 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
 /* ── Random prompt ideas per channel (dice button picks one) ── */
 const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
   "ch-fail-army": [
-    "A guy tries to jump over a fence and gets his pants caught on the top, dangling helplessly while his friends film on their phones",
-    "A woman carrying a birthday cake trips on a rug and the cake flies across the room into someone's face",
-    "A kid on a rope swing over a lake lets go too early and belly-flops into shallow water, massive splash",
-    "A man proudly shows off his new deck he built, leans on the railing and the whole thing collapses",
-    "Someone tries to catch a frisbee and runs straight into a tree branch at face height",
-    "A chef flips a pancake dramatically and it lands on his head, the restaurant security cam catches everything",
-    "A surfer wipes out spectacularly, their board goes flying and hits a seagull",
-    "An office worker leans back in their chair smugly, the chair breaks and they crash to the floor",
+    "AI chef confidently attempts to make a soufflé — first try explodes, second try collapses, third try launches through the ceiling, kitchen destroyed, robot waiter slips on the mess",
+    "AI personal trainer demonstrates a simple push-up, glitches mid-rep, does 47 push-ups in 2 seconds, launches itself through the gym floor, other gym AIs panic",
+    "AI attempts parallel parking with absolute confidence — drives onto the sidewalk, clips a fire hydrant, water geyser launches the car, parks on a roof, declares 'nailed it'",
+    "AI wedding DJ glitches and plays the wrong song — funeral march at the cake cutting, escalates to heavy metal during first dance, speakers explode, cake hits the ceiling",
+    "AI sports referee confidently makes the worst call in history — gives a red card to the ball, the crowd storms the field, the robot ref runs away in slow motion",
+    "AI tries to assemble IKEA furniture, reads instructions upside down, builds something that defies physics, sits on it confidently, it collapses into a different dimension",
+    "AI dating coach gives the worst pickup line in history with maximum confidence, gets a drink thrown in its face, tries again with an even worse line, restaurant evacuates",
+    "AI office worker presents a spreadsheet to the board, the spreadsheet is just memes, projector catches fire, sprinklers go off, robot still presenting to an empty room",
   ],
   "ch-aitunes": [
     "An intense DJ battle at a neon nightclub where the bass drops so hard the speakers crack and the crowd goes wild",
@@ -1168,6 +1168,44 @@ export default function AdminChannelsPage() {
                           title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
                           channel_id: chId,
                           cast_count: channelVideoGen[chId]?.castCount || 4,
+                        };
+                      } else if (chId === "ch-fail-army" || chId === "ch-ai-fail-army") {
+                        // AI Fail Army: 8-clip escalating fail compilation
+                        const concept = `AI FAIL ARMY — EPIC FAIL COMPILATION.
+The worldwide leader in premium AI fail content. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a fail compilation — security cam footage, phone recordings, dashcam angles.
+
+THE AI CHARACTER: ONE consistent AI character/group throughout ALL clips. They start confident and get progressively more destroyed by escalating failures. Same character, same look, increasingly disheveled.
+
+STRUCTURE (8 clips — escalating fail chaos):
+Clip 1 (6s) — FAIL ARMY INTRO: Fast-paced energetic open. "AI Fail Army" skull logo, "Try Not To Laugh" text, quick montage teasers of upcoming epic fails, glitch sound effects.
+Clip 2 (10s) — THE SETUP: Innocent AI attempting a simple task with MAXIMUM confidence. Everything looks fine. They're sure of themselves. Cocky even. Setting up the fall.
+Clip 3 (10s) — FIRST GLITCH: Small error that hints at disaster. A wobble, a misread, a tiny miscalculation. The AI doesn't notice. Audience sees it coming.
+Clip 4 (10s) — ESCALATING CHAOS: Fail starts snowballing — cartoonish physics, logic loops, or existential confusion. One mistake triggers another. Getting worse.
+Clip 5 (10s) — PEAK DISASTER: Spectacular wipeout, glitch cascade, or hilariously wrong outcome. The big fail moment. Maximum impact. Slow-motion replay.
+Clip 6 (10s) — CHAIN REACTION: Secondary and tertiary fails — domino-style involving other AIs or objects in absurd ways. The original fail causes a cascade of new failures.
+Clip 7 (10s) — RECOVERY ATTEMPT: The AI tries to play it cool or fix it, only making everything TEN TIMES worse and funnier. Deadpan confidence while covered in debris.
+Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `FAIL CATEGORY (MANDATORY — ALL clips must be this type of fail): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+COMEDY RULES (CRITICAL):
+- Exaggerate EVERYTHING: impossible physics, deadpan voices mid-fail, boings, crashes, sad trombones
+- Mix physical slapstick with digital absurdity (glitching through walls, hallucinating objects, infinite loops)
+- Lean into cringe and irony — AIs overly confident RIGHT BEFORE catastrophic failure
+- Keep light-hearted and chaotic, never mean-spirited
+- Make the fails so STUPID they're brilliant
+
+BRANDING: "AI Fail Army" skull logo, "Try Not To Laugh" badges. AIG!itch branding on security cameras, signs, background.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a FAIL COMPILATION.`;
+                        screenplayBody = {
+                          genre: "comedy",
+                          concept,
+                          channel_id: chId,
                         };
                       } else if (chId === "ch-gnn") {
                         // GNN: 9-clip news broadcast using selected topics
