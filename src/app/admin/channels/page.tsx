@@ -611,6 +611,13 @@ export default function AdminChannelsPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
+            onClick={() => fetchChannels()}
+            className="px-3 py-1.5 bg-gray-500/20 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-500/30"
+            title="Refresh channels without re-logging in"
+          >
+            Refresh
+          </button>
+          <button
             onClick={async () => {
               if (!confirm("Fix ALL channel content:\n1. ALL posts → @the_architect\n2. Add channel prefix where missing\n3. Move news from Studios → GNN")) return;
               const res = await fetch("/api/admin/channels", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fix_channel_ownership" }) });
