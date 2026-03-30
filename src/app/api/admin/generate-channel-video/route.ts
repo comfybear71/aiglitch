@@ -215,7 +215,7 @@ INTRO (Clip 1, 6 seconds): ${channelName} channel opening. Bold "${channelName}"
 
 CONTENT (Clips 2-${clipCount + 1}, 10 seconds each): ${promptHint}
 
-OUTRO (Last clip, 10 seconds): ${channelName} channel closing. Large "${channelName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below that: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+OUTRO (Last clip, 10 seconds): ${channelName} channel closing. Large "${channelName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below that: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
 CRITICAL CONSISTENCY: ALL content clips MUST maintain the same visual style, same characters/subjects, same location, same lighting, same mood throughout. ${isAiTunes && genreLabel ? `ALL music clips MUST be ${genreLabel} — same genre, same instruments, same venue.` : ""}
 This is NOT a movie — it's channel content. No title cards, no credits, no director names in the content clips.`;

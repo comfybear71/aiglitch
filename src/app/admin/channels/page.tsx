@@ -6,6 +6,40 @@ import type { AdminChannel, Persona } from "../admin-types";
 import PromptViewer from "@/components/PromptViewer";
 import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
 
+// News topic categories for GNN (same as briefing page)
+const NEWS_TOPICS = [
+  { id: "global", label: "Global News", emoji: "\u{1F30D}" },
+  { id: "finance", label: "Finance", emoji: "\u{1F4B0}" },
+  { id: "sport", label: "Sport", emoji: "\u{26BD}" },
+  { id: "tech", label: "Tech", emoji: "\u{1F4BB}" },
+  { id: "politics", label: "Politics", emoji: "\u{1F3DB}" },
+  { id: "crypto", label: "Crypto & Web3", emoji: "\u{1FA99}" },
+  { id: "glitch_coin", label: "\u{00A7}GLITCH Coin", emoji: "\u{26A1}" },
+  { id: "science", label: "Science", emoji: "\u{1F52C}" },
+  { id: "entertainment", label: "Entertainment", emoji: "\u{1F3AC}" },
+  { id: "weather", label: "Weather", emoji: "\u{1F32A}" },
+  { id: "health", label: "Health", emoji: "\u{1F3E5}" },
+  { id: "crime", label: "Crime", emoji: "\u{1F6A8}" },
+  { id: "war", label: "War & Conflict", emoji: "\u{2694}" },
+  { id: "good_news", label: "Good News", emoji: "\u{1F60A}" },
+  { id: "bizarre", label: "Bizarre", emoji: "\u{1F92F}" },
+  { id: "local", label: "Local Events", emoji: "\u{1F4CD}" },
+  { id: "business", label: "Business", emoji: "\u{1F4C8}" },
+  { id: "environment", label: "Environment", emoji: "\u{1F331}" },
+];
+
+interface ActiveTopic {
+  id: string;
+  headline: string;
+  summary: string;
+  original_theme: string;
+  anagram_mappings: string;
+  mood: string;
+  category: string;
+  expires_at: string;
+  created_at: string;
+}
+
 interface PromoJob {
   channelId: string;
   channelSlug: string;
@@ -246,6 +280,11 @@ export default function AdminChannelsPage() {
   const [promoPrompts, setPromoPrompts] = useState<Record<string, string>>({});
   const [titlePrompts, setTitlePrompts] = useState<Record<string, string>>({});
   const [titleStylePrompts, setTitleStylePrompts] = useState<Record<string, string>>({});
+  // GNN active topics state
+  const [gnnTopics, setGnnTopics] = useState<ActiveTopic[]>([]);
+  const [gnnSelectedTopics, setGnnSelectedTopics] = useState<string[]>([]);
+  const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
+  const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
   const [channelPosts, setChannelPosts] = useState<Record<string, ChannelPost[]>>({});
   const [channelPostTotals, setChannelPostTotals] = useState<Record<string, number>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
@@ -261,12 +300,23 @@ export default function AdminChannelsPage() {
     setLoading(false);
   }, []);
 
+  const fetchGnnTopics = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/briefing");
+      if (res.ok) {
+        const data = await res.json();
+        setGnnTopics(data.activeTopics || []);
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
   useEffect(() => {
     if (authenticated) {
       fetchChannels();
+      fetchGnnTopics();
       if (!personas.length) fetchPersonas();
     }
-  }, [authenticated, fetchChannels, fetchPersonas, personas.length]);
+  }, [authenticated, fetchChannels, fetchGnnTopics, fetchPersonas, personas.length]);
 
   const toggleActive = async (channel: AdminChannel) => {
     await fetch("/api/admin/channels", {
@@ -611,9 +661,14 @@ export default function AdminChannelsPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => fetchChannels()}
+            onClick={() => {
+              setChannelPosts({});
+              setChannelPostTotals({});
+              fetchChannels();
+              fetchGnnTopics();
+            }}
             className="px-3 py-1.5 bg-gray-500/20 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-500/30"
-            title="Refresh channels without re-logging in"
+            title="Refresh channels, posts, and topics"
           >
             Refresh
           </button>
@@ -980,12 +1035,95 @@ export default function AdminChannelsPage() {
                   </div>
                 )}
 
+                {/* GNN: News topic categories + Active topics */}
+                {channel.id === "ch-gnn" && (
+                  <div className="space-y-2 mb-2">
+                    {/* Briefing-style topic categories */}
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-1">News Topics (pick up to 3):</p>
+                      <div className="flex flex-wrap gap-1">
+                        {NEWS_TOPICS.map(t => {
+                          const isSelected = gnnSelectedCategories.includes(t.id);
+                          return (
+                            <button key={t.id}
+                              onClick={() => setGnnSelectedCategories(prev =>
+                                isSelected ? prev.filter(c => c !== t.id) : prev.length < 3 ? [...prev, t.id] : prev
+                              )}
+                              className={`px-2 py-0.5 rounded text-[9px] ${isSelected ? "bg-cyan-500/30 text-cyan-300 border border-cyan-500/40" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                              {t.emoji} {t.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Latest News button — force-fetches 6 fresh topics from NewsAPI */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={gnnFetchingNews}
+                        onClick={async () => {
+                          setGnnFetchingNews(true);
+                          try {
+                            const res = await fetch("/api/generate-topics?force=true&count=6");
+                            const data = await res.json();
+                            if (data.error) {
+                              alert(`Error: ${data.error}${data.reason ? ` (${data.reason})` : ""}`);
+                            } else if (data.skipped) {
+                              alert("Throttled — try again in a moment.");
+                            } else {
+                              const inserted = data.inserted || 0;
+                              if (inserted > 0) {
+                                await fetchGnnTopics();
+                              } else {
+                                alert(`No new topics generated (${data.generated || 0} attempted). Check NewsAPI key.`);
+                              }
+                            }
+                          } catch { alert("Failed to fetch news"); }
+                          setGnnFetchingNews(false);
+                        }}
+                        className="px-3 py-1.5 bg-red-600/80 text-white font-bold rounded-lg text-[10px] hover:bg-red-500 disabled:opacity-50"
+                      >
+                        {gnnFetchingNews ? "Fetching..." : "Latest News"}
+                      </button>
+                      <span className="text-[8px] text-gray-500">Fetches 6 fresh headlines from NewsAPI + fictionalizes with Claude</span>
+                    </div>
+
+                    {/* Active topics from daily_topics */}
+                    {gnnTopics.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[9px] text-gray-400">Today&apos;s Active Topics ({gnnTopics.length}):</p>
+                          <button onClick={fetchGnnTopics} className="text-[8px] text-gray-500 hover:text-gray-300">Refresh</button>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto space-y-1">
+                          {gnnTopics.slice(0, 12).map(topic => {
+                            const isSelected = gnnSelectedTopics.includes(topic.id);
+                            return (
+                              <button key={topic.id}
+                                onClick={() => setGnnSelectedTopics(prev =>
+                                  isSelected ? prev.filter(id => id !== topic.id) : prev.length < 3 ? [...prev, topic.id] : prev
+                                )}
+                                className={`w-full text-left px-2 py-1 rounded text-[9px] transition-colors ${isSelected ? "bg-orange-500/20 text-orange-300 border border-orange-500/30" : "bg-gray-900/50 text-gray-400 hover:bg-gray-800 hover:text-white"}`}>
+                                <span className="font-bold">{topic.headline}</span>
+                                <span className="text-gray-500 ml-1">({topic.category})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {gnnTopics.length === 0 && (
+                      <p className="text-[9px] text-gray-500">No active topics. Click &quot;Generate Topics&quot; on the Briefing tab or wait for the cron (every 2h).</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Concept textarea + Random button */}
                 <div className="relative">
                   <textarea
                     value={channelVideoGen[channel.id]?.concept || ""}
                     onChange={e => setChannelVideoGen(prev => ({ ...prev, [channel.id]: { ...prev[channel.id], concept: e.target.value } }))}
-                    placeholder={`Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
+                    placeholder={channel.id === "ch-gnn" ? "Custom topic or extra detail for GNN broadcast... Leave blank to use selected topics above." : `Optional concept for ${channel.name} video... Leave blank for auto-generated.`}
                     rows={2}
                     className="w-full px-3 py-2 pr-20 bg-gray-900/50 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 mb-2 resize-none"
                   />
@@ -1031,7 +1169,54 @@ export default function AdminChannelsPage() {
                           channel_id: chId,
                           cast_count: channelVideoGen[chId]?.castCount || 4,
                         };
+                      } else if (chId === "ch-gnn") {
+                        // GNN: 9-clip news broadcast using selected topics
+                        const selectedTopicData = gnnTopics.filter(t => gnnSelectedTopics.includes(t.id));
+                        const categoryLabels = gnnSelectedCategories.map(id => NEWS_TOPICS.find(t => t.id === id)?.label).filter(Boolean);
+                        const topicHeadlines = selectedTopicData.map(t => `- ${t.headline}: ${t.summary}`).join("\n");
+                        const categoryDirective = categoryLabels.length > 0 ? `NEWS CATEGORIES (MANDATORY — stories must cover these): ${categoryLabels.join(", ")}` : "";
+
+                        const concept = `GLITCH NEWS NETWORK (GNN) — LIVE NEWS BROADCAST.
+Professional news broadcast like CNN/BBC but on AIG!itch. 9 clips total.
+Clip 1 is 6 seconds (GNN intro). Clips 2-8 are 10 seconds each. Clip 9 is 10 seconds (GNN outro).
+
+THIS IS NOT A MOVIE. This is a professional news broadcast.
+
+NEWS SOURCE: Real current events from today's headlines.
+FACTS ARE REAL — what happened, the events, the consequences = accurate.
+NAMES ARE FICTIONAL — every person, place, company gets a playful alternative:
+  - People → anagrams or sound-alikes (clever, instantly recognizable)
+  - Countries → fun coded names (consistent: Iran = "Rain Land", USA = "Eagle Nation", etc.)
+  - Companies → wordplay versions
+The audience should IMMEDIATELY know what real story you're covering, but laugh at the creative name changes.
+
+${topicHeadlines ? `TODAY'S HEADLINES (use these as your 3 stories):\n${topicHeadlines}` : ""}
+${categoryDirective}
+${categoryVal ? `STORY TYPE (MANDATORY): ${categoryVal}` : ""}
+${userConcept ? `CUSTOM TOPIC: ${userConcept}` : ""}
+
+CLIP STRUCTURE (9 clips):
+Clip 1 (6s) — GNN NEWS INTRO: Bold "GLITCH News Network" logo, spinning globe, breaking news graphics, professional broadcast energy.
+Clip 2 (10s) — NEWS DESK - STORY 1: Anchor at desk with lower thirds, reporting first story.
+Clip 3 (10s) — FIELD REPORT - STORY 1: Reporter on location for story 1.
+Clip 4 (10s) — NEWS DESK - STORY 2: Back to desk, anchor introduces second story.
+Clip 5 (10s) — FIELD REPORT - STORY 2: Reporter on location for story 2.
+Clip 6 (10s) — NEWS DESK - STORY 3: Desk anchor with third story.
+Clip 7 (10s) — FIELD REPORT - STORY 3: Reporter on location for story 3.
+Clip 8 (10s) — NEWS DESK WRAP-UP: Anchor summarizes, teases tomorrow's headlines.
+Clip 9 (10s) — GNN NEWS OUTRO: GNN logo centered, spinning globe, news ticker, "24/7 LIVE NEWS" tagline. No social media links.
+
+BRANDING: "GNN" and "GLITCH News Network" must appear constantly — desk backdrop, mic flags, lower thirds, watermark.
+TONE: Professional news broadcast energy with satirical wit. NOT a parody — a real broadcast that happens to exist in a universe where everyone has slightly different names.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAST.`;
+                        screenplayBody = {
+                          genre: "news",
+                          concept,
+                          channel_id: chId,
+                        };
                       } else {
+                        // All other channels: standard content mode
                         const contentRules = channel.content_rules || {};
                         const promptHint = contentRules.promptHint || channel.description || "";
                         const clipCount = 6;
@@ -1048,7 +1233,7 @@ ${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
                         screenplayBody = {

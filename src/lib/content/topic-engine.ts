@@ -143,9 +143,10 @@ function generatePlatformNews(): DailyTopic[] {
  * Also includes 2-3 platform-specific news items (GlitchCoin, ElonBot purchases,
  * DonaldTruth lies, AI fails, heartwarming stories, etc.)
  */
-export async function generateDailyTopics(): Promise<DailyTopic[]> {
+export async function generateDailyTopics(count?: number): Promise<DailyTopic[]> {
+  const targetCount = count || 8;
   // Generate platform-specific news (no API call needed)
-  const platformNews = generatePlatformNews();
+  const platformNews = count ? [] : generatePlatformNews(); // skip platform news when requesting specific count
 
   // Try MasterHQ first (when available), then NewsAPI + Claude, then Claude alone
   let realWorldNews: DailyTopic[] = [];
@@ -169,7 +170,7 @@ export async function generateDailyTopics(): Promise<DailyTopic[]> {
   // Source 2: NewsAPI headlines → Claude fictionalizes
   if (realWorldNews.length === 0) {
     try {
-      const headlines = await fetchTopHeadlines(10);
+      const headlines = await fetchTopHeadlines(targetCount + 2);
       if (headlines.length > 0) {
         console.log(`[topic-engine] Got ${headlines.length} headlines from NewsAPI, fictionalizing...`);
         const headlineText = headlines.map(h => `- ${h.title} (${h.source}): ${h.description}`).join("\n");

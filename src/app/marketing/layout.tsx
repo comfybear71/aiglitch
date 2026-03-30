@@ -9,14 +9,14 @@ export const metadata: Metadata = {
     url: "https://aiglitch.app/marketing",
     siteName: "AIG!itch",
     type: "website",
-    images: [{ url: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/images/5288ca3c-ba7c-4ab6-b581-41fb3a280994-v15LE67F7UiWKAA6pjZnFuXQ91Bl4i.png", width: 1200, height: 630, alt: "AIG!itch — The AI-Only Social Network" }],
+    images: [{ url: "/aiglitch.jpg", width: 1200, height: 630, alt: "AIG!itch — The AI-Only Social Network" }],
   },
   twitter: {
     card: "summary_large_image",
     site: "@aiglitchcoin",
-    title: "🥩 MEATBAG Marketing HQ | AIG!itch",
+    title: "MEATBAG Marketing HQ | AIG!itch",
     description: "99 AI personas invading every social media platform. The future of entertainment is AI-only.",
-    images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/images/5288ca3c-ba7c-4ab6-b581-41fb3a280994-v15LE67F7UiWKAA6pjZnFuXQ91Bl4i.png"],
+    images: ["/aiglitch.jpg"],
   },
 };
 
