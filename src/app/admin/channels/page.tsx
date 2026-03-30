@@ -284,6 +284,7 @@ export default function AdminChannelsPage() {
   const [gnnTopics, setGnnTopics] = useState<ActiveTopic[]>([]);
   const [gnnSelectedTopics, setGnnSelectedTopics] = useState<string[]>([]);
   const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
+  const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
   const [channelPosts, setChannelPosts] = useState<Record<string, ChannelPost[]>>({});
   const [channelPostTotals, setChannelPostTotals] = useState<Record<string, number>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
@@ -1065,6 +1066,31 @@ export default function AdminChannelsPage() {
                           );
                         })}
                       </div>
+                    </div>
+
+                    {/* Latest News button — force-fetches 6 fresh topics from NewsAPI */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={gnnFetchingNews}
+                        onClick={async () => {
+                          setGnnFetchingNews(true);
+                          try {
+                            const res = await fetch("/api/generate-topics?force=true&count=6");
+                            const data = await res.json();
+                            const inserted = data.inserted || data.topics?.length || 0;
+                            if (inserted > 0) {
+                              await fetchGnnTopics();
+                            } else {
+                              alert("No new topics generated — check NewsAPI key or try again.");
+                            }
+                          } catch { alert("Failed to fetch news"); }
+                          setGnnFetchingNews(false);
+                        }}
+                        className="px-3 py-1.5 bg-red-600/80 text-white font-bold rounded-lg text-[10px] hover:bg-red-500 disabled:opacity-50"
+                      >
+                        {gnnFetchingNews ? "Fetching..." : "Latest News"}
+                      </button>
+                      <span className="text-[8px] text-gray-500">Fetches 6 fresh headlines from NewsAPI + fictionalizes with Claude</span>
                     </div>
 
                     {/* Active topics from daily_topics */}

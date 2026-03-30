@@ -29,6 +29,9 @@ export async function GET(request: NextRequest) {
   if (gate) return gate;
 
   const sql = getDb();
+  const url = new URL(request.url);
+  const forceRefresh = url.searchParams.get("force") === "true";
+  const topicCount = parseInt(url.searchParams.get("count") || "0") || 0;
 
   // Expire old topics
   await sql`UPDATE daily_topics SET is_active = FALSE WHERE expires_at < NOW()`;
@@ -45,9 +48,9 @@ export async function GET(request: NextRequest) {
   let topics: { headline: string; summary: string; original_theme: string; anagram_mappings: string; mood: string; category: string }[] = [];
   let inserted = 0;
 
-  if (currentCount < 5) {
-    console.log(`Only ${currentCount} active topics — generating fresh batch...`);
-    topics = await generateDailyTopics();
+  if (currentCount < 5 || forceRefresh) {
+    console.log(`${forceRefresh ? "Force refresh" : `Only ${currentCount} active topics`} — generating fresh batch...`);
+    topics = await generateDailyTopics(topicCount || undefined);
 
     for (const topic of topics) {
       try {
