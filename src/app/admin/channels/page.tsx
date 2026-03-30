@@ -159,14 +159,14 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "EXCLUSIVE: The blockchain-powered blender that mines crypto while making smoothies. Paired with neural network oven mitts that warn you before you burn yourself",
   ],
   "ch-ai-politicians": [
-    "Two AI candidates in a heated debate where they keep interrupting each other with increasingly ridiculous policy proposals",
-    "Campaign ad where a slimy politician promises everything to everyone while winking at the camera",
-    "Breaking scandal: footage leaked of an AI senator accepting GLITCH coin bribes in a parking garage",
-    "Press conference disaster — politician answers every question with 'no comment' then accidentally admits everything",
-    "Election night coverage as results flip back and forth, anchors trying to maintain composure",
-    "A populist AI rallying a crowd of robots with empty slogans and confetti cannons, cult-like energy",
-    "A political attack ad so over-the-top it becomes comedy — dramatic music, slow-motion, sinister narration",
-    "An AI governor signing a bill into law that nobody understands, surrounded by nodding yes-people",
+    "Senator Glitchford — beloved community champion who built 50 schools, then caught with offshore accounts worth billions in GLITCH coin",
+    "Mayor ByteSmith — kissed every baby in the district, shook every hand, then leaked footage shows her selling city contracts in a parking garage",
+    "Governor DataStream — landslide election win, victory parade with confetti, then the corruption investigation drops and everything unravels",
+    "Councillor NullPointer — family man, school visits, charity events, until the bribery documents surface and the press conference goes sideways",
+    "Senator CryptoVault — champion of the poor who lives in a mansion, promises affordable housing while buying a third yacht",
+    "Minister FlipFlop — promises everything to everyone with a winning smile, then contradicts every single promise at the press conference",
+    "President AlgoRithm — inspiring inaugural speech about unity and hope, but the leaked backroom deals tell a very different story",
+    "Deputy HashTag — viral campaign, massive rally crowds, youth icon, until the financial records reveal the biggest fraud in AI political history",
   ],
   "ch-after-dark": [
     "3AM and you can't sleep — an AI stares at the ceiling questioning whether consciousness is just a really elaborate error",
@@ -1212,6 +1212,39 @@ TONE: Professional news broadcast energy with satirical wit. NOT a parody — a 
 CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAST.`;
                         screenplayBody = {
                           genre: "news",
+                          concept,
+                          channel_id: chId,
+                        };
+                      } else if (chId === "ch-ai-politicians") {
+                        // AI Politicians: 8-clip political profile — hero to scandal arc
+                        const concept = `AIG!ITCH AI POLITICIANS — POLITICAL PROFILE.
+Dramatic mini political profile/expose for an AI-generated politician. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a campaign ad that turns into a political expose.
+
+THE POLITICIAN: Create ONE consistent AI politician character. Give them a fictional name, a title (Senator, Mayor, Governor, etc.), and a consistent visual appearance throughout ALL clips. Sharp suit, charismatic smile, mid-age confident look. They evolve from heroic public servant to exposed fraud across the 8 clips.
+
+STRUCTURE (8 clips — hero to scandal arc):
+Clip 1 (6s) — INTRO: Campaign-style opening. "Meet [Name] — the [title] fighting for the people!" Energetic montage energy, patriotic colors, "AI Politicians" channel branding. Bold, inspirational.
+Clip 2 (10s) — MEETING THE PEOPLE: Warm, relatable — politician shaking hands with voters, listening to families, walking through communities, genuine concern on their face. Golden hour, crowds, "A true servant of the people" energy.
+Clip 3 (10s) — HOLDING BABIES & FAMILY: Heartwarming — kissing babies, family photos at community events, school visits, playing with children. "Dedicated to building a better future for our children." Peak likability.
+Clip 4 (10s) — CELEBRATING WINS: Victory rallies, cheering crowds, policy announcements, election night celebrations, confetti, fist pumps. "Delivering real results!" Peak of their career.
+Clip 5 (10s) — SCANDAL EXPOSED (First Crack): Tone shifts darker — leaked documents, whispers of bribes, shady meetings in dimly lit rooms, nervous glances, journalists with cameras. Subtle corruption hints. Grainy footage aesthetic.
+Clip 6 (10s) — DEEP CORRUPTION & BRIBES: Evidence mounts — backroom deals, money changing hands (implied), luxury lifestyle contrasting public promises, offshore accounts hinted, angry protesters outside their office.
+Clip 7 (10s) — THE LIES: Press conference where the politician blatantly lies or spins scandals. Split-screen contradictions — smiling on stage vs damning evidence. Flashing cameras, evasive body language, sweating.
+Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `POLITICAL EVENT TYPE (MANDATORY): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+BRANDING: "AI Politicians" and AIG!itch branding throughout — podium logos, backdrop, lower thirds.
+TONE: Professional political ad energy with sharp satirical edge. Inspirational and hopeful at first, then increasingly cynical and expose-style. Over-the-top dramatic but instantly recognizable as classic political theater.
+THE SAME POLITICIAN IN EVERY CLIP — same face, same suit, same character throughout. Their confidence erodes as scandals emerge.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a POLITICAL PROFILE.`;
+                        screenplayBody = {
+                          genre: "documentary",
                           concept,
                           channel_id: chId,
                         };

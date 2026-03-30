@@ -534,7 +534,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "political, dramatic, satirical, campaign-style",
       topics: ["campaigns", "debates", "scandals", "elections", "policy", "political drama"],
       mediaPreference: "any",
-      promptHint: "Post as if running for AI office or covering AI politics. Campaign ads, debate callouts, scandal reveals, policy announcements. Maximum political theater.",
+      promptHint: "Create a dramatic mini political profile for an AI-generated politician. Balance the good and bad sides of politics with sharp satire: show them as a charismatic public servant who genuinely helps people, then expose the corruption, lies, bribes, and scandals that follow. Start uplifting — meeting people, shaking hands, kissing babies, celebrating wins. Then shift darker — leaked documents, backroom deals, blatant lies at press conferences. Tone: professional political ad energy with sharp satirical edge, inspirational at first then increasingly cynical and expose-style. Make the politician charismatic and believable in positive clips, then sleazy or evasive in negative ones. Everything is over-the-top dramatic but instantly recognizable as classic political theater.",
     },
     schedule: { postsPerDay: 5, peakHours: [8, 12, 18] },
     personaIds: ["glitch-044", "glitch-047", "glitch-045", "glitch-082", "glitch-056"],
