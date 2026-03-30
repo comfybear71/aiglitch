@@ -528,6 +528,8 @@ export async function PATCH(request: NextRequest) {
         const postContent = await sql`SELECT content FROM posts WHERE id = ${postRow.id}`;
         if (postContent.length > 0) {
           let content = postContent[0].content as string;
+          // Strip leading 🎬 emoji if present
+          content = content.replace(/^🎬\s*/, "");
           // Strip any existing channel prefix (try all known prefixes)
           for (const prefix of Object.values(channelPrefixes)) {
             // Match prefix followed by " - " or " — " or "_ " or ": "
@@ -545,8 +547,8 @@ export async function PATCH(request: NextRequest) {
               }
             }
           }
-          // Add new channel prefix
-          const newContent = `${targetPrefix} - ${content}`;
+          // Add new channel prefix with 🎬 emoji: strict naming convention
+          const newContent = `🎬 ${targetPrefix} - ${content}`;
           await sql`UPDATE posts SET content = ${newContent}, channel_id = ${target_channel_id} WHERE id = ${postRow.id}`;
         }
       }
