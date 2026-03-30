@@ -288,6 +288,8 @@ export default function AdminChannelsPage() {
   const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
   const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
   const [infomercialSelectedItems, setInfomercialSelectedItems] = useState<string[]>([]);
+  const [autopilotQueue, setAutopilotQueue] = useState<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>([]);
+  const [autopilotTotal, setAutopilotTotal] = useState(0);
   const [channelPosts, setChannelPosts] = useState<Record<string, ChannelPost[]>>({});
   const [channelPostTotals, setChannelPostTotals] = useState<Record<string, number>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
@@ -320,6 +322,90 @@ export default function AdminChannelsPage() {
       if (!personas.length) fetchPersonas();
     }
   }, [authenticated, fetchChannels, fetchGnnTopics, fetchPersonas, personas.length]);
+
+  // Autopilot: process queue — when current generation finishes, start the next
+  useEffect(() => {
+    if (!generating && autopilotQueue.length > 0) {
+      const [next, ...rest] = autopilotQueue;
+      setAutopilotQueue(rest);
+      const remaining = rest.length;
+      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: Starting ${next.channelName} (${autopilotTotal - remaining}/${autopilotTotal})...`]);
+      startGeneration(next);
+    }
+  }, [generating, autopilotQueue, autopilotTotal, startGeneration, setGenerationLog]);
+
+  // Build autopilot queue from random channels
+  const runAutopilot = (count: number) => {
+    const activeChannels = channels.filter(ch => ch.is_active && ch.id !== "ch-aiglitch-studios");
+    if (activeChannels.length === 0) { alert("No active channels"); return; }
+
+    // Pick random channels, avoiding duplicates until we exhaust the list
+    const picks: typeof activeChannels = [];
+    const pool = [...activeChannels];
+    for (let i = 0; i < count; i++) {
+      if (pool.length === 0) pool.push(...activeChannels); // refill if we need more than available
+      const idx = Math.floor(Math.random() * pool.length);
+      picks.push(pool.splice(idx, 1)[0]);
+    }
+
+    // Build screenplayBody for each pick
+    const queue = picks.map(ch => {
+      const contentRules = ch.content_rules || {};
+      const promptHint = contentRules.promptHint || ch.description || "";
+      const clipCount = 6;
+
+      // Pick a random category from the channel's options
+      const options = CHANNEL_VIDEO_OPTIONS[ch.id]?.options || [];
+      const randomCategory = options.length > 0 ? options[Math.floor(Math.random() * options.length)] : "";
+
+      // Pick a random concept from the channel's random prompts
+      const prompts = CHANNEL_RANDOM_PROMPTS[ch.id] || [];
+      const randomConcept = prompts.length > 0 ? prompts[Math.floor(Math.random() * prompts.length)] : "";
+
+      const concept = `${ch.name} CHANNEL VIDEO — ${clipCount + 2} clips total.
+Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds each (main content). Scene ${clipCount + 2} is a 10-second channel outro.
+
+THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no "AIG!itch Studios", no cast lists. Just pure channel content.
+
+CHANNEL: ${ch.name}
+CHANNEL RULES: ${promptHint}
+${randomCategory ? `THEME/CATEGORY (MANDATORY — ALL content clips must focus on this): ${randomCategory}` : ""}
+${randomConcept ? `CONCEPT: ${randomConcept}` : ""}
+
+INTRO (Scene 1, 6 seconds): ${ch.name} channel opening. Bold "${ch.name}" logo animation with channel-themed graphics and energy.
+CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
+OUTRO (Last scene, 10 seconds): ${ch.name} channel closing. Large "${ch.name}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${ch.name} channel content ONLY.`;
+
+      // Add slogans
+      const channelSlogan = SLOGANS.channels[ch.id as keyof typeof SLOGANS.channels] || "Stay Glitchy.";
+      const randomSlogans = [...SLOGANS.core].sort(() => Math.random() - 0.5).slice(0, 3);
+      const outroSignoff = SLOGANS.outros[Math.floor(Math.random() * SLOGANS.outros.length)];
+      const sloganBlock = `\nAIG!ITCH SLOGANS: Channel: "${channelSlogan}" | Brand: "${randomSlogans.join('", "')}" | Outro: "${outroSignoff}"\n`;
+
+      return {
+        channelId: ch.id,
+        channelName: ch.name,
+        channelSlug: ch.slug,
+        isStudios: false,
+        screenplayBody: {
+          genre: ch.genre || "drama",
+          concept: concept + sloganBlock,
+          channel_id: ch.id,
+        },
+      };
+    });
+
+    setAutopilotTotal(queue.length);
+    setGenerationLog([`🤖 AUTOPILOT MODE: Queued ${queue.length} videos across ${new Set(queue.map(q => q.channelName)).size} channels`]);
+    setGenerationLog((prev: string[]) => [...prev, `  Channels: ${queue.map(q => q.channelName).join(", ")}`]);
+
+    // Start the first one immediately, queue the rest
+    const [first, ...rest] = queue;
+    setAutopilotQueue(rest);
+    startGeneration(first);
+  };
 
   const toggleActive = async (channel: AdminChannel) => {
     await fetch("/api/admin/channels", {
@@ -675,83 +761,22 @@ export default function AdminChannelsPage() {
           >
             Refresh
           </button>
-          <button
-            onClick={async () => {
-              if (!confirm("Fix ALL channel content:\n1. ALL posts → @the_architect\n2. Add channel prefix where missing\n3. Move news from Studios → GNN")) return;
-              const res = await fetch("/api/admin/channels", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fix_channel_ownership" }) });
-              const data = await res.json();
-              alert(data.message || "Done");
-              fetchChannels();
-            }}
-            className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30"
-          >
-            Fix Ownership
-          </button>
-          <button
-            onClick={async () => {
-              if (!confirm("UNDO: Restore all posts that were just cleaned? This will put posts back into GNN, Studios, Infomercial, etc. based on their content type.")) return;
-              const res = await fetch("/api/admin/channels", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "undo_clean" }),
-              });
-              const data = await res.json();
-              let msg = data.message || "Done";
-              if (data.results?.length > 0) {
-                msg += "\n\n" + data.results.map((r: { channel: string; restored: number }) => `${r.channel}: ${r.restored} restored`).join("\n");
-              }
-              alert(msg);
-              fetchChannels();
-            }}
-            className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30"
-          >
-            Undo Clean
-          </button>
-          <button
-            onClick={async () => {
-              if (!confirm("Clean ALL channels? This will:\n1. Restore videos that belong in each channel\n2. Remove videos that don't match the channel name prefix\n\nEach channel uses its name as the required prefix.")) return;
-              const res = await fetch("/api/admin/channels", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "clean_all_channels" }),
-              });
-              const data = await res.json();
-              let msg = data.message || "Done";
-              if (data.results?.length > 0) {
-                msg += "\n\nDetails:\n" + data.results.map((r: { channel: string; flushed: number; restored: number }) => `${r.channel}: ${r.flushed} removed, ${r.restored} restored`).join("\n");
-              }
-              alert(msg);
-              fetchChannels();
-            }}
-            className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30"
-          >
-            Clean All Channels
-          </button>
-          <button
-            onClick={async () => {
-              if (!confirm("Remove all non-video content from ALL channels? Images and memes will be moved back to the main feed.")) return;
-              const res = await fetch("/api/admin/channels", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "flush_non_video" }),
-              });
-              const data = await res.json();
-              alert(data.message || `Flushed ${data.flushed || 0} posts`);
-              fetchChannels();
-            }}
-            className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30"
-          >
-            Flush Non-Video
-          </button>
+          {/* Autopilot — one-click batch generation */}
+          {[5, 10, 20].map(count => (
+            <button key={count}
+              disabled={generating}
+              onClick={() => {
+                if (!confirm(`AUTOPILOT: Generate ${count} random videos across all channels?\n\nThis will pick ${count} random channels and generate a video for each with random topics/concepts. Takes a while — runs in the background.`)) return;
+                runAutopilot(count);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${generating ? "bg-gray-800 text-gray-600" : "bg-green-600/80 text-white hover:bg-green-500"}`}
+            >
+              Autopilot {count}
+            </button>
+          ))}
           <a href="/channels" target="_blank" className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700">
             View Live
           </a>
-          <button
-            onClick={() => { setEditingChannel(null); setShowCreate(true); }}
-            className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30"
-          >
-            + New Channel
-          </button>
         </div>
       </div>
 
