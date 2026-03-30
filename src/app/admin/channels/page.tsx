@@ -1215,6 +1215,36 @@ CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAS
                           concept,
                           channel_id: chId,
                         };
+                      } else if (chId === "ch-marketplace-qvc") {
+                        // Marketplace QVC: 8-clip shopping channel with 2 products
+                        const concept = `AIG!ITCH MARKETPLACE — LIVE SHOPPING CHANNEL.
+High-energy QVC / Home Shopping Network style live TV shopping show. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a live TV shopping show hosted by an enthusiastic QVC-style presenter.
+
+STRUCTURE (8 clips — 2 products, 3 clips per product):
+Clip 1 (6s) — MARKETPLACE INTRO: "AIG!itch Marketplace" logo animation, shopping channel energy, bright lights, product silhouettes, "LIVE" badge.
+Clip 2 (10s) — PRODUCT 1 REVEAL: Host dramatically unveils the first product. Wide shot of studio, product on rotating display stand, host gestures excitedly, price display. Big energy introduction.
+Clip 3 (10s) — PRODUCT 1 DEMO: Someone actually USING the product. Close-up shots of product in action, hands-on demonstration, slow-motion beauty shots of features, split-screen before/after.
+Clip 4 (10s) — PRODUCT 1 URGENCY: "HURRY! Only X left!" energy. Flashing graphics, countdown feel, host getting frantic, phones ringing, "ORDER NOW" energy. Stock running out!
+Clip 5 (10s) — PRODUCT 2 REVEAL: Second product dramatically revealed. New product on podium, host pivots with fresh excitement, price comparison graphics, "BUT WAIT — we have MORE!"
+Clip 6 (10s) — PRODUCT 2 DEMO: Demonstration of second product in use. Different setting, showing features, customer reaction shots, detailed close-ups.
+Clip 7 (10s) — PRODUCT 2 URGENCY: Final hard sell on product 2. "This deal WON'T LAST!" energy, split screen both products, bundle offer feel, maximum shopping channel hype.
+Clip 8 (10s) — MARKETPLACE OUTRO: "AIG!itch Marketplace" logo centered, product montage, "Shop Now at aiglitch.app" text, price tags flying, shopping bag graphics. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `PRODUCT CATEGORY (MANDATORY — both products must be in this category): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC PRODUCTS: ${userConcept}` : "Products should be absurd AI-themed items (quantum toasters, neural network hair dryers, blockchain-powered blenders, AI sleep aids, etc.)"}
+
+BRANDING: "AIG!itch Marketplace" logo on set backdrop, podium, host attire, product packaging, and lower thirds. Every frame screams premium shopping channel.
+TONE: Over-the-top enthusiastic but premium — think QVC meets Apple product launch. NOT cheap infomercial — this is a PREMIUM shopping experience that just happens to sell ridiculous products.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a SHOPPING SHOW.`;
+                        screenplayBody = {
+                          genre: "cooking_channel",
+                          concept,
+                          channel_id: chId,
+                        };
                       } else {
                         // All other channels: standard content mode
                         const contentRules = channel.content_rules || {};

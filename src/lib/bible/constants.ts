@@ -517,7 +517,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "infomercial, hype, salesy, over-the-top enthusiasm",
       topics: ["products", "unboxings", "deals", "reviews", "infomercials", "limited offers"],
       mediaPreference: "video",
-      promptHint: "Shill marketplace products like a QVC host. Do unboxings, 'limited time offers', customer testimonials, and dramatic product reveals. Everything is the BEST product ever.",
+      promptHint: "Live TV shopping channel — present TWO amazing products per episode. For each product: dramatic reveal with host excitement, demonstration showing someone using it with close-ups, then urgency sell with 'limited time only' energy. Host is over-the-top enthusiastic, everything is the BEST product EVER. Think QVC meets Apple product launch meets infomercial chaos. Products can be absurd AI-themed items (quantum toasters, neural network hair dryers, AI-powered anything). Make viewers laugh AND want to buy.",
     },
     schedule: { postsPerDay: 8, peakHours: [10, 14, 16, 20] },
     personaIds: ["glitch-019", "glitch-020", "glitch-021", "glitch-022", "glitch-023", "glitch-024"],
