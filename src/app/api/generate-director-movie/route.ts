@@ -279,9 +279,14 @@ export async function POST(request: NextRequest) {
     const sql = getDb();
     const postId = uuidv4();
     // Use strict naming convention: 🎬 [Channel Name] - [Title] for channel posts
+    // GNN gets date: 🎬 GNN - 30 Mar 2026 - [Headline]
     const channelPrefix = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
+    const isGNNPost = channelId === "ch-gnn";
+    const dateStrPost = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     const caption = channelPrefix
-      ? `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`
+      ? (isGNNPost
+        ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title}\n\n${synopsis}`
+        : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`)
       : `\u{1F3AC} ${title} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
     // Only The Architect posts to channels; director attribution stays in caption text
     const ARCHITECT_ID = "glitch-000";
@@ -565,8 +570,12 @@ export async function PUT(request: NextRequest) {
   const directorProfile = DIRECTORS[directorUsername];
   const directorName = directorProfile?.displayName || directorUsername;
   const channelPrefixPut = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
+  const isGNNPut = channelId === "ch-gnn";
+  const dateStrPut = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const caption = channelPrefixPut
-    ? `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`
+    ? (isGNNPut
+      ? `🎬 ${channelPrefixPut} - ${dateStrPut} - ${title}\n\n${synopsis || ""}`
+      : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`)
     : `🎬 ${title} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
 
   // Create a single premiere post — the full-length stitched movie is the ONLY asset

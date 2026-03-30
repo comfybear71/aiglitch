@@ -1077,8 +1077,13 @@ export async function submitDirectorFilm(
     ? CHANNEL_TITLE_PREFIX[options.channelId] || ""
     : "";
 
+  // GNN gets date in the caption so viewers know if it's current: 🎬 GNN - 30 Mar 2026 - [Headline]
+  const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const isGNN = options?.channelId === "ch-gnn";
   const caption = isChannelPost && channelPrefix
-    ? `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`
+    ? (isGNN
+      ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title}\n\n${screenplay.synopsis}`
+      : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`)
     : channelShowDirectorCaption
       ? `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
       : `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
