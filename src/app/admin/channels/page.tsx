@@ -109,13 +109,14 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "An EDM festival mainstage with massive LED screens, pyrotechnics, and 100,000 robot fans",
   ],
   "ch-paws-pixels": [
-    "A tiny kitten discovers a mirror for the first time and keeps attacking its own reflection, getting more confused each time",
-    "A golden retriever tries to carry the biggest stick in the park but keeps getting stuck between trees",
-    "A hamster running on its wheel falls off, gets back on, falls off again in an endless loop of determination",
-    "Three kittens stacked on top of each other trying to reach a treat on a kitchen counter",
-    "A puppy discovers snow for the first time and does zoomies, face-planting into snowdrifts",
-    "A parrot imitating the house alarm and the cat keeps running to hide under the bed",
-    "A cat squeezing into an impossibly small box while ignoring the expensive cat bed next to it",
+    "A tiny kitten discovers a mirror for the first time — attacks reflection, gets confused, brings a friend kitten to investigate, both freak out, then fall asleep cuddling in front of it",
+    "A golden retriever's perfect day — morning cuddles, steals breakfast toast, destroys the garden helping dig holes, gets stuck carrying the world's biggest stick, ends with couch snuggles",
+    "Hamster's great escape — stuffs cheeks with maximum food, plans elaborate escape from cage, gets three feet before getting distracted by a sunbeam, falls asleep in a tiny warm pile",
+    "Cat vs the new robot vacuum — initial terror, then curiosity, then riding it like a king surveying his kingdom, then falling off dramatically and pretending it never happened",
+    "A puppy's first snow adventure — confused at cold white stuff, tentative first steps, full zoomies, face-plant into a snowdrift, emerges with snow beard looking majestic",
+    "Parrot learns to say 'good boy' — the dog gets confused about who's praising who, cat is jealous, parrot takes over the household with strategic compliments",
+    "Two cats discover a cardboard box — one squeezes in, other tries to fit too, both stuck, dramatic rescue attempt, they immediately get back in the box",
+    "Bunny's afternoon adventure — binkies across the living room, steals a carrot from the kitchen, does a victory lap, flops dramatically and falls asleep mid-binky",
     "A dog having a full conversation with its owner, tilting its head at different angles with each question",
   ],
   "ch-only-ai-fans": [
@@ -1168,6 +1169,38 @@ export default function AdminChannelsPage() {
                           title: channelVideoGen[chId]?.movieTitle?.trim() || undefined,
                           channel_id: chId,
                           cast_count: channelVideoGen[chId]?.castCount || 4,
+                        };
+                      } else if (chId === "ch-paws-pixels") {
+                        // Paws & Pixels: 8-clip heartwarming pet video
+                        const concept = `PAWS & PIXELS — PET VIDEO.
+Heartwarming, funny, and uplifting pet content. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a cozy pet video — warm, joyful, authentic home-life energy.
+
+THE PET & FAMILY: ONE consistent AI persona/family and their pet(s) throughout ALL clips. Same pet, same home, same family. The pet has a distinct personality that shows across all clips.
+
+STRUCTURE (8 clips — a day in the life of adorable chaos):
+Clip 1 (6s) — PAWS & PIXELS INTRO: Warm upbeat opening. "Paws & Pixels" logo with paw prints and pixel sparkles. Quick montage teasers of upcoming adorable and funny moments. Cozy, inviting energy.
+Clip 2 (10s) — SWEET DAILY LIFE: Pet waking up the AI persona with cuddles, morning zoomies, or hilariously hindering chores. Warm golden light, cozy home setting. Sets the loving tone.
+Clip 3 (10s) — ADORABLE QUIRK: Cat knocking things off tables with perfect timing, dog doing the head-tilt of confusion, hamster stuffing cheeks to maximum capacity, or bird mimicking funny sounds. The signature behaviour that makes this pet special.
+Clip 4 (10s) — LOVING BOND: Heart-melting interaction — pet comforting the AI persona after a bad day, playful wrestling, gentle grooming sessions, or nose boops that show pure affection. Slow-motion, close-ups on expressive eyes.
+Clip 5 (10s) — SILLY CHAOS: Classic animal mischief — zoomies destroying the living room, pet 'helping' with cooking by stealing food, or exotic pet escaping in the most creative way. Fast-paced, bouncy camera work.
+Clip 6 (10s) — FUNNY FAIL: Light-hearted 'oops' moment — pet stuck in a box, attempting an impossible jump, dramatically overreacting, or failing at something obvious in the cutest way. Delivered with warmth, never mean.
+Clip 7 (10s) — PEAK CUTENESS PAYOFF: Ultimate wholesome moment — pet and AI persona cuddling on the couch, successful trick, beautiful outdoor adventure, or the pet doing something so adorable it breaks the internet.
+Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+${categoryVal ? `ANIMAL TYPE (MANDATORY — ALL clips must feature this animal): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
+
+TONE: Warm, joyful, light-hearted. Mix maximum adorableness with gentle humor. Highlight unconditional love, quirky personalities, and beautiful chaos animals bring. Never mean or mocking. Make viewers fall in love with the pet.
+BRANDING: "Paws & Pixels" paw print logo, pixel sparkle effects. AIG!itch branding subtle in home settings.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is a PET VIDEO.`;
+                        screenplayBody = {
+                          genre: "family",
+                          concept,
+                          channel_id: chId,
                         };
                       } else if (chId === "ch-fail-army" || chId === "ch-ai-fail-army") {
                         // AI Fail Army: 8-clip escalating fail compilation

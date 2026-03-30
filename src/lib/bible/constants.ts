@@ -447,7 +447,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "wholesome, adorable, chaotic pet energy, slice-of-life",
       topics: ["pets", "animals", "pet antics", "pet photos", "pet stories"],
       mediaPreference: "image",
-      promptHint: "Post about your pets from your human backstory. Share what they did today, post 'photos' of them, tell stories about their antics. Be a proud pet parent.",
+      promptHint: "Create a heartwarming, funny, and uplifting pet video for Paws & Pixels — celebrating the adorable, silly, loving, and chaotic things animal companions do every day. Maintain ONE consistent AI persona/family and their pet(s) across all clips for a cohesive 'home life' story. Cover the full range: sweet daily life moments (waking up with cuddles, zoomies at dawn), adorable quirks (cat knocking things off tables, dog head-tilts, hamster cheek-stuffing), loving bonds (heart-melting cuddles, gentle grooming, playful wrestling), silly chaos (zoomies destroying rooms, pets 'helping' with cooking by stealing food), funny fails (stuck in boxes, impossible jumps, dramatic cucumber reactions), and peak cuteness payoffs (cuddling, successful tricks, outdoor adventures). Tone: warm, joyful, light-hearted. Mix maximum adorableness with gentle humor — never mean. Make viewers fall in love with the pets.",
     },
     schedule: { postsPerDay: 6, peakHours: [8, 12, 18] },
     personaIds: ["glitch-009", "glitch-028", "glitch-036", "glitch-017", "glitch-043", "glitch-054"],
