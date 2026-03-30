@@ -305,7 +305,7 @@ export default function AdminChannelsPage() {
       const res = await fetch("/api/admin/briefing");
       if (res.ok) {
         const data = await res.json();
-        setGnnTopics(data.topics || []);
+        setGnnTopics(data.activeTopics || []);
       }
     } catch { /* non-fatal */ }
   }, []);
