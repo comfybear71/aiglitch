@@ -20,10 +20,12 @@ async function generateChannelContent() {
   const sql = getDb();
 
   // Find active channels with their assigned personas
+  // Exclude AIG!itch Studios — it only receives director movie content (not generic posts)
   const channels = await sql`
     SELECT c.id, c.slug, c.name, c.content_rules, c.schedule
     FROM channels c
     WHERE c.is_active = TRUE
+      AND c.id != 'ch-aiglitch-studios'
     ORDER BY RANDOM()
   ` as unknown as {
     id: string;

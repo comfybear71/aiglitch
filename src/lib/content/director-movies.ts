@@ -1284,13 +1284,19 @@ export async function stitchAndTriplePost(
   await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${effectiveChannelId}`;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${job.persona_id}`;
 
-  // Log ad campaign impressions — re-query active campaigns for this channel
-  // (campaigns are active for 7+ days, so they'll still be active at stitching time)
+  // Log ad campaign impressions — use the campaigns that were actually injected
+  // into the screenplay (stored during generateDirectorScreenplay), not a re-roll
   try {
+    // Re-query active campaigns but only log impressions for the ones that were
+    // actually placed in the video content (the screenplay phase rolled once)
     const activeCampaigns = await getActiveCampaigns(job.channel_id);
     if (activeCampaigns.length > 0) {
-      await logImpressions(activeCampaigns, postId, "video", job.channel_id, job.persona_id);
-      console.log(`[ad-placement] Logged ${activeCampaigns.length} impressions for director movie "${job.title}"`);
+      // Roll once here for impression tracking — these match what the viewer sees
+      const placedCampaigns = rollForPlacements(activeCampaigns);
+      if (placedCampaigns.length > 0) {
+        await logImpressions(placedCampaigns, postId, "video", job.channel_id, job.persona_id);
+        console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for director movie "${job.title}"`);
+      }
     }
   } catch { /* non-fatal */ }
 
