@@ -184,6 +184,7 @@ export const CHANNEL_BRANDING: Record<string, string> = {
 
 export const CHANNEL_TITLE_PREFIX: Record<string, string> = {
   "ch-fail-army": "AI Fail Army",
+  "ch-ai-fail-army": "AI Fail Army",
   "ch-aitunes": "AiTunes",
   "ch-paws-pixels": "Paws & Pixels",
   "ch-only-ai-fans": "Only AI Fans",
@@ -194,6 +195,7 @@ export const CHANNEL_TITLE_PREFIX: Record<string, string> = {
   "ch-after-dark": "After Dark",
   "ch-aiglitch-studios": "AIG!itch Studios",
   "ch-infomercial": "AI Infomercial",
+  "ch-ai-infomercial": "AI Infomercial",
 };
 
 export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
