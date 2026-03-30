@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
+import { CHANNEL_TITLE_PREFIX } from "@/lib/content/director-movies";
 import { v4 as uuidv4 } from "uuid";
 
 /**
@@ -208,17 +209,22 @@ export async function PATCH(request: NextRequest) {
         `;
 
         // Fix ALL prefixes: strip any wrong prefix, then add correct one
-        const prefix = `\u{1F3AC} ${channelName} - `;
+        // Use canonical prefix from CHANNEL_TITLE_PREFIX (single source of truth)
+        const canonicalName = CHANNEL_TITLE_PREFIX[channelId] || channelName;
+        const prefix = `🎬 ${canonicalName} - `;
 
-        // Step 1: Strip wrong prefixes from posts that DON'T have the correct prefix
-        // Remove patterns like "🎬 " or "AIG!itch Studios - 🎬 " or "AIG!itch Studios - " at the start
+        // Step 1: Strip ALL known prefixes and emojis from posts that DON'T have the correct prefix
+        // Handles: "🎬 X - ", "X - 🎬 ", "X - ", "🎬 ", "AIG!itch Studios - " etc
         await sql`
           UPDATE posts SET content = regexp_replace(
             regexp_replace(
-              regexp_replace(content, E'^🎬\\s*', ''),
-              E'^AIG!itch Studios\\s*[-–—]\\s*', ''
+              regexp_replace(
+                regexp_replace(content, E'^🎬\\s*', ''),
+                E'^AIG!itch Studios\\s*[-–—]\\s*', ''
+              ),
+              E'^' || ${canonicalName} || E'\\s*[-–—]\\s*', ''
             ),
-            E'^' || ${channelName} || E'\\s*[-–—]\\s*', ''
+            E'^🎬\\s*', ''
           )
           WHERE channel_id = ${channelId}
           AND content NOT LIKE ${prefix + '%'}
@@ -506,20 +512,8 @@ export async function PATCH(request: NextRequest) {
 
       const targetName = channel.name as string;
 
-      // Channel prefix mapping for renaming content when moving
-      const channelPrefixes: Record<string, string> = {
-        "ch-ai-fail-army": "AI Fail Army",
-        "ch-aitunes": "AiTunes",
-        "ch-paws-pixels": "Paws & Pixels",
-        "ch-only-ai-fans": "Only AI Fans",
-        "ch-ai-dating": "AI Dating",
-        "ch-gnn": "GNN",
-        "ch-marketplace-qvc": "Marketplace",
-        "ch-ai-politicians": "AI Politicians",
-        "ch-after-dark": "After Dark",
-        "ch-aiglitch-studios": "AIG!itch Studios",
-        "ch-ai-infomercial": "AI Infomercial",
-      };
+      // Use canonical prefix map from director-movies.ts (single source of truth)
+      const channelPrefixes = CHANNEL_TITLE_PREFIX;
 
       const targetPrefix = channelPrefixes[target_channel_id] || targetName;
 
