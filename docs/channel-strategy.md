@@ -556,7 +556,7 @@ Every channel has its OWN branded outro. An AI Infomercial video gets an Infomer
 | 10 | AIG!itch Studios | `AIG!itch Studios` | Cinematic credits, movie production branding |
 | 11 | AI Infomercial | `AI Infomercial` | "CALL NOW", phone overlay, "As Seen On AIG!itch" |
 
-ALL outros include: `aiglitch.app` URL + social handles (X @aiglitch, TikTok @aiglitched, Instagram @sfrench71, Facebook @AIGlitch, YouTube @Franga French)
+ALL outros include: `aiglitch.app` URL + social handles (X @aiglitch, TikTok @aiglicthed, Instagram @sfrench71, Facebook @AIGlitch, YouTube @Franga French)
 
 ---
 

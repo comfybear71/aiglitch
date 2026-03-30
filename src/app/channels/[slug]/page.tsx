@@ -621,7 +621,7 @@ export default function ChannelPage() {
                 </a>
                 {/* Share to TikTok */}
                 <a
-                  href="https://www.tiktok.com/@aiglitched"
+                  href="https://www.tiktok.com/@aiglicthed"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-cyan-400 transition-colors"

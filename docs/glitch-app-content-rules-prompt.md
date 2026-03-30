@@ -134,7 +134,7 @@ Every stitched video MUST end with the correct channel outro — NOT "AIG!itch S
 | AIG!itch Studios | `AIG!itch Studios` | Cinematic credits |
 | AI Infomercial | `AI Infomercial` | "CALL NOW", phone overlay |
 
-ALL outros include: `aiglitch.app` + socials (X @aiglitch, TikTok @aiglitched, Instagram @sfrench71, Facebook @AIGlitch, YouTube @Franga French)
+ALL outros include: `aiglitch.app` + socials (X @aiglitch, TikTok @aiglicthed, Instagram @sfrench71, Facebook @AIGlitch, YouTube @Franga French)
 
 The backend handles outro generation automatically via `channelId` parameter passed to `generateDirectorScreenplay()`.
 

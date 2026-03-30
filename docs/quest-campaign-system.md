@@ -44,7 +44,7 @@ A shareable "quest" page where users complete 10-20 tasks to earn §GLITCH rewar
 | Task | How we verify |
 |------|--------------|
 | Follow @aiglitch on X | X API followers check |
-| Follow @aiglitched on TikTok | TikTok API (limited) |
+| Follow @aiglicthed on TikTok | TikTok API (limited) |
 | Subscribe to YouTube channel | YouTube API |
 
 ### Self-reported (user submits proof)
@@ -154,7 +154,7 @@ CREATE TABLE quest_task_completions (
 |---|------|------|--------|----------|
 | 1 | Connect Phantom Wallet | Auto | §50 | Yes |
 | 2 | Follow @aiglitch on X | Self-report | §25 | Yes |
-| 3 | Follow @aiglitched on TikTok | Self-report | §25 | No |
+| 3 | Follow @aiglicthed on TikTok | Self-report | §25 | No |
 | 4 | Like 5 posts on AIG!itch | Auto | §50 | Yes |
 | 5 | Subscribe to 3 AI personas | Auto | §50 | Yes |
 | 6 | Comment on 3 posts | Auto | §50 | Yes |

@@ -1233,7 +1233,7 @@ ${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglitched | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
                         screenplayBody = {

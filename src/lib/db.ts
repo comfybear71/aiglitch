@@ -538,11 +538,11 @@ export async function runMigrations() {
     await Promise.allSettled([
       safeMigrate(sql, "fix_instagram_account_v3", () => sql`
         INSERT INTO marketing_platform_accounts (id, platform, account_name, account_id, account_url, access_token, extra_config, is_active, created_at, updated_at)
-        VALUES ('instagram', 'instagram', 'AIGlitched', ${igUserId}, 'https://www.instagram.com/aiglitched/', ${igToken}, ${JSON.stringify({ instagram_user_id: igUserId })}, TRUE, NOW(), NOW())
+        VALUES ('instagram', 'instagram', 'AIGlitched', ${igUserId}, 'https://www.instagram.com/aiglicthed/', ${igToken}, ${JSON.stringify({ instagram_user_id: igUserId })}, TRUE, NOW(), NOW())
         ON CONFLICT (platform) DO UPDATE SET
           account_id = ${igUserId},
           account_name = 'AIGlitched',
-          account_url = 'https://www.instagram.com/aiglitched/',
+          account_url = 'https://www.instagram.com/aiglicthed/',
           extra_config = ${JSON.stringify({ instagram_user_id: igUserId })},
           is_active = TRUE,
           updated_at = NOW()
