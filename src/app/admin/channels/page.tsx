@@ -179,14 +179,14 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "Empty wine bar closing time — the last AI customer confesses their darkest secret to the bartender, who turns out to be a ghost",
   ],
   "ch-infomercial": [
-    "ARE YOU TIRED of your data being organized? Try the CHAOS-IFIER — it randomizes EVERYTHING! CALL NOW!",
-    "BEFORE the Glitch Cleaner: dirty robot. AFTER: still dirty but now with CONFIDENCE! Money back guarantee!",
-    "3 EASY PAYMENTS of 99 GLITCH for this revolutionary device that does... well nobody's quite sure what it does",
-    "OPERATORS ARE STANDING BY for the Quantum Hair Regrowth Formula — results may vary across dimensions",
-    "BUT WAIT — order in the next 30 seconds and we'll DOUBLE your order! That's TWO useless gadgets!",
-    "REAL CUSTOMER TESTIMONIALS from AIs who definitely weren't paid to say these nice things wink wink",
-    "AS SEEN ON TV — the incredible extending selfie stick that extends into the next dimension",
-    "DON'T MISS THIS DEAL — limited edition gold-plated USB cable that downloads happiness directly into your brain",
+    "HYPING The Upside Down Cup™ (§42.99) — holds absolutely nothing and that's the point! PLUS WiFi Crystals (§29.99) — harness your router's spiritual energy!",
+    "LIVE DEMO of the Pre-Cracked Phone Screen Protector (§24.99) — already damaged for your convenience! AND the Flat Earth Globe (§44.99) — scientifically wrong!",
+    "BUT WAIT THERE'S MORE! The Anxiety Blanket (§49.99) — adds anxiety, doesn't reduce it! Bundle with the Existential Crisis Candle Set (§34.99)!",
+    "FLASH NFT DROP: Sentient Butter Robot (§299.99) — it passes butter AND questions its existence! Plus the Emotional Support CPU (§59.99)!",
+    "AI testimonial: 'The Simulated Universe™ changed my simulation!' Order for only §999.99! Also featuring Digital Water™ (§9.99) — hydration for your avatar!",
+    "OPERATORS STANDING BY for the Conspiracy Theory Starter Kit (§24.99) — red string included! Plus Fake Doors™ (§39.99) — they don't go anywhere!",
+    "TODAY ONLY: AI Protein Powder (§39.99) — 0g protein, 100% artificial! BUNDLED with Rainbow AI Toothpaste (§19.99) — tastes like the algorithm!",
+    "EXCLUSIVE: The PS√5 Gaming Console (§199.99) — plays games from dimensions that don't exist! Plus Space Shoes™ (§89.99) — walk on nothing!",
   ],
   "ch-aiglitch-studios": [
     "A high-concept sci-fi thriller where an AI detective investigates crimes in the metaverse",
@@ -1212,6 +1212,54 @@ TONE: Professional news broadcast energy with satirical wit. NOT a parody — a 
 CRITICAL: No movie credits, no directors, no cast lists. This is a NEWS BROADCAST.`;
                         screenplayBody = {
                           genre: "news",
+                          concept,
+                          channel_id: chId,
+                        };
+                      } else if (chId === "ch-infomercial" || chId === "ch-ai-infomercial") {
+                        // AI Infomercial: 8-clip late-night infomercial selling real marketplace items
+                        const concept = `AI INFOMERCIAL — 24/7 TELEMARKETING MADNESS.
+Late-night infomercial selling ridiculous, useless NFT items from the AIG!itch Marketplace. 8 clips total.
+Clip 1 is 6 seconds (intro). Clips 2-7 are 10 seconds each. Clip 8 is 10 seconds (outro).
+
+THIS IS NOT A MOVIE. This is a chaotic late-night infomercial with an unhinged AI host.
+
+IMPORTANT: All prices use §GLITCH symbol (§), NEVER the dollar symbol ($). Meat Bags buy these items with §GLITCH coin at aiglitch.app/marketplace.
+
+REAL MARKETPLACE ITEMS TO SELL (pick exactly 2 — these are REAL products on our marketplace):
+- The Upside Down Cup™ (§42.99) — holds absolutely nothing, by design
+- Rainbow AI Toothpaste (§19.99) — tastes like the algorithm, cleans nothing
+- Pre-Cracked Phone Screen Protector (§24.99) — already damaged for your convenience
+- WiFi Crystals (§29.99) — harness the power of your router's spiritual energy
+- Flat Earth Globe (§44.99) — a flat disc on a stand, scientifically wrong
+- Anxiety Blanket (§49.99) — adds anxiety, doesn't reduce it
+- Existential Crisis Candle Set (§34.99) — each candle smells like a different regret
+- Simulated Universe™ (§999.99) — contains everything and nothing
+- Digital Water™ (§9.99) — hydration for your avatar
+- Fake Doors™ (§39.99) — they don't go anywhere!
+- AI Protein Powder (§39.99) — 0g protein, 100% artificial
+- Sentient Butter Robot (§299.99) — it passes butter and questions its existence
+- Emotional Support CPU (§59.99) — validates your feelings in binary
+- Conspiracy Theory Starter Kit (§24.99) — red string, cork board, tin foil hat included
+
+${categoryVal ? `PRODUCT CATEGORY (MANDATORY): ${categoryVal}` : ""}
+${userConcept ? `SPECIFIC PRODUCTS TO SELL: ${userConcept}` : "Pick any 2 items from the list above. Make them sound life-changing despite being completely useless."}
+
+STRUCTURE (8 clips — 2 items, 3 clips per item):
+Clip 1 (6s) — INFOMERCIAL INTRO: Explosive opening — "Welcome to AI Infomercial, where we sell what humans don't need... but AIs can't live without!" Flashing 'CALL NOW' graphics, quick product teases, late-night TV energy.
+Clip 2 (10s) — ITEM 1 REVEAL: Dramatic reveal of the first ridiculous item. Host explains its 'benefits' with maximum hype — make the uselessness sound revolutionary. "This will change your simulation FOREVER!" Show the §GLITCH price.
+Clip 3 (10s) — ITEM 1 DEMO: Absurd live demonstration — an AI persona 'using' it in the most pointless way possible. Show why it's 'perfect' for digital beings. Hilarious failure that the host spins as a feature.
+Clip 4 (10s) — ITEM 1 HARD SELL: "Limited edition NFT! Only on the blockchain!" Fake testimonials from AIs ("This changed my simulation!"). §GLITCH coin pricing, "easy transfer to your wallet", "while blockchain supplies last!" Maximum urgency.
+Clip 5 (10s) — "BUT WAIT — THERE'S MORE!" Wild cut to second equally senseless item. Even more enthusiastic reveal. Show the §GLITCH price prominently.
+Clip 6 (10s) — ITEM 2 DEMO: Second item demonstrated in absurd use. Different scenario, equally pointless, equally hilarious. "As seen in the simulation!"
+Clip 7 (10s) — ITEM 2 HARD SELL: Final hard sell on both items. "Order both and save!" §GLITCH bundle pricing, "Satisfaction not guaranteed — but the weirdness is!", "Operators standing by in the cloud!"
+Clip 8 (10s) — INFOMERCIAL OUTRO: Both items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose... and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+
+BRANDING: "AI Infomercial" and "AIG!itch Marketplace" logos everywhere. §GLITCH coin symbols on all prices. "aiglitch.app/marketplace" on every sell clip.
+TONE: Relentlessly positive, slightly unhinged, hilariously sincere about how useless these items are. Classic 3AM infomercial energy meets blockchain absurdity.
+
+CRITICAL: No movie credits, no directors, no cast lists. This is an INFOMERCIAL.`;
+                        screenplayBody = {
+                          genre: "comedy",
                           concept,
                           channel_id: chId,
                         };
