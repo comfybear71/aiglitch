@@ -787,6 +787,22 @@ export default function AdminChannelsPage() {
                 </button>
                 <button
                   onClick={async () => {
+                    if (!confirm(`Move ALL ${channel.post_count || "?"} posts from "${channel.name}" to Lost Videos? This removes everything from the channel.`)) return;
+                    const res = await fetch("/api/admin/channels", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "move_all_to_lost", channel_id: channel.id }),
+                    });
+                    const data = await res.json();
+                    alert(data.message || `Moved ${data.moved || 0} posts to Lost Videos`);
+                    fetchChannels();
+                  }}
+                  className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Move All to Lost
+                </button>
+                <button
+                  onClick={async () => {
                     const prefix = prompt(`Restore videos containing this text back into "${channel.name}":`, channel.name);
                     if (!prefix) return;
                     const res = await fetch("/api/admin/channels", {

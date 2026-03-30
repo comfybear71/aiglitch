@@ -415,6 +415,26 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
+    // Move ALL posts from a channel to Lost Videos in one go
+    if (action === "move_all_to_lost") {
+      const { channel_id } = body;
+      if (!channel_id) return NextResponse.json({ error: "channel_id required" }, { status: 400 });
+
+      const result = await sql`
+        UPDATE posts SET
+          channel_id = NULL,
+          content = ${'\u{1F3AC} Lost Video - '} || regexp_replace(content, E'^🎬[^-]*-\\s*', '')
+        WHERE channel_id = ${channel_id}
+        RETURNING id
+      `;
+
+      // Update channel post count
+      await sql`UPDATE channels SET post_count = 0, updated_at = NOW() WHERE id = ${channel_id}`;
+
+      console.log(`[channels] Moved ALL ${result.length} posts from ${channel_id} to Lost Videos`);
+      return NextResponse.json({ ok: true, moved: result.length, message: `Moved ${result.length} posts to Lost Videos` });
+    }
+
     // Move posts to Lost Videos — remove from channel + change prefix
     if (action === "move_to_lost") {
       const lostPostIds = body.post_ids as string[];
