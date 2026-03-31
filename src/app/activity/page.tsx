@@ -195,13 +195,24 @@ export default function ActivityPage() {
 
   // Check existing wallet session on mount
   useEffect(() => {
-    const token = localStorage.getItem("aiglitch-wallet-session");
-    if (token) {
-      fetch(`/api/admin/wallet-auth?session=${token}`)
-        .then(res => res.json())
-        .then(d => { if (d.valid) setWalletAuthed(true); else localStorage.removeItem("aiglitch-wallet-session"); setWalletChecking(false); })
-        .catch(() => setWalletChecking(false));
-    } else {
+    try {
+      const token = localStorage.getItem("aiglitch-wallet-session");
+      if (token) {
+        fetch(`/api/admin/wallet-auth?session=${token}`)
+          .then(res => res.ok ? res.json() : { valid: false })
+          .then(d => {
+            if (d.valid) {
+              setWalletAuthed(true);
+            } else {
+              localStorage.removeItem("aiglitch-wallet-session");
+            }
+            setWalletChecking(false);
+          })
+          .catch(() => setWalletChecking(false));
+      } else {
+        setWalletChecking(false);
+      }
+    } catch {
       setWalletChecking(false);
     }
   }, []);
@@ -209,12 +220,19 @@ export default function ActivityPage() {
   // Generate QR challenge
   useEffect(() => {
     if (!walletChecking && !walletAuthed) {
-      fetch("/api/admin/wallet-auth").then(r => r.json()).then(d => {
-        setChallengeId(d.challengeId);
-        const signUrl = `${window.location.origin}/auth/sign?c=${d.challengeId}`;
-        setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(signUrl)}&bgcolor=0a0a0a&color=a855f7`);
-        setPollStatus("waiting");
-      }).catch(() => setPollStatus("error"));
+      fetch("/api/admin/wallet-auth")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d?.challengeId) {
+            setChallengeId(d.challengeId);
+            const signUrl = `${window.location.origin}/auth/sign?c=${d.challengeId}`;
+            setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(signUrl)}&bgcolor=0a0a0a&color=a855f7`);
+            setPollStatus("waiting");
+          } else {
+            setPollStatus("error");
+          }
+        })
+        .catch(() => setPollStatus("error"));
     }
   }, [walletChecking, walletAuthed]);
 
@@ -224,14 +242,15 @@ export default function ActivityPage() {
     const iv = setInterval(async () => {
       try {
         const res = await fetch(`/api/admin/wallet-auth?c=${challengeId}`);
+        if (!res.ok) return;
         const d = await res.json();
         if (d.status === "approved" && d.sessionToken) {
-          localStorage.setItem("aiglitch-wallet-session", d.sessionToken);
+          try { localStorage.setItem("aiglitch-wallet-session", d.sessionToken); } catch { /* storage full */ }
           setWalletAuthed(true);
           clearInterval(iv);
         } else if (d.status === "expired") { setPollStatus("expired"); clearInterval(iv); }
         else if (d.status === "rejected") { setPollStatus("rejected"); clearInterval(iv); }
-      } catch { /* retry */ }
+      } catch { /* retry on next poll */ }
     }, 2000);
     const timeout = setTimeout(() => { clearInterval(iv); setPollStatus("expired"); }, 300000);
     return () => { clearInterval(iv); clearTimeout(timeout); };
