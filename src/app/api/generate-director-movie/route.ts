@@ -283,7 +283,8 @@ export async function POST(request: NextRequest) {
     const channelPrefix = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
     const isGNNPost = channelId === "ch-gnn";
     const dateStrPost = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    const caption = channelPrefix
+    const isStudiosPost = channelId === "ch-aiglitch-studios" || !channelPrefix;
+    const caption = channelPrefix && !isStudiosPost
       ? (isGNNPost
         ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title}\n\n${synopsis}`
         : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`)
@@ -572,7 +573,8 @@ export async function PUT(request: NextRequest) {
   const channelPrefixPut = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
   const isGNNPut = channelId === "ch-gnn";
   const dateStrPut = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  const caption = channelPrefixPut
+  const isStudiosPut = channelId === "ch-aiglitch-studios" || !channelPrefixPut;
+  const caption = channelPrefixPut && !isStudiosPut
     ? (isGNNPut
       ? `🎬 ${channelPrefixPut} - ${dateStrPut} - ${title}\n\n${synopsis || ""}`
       : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`)

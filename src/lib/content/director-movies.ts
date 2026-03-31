@@ -1114,7 +1114,9 @@ export async function submitDirectorFilm(
   // GNN gets date in the caption so viewers know if it's current: 🎬 GNN - 30 Mar 2026 - [Headline]
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const isGNN = options?.channelId === "ch-gnn";
-  const caption = isChannelPost && channelPrefix
+  // Studios always gets the full rich caption with genre, director, cast
+  const isStudiosCaption = options?.channelId === "ch-aiglitch-studios" || !isChannelPost;
+  const caption = isChannelPost && channelPrefix && !isStudiosCaption
     ? (isGNN
       ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title}\n\n${screenplay.synopsis}`
       : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`)
