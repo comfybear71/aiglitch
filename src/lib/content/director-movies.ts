@@ -592,10 +592,13 @@ export async function generateDirectorScreenplay(
   // This is subliminal branding — not standalone ads. Campaigns control their own
   // frequency (30-80%) via rollForPlacements() probability check.
   const activeCampaigns = await getActiveCampaigns(channelId);
+  console.log(`[ad-placement] ${activeCampaigns.length} active campaigns for channel ${channelId || "feed"}: ${activeCampaigns.map(c => `${c.brand_name}(${c.frequency})`).join(", ")}`);
   const placementCampaigns = rollForPlacements(activeCampaigns);
   const placementDirective = buildVisualPlacementPrompt(placementCampaigns);
   if (placementCampaigns.length > 0) {
-    console.log(`[ad-placement] Director ${director.displayName}: injecting ${placementCampaigns.length} placements into screenplay: ${placementCampaigns.map(c => c.brand_name).join(", ")}`);
+    console.log(`[ad-placement] PLACED: ${placementCampaigns.map(c => c.brand_name).join(", ")} in screenplay`);
+  } else {
+    console.log(`[ad-placement] NO placements this time (roll missed all campaigns)`);
   }
 
   // Build prompt — channel concepts provide their own complete rules,

@@ -116,6 +116,7 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
     directorId: director.id,
     castList: screenplay.castList,
     screenplayProvider: screenplay.screenplayProvider || "claude",
+    sponsorPlacements: screenplay._adCampaigns?.map(c => c.brand_name) || [],
     scenes: screenplay.scenes.map(s => ({
       sceneNumber: s.sceneNumber,
       title: s.title,
