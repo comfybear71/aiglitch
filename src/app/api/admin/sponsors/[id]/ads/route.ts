@@ -27,27 +27,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const sql = getDb();
     const { id: sponsorId } = await params;
     const body = await request.json();
-    const { product_name, product_description, product_image_url, ad_style, package: packageId, target_platforms } = body;
+    const { product_name, product_description, product_image_url, ad_style, package: packageId,
+      target_platforms, logo_url, product_images, masterhq_sponsor_id, frequency, campaign_days, cash_paid } = body;
 
     if (!product_name || !product_description) {
       return NextResponse.json({ error: "product_name and product_description are required" }, { status: 400 });
     }
 
     // Look up package to auto-fill duration, cost, etc.
-    const pkg = SPONSOR_PACKAGES[packageId as SponsorPackageId] || SPONSOR_PACKAGES.basic;
+    const pkg = SPONSOR_PACKAGES[packageId as SponsorPackageId] || SPONSOR_PACKAGES.glitch;
     const platforms = target_platforms || pkg.platforms;
+    const freq = frequency || pkg.frequency || 30;
+    const days = campaign_days || pkg.campaign_days || 7;
 
     const result = await sql`
       INSERT INTO sponsored_ads (
         sponsor_id, product_name, product_description, product_image_url,
         ad_style, target_platforms, duration, package, glitch_cost,
-        cash_equivalent, follow_ups_remaining, status
+        cash_equivalent, follow_ups_remaining, status,
+        logo_url, product_images, masterhq_sponsor_id, frequency, campaign_days, cash_paid
       ) VALUES (
         ${parseInt(sponsorId)}, ${product_name}, ${product_description},
         ${product_image_url || null}, ${ad_style || "product_showcase"},
-        ${platforms}, ${pkg.duration}, ${packageId || "basic"},
+        ${platforms}, ${pkg.duration}, ${packageId || "glitch"},
         ${pkg.glitch_cost}, ${pkg.cash_equivalent}, ${pkg.follow_ups},
-        'draft'
+        'draft',
+        ${logo_url || null},
+        ${product_images ? JSON.stringify(product_images) : "[]"}::jsonb,
+        ${masterhq_sponsor_id || null},
+        ${freq}, ${days}, ${cash_paid || pkg.cash_equivalent}
       ) RETURNING id
     `;
 
@@ -77,13 +85,15 @@ export async function PUT(request: NextRequest) {
 
     // Generate action — use Claude to create video prompt + caption
     if (action === "generate") {
-      const { product_name, product_description, ad_style, package: packageId } = body;
-      const pkg = SPONSOR_PACKAGES[(packageId || "basic") as SponsorPackageId] || SPONSOR_PACKAGES.basic;
+      const { product_name, product_description, ad_style, package: packageId, logo_url: genLogoUrl, product_images: genImages } = body;
+      const pkg = SPONSOR_PACKAGES[(packageId || "glitch") as SponsorPackageId] || SPONSOR_PACKAGES.glitch;
       const prompt = buildSponsoredAdPrompt({
         product_name: product_name || "Product",
         product_description: product_description || "",
         ad_style: ad_style || "product_showcase",
         duration: pkg.duration,
+        logo_url: genLogoUrl,
+        product_images: genImages,
       });
 
       try {
