@@ -231,6 +231,9 @@ async function runBackgroundGeneration(
       stitchForm.append("tagline", screenplay.tagline || "");
       stitchForm.append("castList", JSON.stringify(isStudios ? (screenplay.castList || []) : []));
       stitchForm.append("channelId", chId);
+      if (screenplay.sponsorPlacements?.length > 0) {
+        stitchForm.append("sponsorPlacements", JSON.stringify(screenplay.sponsorPlacements));
+      }
       const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
       const stitchData = await stitchRes.json();
 
