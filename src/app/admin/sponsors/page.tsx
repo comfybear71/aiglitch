@@ -233,6 +233,45 @@ export default function SponsorsPage() {
     } catch (err) { console.error("Fetch ads error:", err); }
   };
 
+  // Refresh an existing sponsor's product data from MasterHQ
+  const refreshSponsorFromMasterHQ = async (sponsor: Sponsor) => {
+    try {
+      const res = await fetch(`https://masterhq.dev/api/sponsor/list?company=${encodeURIComponent(sponsor.company_name)}`);
+      if (!res.ok) { alert("Failed to fetch from MasterHQ"); return; }
+      const data = await res.json();
+      const mhq = data.sponsors?.[0];
+      if (!mhq) { alert(`No MasterHQ data found for "${sponsor.company_name}"`); return; }
+
+      const logoFile = mhq.files?.find((f: { type: string }) => f.type === "logo");
+      const imageFiles = mhq.files?.filter((f: { type: string }) => f.type === "image").map((f: { url: string }) => f.url) || [];
+      const tierKey = mhq.tier?.toLowerCase() === "chaos" ? "chaos" : "glitch";
+
+      const updateRes = await fetch("/api/admin/sponsors", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: sponsor.id,
+          product_name: mhq.productName || mhq.company,
+          product_description: mhq.productDescription || "",
+          logo_url: logoFile?.url || null,
+          product_images: imageFiles,
+          industry: mhq.industry || sponsor.industry,
+          website: mhq.website || sponsor.website,
+          masterhq_id: mhq.id,
+          tier: tierKey,
+        }),
+      });
+      if (updateRes.ok) {
+        alert(`Updated ${sponsor.company_name} with MasterHQ data: ${mhq.productName || "product"}, ${imageFiles.length} images`);
+        fetchSponsors();
+      } else {
+        alert("Failed to update sponsor");
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   const saveSponsor = async () => {
     setSaving(true);
     try {
@@ -431,6 +470,8 @@ export default function SponsorsPage() {
                     {s.industry && <span className="text-gray-500">{s.industry}</span>}
                     <span className="text-green-400">{s.glitch_balance} GLITCH</span>
                     <span className="text-gray-500">Spent: {s.total_spent}</span>
+                    <button onClick={(e) => { e.stopPropagation(); refreshSponsorFromMasterHQ(s); }}
+                      className="px-2 py-1 bg-fuchsia-500/20 text-fuchsia-400 rounded hover:bg-fuchsia-500/30">Sync</button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingSponsor(s); setForm({ company_name: s.company_name, contact_email: s.contact_email, contact_name: s.contact_name || "", industry: s.industry || "", website: s.website || "", notes: s.notes || "", status: s.status, glitch_balance: s.glitch_balance }); setShowForm(true); }}
                       className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded hover:bg-yellow-500/30">Edit</button>
                     <button onClick={(e) => { e.stopPropagation(); deleteSponsor(s.id); }}
