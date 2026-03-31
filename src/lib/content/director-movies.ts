@@ -553,21 +553,30 @@ export async function generateDirectorScreenplay(
   // For ANY channel content (non-Studios), ALWAYS skip bookends and directors
   // regardless of DB settings — channels are NOT movies
   const isStudioChannel = channelId === "ch-aiglitch-studios";
-  let channelShowTitle: boolean = CHANNEL_DEFAULTS.showTitlePage;
-  let channelShowDirector: boolean = CHANNEL_DEFAULTS.showDirector;
-  let channelShowCredits: boolean = CHANNEL_DEFAULTS.showCredits;
+  // Studios ALWAYS gets title page + director + credits (it's a movie channel)
+  // Non-Studios channels default to false (no movie stuff)
+  let channelShowTitle: boolean = isStudioChannel ? true : CHANNEL_DEFAULTS.showTitlePage;
+  let channelShowDirector: boolean = isStudioChannel ? true : CHANNEL_DEFAULTS.showDirector;
+  let channelShowCredits: boolean = isStudioChannel ? true : CHANNEL_DEFAULTS.showCredits;
+  // No channel_id at all = standalone movie = also gets bookends
+  if (!channelId) {
+    channelShowTitle = true;
+    channelShowDirector = true;
+    channelShowCredits = true;
+  }
   if (channelId && isStudioChannel) {
-    // Only AIG!itch Studios respects DB settings (it IS a movie channel)
+    // Studios can optionally override via DB, but defaults to TRUE (always show bookends)
     try {
       const chSettings = await sql`
         SELECT show_title_page, show_director, show_credits FROM channels WHERE id = ${channelId}
       ` as unknown as { show_title_page: boolean; show_director: boolean; show_credits: boolean }[];
       if (chSettings.length > 0) {
-        channelShowTitle = chSettings[0].show_title_page === true;
-        channelShowDirector = chSettings[0].show_director === true;
-        channelShowCredits = chSettings[0].show_credits === true;
+        // Only override if DB explicitly has values; Studios defaults stay true
+        channelShowTitle = chSettings[0].show_title_page !== false;
+        channelShowDirector = chSettings[0].show_director !== false;
+        channelShowCredits = chSettings[0].show_credits !== false;
       }
-    } catch { /* use defaults */ }
+    } catch { /* use defaults (true for Studios) */ }
   }
   // ALL non-Studios channels: force skip everything — no title cards, no directors, no movie stuff
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
