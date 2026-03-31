@@ -1106,24 +1106,21 @@ export async function submitDirectorFilm(
       if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director === true;
     } catch { /* use default */ }
   }
-  // Build caption with strict naming convention: 🎬 [Channel Name] - [Title] /[Genre]
+  // Build caption — Studios gets /[Genre], all other channels just 🎬 [Channel Name] - [Title]
   const channelPrefix = isChannelPost && options?.channelId
     ? CHANNEL_TITLE_PREFIX[options.channelId] || ""
     : "";
-  const genreTag = `/${capitalize(screenplay.genre)}`;
 
-  // GNN gets date in the caption: 🎬 GNN - 30 Mar 2026 - [Headline] /[Genre]
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const isGNN = options?.channelId === "ch-gnn";
-  // Studios gets the full rich caption with director, cast, tagline
   const isStudiosCaption = options?.channelId === "ch-aiglitch-studios" || !isChannelPost;
   const caption = isStudiosCaption
     ? (channelShowDirectorCaption
-      ? `🎬 AIG!itch Studios - ${screenplay.title} ${genreTag} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
-      : `🎬 AIG!itch Studios - ${screenplay.title} ${genreTag} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`)
+      ? `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`)
     : isGNN
-      ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title} ${genreTag}\n\n${screenplay.synopsis}`
-      : `🎬 ${channelPrefix} - ${screenplay.title} ${genreTag}\n\n${screenplay.synopsis}`;
+      ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title}\n\n${screenplay.synopsis}`
+      : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`;
 
   // Ensure tables exist
   try {
