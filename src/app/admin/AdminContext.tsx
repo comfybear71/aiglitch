@@ -365,9 +365,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       setAutopilotQueue(rest);
       const current = autopilotTotal - autopilotQueue.length + 1;
       setAutopilotCurrent(current);
-      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 30s (rate limit cooldown)...`]);
-      // 30-second cooldown between autopilot generations — Grok needs breathing room after 8 clips
-      setTimeout(() => startGeneration(next), 30000);
+      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 2 min (rate limit cooldown)...`]);
+      // 2-minute cooldown between autopilot generations — Grok needs breathing room after 8 clips
+      setTimeout(() => startGeneration(next), 120000);
     }
     // Autopilot complete
     if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
