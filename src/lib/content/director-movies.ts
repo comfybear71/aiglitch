@@ -919,13 +919,59 @@ ${jsonFormat}`;
       if (!skipTitlePage) {
         const directorLine = skipDirector ? "" : ` "Directed by ${director.displayName}" fades in below.`;
         const directorFrame = skipDirector ? "" : ` with "Directed by ${director.displayName}" below`;
+
+        // Genre-specific intro styles — each genre gets a unique opening feel
+        const genreIntros: Record<string, { style: string; transition: string }> = {
+          horror: {
+            style: "Dark, unsettling title card reveal. Screen flickers with static and distortion. The AIG!itch Studios logo glitches into existence through corrupted pixels, then the film title materializes in blood-red scratchy typography that drips and warps. Eerie silence, sudden bass drop, shadows creeping across the frame.",
+            transition: "dissolving into darkness with a faint heartbeat pulse",
+          },
+          scifi: {
+            style: "Futuristic holographic title card. The AIG!itch Studios logo materializes as a 3D hologram in a vast star field, then the film title assembles letter-by-letter from floating data particles and neon light streams. Lens flares, deep space ambience, warp-speed light trails.",
+            transition: "warping through a data tunnel into the first scene",
+          },
+          comedy: {
+            style: "Bright, playful title card reveal. The AIG!itch Studios logo bounces onto screen with cartoon energy, then the film title pops in with fun, bold typography and confetti explosions. Upbeat colors, exaggerated motion, quirky sound design vibes.",
+            transition: "with a comedic iris wipe into the first scene",
+          },
+          action: {
+            style: "Explosive title card reveal. The AIG!itch Studios logo smashes through a wall of fire and debris, then the film title slams onto screen in heavy metallic typography with sparks flying. Shockwave effects, dramatic slow-motion, adrenaline energy.",
+            transition: "with an explosion shockwave transitioning to the first scene",
+          },
+          romance: {
+            style: "Elegant, dreamy title card reveal. The AIG!itch Studios logo fades in through soft bokeh and floating rose petals, then the film title appears in graceful, flowing script typography with warm golden light. Gentle lens flares, intimate warmth.",
+            transition: "with a soft focus dissolve into the first scene",
+          },
+          family: {
+            style: "Magical, whimsical title card reveal. The AIG!itch Studios logo sparkles into existence with fairy dust and warm golden light, then the film title materializes in friendly, inviting typography with twinkling stars and magical particles.",
+            transition: "with a storybook page turn into the first scene",
+          },
+          documentary: {
+            style: "Clean, authoritative title card reveal. The AIG!itch Studios logo fades in over sweeping aerial footage, then the film title appears in sophisticated, minimal typography with a subtle map or timeline graphic behind it. Natural light, gravitas.",
+            transition: "with a slow crossfade into the opening shot",
+          },
+          drama: {
+            style: "Moody, atmospheric title card reveal. The AIG!itch Studios logo emerges from shadow and light, then the film title fades in with elegant, understated typography against a brooding backdrop of shifting clouds or rain. Emotional weight in every frame.",
+            transition: "with a slow dissolve into the first scene",
+          },
+          music_video: {
+            style: "High-energy musical title card. The AIG!itch Studios logo pulses onto screen with a bass drop, then the film title materializes in neon concert typography with sound wave visualizers, strobe effects, and speaker stacks pumping.",
+            transition: "with a beat-synced cut into the performance",
+          },
+          cooking_channel: {
+            style: "Sizzling culinary title card. The AIG!itch Studios logo appears through rising steam and dramatic kitchen fire, then the film title materializes in bold typography with slow-motion food splashes, oil sizzle, and dramatic plating reveals.",
+            transition: "with a whip pan into the kitchen",
+          },
+        };
+
+        const introStyle = genreIntros[genre] || genreIntros.drama!;
         prefix.push({
           sceneNumber: 1,
           type: "intro",
           title: "Title Card",
           description: `AIG!itch Studios presents: ${parsed.title}${skipDirector ? "" : `, directed by ${director.displayName}`}`,
-          videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography.${directorLine} ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
-          lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography${directorFrame}, AIG!itch Studios logo visible, transitioning to first scene.`,
+          videoPrompt: `${introStyle.style}${directorLine} ${template.lightingDesign}. The title "${parsed.title}" must be prominent and readable.`,
+          lastFrameDescription: `The film title "${parsed.title}" displayed prominently${directorFrame}, AIG!itch Studios logo visible, ${introStyle.transition}.`,
           duration: 10,
         });
       }
@@ -990,8 +1036,54 @@ ${jsonFormat}`;
 
         const outro = channelId ? channelOutros[channelId] : null;
         const outroLogo = outro?.logo || "AIG!itch Studios";
-        const outroStyle = outro?.style || `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background.`;
-        const outroLastFrame = outro?.lastFrame || "AIG!itch Studios logo centered";
+
+        // Genre-specific Studios outro styles — each genre gets a unique credits feel
+        const genreOutros: Record<string, { style: string; lastFrame: string }> = {
+          horror: {
+            style: "Dark, eerie end credits. 'THE END' scratches onto screen in blood-red distorted text over a black void. Credits scroll over flickering static, corrupted footage, and unsettling shadows. Sudden glitch reveals the AIG!itch Studios logo in sickly green neon. Creeping dread, faint whispers, the screen cracks.",
+            lastFrame: "AIG!itch Studios logo glitching through horror static with 'THE END' in blood-red",
+          },
+          scifi: {
+            style: "Futuristic holographic end credits. 'THE END' materializes as floating holographic text in a vast star field. Credits scroll as data streams alongside a spinning galaxy. The AIG!itch Studios logo assembles from particles of light. Deep space ambience, warp trails, cosmic beauty.",
+            lastFrame: "AIG!itch Studios logo as a hologram floating in deep space with star trails",
+          },
+          comedy: {
+            style: "Fun, upbeat end credits. 'THE END' bounces onto screen with playful cartoon energy. Credits roll over a blooper-reel montage with exaggerated reactions. The AIG!itch Studios logo pops in with confetti and party poppers. Bright colors, silly energy, feel-good vibes.",
+            lastFrame: "AIG!itch Studios logo with confetti, party poppers, and bright playful colors",
+          },
+          action: {
+            style: "Explosive end credits. 'THE END' slams onto screen in heavy metallic text with sparks and debris. Credits roll over slow-motion explosions and hero silhouettes. The AIG!itch Studios logo emerges through fire and smoke. Epic, powerful, victorious.",
+            lastFrame: "AIG!itch Studios logo emerging through fire and smoke with metallic sheen",
+          },
+          romance: {
+            style: "Elegant, emotional end credits. 'THE END' fades in through soft golden light and floating petals. Credits scroll over intimate silhouettes and sunset bokeh. The AIG!itch Studios logo glows warmly. Bittersweet beauty, gentle warmth, lingering emotion.",
+            lastFrame: "AIG!itch Studios logo in warm golden glow with soft bokeh and floating petals",
+          },
+          family: {
+            style: "Heartwarming end credits. 'THE END' sparkles onto screen with magical fairy dust. Credits roll over a gentle montage of the happiest moments. The AIG!itch Studios logo twinkles with warm golden stars. Feel-good, magical, uplifting.",
+            lastFrame: "AIG!itch Studios logo sparkling with warm golden stars and magical particles",
+          },
+          documentary: {
+            style: "Thoughtful end credits. 'THE END' appears in clean, sophisticated typography over sweeping aerial footage. Credits scroll with dignified pace. The AIG!itch Studios logo fades in with quiet authority. Reflective, impactful, educational gravitas.",
+            lastFrame: "AIG!itch Studios logo over sweeping landscape with clean sophisticated typography",
+          },
+          drama: {
+            style: "Moody, emotional end credits. 'THE END' fades in through rain-streaked glass or shifting shadows. Credits scroll over atmospheric footage — empty streets, distant lights, lingering final moments. The AIG!itch Studios logo emerges from the darkness. Heavy, contemplative, cathartic.",
+            lastFrame: "AIG!itch Studios logo emerging from atmospheric shadows with emotional weight",
+          },
+          music_video: {
+            style: "Concert-energy end credits. 'THE END' pulses onto screen synced to an imaginary bass drop. Credits roll over concert silhouettes, speaker stacks, and neon stage lights. The AIG!itch Studios logo glows with sound wave visualizers. Electric, euphoric, crowd-roar energy.",
+            lastFrame: "AIG!itch Studios logo pulsing with neon concert lighting and sound waves",
+          },
+          cooking_channel: {
+            style: "Culinary finale end credits. 'THE END' appears in elegant typography over a dramatic final plating shot. Credits roll over sizzling montage — flames, pours, steam, perfect dishes. The AIG!itch Studios logo appears through rising kitchen steam. Appetizing, dramatic, satisfying.",
+            lastFrame: "AIG!itch Studios logo through rising kitchen steam with warm amber glow",
+          },
+        };
+
+        const genreOutro = genreOutros[genre] || genreOutros.drama!;
+        const outroStyle = outro?.style || genreOutro.style;
+        const outroLastFrame = outro?.lastFrame || genreOutro.lastFrame;
 
         // Add sponsor thanks if product placements were in this video
         const sponsorThanks = placementCampaigns.length > 0
