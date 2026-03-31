@@ -112,18 +112,20 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       {/* Generation Progress Panel */}
       {generationLog.length > 0 && (
         <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-3 sm:pt-4">
-          <div className={`border rounded-xl p-4 ${(generating || genProgress) ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
+          <div className={`border rounded-xl p-4 ${(generating || genProgress || autopilotQueue.length > 0) ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                {(generating || genProgress) && <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
+                {(generating || genProgress || autopilotQueue.length > 0) && <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
                 <h3 className="text-sm font-bold text-green-400">
                   {(generating || genProgress)
                     ? autopilotTotal > 0
                       ? `🤖 AUTOPILOT ${autopilotCurrent}/${autopilotTotal} — Generation in progress...`
                       : "Generation in progress..."
-                    : autopilotTotal > 0 && autopilotQueue.length === 0
-                      ? `✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos`
-                      : "Generation complete"}
+                    : autopilotQueue.length > 0
+                      ? `🤖 AUTOPILOT ${autopilotCurrent}/${autopilotTotal} — Next video in ~2 min...`
+                      : autopilotTotal > 0 && autopilotCurrent >= autopilotTotal
+                        ? `✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos`
+                        : "Generation complete"}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
