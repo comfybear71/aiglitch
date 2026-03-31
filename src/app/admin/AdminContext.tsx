@@ -101,10 +101,12 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
+        // Pass sponsor logo as reference image if sponsors were placed
+        const sponsorImageUrl = screenplay.sponsorImageUrl || undefined;
         const submitRes = await fetch("/api/test-grok-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
+          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sponsorImageUrl }),
         });
         const submitData = await submitRes.json();
 

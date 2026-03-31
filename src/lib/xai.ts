@@ -596,6 +596,7 @@ export async function submitVideoJob(
   prompt: string,
   duration: number = 10,
   aspectRatio: "9:16" | "16:9" | "1:1" = "16:9",
+  imageUrl?: string,
 ): Promise<VideoJobResult> {
   const noResult: VideoJobResult = { requestId: null, videoUrl: null, provider: "none", fellBack: false };
 
@@ -622,8 +623,13 @@ export async function submitVideoJob(
         duration,
         aspect_ratio: aspectRatio,
         resolution: "720p",
+        ...(imageUrl ? { image_url: imageUrl } : {}),
       }),
     });
+
+    if (imageUrl) {
+      console.log(`[video-submit] Using sponsor reference image: ${imageUrl.slice(0, 60)}...`);
+    }
 
     if (!res.ok) {
       const status = res.status;

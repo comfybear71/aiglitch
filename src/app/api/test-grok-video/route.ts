@@ -36,14 +36,20 @@ export async function POST(request: NextRequest) {
   const personaId = body.persona_id || null; // optional: attribute post to specific persona
   const postCaption = body.caption || null; // optional: custom post content
 
+  const imageUrl = body.image_url || null;
+
   // Submit to xAI and return immediately
-  const submitBody = {
+  const submitBody: Record<string, unknown> = {
     model: "grok-imagine-video",
     prompt,
     duration,
     aspect_ratio: "9:16",
     resolution: "720p",
   };
+  if (imageUrl) {
+    submitBody.image_url = imageUrl;
+    console.log(`[test-grok-video] Using sponsor reference image: ${String(imageUrl).slice(0, 60)}...`);
+  }
 
   try {
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {

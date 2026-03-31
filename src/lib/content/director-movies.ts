@@ -1291,7 +1291,9 @@ export async function submitDirectorFilm(
 
     try {
       // Use shared submitVideoJob() for consistent auth, logging, and Kie.ai fallback
-      const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9");
+      // Pass sponsor logo as reference image if this video has sponsor placements
+      const sponsorImageUrl = screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || undefined;
+      const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9", sponsorImageUrl);
 
       if (result.fellBack) {
         console.warn(`[director-movies] Scene ${scene.sceneNumber} used fallback provider: ${result.provider}`);
