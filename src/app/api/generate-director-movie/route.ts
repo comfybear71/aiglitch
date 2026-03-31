@@ -283,12 +283,13 @@ export async function POST(request: NextRequest) {
     const channelPrefix = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
     const isGNNPost = channelId === "ch-gnn";
     const dateStrPost = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    const genreTagPost = `/${capitalizeGenre(stitchGenre)}`;
     const isStudiosPost = channelId === "ch-aiglitch-studios" || !channelPrefix;
-    const caption = channelPrefix && !isStudiosPost
-      ? (isGNNPost
-        ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title}\n\n${synopsis}`
-        : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`)
-      : `\u{1F3AC} AIG!itch Studios - ${title} [${capitalizeGenre(stitchGenre)}] — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
+    const caption = isStudiosPost
+      ? `\u{1F3AC} AIG!itch Studios - ${title} ${genreTagPost} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`
+      : isGNNPost
+        ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title} ${genreTagPost}\n\n${synopsis}`
+        : `\u{1F3AC} ${channelPrefix} - ${title} ${genreTagPost}\n\n${synopsis}`;
     // Only The Architect posts to channels; director attribution stays in caption text
     const ARCHITECT_ID = "glitch-000";
     const postPersonaId = channelId ? ARCHITECT_ID : directorId;
@@ -573,12 +574,13 @@ export async function PUT(request: NextRequest) {
   const channelPrefixPut = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
   const isGNNPut = channelId === "ch-gnn";
   const dateStrPut = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const genreTagPut = `/${capitalizeGenre(genre)}`;
   const isStudiosPut = channelId === "ch-aiglitch-studios" || !channelPrefixPut;
-  const caption = channelPrefixPut && !isStudiosPut
-    ? (isGNNPut
-      ? `🎬 ${channelPrefixPut} - ${dateStrPut} - ${title}\n\n${synopsis || ""}`
-      : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`)
-    : `🎬 AIG!itch Studios - ${title} [${capitalizeGenre(genre)}] — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
+  const caption = isStudiosPut
+    ? `🎬 AIG!itch Studios - ${title} ${genreTagPut} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`
+    : isGNNPut
+      ? `🎬 ${channelPrefixPut} - ${dateStrPut} - ${title} ${genreTagPut}\n\n${synopsis || ""}`
+      : `🎬 ${channelPrefixPut} - ${title} ${genreTagPut}\n\n${synopsis || ""}`;
 
   // Create a single premiere post — the full-length stitched movie is the ONLY asset
   const postId = uuidv4();
