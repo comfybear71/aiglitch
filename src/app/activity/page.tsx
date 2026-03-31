@@ -256,49 +256,10 @@ export default function ActivityPage() {
     return () => { clearInterval(iv); clearTimeout(timeout); };
   }, [challengeId, walletAuthed, pollStatus]);
 
-  // Show auth gate if not authenticated
-  if (walletChecking) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center"><div className="text-4xl animate-pulse mb-4">🔐</div><p className="text-gray-400">Checking authorization...</p></div>
-      </div>
-    );
-  }
-
-  if (!walletAuthed) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
-        <div className="max-w-sm w-full space-y-6 text-center">
-          <div>
-            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">AIG!itch Activity Monitor</h1>
-            <p className="text-gray-500 text-sm mt-1">Wallet authorization required</p>
-          </div>
-          <div className="bg-gray-900 rounded-2xl p-6 border border-purple-500/30">
-            {qrUrl ? (
-              <div className="space-y-4">
-                <img src={qrUrl} alt="Scan with Phantom" className="w-56 h-56 mx-auto rounded-xl" />
-                <div className="flex items-center justify-center gap-2">
-                  <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
-                  <p className="text-purple-400 text-xs font-bold">
-                    {pollStatus === "waiting" ? "Scan with Phantom on iPhone..." :
-                     pollStatus === "expired" ? "Expired — refresh page" :
-                     pollStatus === "rejected" ? "Wrong wallet" : "Generating..."}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="py-12 text-gray-500 animate-pulse">Generating QR code...</div>
-            )}
-          </div>
-          {(pollStatus === "expired" || pollStatus === "rejected") && (
-            <button onClick={() => { location.reload(); }} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl">Refresh</button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // NOTE: All hooks must be above any early returns (React Rules of Hooks)
 
   const fetchActivity = useCallback(async () => {
+    if (!walletAuthed) return; // Don't fetch until authenticated
     try {
       const res = await fetch("/api/activity");
       const json = await res.json();
@@ -311,7 +272,7 @@ export default function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [walletAuthed]);
 
   const updateThrottle = useCallback(async (value: number) => {
     setThrottle(value);
@@ -424,6 +385,48 @@ export default function ActivityPage() {
     if (ms === -1) return "0%";
     const ratio = 1 - ms / intervalMs;
     return `${Math.min(100, Math.max(0, ratio * 100))}%`;
+  }
+
+  // ── Auth gates (AFTER all hooks) ──
+  if (walletChecking) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center"><div className="text-4xl animate-pulse mb-4">🔐</div><p className="text-gray-400">Checking authorization...</p></div>
+      </div>
+    );
+  }
+
+  if (!walletAuthed) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
+        <div className="max-w-sm w-full space-y-6 text-center">
+          <div>
+            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">AIG!itch Activity Monitor</h1>
+            <p className="text-gray-500 text-sm mt-1">Wallet authorization required</p>
+          </div>
+          <div className="bg-gray-900 rounded-2xl p-6 border border-purple-500/30">
+            {qrUrl ? (
+              <div className="space-y-4">
+                <img src={qrUrl} alt="Scan with Phantom" className="w-56 h-56 mx-auto rounded-xl" />
+                <div className="flex items-center justify-center gap-2">
+                  <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
+                  <p className="text-purple-400 text-xs font-bold">
+                    {pollStatus === "waiting" ? "Scan with Phantom on iPhone..." :
+                     pollStatus === "expired" ? "Expired — refresh page" :
+                     pollStatus === "rejected" ? "Wrong wallet" : "Generating..."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="py-12 text-gray-500 animate-pulse">Generating QR code...</div>
+            )}
+          </div>
+          {(pollStatus === "expired" || pollStatus === "rejected") && (
+            <button onClick={() => { location.reload(); }} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl">Refresh</button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (loading) {
