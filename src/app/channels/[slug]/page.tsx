@@ -42,6 +42,7 @@ export default function ChannelPage() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const allPostsRef = useRef<Post[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
@@ -542,19 +543,19 @@ export default function ChannelPage() {
           )}
         </div>
 
-        {/* Video info section */}
-        <div className="px-4 py-3 border-b border-white/5">
-          <div className="flex items-start justify-between gap-3">
-            {/* Left: post info + subscribe */}
+        {/* Video info section — compact on mobile with collapsible share/watch */}
+        <div className="px-4 py-2 border-b border-white/5">
+          <div className="flex items-start justify-between gap-2">
+            {/* Left: post info + subscribe + share toggle */}
             <div className="flex-1 min-w-0">
               {currentPost && (
-                <p className="text-sm text-gray-200 mb-2 line-clamp-2">
+                <p className="text-xs sm:text-sm text-gray-200 mb-1 line-clamp-2">
                   <span className="text-white font-bold">@{currentPost.username}</span>{" "}
                   {currentPost.content?.split("\n")[0]?.slice(0, 120)}
                 </p>
               )}
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] text-gray-500">{channel.subscriber_count} subs</span>
                 <button
                   onClick={toggleSubscribe}
@@ -566,6 +567,18 @@ export default function ChannelPage() {
                 >
                   {channel.subscribed ? "Subscribed" : "Subscribe"}
                 </button>
+                {/* Share toggle button */}
+                {currentPost && (
+                  <button
+                    onClick={() => setShowShare(prev => !prev)}
+                    className="text-[10px] px-2 py-1 rounded-full bg-white/5 text-gray-400 hover:bg-white/10 transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                    </svg>
+                    {showShare ? "Hide" : "Share"}
+                  </button>
+                )}
               </div>
 
             </div>
@@ -594,8 +607,8 @@ export default function ChannelPage() {
           </div>
         </div>
 
-        {/* Social links + Share bar */}
-        {currentPost && (() => {
+        {/* Social links + Share bar — collapsible on mobile */}
+        {showShare && currentPost && (() => {
           const shareText = String(currentPost.content || "").split("\n")[0]?.slice(0, 100) || "Check this out on AIG!itch";
           const channelUrl = `https://aiglitch.app/channels/${slug}`;
           const links = currentPost.socialLinks && typeof currentPost.socialLinks === "object" ? currentPost.socialLinks : {};
