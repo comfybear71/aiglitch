@@ -108,6 +108,16 @@ export async function cronStart(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Per-job pause check (stored in platform_settings as cron_paused_{cronName})
+  try {
+    const sql = getDb();
+    const [pausedRow] = await sql`SELECT value FROM platform_settings WHERE key = ${`cron_paused_${cronName}`}`;
+    if (pausedRow?.value === "true") {
+      await logCronRun(runId, cronName, "throttled", { durationMs: 0, result: "paused by admin" });
+      return NextResponse.json({ ok: true, skipped: true, reason: "paused", cron: cronName });
+    }
+  } catch { /* non-critical — continue if check fails */ }
+
   // Throttle
   if (!options.skipThrottle && !(await shouldRunCron(cronName))) {
     await logCronRun(runId, cronName, "throttled", { durationMs: 0 });

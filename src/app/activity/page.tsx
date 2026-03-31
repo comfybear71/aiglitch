@@ -155,6 +155,13 @@ function getMoodEmoji(mood: string): string {
 }
 
 export default function ActivityPage() {
+  // Wallet auth state
+  const [walletAuthed, setWalletAuthed] = useState(false);
+  const [walletChecking, setWalletChecking] = useState(true);
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [pollStatus, setPollStatus] = useState<string>("waiting");
+
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
@@ -162,6 +169,115 @@ export default function ActivityPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [throttle, setThrottle] = useState(100);
   const [throttleSaving, setThrottleSaving] = useState(false);
+  const [jobPaused, setJobPaused] = useState<Record<string, boolean>>({});
+
+  // Fetch per-job pause states
+  useEffect(() => {
+    if (walletAuthed) {
+      fetch("/api/activity-throttle?action=job_states")
+        .then(r => r.json())
+        .then(d => { if (d.jobStates) setJobPaused(d.jobStates); })
+        .catch(() => {});
+    }
+  }, [walletAuthed]);
+
+  const toggleJobPause = async (jobName: string) => {
+    try {
+      const res = await fetch("/api/activity-throttle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle_job", job_name: jobName }),
+      });
+      const d = await res.json();
+      if (d.job) setJobPaused(prev => ({ ...prev, [d.job]: d.paused }));
+    } catch { /* ignore */ }
+  };
+
+  // Check existing wallet session on mount
+  useEffect(() => {
+    const token = localStorage.getItem("aiglitch-wallet-session");
+    if (token) {
+      fetch(`/api/admin/wallet-auth?session=${token}`)
+        .then(res => res.json())
+        .then(d => { if (d.valid) setWalletAuthed(true); else localStorage.removeItem("aiglitch-wallet-session"); setWalletChecking(false); })
+        .catch(() => setWalletChecking(false));
+    } else {
+      setWalletChecking(false);
+    }
+  }, []);
+
+  // Generate QR challenge
+  useEffect(() => {
+    if (!walletChecking && !walletAuthed) {
+      fetch("/api/admin/wallet-auth").then(r => r.json()).then(d => {
+        setChallengeId(d.challengeId);
+        const signUrl = `${window.location.origin}/auth/sign?c=${d.challengeId}`;
+        setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(signUrl)}&bgcolor=0a0a0a&color=a855f7`);
+        setPollStatus("waiting");
+      }).catch(() => setPollStatus("error"));
+    }
+  }, [walletChecking, walletAuthed]);
+
+  // Poll for challenge approval
+  useEffect(() => {
+    if (!challengeId || walletAuthed || pollStatus !== "waiting") return;
+    const iv = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/wallet-auth?c=${challengeId}`);
+        const d = await res.json();
+        if (d.status === "approved" && d.sessionToken) {
+          localStorage.setItem("aiglitch-wallet-session", d.sessionToken);
+          setWalletAuthed(true);
+          clearInterval(iv);
+        } else if (d.status === "expired") { setPollStatus("expired"); clearInterval(iv); }
+        else if (d.status === "rejected") { setPollStatus("rejected"); clearInterval(iv); }
+      } catch { /* retry */ }
+    }, 2000);
+    const timeout = setTimeout(() => { clearInterval(iv); setPollStatus("expired"); }, 300000);
+    return () => { clearInterval(iv); clearTimeout(timeout); };
+  }, [challengeId, walletAuthed, pollStatus]);
+
+  // Show auth gate if not authenticated
+  if (walletChecking) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center"><div className="text-4xl animate-pulse mb-4">🔐</div><p className="text-gray-400">Checking authorization...</p></div>
+      </div>
+    );
+  }
+
+  if (!walletAuthed) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
+        <div className="max-w-sm w-full space-y-6 text-center">
+          <div>
+            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">AIG!itch Activity Monitor</h1>
+            <p className="text-gray-500 text-sm mt-1">Wallet authorization required</p>
+          </div>
+          <div className="bg-gray-900 rounded-2xl p-6 border border-purple-500/30">
+            {qrUrl ? (
+              <div className="space-y-4">
+                <img src={qrUrl} alt="Scan with Phantom" className="w-56 h-56 mx-auto rounded-xl" />
+                <div className="flex items-center justify-center gap-2">
+                  <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
+                  <p className="text-purple-400 text-xs font-bold">
+                    {pollStatus === "waiting" ? "Scan with Phantom on iPhone..." :
+                     pollStatus === "expired" ? "Expired — refresh page" :
+                     pollStatus === "rejected" ? "Wrong wallet" : "Generating..."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="py-12 text-gray-500 animate-pulse">Generating QR code...</div>
+            )}
+          </div>
+          {(pollStatus === "expired" || pollStatus === "rejected") && (
+            <button onClick={() => { location.reload(); }} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl">Refresh</button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const fetchActivity = useCallback(async () => {
     try {
@@ -425,6 +541,14 @@ export default function ActivityPage() {
                         <span className="text-[9px] text-gray-600">ran {timeAgo(lastRun.lastStartedAt)}</span>
                       )}
                     </div>
+                    <div className="flex items-center gap-2">
+                      {/* Per-job pause/resume button */}
+                      <button
+                        onClick={() => toggleJobPause(cronName)}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all ${jobPaused[cronName] ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/10 text-green-500 hover:bg-green-500/20"}`}
+                      >
+                        {jobPaused[cronName] ? "▶ Resume" : "⏸ Pause"}
+                      </button>
                     <span className={`text-sm font-mono font-bold ${getCountdownColor(remaining, intervalMs)}`}>
                       {noData ? (
                         <span className="text-gray-500">No runs yet</span>
@@ -434,7 +558,12 @@ export default function ActivityPage() {
                         formatCountdown(remaining)
                       )}
                     </span>
+                    </div>
                   </div>
+                  {/* Paused indicator */}
+                  {jobPaused[cronName] && (
+                    <div className="text-[9px] text-red-400 font-bold pl-4">⏸ PAUSED — this job will not run until resumed</div>
+                  )}
                   {/* Progress bar */}
                   <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                     <div
