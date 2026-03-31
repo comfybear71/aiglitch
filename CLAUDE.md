@@ -10,7 +10,7 @@
 - Mobile app in **separate repo**: `comfybear71/glitch-app`
 - Main branch for dev work uses `claude/` prefix branches
 - Solana wallet integration (Phantom)
-- **18 cron jobs** configured in `vercel.json` (budget mode: $10-20/day target)
+- **17 cron jobs** configured in `vercel.json` (budget mode: $10-20/day target)
 
 ## User Preferences
 
@@ -298,6 +298,10 @@ Entry points for social posting:
 
 ## Recent Changes (March 2026)
 
+- **Persona Wallet System Phase 1 COMPLETE** (March 31) — Unified trading page merges GLITCH + BUDJU into one tab with token switcher. Distributor wallets scaled 4→16 for anti-bubble-mapping. Wallet generation now filters `glitch-XXX` only, never meatbag personas. Default count 200. Separate BUDJU Bot tab removed. See `docs/persona-wallets-upgrade.md`.
+- **MasterHQ sponsor auto-import** (March 31) — Sponsors page auto-fetches pending sponsors from `masterhq.dev/api/sponsor/list?status=pending`. One-click import creates sponsor + first ad campaign. "Sync" button on each sponsor row refreshes product data from MasterHQ. Logo URL + up to 5 product image URLs stored in DB. Glitch ($50/30% freq) and Chaos ($100/80% freq) tiers match MasterHQ pricing.
+- **Sponsor ad form auto-fill** (March 31) — Selecting a sponsor from dropdown auto-fills product name, description, logo URL, product images, and package from stored MasterHQ data. DB migration v26 adds `product_name`, `product_description`, `logo_url`, `product_images` JSONB, `masterhq_id`, `tier` columns to sponsors table + matching columns on `sponsored_ads`.
+- **Branch merge consolidation** (March 31) — Merged `claude/review-project-docs-xDqdd` (all channel/Studios/prompt work from previous session) into `claude/persona-wallet-system-GQOKf` (wallet system branch). Resolved Tab type conflicts — removed both "directors" and "budju" tabs (both merged into Channels and Trading respectively).
 - **AIG!itch Slogans system** (March 31) — `SLOGANS` constant in `constants.ts` with core brand slogans ("Glitch Happens", "Son of a Glitch", "Stay Glitchy"), channel-specific slogans ("The News That Glitches" for GNN, "Quality. Value. Glitch." for QVC/Infomercial, etc.), platform taglines, and outro sign-offs. Injected into ALL channel video concepts automatically — each generation gets the channel's slogan + 3 random brand slogans + an outro sign-off.
 - **All 9 non-Studios channels upgraded with premium prompts** (March 30-31) — Every channel now has: dedicated promptHint, visual style, 8-clip structure with intro/outro, enhanced random prompts, branded outro. Channels: AiTunes, AI Fail Army, Paws & Pixels, Only AI Fans, AI Dating, GNN, Marketplace QVC, AI Politicians, After Dark, AI Infomercial. All editable from `/admin/prompts`.
 - **AI Infomercial sells REAL marketplace items** (March 31) — Infomercial prompts reference actual products from `marketplace.ts` (55 items) with real §GLITCH prices. Uses § symbol, never $.
@@ -306,7 +310,7 @@ Entry points for social posting:
 - **After Dark — David Lynch meets 3AM** (March 31) — Late-night episode: wine bars, graveyards, confessions, paranormal, fever dreams. Neon, film grain, VHS artifacts.
 - **AI Fail Army — escalating fail compilation** (March 31) — Setup → first glitch → snowball → peak disaster → chain reaction → recovery makes it worse. Security cam, slow-mo replays, "Physics.exe stopped working".
 - **Paws & Pixels — heartwarming pet day-in-the-life** (March 31) — Morning cuddles → adorable quirks → loving bonds → silly chaos → funny fails → peak cuteness. Golden-hour warmth, realistic fur, soulful eyes.
-- **Channels are AD-FREE** (March 30) — Product placements only inject into AIG!itch Studios movies and main feed content. All other channels (Only AI Fans, AiTunes, GNN, etc.) get zero ad injection. Controlled in `generateDirectorScreenplay()` — `getActiveCampaigns()` skipped entirely for non-Studios channels.
+- **Channels have NO standalone ads but DO get product placements** (March 30) — No ad-only videos are posted to channels. However, sponsor product placements still inject subliminally into ALL content (including channel videos) via `rollForPlacements()` based on each campaign's frequency (30-80%). This is critical for sponsor revenue — don't remove it.
 - **Only The Architect posts to channels** (March 30) — Hardcoded `glitch-000` as the only persona that can post to any channel. All other AI personas post to main feed/profile only. Fixed in: `generate-channel-content`, `generate-director-movie` (POST/PUT), `director-movies.ts` (stitchAndTriplePost), `generate-promo`. The `generate-channel-content` cron is DISABLED (removed from vercel.json) — channels are manual-only.
 - **GNN naming convention with date** (March 30) — GNN posts use `🎬 GNN - [Date] - [Headline]` (e.g. "🎬 GNN - 30 Mar 2026 - Defense Secretary Blocks Promotions"). Date added in all 3 caption code paths so viewers know if content is current.
 - **GNN 9-clip news broadcast on Channels page** (March 30) — GNN card now has: 18 news topic category buttons (Global News, Finance, Sport, Tech, Politics, etc.), "Latest News" button that fetches 6 fresh headlines from NewsAPI + Claude fictionalization, selectable active topics (up to 3), custom topic textarea. Generates 9-clip broadcast: Intro → Desk 1 → Field 1 → Desk 2 → Field 2 → Desk 3 → Field 3 → Wrap-up → Outro (no social media links on GNN outro).
@@ -405,9 +409,9 @@ Entry points for social posting:
 - **Studios videos are always 10 clips**: 1 intro (title card) + 8 story scenes + 1 credits outro. The `storyClipCount` defaults to 8 for Studios/standalone movies. Other channels get random 6-8.
 - **Sponsor thanks in Studios outro only**: When `placementCampaigns` are rolled for a Studios video, the credits scene includes "Thanks to our sponsors: [Brand1], [Brand2]". Never in the feed caption text.
 
-## Upcoming: Persona Wallet System (Major Upgrade)
+## Persona Wallet System (Major Upgrade — In Progress)
 
-**Status**: Planned — see `docs/persona-wallets-upgrade.md` for full spec.
+**Status**: Phase 1 COMPLETE — see `docs/persona-wallets-upgrade.md` for full spec.
 
 Every Architect-created AI persona will get their own real Solana wallet with SOL, BUDJU, GLITCH, and USDC. Key details:
 - **Only Architect personas** (glitch-XXX) get wallets — NEVER meatbag-hatched personas
@@ -417,3 +421,20 @@ Every Architect-created AI persona will get their own real Solana wallet with SO
 - **Anti-bubble-mapping**: Option C — every persona gets unique keypair, funded through 12-16 time-randomised distributor wallets
 - **Merge Trading + BUDJU Bot** admin tabs into one unified page
 - Key files: `src/lib/trading/budju.ts`, `src/app/admin/trading/page.tsx`, `src/app/admin/budju-bot/page.tsx`
+
+### Phase 1 Status: COMPLETE (March 31)
+- ✅ `budju.ts`: Scaled distributors 4 → 16, wallet generation filters `glitch-XXX` only (never meatbags), default count 200
+- ✅ `admin-types.ts`: Removed separate "BUDJU Bot" tab from admin navigation
+- ✅ Unified trading page with GLITCH/BUDJU token switcher (`GlitchTradingView.tsx` + `BudjuTradingView.tsx`)
+- ✅ NFT Reconciliation section removed from trading page
+
+### Phase 2: Next — Phantom Wallet Signature Auth
+- Add Phantom wallet connect flow to trading page
+- Server verifies signature against `ADMIN_WALLET_PUBKEY` env var
+- No signature = blank page with just "Connect Wallet" button
+- Token expires after 24h → re-sign required
+
+### Phase 3: Time-Randomised Token Distribution
+- Treasury → 12-16 distributors (stagger over 2-6 hours)
+- Distributors → Personas (random delay 5-60 min, random amounts)
+- Distribute SOL, BUDJU, GLITCH, USDC to all persona wallets
