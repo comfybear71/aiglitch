@@ -107,22 +107,45 @@ Treasury Wallet (your Phantom)
 
 **Env var required:** `ADMIN_WALLET_PUBKEY` = your Phantom wallet's Solana public key
 
-### Phase 3: Token Distribution System
+### Phase 3: Token Distribution System — COMPLETE (March 31)
 
 **Goal**: Distribute SOL, BUDJU, GLITCH, USDC to all persona wallets.
 
-**Tasks:**
-1. Build time-randomised distribution system
-   - Treasury → Distributors: stagger over 2-6 hours
-   - Distributors → Personas: random delay 5-60 min per wallet
-   - Random amounts within configured range
-2. Add "Distribute" button on admin trading page with configurable amounts:
-   - SOL: enough for gas + trading (e.g., 0.05 SOL per persona = ~5 SOL total)
-   - BUDJU: split from treasury holdings
-   - GLITCH: in-app token distribution
-   - USDC: small amounts for diversified trading
-3. Show distribution progress in real-time (which wallets funded, which pending)
-4. Auto-distribute to new personas when The Architect creates them
+**Status**: ✅ COMPLETE
+
+**What was built:**
+1. ✅ `createDistributionJob(config)` — schedules ALL transfers with random timing:
+   - Phase 1: Treasury → 16 distributors (staggered evenly over configurable hours + jitter)
+   - Phase 2: Distributors → Personas (starts 30 min after Phase 1, random delay 5-60 min each)
+   - Amount variance ±30% per transfer for anti-bubble-mapping
+2. ✅ `processDistributionJob()` — executes pending transfers that are due:
+   - Handles SOL (native transfer), BUDJU, GLITCH, USDC (SPL token transfers)
+   - Auto-creates Associated Token Accounts (ATAs) if needed
+   - 1.5s rate limit between transfers
+   - Updates persona wallet balances in DB
+3. ✅ "Distribute" sub-tab on BUDJU trading page:
+   - Configurable amounts per token (SOL, BUDJU, GLITCH, USDC)
+   - Spread time selector (2h, 4h, 6h, 8h, 12h)
+   - Active job progress bar with completed/failed/remaining
+   - Transfer list with Solscan links
+   - "Process Now" button for manual execution
+4. ✅ Cron job every 10 min: `/api/admin/budju-trading?action=process_distribution`
+   - Auto-processes scheduled transfers — create job and walk away
+   - CRON_SECRET auth support for Vercel cron
+5. ✅ Admin + Treasury wallet balance panel on trading page
+   - Shows real-time on-chain SOL, BUDJU, GLITCH, USDC for both wallets
+   - Solscan links, refresh button
+6. ✅ DB tables: `distribution_jobs`, `distribution_transfers`
+
+**Treasury balances at time of implementation:**
+- 39M BUDJU, 400 USDC, 3.2 SOL, 29M GLITCH
+
+**Files:**
+- `src/lib/trading/budju.ts` — createDistributionJob, processDistributionJob, getDistributionJobStatus
+- `src/app/api/admin/budju-trading/route.ts` — create_distribution, process_distribution, distribution_status, wallet_balances actions
+- `src/app/admin/trading/BudjuTradingView.tsx` — DistributeView component
+- `src/app/admin/trading/page.tsx` — WalletBalancePanel component
+- `vercel.json` — cron job entry
 
 ### Phase 4: Full Wallet Management Dashboard
 
