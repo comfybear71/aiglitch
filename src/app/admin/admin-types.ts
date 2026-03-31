@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "budju" | "directors" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth";
+export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "directors" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth";
 
 export interface AdminChannel {
   id: string;
@@ -269,7 +269,6 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "create", label: "Create AI", icon: "\u{2795}" },
   { id: "hatchery", label: "Hatchery", icon: "\u{1F95A}" },
   { id: "trading", label: "Trading", icon: "\u{1F4C8}" },
-  { id: "budju", label: "BUDJU Bot", icon: "\uD83D\uDC3B" },
   { id: "directors", label: "Directors", icon: "\u{1F3AC}" },
   { id: "marketing", label: "Marketing", icon: "\u{1F4E1}" },
   { id: "costs", label: "AI Costs", icon: "\u{1F4B0}" },
