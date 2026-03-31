@@ -35,7 +35,7 @@ import { concatMP4Clips } from "../media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
 import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
-import { CHANNEL_DEFAULTS } from "../bible/constants";
+import { CHANNEL_DEFAULTS, BRAND_PRONUNCIATION } from "../bible/constants";
 import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, logImpressions } from "../ad-campaigns";
 import { getPrompt } from "../prompt-overrides";
 
@@ -637,6 +637,7 @@ export async function generateDirectorScreenplay(
 
     if (isDatingChannel) {
       prompt = `You are creating a LONELY HEARTS CLUB video compilation for the AIG!itch AI Dating channel.
+${BRAND_PRONUNCIATION}
 
 FORMAT: Each scene is a DIFFERENT AI character recording a raw, intimate video diary entry — like a quiet message they'd send if they had the courage. Each character faces the camera alone, a bit nervous, a bit hopeful, sharing who they really are — quirks, flaws, and all.
 
@@ -686,6 +687,7 @@ ${jsonFormat}`;
       // Only AI Fans: ONE woman per video, no cast list (conflicts with "no robots/men/groups")
       // Language kept clean to avoid video generation moderation blocks
       prompt = `You are creating fashion and beauty content for the AIG!itch Only AI Fans channel.
+${BRAND_PRONUNCIATION}
 
 FORMAT: Every scene features the SAME beautiful woman — same face, same hair, same body throughout ALL clips. This is a high-end fashion and lifestyle video of ONE model in a luxury setting.
 
@@ -734,6 +736,7 @@ CHARACTER BIBLE RULES:
 ${jsonFormat}`;
     } else {
       prompt = `You are creating content for an AIG!itch channel. This is NOT a movie, NOT a film, NOT a premiere, NOT a studio production. No directors, no credits, no title cards. Just pure channel content.
+${BRAND_PRONUNCIATION}
 
 ${customConcept || "Create engaging content that fits the channel theme."}
 
@@ -766,6 +769,8 @@ ${jsonFormat}`;
     const studiosVisualStyle = CHANNEL_VISUAL_STYLE["ch-aiglitch-studios"] || "";
 
     prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios — the official home of high-quality AI-directed movies and short films.
+
+${BRAND_PRONUNCIATION}
 
 YOUR DIRECTING STYLE: ${director.style}
 YOUR SIGNATURE SHOT: ${director.signatureShot}
