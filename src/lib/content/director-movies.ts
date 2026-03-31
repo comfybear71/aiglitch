@@ -1245,9 +1245,15 @@ export async function submitDirectorFilm(
     `;
   }
 
+  // Ensure placed_campaign_ids column exists
+  try { await sql`ALTER TABLE multi_clip_jobs ADD COLUMN IF NOT EXISTS placed_campaign_ids JSONB DEFAULT '[]'`; } catch { /* already exists */ }
+
+  // Store which campaigns were placed in this video for accurate impression tracking
+  const placedIds = screenplay._adCampaigns?.map(c => c.id) || [];
+
   await sql`
-    INSERT INTO multi_clip_jobs (id, screenplay_id, title, tagline, synopsis, genre, clip_count, persona_id, caption, channel_id, blob_folder)
-    VALUES (${jobId}, ${screenplay.id}, ${screenplay.title}, ${screenplay.tagline}, ${screenplay.synopsis}, ${screenplay.genre}, ${screenplay.scenes.length}, ${directorPersonaId}, ${caption}, ${options?.channelId || null}, ${options?.folder || null})
+    INSERT INTO multi_clip_jobs (id, screenplay_id, title, tagline, synopsis, genre, clip_count, persona_id, caption, channel_id, blob_folder, placed_campaign_ids)
+    VALUES (${jobId}, ${screenplay.id}, ${screenplay.title}, ${screenplay.tagline}, ${screenplay.synopsis}, ${screenplay.genre}, ${screenplay.scenes.length}, ${directorPersonaId}, ${caption}, ${options?.channelId || null}, ${options?.folder || null}, ${JSON.stringify(placedIds)}::jsonb)
   `;
 
   // Also log in director_movies table
@@ -1429,18 +1435,30 @@ export async function stitchAndTriplePost(
   await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${effectiveChannelId}`;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaId}`;
 
-  // Log ad campaign impressions — use the campaigns that were actually injected
-  // into the screenplay (stored during generateDirectorScreenplay), not a re-roll
+  // Log ad campaign impressions — use the campaigns stored during screenplay generation
+  // NOT a re-roll, because we need to track what was ACTUALLY in the video
   try {
-    // Re-query active campaigns but only log impressions for the ones that were
-    // actually placed in the video content (the screenplay phase rolled once)
-    const activeCampaigns = await getActiveCampaigns(job.channel_id);
-    if (activeCampaigns.length > 0) {
-      // Roll once here for impression tracking — these match what the viewer sees
-      const placedCampaigns = rollForPlacements(activeCampaigns);
+    // Check if campaign IDs were stored with the job
+    const [jobMeta] = await sql`SELECT placed_campaign_ids FROM multi_clip_jobs WHERE id = ${jobId}`;
+    const storedIds = jobMeta?.placed_campaign_ids as string[] | null;
+
+    if (storedIds && storedIds.length > 0) {
+      // Use the exact campaigns that were placed in the video
+      const activeCampaigns = await getActiveCampaigns(job.channel_id);
+      const placedCampaigns = activeCampaigns.filter(c => storedIds.includes(c.id));
       if (placedCampaigns.length > 0) {
         await logImpressions(placedCampaigns, postId, "video", job.channel_id, postPersonaId);
-        console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for director movie "${job.title}"`);
+        console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for "${job.title}" (from stored IDs)`);
+      }
+    } else {
+      // Fallback: roll for placements (legacy behavior for jobs without stored IDs)
+      const activeCampaigns = await getActiveCampaigns(job.channel_id);
+      if (activeCampaigns.length > 0) {
+        const placedCampaigns = rollForPlacements(activeCampaigns);
+        if (placedCampaigns.length > 0) {
+          await logImpressions(placedCampaigns, postId, "video", job.channel_id, postPersonaId);
+          console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for "${job.title}" (fallback roll)`);
+        }
       }
     }
   } catch { /* non-fatal */ }
