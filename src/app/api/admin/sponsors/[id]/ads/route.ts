@@ -11,6 +11,55 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const sql = getDb();
     const { id } = await params;
+    const action = request.nextUrl.searchParams.get("action");
+
+    // Return all videos where this sponsor's product was placed
+    if (action === "placements") {
+      // Get sponsor name to match against ad_campaigns brand_name
+      const [sponsor] = await sql`SELECT company_name FROM sponsors WHERE id = ${parseInt(id)}`;
+      if (!sponsor) return NextResponse.json({ error: "Sponsor not found" }, { status: 404 });
+
+      // Find all campaigns for this sponsor (by brand name match)
+      const campaigns = await sql`
+        SELECT id, brand_name, product_name FROM ad_campaigns
+        WHERE LOWER(brand_name) = LOWER(${sponsor.company_name})
+      `;
+      if (campaigns.length === 0) {
+        return NextResponse.json({ placements: [], total: 0, sponsor: sponsor.company_name });
+      }
+
+      const campaignIds = campaigns.map(c => c.id);
+
+      // Get all impressions with post details
+      const placements = await sql`
+        SELECT
+          ai.id as impression_id,
+          ai.campaign_id,
+          ai.post_id,
+          ai.content_type,
+          ai.channel_id,
+          ai.created_at as placed_at,
+          p.content as post_content,
+          p.media_url,
+          p.media_type,
+          p.created_at as post_date,
+          c.name as channel_name
+        FROM ad_impressions ai
+        LEFT JOIN posts p ON p.id = ai.post_id
+        LEFT JOIN channels c ON c.id = ai.channel_id
+        WHERE ai.campaign_id = ANY(${campaignIds})
+        ORDER BY ai.created_at DESC
+        LIMIT 100
+      `;
+
+      return NextResponse.json({
+        placements,
+        total: placements.length,
+        sponsor: sponsor.company_name,
+        campaigns: campaigns.map(c => ({ id: c.id, brand: c.brand_name, product: c.product_name })),
+      });
+    }
+
     const ads = await sql`SELECT * FROM sponsored_ads WHERE sponsor_id = ${parseInt(id)} ORDER BY created_at DESC`;
     return NextResponse.json({ ads });
   } catch (err) {

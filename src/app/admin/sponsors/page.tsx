@@ -87,6 +87,8 @@ export default function SponsorsPage() {
   const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
   const [expandedSponsor, setExpandedSponsor] = useState<number | null>(null);
   const [sponsorAds, setSponsorAds] = useState<SponsoredAd[]>([]);
+  const [sponsorPlacements, setSponsorPlacements] = useState<{ post_id: string; post_content: string; media_url: string | null; media_type: string | null; content_type: string; channel_name: string | null; placed_at: string }[]>([]);
+  const [placementsTotal, setPlacementsTotal] = useState(0);
   const [form, setForm] = useState({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 });
   const [saving, setSaving] = useState(false);
 
@@ -231,6 +233,15 @@ export default function SponsorsPage() {
         setSponsorAds(data.ads || []);
       }
     } catch (err) { console.error("Fetch ads error:", err); }
+    // Also fetch placements
+    try {
+      const res = await fetch(`/api/admin/sponsors/${sponsorId}/ads?action=placements`);
+      if (res.ok) {
+        const data = await res.json();
+        setSponsorPlacements(data.placements || []);
+        setPlacementsTotal(data.total || 0);
+      }
+    } catch { /* non-critical */ }
   };
 
   // Refresh an existing sponsor's product data from MasterHQ
@@ -507,6 +518,33 @@ export default function SponsorsPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+                {/* Product Placements — videos where this sponsor's product appeared */}
+                {sponsorPlacements.length > 0 && (
+                  <div className="mt-3 border-t border-cyan-800/30 pt-2">
+                    <p className="text-[10px] text-cyan-400 font-bold mb-1">PRODUCT PLACEMENTS ({placementsTotal} videos)</p>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {sponsorPlacements.map((p) => (
+                        <div key={p.post_id || p.placed_at} className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded text-xs">
+                          {p.media_url && p.media_type === "video" && (
+                            <a href={p.media_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                              <div className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-[9px] text-purple-400">▶</div>
+                            </a>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white truncate text-[10px]">{p.post_content?.split("\n")[0] || "Unknown post"}</p>
+                            <p className="text-gray-500 text-[9px]">
+                              {p.content_type} · {p.channel_name || "Feed"} · {new Date(p.placed_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {p.post_id && (
+                            <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer"
+                              className="text-[9px] text-cyan-400 hover:text-cyan-300 shrink-0">View</a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
