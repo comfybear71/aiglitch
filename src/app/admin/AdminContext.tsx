@@ -246,6 +246,13 @@ interface AdminContextValue {
     screenplayBody: Record<string, unknown>;
   }) => void;
   generationChannelId: string | null;
+
+  // Autopilot
+  autopilotQueue: { channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[];
+  setAutopilotQueue: React.Dispatch<React.SetStateAction<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>>;
+  autopilotTotal: number;
+  setAutopilotTotal: React.Dispatch<React.SetStateAction<number>>;
+  autopilotCurrent: number;
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
@@ -274,6 +281,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [generationChannelId, setGenerationChannelId] = useState<string | null>(null);
   const abortRef = useRef(false);
 
+  // Autopilot queue — survives page navigation
+  const [autopilotQueue, setAutopilotQueue] = useState<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>([]);
+  const [autopilotTotal, setAutopilotTotal] = useState(0);
+  const [autopilotCurrent, setAutopilotCurrent] = useState(0);
+
   const startGeneration = useCallback((params: {
     channelId: string;
     channelName: string;
@@ -297,6 +309,25 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       abortRef,
     );
   }, []);
+
+  // Autopilot: when generation finishes, start next in queue
+  useEffect(() => {
+    if (!generating && autopilotQueue.length > 0) {
+      const [next, ...rest] = autopilotQueue;
+      setAutopilotQueue(rest);
+      const current = autopilotTotal - rest.length;
+      setAutopilotCurrent(current);
+      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName}...`]);
+      // Small delay so the log message is visible before generation starts
+      setTimeout(() => startGeneration(next), 500);
+    }
+    // Autopilot complete
+    if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
+      setGenerationLog((prev: string[]) => [...prev, ``, `✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos generated!`]);
+      setAutopilotTotal(0);
+      setAutopilotCurrent(0);
+    }
+  }, [generating, autopilotQueue, autopilotTotal, autopilotCurrent, startGeneration]);
 
   // Elapsed timer for generation progress
   useEffect(() => {
@@ -346,6 +377,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       genProgress, setGenProgress,
       elapsed,
       startGeneration, generationChannelId,
+      autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent,
     }}>
       {children}
     </AdminContext.Provider>

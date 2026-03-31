@@ -9,6 +9,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   const {
     authenticated, setAuthenticated, error, setError,
     generationLog, setGenerationLog, generating, genProgress, elapsed,
+    autopilotTotal, autopilotCurrent, autopilotQueue,
   } = useAdmin();
 
   const [password, setPassword] = useState("");
@@ -116,7 +117,13 @@ function AdminShell({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-2">
                 {(generating || genProgress) && <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
                 <h3 className="text-sm font-bold text-green-400">
-                  {(generating || genProgress) ? "Generation in progress..." : "Generation complete"}
+                  {(generating || genProgress)
+                    ? autopilotTotal > 0
+                      ? `🤖 AUTOPILOT ${autopilotCurrent}/${autopilotTotal} — Generation in progress...`
+                      : "Generation in progress..."
+                    : autopilotTotal > 0 && autopilotQueue.length === 0
+                      ? `✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos`
+                      : "Generation complete"}
                 </h3>
               </div>
               <div className="flex items-center gap-2">

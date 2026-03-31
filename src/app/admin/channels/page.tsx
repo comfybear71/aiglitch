@@ -265,7 +265,7 @@ const TITLE_STYLE_PRESETS: { label: string; prompt: string }[] = [
 ];
 
 export default function AdminChannelsPage() {
-  const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId } = useAdmin();
+  const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId, autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingChannel, setEditingChannel] = useState<AdminChannel | null>(null);
@@ -288,8 +288,6 @@ export default function AdminChannelsPage() {
   const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
   const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
   const [infomercialSelectedItems, setInfomercialSelectedItems] = useState<string[]>([]);
-  const [autopilotQueue, setAutopilotQueue] = useState<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>([]);
-  const [autopilotTotal, setAutopilotTotal] = useState(0);
   const [channelPosts, setChannelPosts] = useState<Record<string, ChannelPost[]>>({});
   const [channelPostTotals, setChannelPostTotals] = useState<Record<string, number>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
@@ -322,17 +320,6 @@ export default function AdminChannelsPage() {
       if (!personas.length) fetchPersonas();
     }
   }, [authenticated, fetchChannels, fetchGnnTopics, fetchPersonas, personas.length]);
-
-  // Autopilot: process queue — when current generation finishes, start the next
-  useEffect(() => {
-    if (!generating && autopilotQueue.length > 0) {
-      const [next, ...rest] = autopilotQueue;
-      setAutopilotQueue(rest);
-      const remaining = rest.length;
-      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: Starting ${next.channelName} (${autopilotTotal - remaining}/${autopilotTotal})...`]);
-      startGeneration(next);
-    }
-  }, [generating, autopilotQueue, autopilotTotal, startGeneration, setGenerationLog]);
 
   // Build autopilot queue from random channels
   const runAutopilot = (count: number) => {
@@ -398,8 +385,9 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
     });
 
     setAutopilotTotal(queue.length);
-    setGenerationLog([`🤖 AUTOPILOT MODE: Queued ${queue.length} videos across ${new Set(queue.map(q => q.channelName)).size} channels`]);
+    setGenerationLog([`🤖 AUTOPILOT MODE: ${queue.length} videos queued across ${new Set(queue.map(q => q.channelName)).size} channels`]);
     setGenerationLog((prev: string[]) => [...prev, `  Channels: ${queue.map(q => q.channelName).join(", ")}`]);
+    setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: 1/${queue.length} — Starting ${queue[0].channelName}...`]);
 
     // Start the first one immediately, queue the rest
     const [first, ...rest] = queue;
