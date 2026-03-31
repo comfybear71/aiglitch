@@ -86,6 +86,56 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const action = body.action;
 
+  // Get admin + treasury wallet balances (all 4 tokens)
+  if (action === "wallet_balances") {
+    try {
+      const { Connection, PublicKey, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+      const { SERVER_RPC_URL, TREASURY_WALLET_STR } = await import("@/lib/solana-config");
+
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
+      const BUDJU_MINT = new PublicKey("2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump");
+      const GLITCH_MINT = new PublicKey("5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT");
+      const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+
+      async function getWalletBalances(address: string) {
+        const pubkey = new PublicKey(address);
+        const sol = (await connection.getBalance(pubkey)) / LAMPORTS_PER_SOL;
+
+        let budju = 0, glitch = 0, usdc = 0;
+        try {
+          const ata = await getAssociatedTokenAddress(BUDJU_MINT, pubkey);
+          const acc = await getAccount(connection, ata);
+          budju = Number(acc.amount) / 1e6;
+        } catch { /* no ATA */ }
+        try {
+          const ata = await getAssociatedTokenAddress(GLITCH_MINT, pubkey);
+          const acc = await getAccount(connection, ata);
+          glitch = Number(acc.amount) / 1e9;
+        } catch { /* no ATA */ }
+        try {
+          const ata = await getAssociatedTokenAddress(USDC_MINT, pubkey);
+          const acc = await getAccount(connection, ata);
+          usdc = Number(acc.amount) / 1e6;
+        } catch { /* no ATA */ }
+
+        return { sol, budju, glitch, usdc, address };
+      }
+
+      const adminWallet = process.env.ADMIN_WALLET_PUBKEY || process.env.ADMIN_WALLET || "";
+      const treasuryWallet = TREASURY_WALLET_STR || "";
+
+      const [admin, treasury] = await Promise.all([
+        adminWallet ? getWalletBalances(adminWallet) : null,
+        treasuryWallet ? getWalletBalances(treasuryWallet) : null,
+      ]);
+
+      return NextResponse.json({ admin, treasury });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to fetch balances" }, { status: 500 });
+    }
+  }
+
   // Start/Stop trading bot
   if (action === "toggle") {
     const config = await getBudjuConfig();

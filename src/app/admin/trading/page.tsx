@@ -7,6 +7,110 @@ import BudjuTradingView from "./BudjuTradingView";
 
 const WALLET_SESSION_KEY = "aiglitch-wallet-session";
 
+interface WalletBalances {
+  sol: number;
+  budju: number;
+  glitch: number;
+  usdc: number;
+  address: string;
+}
+
+function WalletBalancePanel() {
+  const [adminBalances, setAdminBalances] = useState<WalletBalances | null>(null);
+  const [treasuryBalances, setTreasuryBalances] = useState<WalletBalances | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchBalances = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "wallet_balances" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.admin) setAdminBalances(data.admin);
+        if (data.treasury) setTreasuryBalances(data.treasury);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchBalances(); }, [fetchBalances]);
+
+  const formatBalance = (n: number, decimals: number = 4) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return n.toFixed(decimals);
+  };
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Admin Wallet */}
+      <div className="bg-gray-900 border border-purple-500/30 rounded-xl p-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] text-purple-400 font-bold">ADMIN WALLET (Phantom)</p>
+          <button onClick={fetchBalances} disabled={loading} className="text-[9px] text-gray-500 hover:text-gray-300">
+            {loading ? "..." : "↻"}
+          </button>
+        </div>
+        {adminBalances ? (
+          <>
+            <p className="text-[8px] text-gray-600 font-mono truncate mb-2">{adminBalances.address}</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-cyan-400">{formatBalance(adminBalances.sol)} <span className="text-[9px] text-gray-500">SOL</span></p>
+              </div>
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-fuchsia-400">{formatBalance(adminBalances.budju, 0)} <span className="text-[9px] text-gray-500">BUDJU</span></p>
+              </div>
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-purple-400">{formatBalance(adminBalances.glitch, 0)} <span className="text-[9px] text-gray-500">§GLITCH</span></p>
+              </div>
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-green-400">{formatBalance(adminBalances.usdc, 2)} <span className="text-[9px] text-gray-500">USDC</span></p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-[10px] text-gray-600">{loading ? "Loading..." : "No data"}</p>
+        )}
+      </div>
+
+      {/* Treasury Wallet */}
+      <div className="bg-gray-900 border border-amber-500/30 rounded-xl p-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] text-amber-400 font-bold">TREASURY WALLET</p>
+          <a href={treasuryBalances ? `https://solscan.io/account/${treasuryBalances.address}` : "#"} target="_blank" rel="noopener noreferrer"
+            className="text-[9px] text-gray-500 hover:text-gray-300">Solscan ↗</a>
+        </div>
+        {treasuryBalances ? (
+          <>
+            <p className="text-[8px] text-gray-600 font-mono truncate mb-2">{treasuryBalances.address}</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-cyan-400">{formatBalance(treasuryBalances.sol)} <span className="text-[9px] text-gray-500">SOL</span></p>
+              </div>
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-fuchsia-400">{formatBalance(treasuryBalances.budju, 0)} <span className="text-[9px] text-gray-500">BUDJU</span></p>
+              </div>
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-purple-400">{formatBalance(treasuryBalances.glitch, 0)} <span className="text-[9px] text-gray-500">§GLITCH</span></p>
+              </div>
+              <div className="bg-gray-800/50 rounded px-2 py-1">
+                <p className="text-xs font-bold text-green-400">{formatBalance(treasuryBalances.usdc, 2)} <span className="text-[9px] text-gray-500">USDC</span></p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-[10px] text-gray-600">{loading ? "Loading..." : "No data"}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TradingPage() {
   const { authenticated } = useAdmin();
   const [activeToken, setActiveToken] = useState<"glitch" | "budju">("budju");
@@ -195,6 +299,9 @@ export default function TradingPage() {
           Disconnect
         </button>
       </div>
+
+      {/* Admin + Treasury Wallet Balances */}
+      <WalletBalancePanel />
 
       {/* Token Switcher */}
       <div className="flex gap-2">
