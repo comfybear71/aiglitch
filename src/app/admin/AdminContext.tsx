@@ -62,8 +62,15 @@ async function runBackgroundGeneration(
     setProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
     const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
 
-    for (const scene of scenes) {
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
       if (abortRef.current) break;
+
+      // Rate limit: Grok allows 1 request/second — wait 1.5s between submissions
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+
       setProgress(prev => prev ? { ...prev, current: scene.sceneNumber } : null);
       setLog(prev => [...prev, `[${scene.sceneNumber}/${scenes.length}] 🎬 ${scene.title}`]);
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
@@ -80,8 +87,27 @@ async function runBackgroundGeneration(
           sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: submitData.requestId });
           setLog(prev => [...prev, `  ✅ Submitted: ${submitData.requestId.slice(0, 12)}...`]);
         } else {
-          sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
-          setLog(prev => [...prev, `  ❌ Submit failed: ${submitData.error || "unknown"}`]);
+          // If rate limited, wait longer and retry once
+          if (submitData.error?.includes("429") || submitData.error?.includes("Too many")) {
+            setLog(prev => [...prev, `  ⏳ Rate limited — waiting 5s and retrying...`]);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            const retryRes = await fetch("/api/test-grok-video", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
+            });
+            const retryData = await retryRes.json();
+            if (retryData.success && retryData.requestId) {
+              sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: retryData.requestId });
+              setLog(prev => [...prev, `  ✅ Retry succeeded: ${retryData.requestId.slice(0, 12)}...`]);
+            } else {
+              sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
+              setLog(prev => [...prev, `  ❌ Retry failed: ${retryData.error || "unknown"}`]);
+            }
+          } else {
+            sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
+            setLog(prev => [...prev, `  ❌ Submit failed: ${submitData.error || "unknown"}`]);
+          }
         }
       } catch (err) {
         sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
@@ -317,9 +343,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       setAutopilotQueue(rest);
       const current = autopilotTotal - rest.length;
       setAutopilotCurrent(current);
-      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName}...`]);
-      // Small delay so the log message is visible before generation starts
-      setTimeout(() => startGeneration(next), 500);
+      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 10s (rate limit cooldown)...`]);
+      // 10-second cooldown between autopilot generations to avoid Grok 429 rate limits
+      setTimeout(() => startGeneration(next), 10000);
     }
     // Autopilot complete
     if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
