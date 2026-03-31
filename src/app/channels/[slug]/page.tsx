@@ -164,7 +164,8 @@ export default function ChannelPage() {
     setMuted(val === 0);
     const vid = videoRef.current;
     if (vid) {
-      vid.volume = val;
+      // iOS Safari: vid.volume is read-only, so wrap in try/catch
+      try { vid.volume = val; } catch { /* iOS ignores volume changes */ }
       vid.muted = val === 0;
     }
   };
@@ -172,8 +173,11 @@ export default function ChannelPage() {
   const toggleMute = () => {
     const vid = videoRef.current;
     if (!vid) return;
-    vid.muted = !vid.muted;
-    setMuted(vid.muted);
+    const newMuted = !vid.muted;
+    vid.muted = newMuted;
+    setMuted(newMuted);
+    // On iOS, mute toggle is the only volume control that works
+    if (!newMuted) setVolume(1);
   };
 
   const selectPost = (idx: number) => {
@@ -403,43 +407,103 @@ export default function ChannelPage() {
             </div>
           )}
 
-          {/* Progress bar at bottom of video */}
+          {/* Progress bar at bottom of video — clickable to scrub */}
           {isVideo && (
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
-              <div
-                className="h-full bg-cyan-400 transition-[width] duration-200"
-                style={{ width: `${progress * 100}%` }}
-              />
+            <div
+              className="absolute bottom-0 left-0 right-0 h-3 bg-white/20 cursor-pointer group"
+              onClick={(e) => {
+                const vid = videoRef.current;
+                if (!vid || !vid.duration) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                vid.currentTime = fraction * vid.duration;
+                setProgress(fraction);
+              }}
+              onTouchStart={(e) => {
+                const vid = videoRef.current;
+                if (!vid || !vid.duration) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const touch = e.touches[0];
+                const fraction = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+                vid.currentTime = fraction * vid.duration;
+                setProgress(fraction);
+              }}
+            >
+              <div className="absolute bottom-0 left-0 right-0 h-1 group-hover:h-3 bg-white/20 transition-all">
+                <div
+                  className="h-full bg-cyan-400 transition-[width] duration-200 relative"
+                  style={{ width: `${progress * 100}%` }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
             </div>
           )}
         </div>
 
         {/* Controls bar */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-900/80 border-b border-white/5">
-          {/* Play/pause — only for video */}
-          {isVideo && (
-            <button onClick={togglePlay} className="p-1.5 hover:bg-white/10 rounded transition-colors">
-              {paused ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-              ) : (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-              )}
-            </button>
-          )}
-
-          {/* Prev/Next — always shown */}
+        <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 bg-gray-900/80 border-b border-white/5">
+          {/* Prev track */}
           <button
             onClick={() => { if (currentIdx > 0) setCurrentIdx(prev => prev - 1); }}
             disabled={currentIdx === 0}
             className="p-1.5 hover:bg-white/10 rounded transition-colors disabled:opacity-30"
+            title="Previous"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
           </button>
 
+          {/* 10s backward */}
+          {isVideo && (
+            <button
+              onClick={() => {
+                const vid = videoRef.current;
+                if (vid) { vid.currentTime = Math.max(0, vid.currentTime - 10); }
+              }}
+              className="p-1.5 hover:bg-white/10 rounded transition-colors"
+              title="Back 10s"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12.5 3C7.81 3 4.01 6.58 3.68 11H1l3.89 3.89.07.14L9 11H6.73c.32-3.12 2.97-5.56 6.27-5.56a6.28 6.28 0 016.28 6.28c0 3.46-2.82 6.28-6.28 6.28-1.65 0-3.15-.64-4.27-1.69l-1.41 1.41A8.26 8.26 0 0012.5 20c4.58 0 8.28-3.7 8.28-8.28S17.08 3.44 12.5 3z"/>
+                <text x="10" y="15.5" fontSize="7.5" fontWeight="bold" fill="currentColor" textAnchor="middle">10</text>
+              </svg>
+            </button>
+          )}
+
+          {/* Play/pause */}
+          {isVideo && (
+            <button onClick={togglePlay} className="p-1.5 hover:bg-white/10 rounded transition-colors">
+              {paused ? (
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              ) : (
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              )}
+            </button>
+          )}
+
+          {/* 10s forward */}
+          {isVideo && (
+            <button
+              onClick={() => {
+                const vid = videoRef.current;
+                if (vid) { vid.currentTime = Math.min(vid.duration || 0, vid.currentTime + 10); }
+              }}
+              className="p-1.5 hover:bg-white/10 rounded transition-colors"
+              title="Forward 10s"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M11.5 3c4.69 0 8.49 3.58 8.82 8H23l-3.89 3.89-.07.14L15 11h2.27c-.32-3.12-2.97-5.56-6.27-5.56A6.28 6.28 0 004.72 11.72c0 3.46 2.82 6.28 6.28 6.28 1.65 0 3.15-.64 4.27-1.69l1.41 1.41A8.26 8.26 0 0111.5 20c-4.58 0-8.28-3.7-8.28-8.28S6.92 3.44 11.5 3z"/>
+                <text x="14" y="15.5" fontSize="7.5" fontWeight="bold" fill="currentColor" textAnchor="middle">10</text>
+              </svg>
+            </button>
+          )}
+
+          {/* Next track */}
           <button
             onClick={() => { if (currentIdx < posts.length - 1) setCurrentIdx(prev => prev + 1); }}
             disabled={currentIdx >= posts.length - 1}
             className="p-1.5 hover:bg-white/10 rounded transition-colors disabled:opacity-30"
+            title="Next"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
           </button>
@@ -450,9 +514,9 @@ export default function ChannelPage() {
 
           <div className="flex-1" />
 
-          {/* Volume control — only for video */}
+          {/* Volume control — mute toggle on iOS (volume slider doesn't work), slider on desktop */}
           {isVideo && (
-            <>
+            <div className="flex items-center gap-1">
               <button onClick={toggleMute} className="p-1.5 hover:bg-white/10 rounded transition-colors">
                 {muted || volume === 0 ? (
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -472,9 +536,9 @@ export default function ChannelPage() {
                 step="0.05"
                 value={muted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-16 h-1 accent-cyan-400 cursor-pointer"
+                className="w-16 h-1 accent-cyan-400 cursor-pointer hidden sm:block"
               />
-            </>
+            </div>
           )}
         </div>
 
