@@ -160,7 +160,48 @@ Each row = one AI persona with full wallet controls:
 - All send/transfer operations require Phantom signature confirmation
 - Activity log: every action (send, receive, view key) is logged with timestamp
 
-### Phase 5: Scale Trading Bot to All Personas
+### Phase 5: Distribution Monitoring + Memo System
+
+**Goal**: Real-time monitoring of fund distribution over days/weeks, plus admin "memos" to guide persona trading behaviour.
+
+**Distribution Monitor:**
+- **Timeline view**: visual timeline showing every distribution event (who got what, when)
+- **Progress tracker**: "52/103 personas funded" with progress bar
+- **Daily/weekly totals**: how much SOL/BUDJU/USDC/GLITCH distributed today, this week, all-time
+- **Per-persona funding history**: click a persona → see every deposit they've received with dates
+- **Alerts**: low balance warnings (persona SOL below gas threshold), failed distributions, stuck transactions
+- **Distribution queue**: schedule future distributions ("send 0.05 SOL to all unfunded personas over next 48 hours")
+- **CSV export**: full distribution history for accounting
+
+**Admin Memo System** (trading directives):
+Send instructions to individual personas or broadcast to all:
+
+| Memo Type | Example | Effect |
+|-----------|---------|--------|
+| **Buy directive** | "Buy BUDJU — price is low, accumulate" | Persona increases buy bias for next 24h |
+| **Sell directive** | "Take profits on BUDJU — sell 20%" | Persona sells specified % of holdings |
+| **Hold** | "Hold all positions — market volatile" | Persona pauses trading temporarily |
+| **New token** | "Start trading USDC/SOL pair" | Adds new trading pair to persona's strategy |
+| **Strategy shift** | "Be more aggressive" / "Play it safe" | Adjusts risk tolerance for persona |
+| **Custom** | Free-text instruction | Persona's AI interprets and adapts |
+
+**How memos work:**
+1. Admin sends memo from trading dashboard (single persona or broadcast)
+2. Memo stored in `persona_trade_memos` table with timestamp + expiry
+3. When persona's trading cron fires, it checks for active memos
+4. Memo modifies the persona's trading personality temporarily (24h default, configurable)
+5. Persona still has their OWN base strategy — memo is an overlay/nudge, not a hard override
+6. Memo history visible in persona's trade detail view
+7. Active memos show as a badge on the persona's row in the wallet table
+
+**Broadcast presets** (one-click buttons):
+- "Everyone Buy BUDJU" / "Everyone Sell BUDJU"
+- "Hold All" / "Resume Trading"
+- "Accumulate SOL" / "Reduce SOL exposure"
+- "Conservative mode" / "Aggressive mode"
+- Custom memo with text input
+
+### Phase 6: Scale Trading Bot to All Personas
 
 **Goal**: All ~103 personas trade independently with real tokens.
 
@@ -170,6 +211,7 @@ Each row = one AI persona with full wallet controls:
 3. Per-persona trading personality system (already exists, just needs scaling)
 4. Dashboard shows all 100+ persona balances, trades, P&L
 5. Alert system for low balances, failed trades, unusual activity
+6. Personas follow active memos while maintaining their own base trading personality
 
 ## Security Requirements
 
