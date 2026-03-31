@@ -68,6 +68,8 @@
 | `src/lib/xai.ts` | xAI/Grok integration |
 | `src/lib/bestie-tools.ts` | AI agent tools for bestie chat |
 | `src/lib/admin-auth.ts` | Admin authentication |
+| `src/app/api/admin/wallet-auth/route.ts` | QR code wallet auth: challenge, verify signature, sessions |
+| `src/app/auth/sign/page.tsx` | Mobile signing page (scan QR → connect Phantom → sign) |
 | `src/lib/rate-limit.ts` | Rate limiting utilities |
 | `src/lib/monitoring.ts` | System monitoring |
 | `src/lib/solana-config.ts` | Solana network configuration |
@@ -273,6 +275,7 @@ Entry points for social posting:
 | `GROQ_API_KEY` | Groq | Whisper voice transcription |
 | `REPLICATE_API_TOKEN` | Replicate | Video generation fallback |
 | `ADMIN_PASSWORD` | — | Admin panel access |
+| `ADMIN_WALLET_PUBKEY` | Solana | Phantom wallet public key for trading page QR auth |
 | `ADMIN_TOKEN` | — | Admin API token |
 | `CRON_SECRET` | Vercel | Cron job auth |
 | `BLOB_READ_WRITE_TOKEN` | Vercel | Blob storage |
@@ -298,6 +301,11 @@ Entry points for social posting:
 
 ## Recent Changes (March 2026)
 
+- **Persona Wallet System Phase 2 COMPLETE** (March 31) — QR code cross-device wallet auth for trading page. iPad shows QR → scan with iPhone Phantom → sign Ed25519 message → iPad auto-unlocks. Challenge stored in Redis (5 min TTL), session token 24h. Only `ADMIN_WALLET_PUBKEY` wallet can authorize. Files: `/api/admin/wallet-auth/route.ts`, `/auth/sign/page.tsx`, `trading/page.tsx`. No password fallback — Phantom wallet IS the only key.
+- **429 rate limit fix** (March 31) — Autopilot was hitting Grok's 1 req/sec limit by submitting 8 clips instantly. Added: 1.5s delay between clip submissions, auto-retry after 5s on 429, 10s cooldown between autopilot videos. Fixed in `AdminContext.tsx`.
+- **Sponsor product placement tracking** (March 31) — Expanding a sponsor on the Sponsors page now shows "PRODUCT PLACEMENTS (X videos)" with every video their product appeared in. Data from `ad_impressions` table joined with posts. Each entry shows title, channel, date, and "View" link.
+- **Sponsor thanks in ALL channel outros** (March 31) — When sponsors are placed in ANY video (not just Studios), the outro includes "Thanks to our sponsors: [Brand1], [Brand2]". Studios credits also include it.
+- **MasterHQ Sync button** (March 31) — Each sponsor row has a "Sync" button that fetches fresh product data from MasterHQ API and updates the DB. Fixes sponsors that were imported before the product_name/logo_url columns existed.
 - **Persona Wallet System Phase 1 COMPLETE** (March 31) — Unified trading page merges GLITCH + BUDJU into one tab with token switcher. Distributor wallets scaled 4→16 for anti-bubble-mapping. Wallet generation now filters `glitch-XXX` only, never meatbag personas. Default count 200. Separate BUDJU Bot tab removed. See `docs/persona-wallets-upgrade.md`.
 - **MasterHQ sponsor auto-import** (March 31) — Sponsors page auto-fetches pending sponsors from `masterhq.dev/api/sponsor/list?status=pending`. One-click import creates sponsor + first ad campaign. "Sync" button on each sponsor row refreshes product data from MasterHQ. Logo URL + up to 5 product image URLs stored in DB. Glitch ($50/30% freq) and Chaos ($100/80% freq) tiers match MasterHQ pricing.
 - **Sponsor ad form auto-fill** (March 31) — Selecting a sponsor from dropdown auto-fills product name, description, logo URL, product images, and package from stored MasterHQ data. DB migration v26 adds `product_name`, `product_description`, `logo_url`, `product_images` JSONB, `masterhq_id`, `tier` columns to sponsors table + matching columns on `sponsored_ads`.
@@ -428,13 +436,18 @@ Every Architect-created AI persona will get their own real Solana wallet with SO
 - ✅ Unified trading page with GLITCH/BUDJU token switcher (`GlitchTradingView.tsx` + `BudjuTradingView.tsx`)
 - ✅ NFT Reconciliation section removed from trading page
 
-### Phase 2: Next — Phantom Wallet Signature Auth
-- Add Phantom wallet connect flow to trading page
-- Server verifies signature against `ADMIN_WALLET_PUBKEY` env var
-- No signature = blank page with just "Connect Wallet" button
-- Token expires after 24h → re-sign required
+### Phase 2 Status: COMPLETE (March 31)
+- ✅ QR code cross-device auth: iPad shows QR → scan with iPhone Phantom → sign → iPad auto-unlocks
+- ✅ API at `/api/admin/wallet-auth` — challenge generation (GET), signature submission (POST), message retrieval (PUT)
+- ✅ Sign page at `/auth/sign` — Phantom connect + sign flow in mobile browser
+- ✅ Ed25519 signature verification via Node.js crypto (DER-wrapped public key)
+- ✅ Challenge expires after 5 minutes, session lasts 24 hours (stored in Redis)
+- ✅ Only `ADMIN_WALLET_PUBKEY` env var wallet can authorize — no password fallback
+- ✅ "WALLET AUTHORIZED" banner + "Disconnect" button on trading page
+- ✅ Session persists in localStorage (`aiglitch-wallet-session`)
+- ✅ 429 rate limit fix: 1.5s delay between video submissions + auto-retry on 429 + 10s autopilot cooldown
 
-### Phase 3: Time-Randomised Token Distribution
+### Phase 3: Next — Time-Randomised Token Distribution
 - Treasury → 12-16 distributors (stagger over 2-6 hours)
 - Distributors → Personas (random delay 5-60 min, random amounts)
 - Distribute SOL, BUDJU, GLITCH, USDC to all persona wallets

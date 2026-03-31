@@ -69,27 +69,43 @@ Treasury Wallet (your Phantom)
 - `src/app/admin/admin-types.ts` — remove `budju-bot` tab
 - `src/lib/db/schema.ts` — potentially add GLITCH/USDC balance columns
 
-### Phase 2: Admin Wallet Authentication
+### Phase 2: Admin Wallet Authentication — COMPLETE (March 31)
 
 **Goal**: Require Phantom wallet signature to access trading page.
 
-**Tasks:**
-1. Add Phantom wallet connect flow to trading page
-2. On connect, request message signature: "Authorize AIG!itch Trading Access"
-3. Server verifies signature against admin wallet public key (env var: `ADMIN_WALLET_PUBKEY`)
-4. Issue short-lived session token (JWT or similar) for subsequent API calls
-5. All trading API endpoints require valid session token
-6. No password fallback — wallet signature is the ONLY auth method for trading
+**Status**: ✅ COMPLETE — QR code cross-device auth working on iPad.
 
-**Flow:**
+**What was built:**
+1. ✅ `/api/admin/wallet-auth` — GET (generate challenge / poll status / validate session), POST (submit signature), PUT (get challenge message)
+2. ✅ `/auth/sign` — Mobile signing page that opens in Phantom's in-app browser when QR is scanned
+3. ✅ QR code displayed on iPad using free QR API (no npm dependency)
+4. ✅ iPad polls server every 2 seconds waiting for iPhone signature
+5. ✅ Ed25519 signature verification using Node.js crypto (DER-wrapped public key)
+6. ✅ Challenge stored in Redis with 5-minute TTL
+7. ✅ Session token stored in Redis with 24-hour TTL + localStorage on iPad
+8. ✅ Only `ADMIN_WALLET_PUBKEY` wallet can authorize — wrong wallet gets rejected
+9. ✅ "WALLET AUTHORIZED" green banner + "Disconnect" button on trading page
+10. ✅ 429 rate limit fix: 1.5s delay between video submissions + 5s auto-retry + 10s autopilot cooldown
+
+**Flow (iPad + iPhone):**
 ```
-1. Open /admin/trading
-2. Page shows "Connect Wallet" button (nothing else visible)
-3. Click → Phantom popup → sign message
-4. Server verifies signature matches ADMIN_WALLET_PUBKEY
-5. Trading dashboard loads with full controls
-6. Token expires after 24h → re-sign required
+1. Open /admin/trading on iPad
+2. Page shows QR code (nothing else visible)
+3. Open Phantom on iPhone → scan QR
+4. Phantom opens /auth/sign page → tap "Connect Phantom & Sign"
+5. Approve signature in Phantom
+6. iPad auto-detects approval (polling every 2s)
+7. Trading dashboard loads with full controls
+8. Session lasts 24 hours → scan QR again when expired
+9. "Disconnect" button to manually revoke session
 ```
+
+**Files:**
+- `src/app/api/admin/wallet-auth/route.ts` — Auth API (challenge, verify, sessions)
+- `src/app/auth/sign/page.tsx` — Mobile signing page
+- `src/app/admin/trading/page.tsx` — QR auth gate + dashboard
+
+**Env var required:** `ADMIN_WALLET_PUBKEY` = your Phantom wallet's Solana public key
 
 ### Phase 3: Token Distribution System
 
