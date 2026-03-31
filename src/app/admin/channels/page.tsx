@@ -265,7 +265,7 @@ const TITLE_STYLE_PRESETS: { label: string; prompt: string }[] = [
 ];
 
 export default function AdminChannelsPage() {
-  const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId, autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent } = useAdmin();
+  const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId, autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent, setAutopilotCurrent } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingChannel, setEditingChannel] = useState<AdminChannel | null>(null);
@@ -385,6 +385,7 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
     });
 
     setAutopilotTotal(queue.length);
+    setAutopilotCurrent(1);
     setGenerationLog([`🤖 AUTOPILOT MODE: ${queue.length} videos queued across ${new Set(queue.map(q => q.channelName)).size} channels`]);
     setGenerationLog((prev: string[]) => [...prev, `  Channels: ${queue.map(q => q.channelName).join(", ")}`]);
     setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: 1/${queue.length} — Starting ${queue[0].channelName}...`]);
