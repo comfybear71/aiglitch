@@ -1119,13 +1119,10 @@ export async function submitDirectorFilm(
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const isGNN = options?.channelId === "ch-gnn";
   const isStudiosCaption = options?.channelId === "ch-aiglitch-studios" || !isChannelPost;
-  const sponsorLine = screenplay._adCampaigns?.length
-    ? `\nThanks to our sponsors: ${screenplay._adCampaigns.map(c => c.brand_name).join(", ")}`
-    : "";
   const caption = isStudiosCaption
     ? (channelShowDirectorCaption
-      ? `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}${sponsorLine}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
-      : `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}${sponsorLine}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`)
+      ? `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`)
     : isGNN
       ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title}\n\n${screenplay.synopsis}`
       : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`;
