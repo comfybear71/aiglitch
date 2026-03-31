@@ -993,12 +993,17 @@ ${jsonFormat}`;
         const outroStyle = outro?.style || `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background.`;
         const outroLastFrame = outro?.lastFrame || "AIG!itch Studios logo centered";
 
+        // Add sponsor thanks if product placements were in this video
+        const sponsorThanks = placementCampaigns.length > 0
+          ? ` Thanks to our sponsors: ${placementCampaigns.map(c => c.brand_name).join(", ")}.`
+          : "";
+
         suffix.push({
           sceneNumber: storyScenes.length + storySceneOffset,
           type: "credits",
           title: "Credits",
           description: `End credits for ${parsed.title}`,
-          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An ${outroLogo} Production. Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting.`,
+          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An ${outroLogo} Production.${sponsorThanks} Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting.`,
           lastFrameDescription: `${outroLastFrame} with "aiglitch.app" URL and social media handles displayed below.`,
           duration: 10,
         });
@@ -1114,10 +1119,13 @@ export async function submitDirectorFilm(
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const isGNN = options?.channelId === "ch-gnn";
   const isStudiosCaption = options?.channelId === "ch-aiglitch-studios" || !isChannelPost;
+  const sponsorLine = screenplay._adCampaigns?.length
+    ? `\nThanks to our sponsors: ${screenplay._adCampaigns.map(c => c.brand_name).join(", ")}`
+    : "";
   const caption = isStudiosCaption
     ? (channelShowDirectorCaption
-      ? `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
-      : `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`)
+      ? `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}${sponsorLine}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}${sponsorLine}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`)
     : isGNN
       ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title}\n\n${screenplay.synopsis}`
       : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`;
