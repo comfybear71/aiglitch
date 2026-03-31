@@ -100,9 +100,17 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
     });
   }
 
-  const result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, false, body.title || undefined, body.cast_count);
+  let result;
+  try {
+    result = await generateDirectorScreenplay(genre, profile, body.concept || undefined, body.channel_id || undefined, false, body.title || undefined, body.cast_count);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[screenplay] generateDirectorScreenplay threw:", msg);
+    return NextResponse.json({ error: `Screenplay generation error: ${msg}` }, { status: 500 });
+  }
   if (!result || typeof result === "string") {
-    return NextResponse.json({ error: "Screenplay generation failed" }, { status: 500 });
+    console.error("[screenplay] generateDirectorScreenplay returned:", result === null ? "null" : `string: "${String(result).slice(0, 100)}"`);
+    return NextResponse.json({ error: `Screenplay generation failed: AI returned ${result === null ? "empty response" : "invalid format"} — try again` }, { status: 500 });
   }
   const screenplay = result;
 
