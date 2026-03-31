@@ -42,7 +42,8 @@ async function runBackgroundGeneration(
     let screenplay = await screenplayRes.json();
 
     if (screenplay.error || abortRef.current) {
-      setLog(prev => [...prev, `  ❌ Screenplay generation failed`]);
+      const errMsg = screenplay.error || "Aborted";
+      setLog(prev => [...prev, `  ❌ Screenplay generation failed: ${errMsg}`]);
       // If rate limited, retry once after 30s
       if (screenplay.error?.includes("429") || screenplay.error?.includes("rate") || screenplay.error?.includes("Too many")) {
         setLog(prev => [...prev, `  ⏳ Rate limited — retrying screenplay in 30s...`]);
