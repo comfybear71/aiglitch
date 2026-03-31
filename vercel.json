@@ -67,6 +67,10 @@
     {
       "path": "/api/admin/elon-campaign?action=cron",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/admin/budju-trading?action=process_distribution",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

@@ -24,12 +24,16 @@ import type { DistributionConfig } from "@/lib/trading/budju";
 
 // ── GET: Dashboard data ──
 export async function GET(request: NextRequest) {
-  if (!(await isAdminAuthenticated(request))) {
+  // Allow cron access for process_distribution
+  const action = request.nextUrl.searchParams.get("action") || "dashboard";
+  const cronSecret = request.headers.get("x-vercel-cron-secret") || request.headers.get("authorization")?.replace("Bearer ", "");
+  const isCron = action === "process_distribution" && cronSecret === process.env.CRON_SECRET;
+
+  if (!isCron && !(await isAdminAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   await ensureDbReady();
-  const action = request.nextUrl.searchParams.get("action") || "dashboard";
 
   if (action === "dashboard") {
     try {
