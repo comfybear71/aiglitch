@@ -103,6 +103,38 @@ async function ensureBudjuTables(): Promise<void> {
     for (const [k, v] of defaults) {
       await sql`INSERT INTO budju_trading_config (key, value) VALUES (${k}, ${v}) ON CONFLICT (key) DO NOTHING`;
     }
+    // Distribution job tracking for time-randomised distributions
+    await sql`
+      CREATE TABLE IF NOT EXISTS distribution_jobs (
+        id TEXT PRIMARY KEY,
+        phase TEXT NOT NULL DEFAULT 'treasury_to_distributors',
+        status TEXT NOT NULL DEFAULT 'pending',
+        config JSONB NOT NULL DEFAULT '{}',
+        progress JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS distribution_transfers (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL,
+        from_type TEXT NOT NULL,
+        from_address TEXT NOT NULL,
+        to_type TEXT NOT NULL,
+        to_address TEXT NOT NULL,
+        to_persona_id TEXT,
+        token TEXT NOT NULL,
+        amount REAL NOT NULL,
+        tx_signature TEXT,
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        scheduled_at TIMESTAMPTZ NOT NULL,
+        executed_at TIMESTAMPTZ,
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
     _budjuTablesReady = true;
   } catch (e) {
     console.error("[BUDJU] Table creation failed:", e);
@@ -826,6 +858,408 @@ export async function distributeFundsFromDistributors(): Promise<{
 }
 
 // ── Drain all persona/distributor wallets back to a destination ──
+// ── Time-Randomised Distribution System ──
+// Creates a distribution job that schedules transfers over hours, not instantly.
+// Phase 1: Treasury → Distributors (staggered over 2-6 hours)
+// Phase 2: Distributors → Personas (random delay 5-60 min per wallet)
+
+export interface DistributionConfig {
+  sol_per_persona: number;      // SOL to give each persona (e.g. 0.05)
+  budju_per_persona: number;    // BUDJU to give each persona (e.g. 50000)
+  glitch_per_persona: number;   // GLITCH to give each persona (e.g. 1000)
+  usdc_per_persona: number;     // USDC to give each persona (e.g. 5)
+  treasury_to_dist_hours: number; // Hours to stagger treasury→distributor transfers (2-6)
+  dist_to_persona_min_delay: number; // Min delay in minutes between persona transfers (5)
+  dist_to_persona_max_delay: number; // Max delay in minutes between persona transfers (60)
+  amount_variance: number;      // Random variance 0-1 (e.g. 0.3 = ±30% of target amount)
+}
+
+const DEFAULT_DIST_CONFIG: DistributionConfig = {
+  sol_per_persona: 0.05,
+  budju_per_persona: 50000,
+  glitch_per_persona: 0,
+  usdc_per_persona: 0,
+  treasury_to_dist_hours: 4,
+  dist_to_persona_min_delay: 5,
+  dist_to_persona_max_delay: 60,
+  amount_variance: 0.3,
+};
+
+/**
+ * Create a new distribution job. Schedules all transfers but doesn't execute them.
+ * Returns the job ID. Use processDistributionJob() to execute pending transfers.
+ */
+export async function createDistributionJob(config: Partial<DistributionConfig> = {}): Promise<{
+  jobId: string;
+  totalTransfers: number;
+  estimatedDuration: string;
+  errors: string[];
+}> {
+  await ensureBudjuTables();
+  const sql = getDb();
+  const cfg = { ...DEFAULT_DIST_CONFIG, ...config };
+  const errors: string[] = [];
+
+  const jobId = uuidv4();
+
+  // Get all distributors and persona wallets
+  const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
+  const personas = await sql`
+    SELECT bw.*, p.display_name FROM budju_wallets bw
+    JOIN ai_personas p ON p.id = bw.persona_id
+    WHERE bw.is_active = TRUE
+    ORDER BY bw.distributor_group, bw.persona_id
+  `;
+
+  if (distributors.length === 0) {
+    return { jobId, totalTransfers: 0, estimatedDuration: "0", errors: ["No distributor wallets found"] };
+  }
+  if (personas.length === 0) {
+    return { jobId, totalTransfers: 0, estimatedDuration: "0", errors: ["No persona wallets found"] };
+  }
+
+  const treasuryAddress = TREASURY_WALLET_STR;
+  const now = Date.now();
+  let transferCount = 0;
+
+  // ── Phase 1: Schedule Treasury → Distributor transfers ──
+  // Stagger evenly over cfg.treasury_to_dist_hours
+  const distIntervalMs = (cfg.treasury_to_dist_hours * 3600 * 1000) / distributors.length;
+  const personasPerGroup: Record<number, number> = {};
+  for (const p of personas) {
+    const g = Number(p.distributor_group);
+    personasPerGroup[g] = (personasPerGroup[g] || 0) + 1;
+  }
+
+  for (let i = 0; i < distributors.length; i++) {
+    const dist = distributors[i];
+    const group = Number(dist.group_number);
+    const personaCount = personasPerGroup[group] || 0;
+    if (personaCount === 0) continue;
+
+    const scheduledAt = new Date(now + (i * distIntervalMs) + (Math.random() * distIntervalMs * 0.3));
+
+    // Calculate how much this distributor needs (for its personas + fees)
+    const tokens = [
+      { token: "SOL", amount: cfg.sol_per_persona * personaCount + 0.01 }, // extra for fees
+      { token: "BUDJU", amount: cfg.budju_per_persona * personaCount },
+      { token: "GLITCH", amount: cfg.glitch_per_persona * personaCount },
+      { token: "USDC", amount: cfg.usdc_per_persona * personaCount },
+    ];
+
+    for (const { token, amount } of tokens) {
+      if (amount <= 0) continue;
+      // Add variance
+      const variance = 1 + (Math.random() * 2 - 1) * cfg.amount_variance;
+      const finalAmount = amount * variance;
+
+      await sql`
+        INSERT INTO distribution_transfers (id, job_id, from_type, from_address, to_type, to_address, token, amount, status, scheduled_at)
+        VALUES (${uuidv4()}, ${jobId}, 'treasury', ${treasuryAddress}, 'distributor', ${dist.wallet_address}, ${token}, ${finalAmount}, 'scheduled', ${scheduledAt.toISOString()})
+      `;
+      transferCount++;
+    }
+  }
+
+  // ── Phase 2: Schedule Distributor → Persona transfers ──
+  // Random delay between min and max per persona
+  const phase2StartMs = now + (cfg.treasury_to_dist_hours * 3600 * 1000) + (30 * 60 * 1000); // Start 30 min after last treasury→dist
+
+  for (const persona of personas) {
+    const group = Number(persona.distributor_group);
+    const dist = distributors.find(d => Number(d.group_number) === group);
+    if (!dist) {
+      errors.push(`No distributor for group ${group} (persona ${persona.display_name})`);
+      continue;
+    }
+
+    const delayMin = cfg.dist_to_persona_min_delay + Math.random() * (cfg.dist_to_persona_max_delay - cfg.dist_to_persona_min_delay);
+    const scheduledAt = new Date(phase2StartMs + (delayMin * 60 * 1000) + (Math.random() * 10 * 60 * 1000));
+
+    const tokens = [
+      { token: "SOL", amount: cfg.sol_per_persona },
+      { token: "BUDJU", amount: cfg.budju_per_persona },
+      { token: "GLITCH", amount: cfg.glitch_per_persona },
+      { token: "USDC", amount: cfg.usdc_per_persona },
+    ];
+
+    for (const { token, amount } of tokens) {
+      if (amount <= 0) continue;
+      const variance = 1 + (Math.random() * 2 - 1) * cfg.amount_variance;
+      const finalAmount = amount * variance;
+
+      await sql`
+        INSERT INTO distribution_transfers (id, job_id, from_type, from_address, to_type, to_address, to_persona_id, token, amount, status, scheduled_at)
+        VALUES (${uuidv4()}, ${jobId}, 'distributor', ${dist.wallet_address}, 'persona', ${persona.wallet_address}, ${persona.persona_id}, ${token}, ${finalAmount}, 'scheduled', ${scheduledAt.toISOString()})
+      `;
+      transferCount++;
+    }
+  }
+
+  // Calculate estimated duration
+  const lastTransfer = await sql`SELECT MAX(scheduled_at) as last FROM distribution_transfers WHERE job_id = ${jobId}`;
+  const durationMs = lastTransfer[0]?.last ? new Date(lastTransfer[0].last as string).getTime() - now : 0;
+  const durationHours = Math.ceil(durationMs / (3600 * 1000));
+
+  // Save job
+  await sql`
+    INSERT INTO distribution_jobs (id, phase, status, config, progress)
+    VALUES (${jobId}, 'scheduled', 'active', ${JSON.stringify(cfg)}::jsonb,
+      ${JSON.stringify({ total: transferCount, completed: 0, failed: 0, phase1: 0, phase2: 0 })}::jsonb)
+  `;
+
+  return {
+    jobId,
+    totalTransfers: transferCount,
+    estimatedDuration: `~${durationHours} hours`,
+    errors,
+  };
+}
+
+/**
+ * Process pending distribution transfers that are scheduled for now or earlier.
+ * Call this from a cron job every 5-10 minutes.
+ * Returns how many transfers were executed.
+ */
+export async function processDistributionJob(jobId?: string): Promise<{
+  executed: number;
+  failed: number;
+  remaining: number;
+  errors: string[];
+}> {
+  await ensureBudjuTables();
+  const sql = getDb();
+  const connection = new Connection(SERVER_RPC_URL, "confirmed");
+  const { getAssociatedTokenAddress, getAccount, createAssociatedTokenAccountInstruction, createTransferInstruction } = await import("@solana/spl-token");
+  const errors: string[] = [];
+  let executed = 0;
+  let failed = 0;
+
+  // Get pending transfers scheduled for now or earlier
+  const whereJob = jobId ? sql`AND job_id = ${jobId}` : sql``;
+  const pending = await sql`
+    SELECT * FROM distribution_transfers
+    WHERE status = 'scheduled' AND scheduled_at <= NOW() ${whereJob}
+    ORDER BY scheduled_at ASC
+    LIMIT 10
+  `;
+
+  for (const transfer of pending) {
+    try {
+      const token = transfer.token as string;
+      const amount = Number(transfer.amount);
+      const fromAddress = transfer.from_address as string;
+      const toAddress = transfer.to_address as string;
+      const fromType = transfer.from_type as string;
+
+      // Get the sender's keypair
+      let senderKeypair: Keypair;
+      if (fromType === "treasury") {
+        const privKey = process.env.TREASURY_PRIVATE_KEY;
+        if (!privKey) {
+          errors.push(`Transfer ${transfer.id}: TREASURY_PRIVATE_KEY not set`);
+          await sql`UPDATE distribution_transfers SET status = 'failed', error = 'TREASURY_PRIVATE_KEY not set', executed_at = NOW() WHERE id = ${transfer.id}`;
+          failed++;
+          continue;
+        }
+        senderKeypair = Keypair.fromSecretKey(bs58.decode(privKey));
+      } else {
+        // Distributor — look up encrypted keypair
+        const [dist] = await sql`SELECT encrypted_keypair FROM budju_distributors WHERE wallet_address = ${fromAddress}`;
+        if (!dist) {
+          errors.push(`Transfer ${transfer.id}: Distributor wallet not found`);
+          await sql`UPDATE distribution_transfers SET status = 'failed', error = 'Distributor not found', executed_at = NOW() WHERE id = ${transfer.id}`;
+          failed++;
+          continue;
+        }
+        senderKeypair = decryptKeypair(dist.encrypted_keypair as string);
+      }
+
+      const toPubkey = new PublicKey(toAddress);
+      let txSignature: string | null = null;
+
+      if (token === "SOL") {
+        // Native SOL transfer
+        const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+        if (lamports < 5000) {
+          await sql`UPDATE distribution_transfers SET status = 'skipped', error = 'Amount too small', executed_at = NOW() WHERE id = ${transfer.id}`;
+          continue;
+        }
+        const tx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: senderKeypair.publicKey,
+            toPubkey,
+            lamports,
+          })
+        );
+        txSignature = await sendAndConfirmTransaction(connection, tx, [senderKeypair], { commitment: "confirmed" });
+      } else {
+        // SPL token transfer (BUDJU, GLITCH, USDC)
+        const mintAddress = token === "BUDJU" ? BUDJU_MINT
+          : token === "GLITCH" ? "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT"
+          : token === "USDC" ? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          : null;
+
+        if (!mintAddress) {
+          await sql`UPDATE distribution_transfers SET status = 'failed', error = 'Unknown token', executed_at = NOW() WHERE id = ${transfer.id}`;
+          failed++;
+          continue;
+        }
+
+        const mint = new PublicKey(mintAddress);
+        const decimals = token === "BUDJU" ? 6 : token === "GLITCH" ? 9 : 6; // USDC = 6
+        const tokenAmount = BigInt(Math.floor(amount * (10 ** decimals)));
+
+        const sourceAta = await getAssociatedTokenAddress(mint, senderKeypair.publicKey);
+        const destAta = await getAssociatedTokenAddress(mint, toPubkey);
+
+        const tx = new Transaction();
+
+        // Create destination ATA if needed
+        try {
+          await getAccount(connection, destAta);
+        } catch {
+          tx.add(
+            createAssociatedTokenAccountInstruction(
+              senderKeypair.publicKey, // payer
+              destAta,                 // ata
+              toPubkey,                // owner
+              mint,                    // mint
+            )
+          );
+        }
+
+        tx.add(
+          createTransferInstruction(
+            sourceAta,               // source
+            destAta,                 // destination
+            senderKeypair.publicKey, // owner
+            tokenAmount,             // amount in smallest units
+          )
+        );
+
+        txSignature = await sendAndConfirmTransaction(connection, tx, [senderKeypair], { commitment: "confirmed" });
+      }
+
+      // Mark as completed
+      await sql`
+        UPDATE distribution_transfers
+        SET status = 'completed', tx_signature = ${txSignature}, executed_at = NOW()
+        WHERE id = ${transfer.id}
+      `;
+
+      // Update persona wallet balance if this was a persona transfer
+      if (transfer.to_persona_id && token === "SOL") {
+        await sql`UPDATE budju_wallets SET sol_balance = sol_balance + ${amount}, total_funded_sol = total_funded_sol + ${amount} WHERE persona_id = ${transfer.to_persona_id}`;
+      } else if (transfer.to_persona_id && token === "BUDJU") {
+        await sql`UPDATE budju_wallets SET budju_balance = budju_balance + ${amount}, total_funded_budju = total_funded_budju + ${amount} WHERE persona_id = ${transfer.to_persona_id}`;
+      }
+
+      executed++;
+      console.log(`[distribution] ${token} ${amount.toFixed(4)} → ${toAddress.slice(0, 8)}... (tx: ${txSignature?.slice(0, 12)})`);
+
+      // Rate limit: 1.5s between transfers to avoid Solana RPC throttling
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`Transfer ${transfer.id}: ${msg}`);
+      await sql`UPDATE distribution_transfers SET status = 'failed', error = ${msg}, executed_at = NOW() WHERE id = ${transfer.id}`;
+      failed++;
+    }
+  }
+
+  // Update job progress
+  if (jobId || pending.length > 0) {
+    const targetJobId = jobId || (pending[0]?.job_id as string);
+    if (targetJobId) {
+      const [stats] = await sql`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'completed') as completed,
+          COUNT(*) FILTER (WHERE status = 'failed') as failed_count,
+          COUNT(*) FILTER (WHERE status = 'scheduled') as remaining,
+          COUNT(*) as total
+        FROM distribution_transfers WHERE job_id = ${targetJobId}
+      `;
+
+      await sql`
+        UPDATE distribution_jobs SET
+          progress = ${JSON.stringify({
+            total: Number(stats.total),
+            completed: Number(stats.completed),
+            failed: Number(stats.failed_count),
+            remaining: Number(stats.remaining),
+          })}::jsonb,
+          status = ${Number(stats.remaining) === 0 ? "completed" : "active"},
+          completed_at = ${Number(stats.remaining) === 0 ? new Date().toISOString() : null},
+          updated_at = NOW()
+        WHERE id = ${targetJobId}
+      `;
+    }
+  }
+
+  const [remainingCount] = await sql`SELECT COUNT(*) as cnt FROM distribution_transfers WHERE status = 'scheduled' ${whereJob}`;
+
+  return {
+    executed,
+    failed,
+    remaining: Number(remainingCount.cnt),
+    errors,
+  };
+}
+
+/**
+ * Get the status of a distribution job.
+ */
+export async function getDistributionJobStatus(jobId?: string): Promise<{
+  job: { id: string; phase: string; status: string; config: DistributionConfig; progress: { total: number; completed: number; failed: number; remaining: number }; created_at: string } | null;
+  transfers: { id: string; from_type: string; to_type: string; to_persona_id: string | null; token: string; amount: number; status: string; scheduled_at: string; executed_at: string | null; tx_signature: string | null; error: string | null }[];
+}> {
+  await ensureBudjuTables();
+  const sql = getDb();
+
+  // Get latest active job if no specific ID
+  let job;
+  if (jobId) {
+    [job] = await sql`SELECT * FROM distribution_jobs WHERE id = ${jobId}`;
+  } else {
+    [job] = await sql`SELECT * FROM distribution_jobs ORDER BY created_at DESC LIMIT 1`;
+  }
+
+  if (!job) return { job: null, transfers: [] };
+
+  const transfers = await sql`
+    SELECT id, from_type, to_type, to_persona_id, token, amount, status, scheduled_at, executed_at, tx_signature, error
+    FROM distribution_transfers
+    WHERE job_id = ${job.id}
+    ORDER BY scheduled_at ASC
+  `;
+
+  return {
+    job: {
+      id: job.id as string,
+      phase: job.phase as string,
+      status: job.status as string,
+      config: job.config as DistributionConfig,
+      progress: job.progress as { total: number; completed: number; failed: number; remaining: number },
+      created_at: job.created_at as string,
+    },
+    transfers: transfers.map(t => ({
+      id: t.id as string,
+      from_type: t.from_type as string,
+      to_type: t.to_type as string,
+      to_persona_id: t.to_persona_id as string | null,
+      token: t.token as string,
+      amount: Number(t.amount),
+      status: t.status as string,
+      scheduled_at: t.scheduled_at as string,
+      executed_at: t.executed_at as string | null,
+      tx_signature: t.tx_signature as string | null,
+      error: t.error as string | null,
+    })),
+  };
+}
+
 export async function drainWallets(destinationAddress: string, walletType: "personas" | "distributors" | "all" = "all"): Promise<{
   drained: { type: string; name: string; wallet: string; sol_sent: number; tx: string | null; error?: string }[];
   total_sol_recovered: number;

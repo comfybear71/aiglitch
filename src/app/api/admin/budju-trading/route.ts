@@ -16,7 +16,11 @@ import {
   drainWallets,
   exportWalletKeys,
   clearFailedTrades,
+  createDistributionJob,
+  processDistributionJob,
+  getDistributionJobStatus,
 } from "@/lib/trading/budju";
+import type { DistributionConfig } from "@/lib/trading/budju";
 
 // ── GET: Dashboard data ──
 export async function GET(request: NextRequest) {
@@ -42,6 +46,27 @@ export async function GET(request: NextRequest) {
   if (action === "config") {
     const config = await getBudjuConfig();
     return NextResponse.json({ config });
+  }
+
+  // Distribution job status
+  if (action === "distribution_status") {
+    try {
+      const jobId = request.nextUrl.searchParams.get("job_id") || undefined;
+      const result = await getDistributionJobStatus(jobId);
+      return NextResponse.json(result);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
+  // Process pending distribution transfers (can be called by cron)
+  if (action === "process_distribution") {
+    try {
+      const result = await processDistributionJob();
+      return NextResponse.json(result);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
@@ -209,6 +234,39 @@ export async function POST(request: NextRequest) {
   if (action === "clear_failed_trades") {
     const deleted = await clearFailedTrades();
     return NextResponse.json({ success: true, deleted });
+  }
+
+  // ── Time-Randomised Distribution ──
+
+  // Create a new distribution job (schedules transfers but doesn't execute)
+  if (action === "create_distribution") {
+    try {
+      const config = body.config as Partial<DistributionConfig> || {};
+      const result = await createDistributionJob(config);
+      return NextResponse.json({ success: true, ...result });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to create distribution job" }, { status: 500 });
+    }
+  }
+
+  // Process pending transfers (execute scheduled transfers that are due)
+  if (action === "process_distribution") {
+    try {
+      const result = await processDistributionJob(body.job_id);
+      return NextResponse.json({ success: true, ...result });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to process distribution" }, { status: 500 });
+    }
+  }
+
+  // Get distribution job status
+  if (action === "distribution_status") {
+    try {
+      const result = await getDistributionJobStatus(body.job_id);
+      return NextResponse.json(result);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to get status" }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
