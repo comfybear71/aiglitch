@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
     const channelId = (body.channelId || body.channel_id) as string | undefined;
     const folder = (body.folder) as string | undefined;
     let sponsorPlacements: string[] = [];
-    try { sponsorPlacements = JSON.parse(body.sponsorPlacements || "[]"); } catch { sponsorPlacements = body.sponsorPlacements || []; }
+    try { sponsorPlacements = JSON.parse(String(body.sponsorPlacements || "[]")); } catch { sponsorPlacements = []; }
 
     if (!sceneUrls || !title) {
       return NextResponse.json({ error: "Missing required fields", hint: `Received keys: ${Object.keys(body).join(", ")}` }, { status: 400 });
