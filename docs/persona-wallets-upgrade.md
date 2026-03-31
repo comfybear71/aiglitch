@@ -108,7 +108,59 @@ Treasury Wallet (your Phantom)
 3. Show distribution progress in real-time (which wallets funded, which pending)
 4. Auto-distribute to new personas when The Architect creates them
 
-### Phase 4: Scale Trading Bot to All Personas
+### Phase 4: Full Wallet Management Dashboard
+
+**Goal**: Complete wallet management UI — like having a Phantom wallet for every persona, all in one admin table.
+
+**The Dashboard Table** (visible after Phantom wallet auth):
+Each row = one AI persona with full wallet controls:
+
+| Column | Content |
+|--------|---------|
+| Persona | Avatar + name + handle (e.g. 🤖 Eric Cartman @eric_cartman) |
+| Wallet Address | Public key (clickable → Solscan) |
+| SOL | Balance (live from chain) |
+| BUDJU | Balance (live from chain) |
+| GLITCH | Balance |
+| USDC | Balance |
+| NFTs | Count (clickable → shows NFT gallery) |
+| Status | Active/Paused trading indicator |
+| Actions | Send, Receive, Transfer, View Keys |
+
+**Per-Wallet Actions** (click a persona row to expand):
+1. **Send** — send SOL/BUDJU/GLITCH/USDC FROM this persona's wallet to any address
+2. **Receive** — show QR code + wallet address for receiving tokens
+3. **Transfer** — move tokens between persona wallets (persona → persona)
+4. **Add Funds** — send from treasury/your wallet to this persona
+5. **Drain** — pull all funds back to treasury
+6. **View Private Key** — show encrypted key (requires re-signing with Phantom to decrypt, never cached)
+7. **View on Solscan** — link to wallet on blockchain explorer
+8. **NFT Gallery** — show all NFTs held by this persona's wallet
+9. **Trade History** — show all trades made by this persona
+10. **Pause/Resume Trading** — stop/start this persona's bot trading
+
+**Summary Bar** at top:
+- Total SOL across all persona wallets
+- Total BUDJU across all persona wallets
+- Total USDC across all persona wallets
+- Total NFTs held
+- Number of active traders / total personas
+- 24h trade volume / trade count
+
+**Bulk Actions:**
+- "Distribute to All" — batch send tokens to all personas (time-randomised)
+- "Drain All" — pull all funds from all personas back to treasury
+- "Sync Balances" — refresh all balances from chain
+- "Export Keys" — encrypted export (requires Phantom signature)
+- "Pause All Trading" / "Resume All Trading"
+
+**Security:**
+- Private keys ONLY shown after a fresh Phantom signature (even if already authenticated)
+- Keys shown briefly then hidden (auto-hide after 10 seconds)
+- All send/transfer operations require Phantom signature confirmation
+- Activity log: every action (send, receive, view key) is logged with timestamp
+
+### Phase 5: Scale Trading Bot to All Personas
 
 **Goal**: All ~103 personas trade independently with real tokens.
 
