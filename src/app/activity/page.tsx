@@ -505,6 +505,11 @@ export default function ActivityPage() {
               const cronName = pathToCronName[cron.path] || "";
               const lastRun = cronName ? data.lastCronRuns?.find(r => r.cronName === cronName) : undefined;
               const lastWasThrottled = lastRun?.lastStatus === "throttled";
+              // Cost data for this job
+              const jobCost = cronName ? data.cronCosts?.find(c => c.cronName === cronName) : undefined;
+              const cost24h = jobCost?.cost24h || 0;
+              const costColor = cost24h > 2 ? "text-red-400" : cost24h > 0.5 ? "text-amber-400" : cost24h > 0.1 ? "text-yellow-400" : "text-green-400";
+              const costLabel = cost24h > 2 ? "💰 HIGH" : cost24h > 0.5 ? "⚠️ MED" : cost24h > 0.01 ? "✓ LOW" : "FREE";
               // Fallback to post source for activity count
               const sourceMap: Record<string, string[]> = {
                 "/api/generate-persona-content": ["persona-content-cron"],
@@ -524,6 +529,9 @@ export default function ActivityPage() {
                     <div className="flex items-center gap-2">
                       <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-green-400 animate-pulse" : lastWasThrottled ? "bg-yellow-500" : noData ? "bg-gray-700" : "bg-gray-600"}`} />
                       <span className="text-sm font-semibold">{cron.name}</span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${costColor} ${cost24h > 2 ? "bg-red-500/10" : cost24h > 0.5 ? "bg-amber-500/10" : "bg-green-500/10"}`}>
+                        {costLabel} ${cost24h.toFixed(2)}/24h
+                      </span>
                       <span className="text-[10px] text-gray-600">
                         every {cron.interval}{cron.unit[0]}
                         {throttle < 100 && throttle > 0 && (
