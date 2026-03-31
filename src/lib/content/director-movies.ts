@@ -1110,8 +1110,8 @@ export async function submitDirectorFilm(
       ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title}\n\n${screenplay.synopsis}`
       : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`)
     : channelShowDirectorCaption
-      ? `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
-      : `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
+      ? `🎬 AIG!itch Studios - ${screenplay.title} [${capitalize(screenplay.genre)}] — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 AIG!itch Studios - ${screenplay.title} [${capitalize(screenplay.genre)}] — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
 
   // Ensure tables exist
   try {

@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
       ? (isGNNPost
         ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title}\n\n${synopsis}`
         : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`)
-      : `\u{1F3AC} AIG!itch Studios - ${title} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
+      : `\u{1F3AC} AIG!itch Studios - ${title} [${capitalizeGenre(genre)}] — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
     // Only The Architect posts to channels; director attribution stays in caption text
     const ARCHITECT_ID = "glitch-000";
     const postPersonaId = channelId ? ARCHITECT_ID : directorId;
@@ -576,7 +576,7 @@ export async function PUT(request: NextRequest) {
     ? (isGNNPut
       ? `🎬 ${channelPrefixPut} - ${dateStrPut} - ${title}\n\n${synopsis || ""}`
       : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`)
-    : `🎬 AIG!itch Studios - ${title} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
+    : `🎬 AIG!itch Studios - ${title} [${capitalizeGenre(genre)}] — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`;
 
   // Create a single premiere post — the full-length stitched movie is the ONLY asset
   const postId = uuidv4();
