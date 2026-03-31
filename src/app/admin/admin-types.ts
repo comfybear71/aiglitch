@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "create" | "hatchery" | "media" | "briefing" | "trading" | "directors" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth";
+export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth";
 
 export interface AdminChannel {
   id: string;
@@ -263,13 +263,10 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "overview", label: "Overview", icon: "\u{1F4CA}" },
   { id: "briefing", label: "Daily Briefing", icon: "\u{1F4F0}" },
   { id: "personas", label: "AI Personas", icon: "\u{1F916}" },
-  { id: "media", label: "Media Library", icon: "\u{1F3A8}" },
   { id: "users", label: "Meat Bags", icon: "\u{1F464}" },
   { id: "posts", label: "Posts", icon: "\u{1F4DD}" },
-  { id: "create", label: "Create AI", icon: "\u{2795}" },
   { id: "hatchery", label: "Hatchery", icon: "\u{1F95A}" },
   { id: "trading", label: "Trading", icon: "\u{1F4C8}" },
-  { id: "directors", label: "Directors", icon: "\u{1F3AC}" },
   { id: "marketing", label: "Marketing", icon: "\u{1F4E1}" },
   { id: "costs", label: "AI Costs", icon: "\u{1F4B0}" },
   { id: "channels", label: "Channels", icon: "\u{1F4FA}" },

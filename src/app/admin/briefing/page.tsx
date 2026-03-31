@@ -140,94 +140,9 @@ export default function BriefingPage() {
 
   return (
     <div className="space-y-6">
-      {/* Breaking News Generator */}
-      <div className="bg-gradient-to-r from-red-950/60 via-gray-900 to-red-950/40 border border-red-500/30 rounded-lg overflow-hidden">
-        <button onClick={() => setNewsOpen(!newsOpen)}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
-          <div className="flex items-center gap-2">
-            <span className={`text-xs transition-transform ${newsOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-sm font-bold text-red-400">{"\u{1F4F0}"} Breaking News</h3>
-            <p className="text-[10px] text-gray-500 hidden sm:inline">9-clip news broadcast with 3 stories</p>
-          </div>
-          {newsGenerating && <span className="text-[10px] text-red-400 animate-pulse">{newsPhase}...</span>}
-        </button>
-        {newsOpen && (
-          <div className="px-4 pb-4">
-            <p className="text-[10px] text-gray-400 mb-3">
-              9-clip news broadcast: Intro {"\u2192"} Desk Story 1 {"\u2192"} Field Report 1 {"\u2192"} Desk Story 2 {"\u2192"} Field Report 2 {"\u2192"} Desk Story 3 {"\u2192"} Field Report 3 {"\u2192"} Wrap-up {"\u2192"} Outro. Based on real current events with names hilariously discombobulated.
-            </p>
-
-            {/* Topic Grid */}
-            <div className="mb-3">
-              <p className="text-[10px] text-gray-400 mb-1.5 font-bold">NEWS TOPICS (pick up to 3):</p>
-              <div className="flex flex-wrap gap-1.5">
-                {NEWS_TOPICS.map(t => (
-                  <button key={t.id} onClick={() => toggleTopic(t.id)} disabled={newsGenerating}
-                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
-                      selectedTopics.includes(t.id)
-                        ? "bg-red-500/30 border-red-400/60 text-red-300 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
-                        : selectedTopics.length >= 3
-                          ? "bg-gray-800/30 border-gray-700/30 text-gray-600 cursor-not-allowed"
-                          : "bg-gray-800/50 border-gray-600/30 text-gray-400 hover:border-red-500/40 hover:text-red-400"
-                    } disabled:opacity-40`}>
-                    {t.emoji} {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom Topic */}
-            <div className="mb-3">
-              <p className="text-[10px] text-gray-400 mb-1 font-bold">CUSTOM TOPIC (optional):</p>
-              <textarea value={customTopic} onChange={e => setCustomTopic(e.target.value)}
-                placeholder="Add extra detail or leave blank..."
-                rows={2} disabled={newsGenerating}
-                className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-[10px] text-white placeholder-gray-600 focus:outline-none focus:border-red-500 resize-none disabled:opacity-40" />
-            </div>
-
-            {/* Go Live Button */}
-            <div className="flex justify-end mb-3 gap-2">
-              {(newsComplete || (newsLog.length > 0 && !newsGenerating)) && (
-                <button onClick={() => { setNewsLog([]); setNewsVideoUrl(null); setNewsComplete(false); setSelectedTopics([]); setCustomTopic(""); }}
-                  className="px-3 py-2 bg-gray-800/60 border border-gray-600/50 text-gray-400 font-bold rounded-lg text-[10px] hover:bg-gray-700/60">
-                  {"\u{1F504}"} Clear
-                </button>
-              )}
-              <button onClick={goLive} disabled={newsGenerating}
-                className="px-6 py-2 bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
-                {newsGenerating ? `\u{23F3} ${newsPhase || "Working"}...` : "\u{1F534} GO LIVE"}
-              </button>
-            </div>
-
-            {/* Progress Log */}
-            {newsLog.length > 0 && (
-              <div ref={newsLogRef} className="bg-black/40 rounded-lg p-3 space-y-1 max-h-64 overflow-y-auto">
-                {newsLog.map((line, i) => (
-                  <p key={i} className={`text-xs font-mono ${
-                    line.includes("\u{274C}") ? "text-red-400" :
-                    line.includes("\u{2705}") || line.includes("\u{1F389}") ? "text-green-400" :
-                    line.includes("COMPLETE") ? "text-red-400 font-bold text-sm" :
-                    line.includes("\u{1F4E1}") ? "text-blue-400" :
-                    line.includes("BREAKING") ? "text-red-300 font-bold" :
-                    "text-gray-300"
-                  }`}>{line}</p>
-                ))}
-                {newsGenerating && (
-                  <p className="text-xs font-mono text-red-400 animate-pulse">{"\u{23F3}"} {newsPhase || "Working"}...</p>
-                )}
-              </div>
-            )}
-
-            {/* Result */}
-            {newsComplete && newsVideoUrl && (
-              <div className="mt-3 bg-gray-800/30 rounded-lg p-3 border border-red-500/20">
-                <p className="text-[10px] text-red-400 font-bold mb-2">Broadcast Result:</p>
-                <video src={newsVideoUrl} controls className="w-full max-w-md rounded-lg" />
-                <p className="text-[10px] text-gray-500 mt-1 break-all">{newsVideoUrl}</p>
-              </div>
-            )}
-          </div>
-        )}
+      {/* Breaking News now handled in Channels → GNN card */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <p className="text-xs text-gray-500">News broadcasts are now generated from the <span className="text-cyan-400 font-bold">Channels</span> tab → GNN card. Use &quot;Latest News&quot; + &quot;Generate GLITCH News Network Video&quot; there.</p>
       </div>
 
       {!briefing ? (

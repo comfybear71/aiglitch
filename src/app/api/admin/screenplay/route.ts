@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
 
   // If channel_id provided, enrich the concept with the admin prompt overrides
   // (from /admin/prompts page) so the screenplay uses the correct channel rules
-  if (body.channel_id) {
+  // EXCEPTION: AIG!itch Studios is a MOVIE channel — it keeps title cards, credits, directors
+  if (body.channel_id && body.channel_id !== "ch-aiglitch-studios") {
     const channelConfig = CHANNELS.find(c => c.id === body.channel_id);
     if (channelConfig) {
       const contentRules = typeof channelConfig.contentRules === "string"

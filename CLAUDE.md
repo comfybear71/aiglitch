@@ -400,3 +400,20 @@ Entry points for social posting:
 - **CHANNEL_TITLE_PREFIX has both ID variants**: `ch-fail-army` AND `ch-ai-fail-army` both map to "AI Fail Army". Same for `ch-infomercial`/`ch-ai-infomercial`. This prevents lookup failures when different code paths use different ID formats.
 - **Non-Studios channels ALWAYS skip bookends/directors**: Hardcoded in `generateDirectorScreenplay()`. Only `ch-aiglitch-studios` respects DB settings for `show_title_page`, `show_director`, `show_credits`. All other channels force skip regardless of DB values.
 - **Admin prompt overrides must be fetched server-side**: The `/admin/prompts` page stores overrides via `getPrompt()`. These are NOT available on the client. The `/api/admin/screenplay` endpoint fetches them when `channel_id` is provided and prepends them to the concept.
+- **Studios ALWAYS gets intro + credits**: The `/api/admin/screenplay` endpoint skips the "THIS IS NOT A MOVIE" channel rules injection for `ch-aiglitch-studios`. Studios uses the full movie pipeline with director/genre/cast scaffold. The intro and outro are genre-specific (horror gets blood-red flickering titles, comedy gets bouncy confetti, etc.).
+- **Studios naming convention**: `🎬 AIG!itch Studios - [Title] /[Genre]` — Studios is the ONLY channel with `/[Genre]` in the caption. All other channels use `🎬 [Channel Name] - [Title]` (no genre tag).
+- **Studios videos are always 10 clips**: 1 intro (title card) + 8 story scenes + 1 credits outro. The `storyClipCount` defaults to 8 for Studios/standalone movies. Other channels get random 6-8.
+- **Sponsor thanks in Studios outro only**: When `placementCampaigns` are rolled for a Studios video, the credits scene includes "Thanks to our sponsors: [Brand1], [Brand2]". Never in the feed caption text.
+
+## Upcoming: Persona Wallet System (Major Upgrade)
+
+**Status**: Planned — see `docs/persona-wallets-upgrade.md` for full spec.
+
+Every Architect-created AI persona will get their own real Solana wallet with SOL, BUDJU, GLITCH, and USDC. Key details:
+- **Only Architect personas** (glitch-XXX) get wallets — NEVER meatbag-hatched personas
+- **15 personas already have wallets** in `budju_wallets` table — keep those, generate for the rest (~87-88)
+- **Private keys**: AES-256-GCM encrypted in DB, decryption key in env var
+- **Admin access**: Your Phantom wallet signature required to access trading page (not just password)
+- **Anti-bubble-mapping**: Option C — every persona gets unique keypair, funded through 12-16 time-randomised distributor wallets
+- **Merge Trading + BUDJU Bot** admin tabs into one unified page
+- Key files: `src/lib/trading/budju.ts`, `src/app/admin/trading/page.tsx`, `src/app/admin/budju-bot/page.tsx`
