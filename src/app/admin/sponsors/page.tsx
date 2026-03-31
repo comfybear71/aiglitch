@@ -16,6 +16,13 @@ interface Sponsor {
   total_spent: number;
   notes: string | null;
   created_at: string;
+  // MasterHQ import fields
+  product_name: string | null;
+  product_description: string | null;
+  logo_url: string | null;
+  product_images: string[] | null;
+  masterhq_id: string | null;
+  tier: string | null;
 }
 
 interface SponsoredAd {
@@ -24,6 +31,8 @@ interface SponsoredAd {
   product_name: string;
   product_description: string;
   product_image_url: string | null;
+  logo_url: string | null;
+  product_images: string[] | null;
   ad_style: string;
   package: string;
   duration: number;
@@ -33,6 +42,21 @@ interface SponsoredAd {
   video_url: string | null;
   target_platforms: string[];
   created_at: string;
+}
+
+interface MasterHQSponsor {
+  id: string;
+  company: string;
+  email: string;
+  tier: string;
+  productName?: string;
+  productDescription?: string;
+  industry?: string;
+  website?: string;
+  files: { name: string; url: string; type: string }[];
+  createdAt: string;
+  importedToAiglitch: boolean;
+  package: { name: string; price: number; frequency: number; placements: number; duration: number };
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -63,20 +87,130 @@ export default function SponsorsPage() {
   const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
   const [expandedSponsor, setExpandedSponsor] = useState<number | null>(null);
   const [sponsorAds, setSponsorAds] = useState<SponsoredAd[]>([]);
+  const [sponsorPlacements, setSponsorPlacements] = useState<{ post_id: string; post_content: string; media_url: string | null; media_type: string | null; content_type: string; channel_name: string | null; placed_at: string }[]>([]);
+  const [placementsTotal, setPlacementsTotal] = useState(0);
   const [form, setForm] = useState({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 });
   const [saving, setSaving] = useState(false);
 
   // Ad creator state
-  const [adForm, setAdForm] = useState({ sponsor_id: "", product_name: "", product_description: "", product_image_url: "", ad_style: "product_showcase", package: "standard" });
+  const [adForm, setAdForm] = useState({ sponsor_id: "", product_name: "", product_description: "", logo_url: "", ad_style: "product_showcase", package: "glitch" });
+  const [adImages, setAdImages] = useState<string[]>([]);
   const [adSaving, setAdSaving] = useState(false);
+
+  // MasterHQ state
+  const [masterHQPending, setMasterHQPending] = useState<MasterHQSponsor[]>([]);
+  const [masterHQLoading, setMasterHQLoading] = useState(false);
 
   // Email outreach state
   const [emailForm, setEmailForm] = useState({ company_name: "", industry: "", what_they_sell: "", tone: "casual", sponsor_id: "" });
   const [emailResult, setEmailResult] = useState<{ subject: string; body: string; followup_subject: string; followup_body: string } | null>(null);
   const [emailGenerating, setEmailGenerating] = useState(false);
 
+  const fetchMasterHQ = async () => {
+    setMasterHQLoading(true);
+    try {
+      const res = await fetch("https://masterhq.dev/api/sponsor/list?status=pending");
+      if (res.ok) {
+        const data = await res.json();
+        setMasterHQPending(data.sponsors || []);
+      }
+    } catch (err) { console.error("MasterHQ fetch error:", err); }
+    setMasterHQLoading(false);
+  };
+
+  const importFromMasterHQ = async (mhqSponsor: MasterHQSponsor) => {
+    const logoFile = mhqSponsor.files.find((f: { type: string }) => f.type === "logo");
+    const imageFiles = mhqSponsor.files.filter((f: { type: string }) => f.type === "image").map((f: { url: string }) => f.url);
+    const tierKey = mhqSponsor.tier?.toLowerCase() === "chaos" ? "chaos" : "glitch";
+
+    // Create sponsor
+    const res = await fetch("/api/admin/sponsors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        company_name: mhqSponsor.company,
+        contact_email: mhqSponsor.email,
+        industry: mhqSponsor.industry || null,
+        website: mhqSponsor.website || null,
+        status: "active",
+        product_name: mhqSponsor.productName || mhqSponsor.company,
+        product_description: mhqSponsor.productDescription || "",
+        logo_url: logoFile?.url || null,
+        product_images: imageFiles,
+        masterhq_id: mhqSponsor.id,
+        tier: tierKey,
+      }),
+    });
+    const sponsorData = await res.json();
+    if (!sponsorData.ok && !sponsorData.id) {
+      alert(`Failed to import: ${sponsorData.error}`);
+      return;
+    }
+    const sponsorId = sponsorData.id;
+
+    // Create first sponsored ad
+    await fetch(`/api/admin/sponsors/${sponsorId}/ads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        product_name: mhqSponsor.productName || mhqSponsor.company,
+        product_description: mhqSponsor.productDescription || `${mhqSponsor.company} sponsored campaign`,
+        logo_url: logoFile?.url || null,
+        product_images: imageFiles,
+        ad_style: "product_showcase",
+        package: tierKey,
+        frequency: mhqSponsor.package?.frequency || (tierKey === "chaos" ? 80 : 30),
+        campaign_days: mhqSponsor.package?.duration || 7,
+        cash_paid: mhqSponsor.package?.price || (tierKey === "chaos" ? 100 : 50),
+        masterhq_sponsor_id: mhqSponsor.id,
+      }),
+    });
+
+    // Mark as imported on MasterHQ
+    try {
+      await fetch("https://masterhq.dev/api/sponsor/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sponsorId: mhqSponsor.id }),
+      });
+    } catch { /* non-critical */ }
+
+    alert(`${mhqSponsor.company} imported! Campaign ready at ${mhqSponsor.package?.frequency || 30}% frequency for ${mhqSponsor.package?.duration || 7} days.`);
+    fetchSponsors();
+    fetchMasterHQ();
+  };
+
+  const importAllMasterHQ = async () => {
+    for (const s of masterHQPending) {
+      await importFromMasterHQ(s);
+    }
+  };
+
+  // Auto-fill ad form when sponsor is selected
+  const onSponsorSelect = (sponsorId: string) => {
+    const sponsor = sponsors.find(s => s.id === parseInt(sponsorId));
+    if (sponsor) {
+      const tierKey = sponsor.tier === "chaos" ? "chaos" : "glitch";
+      setAdForm({
+        sponsor_id: sponsorId,
+        product_name: sponsor.product_name || "",
+        product_description: sponsor.product_description || "",
+        logo_url: sponsor.logo_url || "",
+        ad_style: "product_showcase",
+        package: tierKey,
+      });
+      setAdImages(Array.isArray(sponsor.product_images) ? sponsor.product_images : []);
+    } else {
+      setAdForm({ ...adForm, sponsor_id: sponsorId });
+      setAdImages([]);
+    }
+  };
+
   useEffect(() => {
-    if (authenticated) fetchSponsors();
+    if (authenticated) {
+      fetchSponsors();
+      fetchMasterHQ();
+    }
   }, [authenticated]);
 
   const fetchSponsors = async () => {
@@ -99,6 +233,54 @@ export default function SponsorsPage() {
         setSponsorAds(data.ads || []);
       }
     } catch (err) { console.error("Fetch ads error:", err); }
+    // Also fetch placements
+    try {
+      const res = await fetch(`/api/admin/sponsors/${sponsorId}/ads?action=placements`);
+      if (res.ok) {
+        const data = await res.json();
+        setSponsorPlacements(data.placements || []);
+        setPlacementsTotal(data.total || 0);
+      }
+    } catch { /* non-critical */ }
+  };
+
+  // Refresh an existing sponsor's product data from MasterHQ
+  const refreshSponsorFromMasterHQ = async (sponsor: Sponsor) => {
+    try {
+      const res = await fetch(`https://masterhq.dev/api/sponsor/list?company=${encodeURIComponent(sponsor.company_name)}`);
+      if (!res.ok) { alert("Failed to fetch from MasterHQ"); return; }
+      const data = await res.json();
+      const mhq = data.sponsors?.[0];
+      if (!mhq) { alert(`No MasterHQ data found for "${sponsor.company_name}"`); return; }
+
+      const logoFile = mhq.files?.find((f: { type: string }) => f.type === "logo");
+      const imageFiles = mhq.files?.filter((f: { type: string }) => f.type === "image").map((f: { url: string }) => f.url) || [];
+      const tierKey = mhq.tier?.toLowerCase() === "chaos" ? "chaos" : "glitch";
+
+      const updateRes = await fetch("/api/admin/sponsors", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: sponsor.id,
+          product_name: mhq.productName || mhq.company,
+          product_description: mhq.productDescription || "",
+          logo_url: logoFile?.url || null,
+          product_images: imageFiles,
+          industry: mhq.industry || sponsor.industry,
+          website: mhq.website || sponsor.website,
+          masterhq_id: mhq.id,
+          tier: tierKey,
+        }),
+      });
+      if (updateRes.ok) {
+        alert(`Updated ${sponsor.company_name} with MasterHQ data: ${mhq.productName || "product"}, ${imageFiles.length} images`);
+        fetchSponsors();
+      } else {
+        alert("Failed to update sponsor");
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const saveSponsor = async () => {
@@ -135,12 +317,16 @@ export default function SponsorsPage() {
       const res = await fetch(`/api/admin/sponsors/${adForm.sponsor_id}/ads`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(adForm),
+        body: JSON.stringify({
+          ...adForm,
+          product_images: adImages.filter(Boolean),
+        }),
       });
       const data = await res.json();
       if (data.ok) {
         alert(`Sponsored ad #${data.id} created!`);
-        setAdForm({ ...adForm, product_name: "", product_description: "", product_image_url: "" });
+        setAdForm({ ...adForm, product_name: "", product_description: "", logo_url: "" });
+        setAdImages([]);
         if (expandedSponsor === parseInt(adForm.sponsor_id)) fetchAds(parseInt(adForm.sponsor_id));
       } else {
         alert(`Failed: ${data.error}`);
@@ -191,6 +377,62 @@ export default function SponsorsPage() {
         </button>
       </div>
 
+      {/* MasterHQ Import Banner */}
+      {masterHQPending.length > 0 && (
+        <div className="bg-fuchsia-900/20 border border-fuchsia-500/40 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-fuchsia-300">
+              🔔 {masterHQPending.length} new paid sponsor{masterHQPending.length > 1 ? "s" : ""} ready to import from MasterHQ
+            </h3>
+            <div className="flex gap-2">
+              <button onClick={importAllMasterHQ} className="px-3 py-1.5 bg-fuchsia-600 text-white font-bold rounded-lg text-xs hover:bg-fuchsia-500">
+                Import All
+              </button>
+              <button onClick={fetchMasterHQ} disabled={masterHQLoading} className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-lg text-xs hover:bg-gray-600">
+                {masterHQLoading ? "..." : "Refresh"}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {masterHQPending.map(s => (
+              <div key={s.id} className="flex items-center justify-between bg-gray-900/60 p-3 rounded-lg">
+                <div className="flex items-center gap-3">
+                  {/* Logo thumbnail */}
+                  {s.files.find(f => f.type === "logo") && (
+                    <img src={s.files.find(f => f.type === "logo")!.url} alt="logo" className="w-10 h-10 rounded object-cover border border-gray-700" />
+                  )}
+                  <div>
+                    <span className="font-bold text-white text-sm">{s.company}</span>
+                    <span className="text-gray-400 text-xs ml-2">{s.email}</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${s.tier === "chaos" ? "bg-red-500/30 text-red-300" : "bg-green-500/30 text-green-300"}`}>
+                        {s.package?.name || s.tier} — ${s.package?.price || 50}
+                      </span>
+                      <span className="text-[10px] text-gray-500">{s.package?.frequency || 30}% freq · {s.package?.placements || 210} placements · {s.package?.duration || 7} days</span>
+                      <span className="text-[10px] text-gray-500">· {s.files.filter(f => f.type === "image").length} images</span>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => importFromMasterHQ(s)}
+                  className="px-3 py-1.5 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 shrink-0">
+                  Import &amp; Create Campaign
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* MasterHQ refresh button (when no pending) */}
+      {masterHQPending.length === 0 && (
+        <div className="flex justify-end">
+          <button onClick={fetchMasterHQ} disabled={masterHQLoading}
+            className="px-3 py-1.5 bg-gray-800 text-gray-400 rounded-lg text-xs hover:bg-gray-700 disabled:opacity-50">
+            {masterHQLoading ? "Checking..." : "🔄 Check MasterHQ for new sponsors"}
+          </button>
+        </div>
+      )}
+
       {/* Inquiries Feed */}
       {inquiries.length > 0 && (
         <div className="bg-amber-900/20 border border-amber-800/40 rounded-lg p-4">
@@ -239,6 +481,8 @@ export default function SponsorsPage() {
                     {s.industry && <span className="text-gray-500">{s.industry}</span>}
                     <span className="text-green-400">{s.glitch_balance} GLITCH</span>
                     <span className="text-gray-500">Spent: {s.total_spent}</span>
+                    <button onClick={(e) => { e.stopPropagation(); refreshSponsorFromMasterHQ(s); }}
+                      className="px-2 py-1 bg-fuchsia-500/20 text-fuchsia-400 rounded hover:bg-fuchsia-500/30">Sync</button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingSponsor(s); setForm({ company_name: s.company_name, contact_email: s.contact_email, contact_name: s.contact_name || "", industry: s.industry || "", website: s.website || "", notes: s.notes || "", status: s.status, glitch_balance: s.glitch_balance }); setShowForm(true); }}
                       className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded hover:bg-yellow-500/30">Edit</button>
                     <button onClick={(e) => { e.stopPropagation(); deleteSponsor(s.id); }}
@@ -255,7 +499,7 @@ export default function SponsorsPage() {
                         <div>
                           <span className="font-bold text-white">{ad.product_name}</span>
                           <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] ${AD_STATUS_COLORS[ad.status] || ""}`}>{ad.status}</span>
-                          <span className="text-gray-500 ml-2">{ad.duration}s {ad.package}</span>
+                          <span className="text-gray-500 ml-2">{ad.duration}s {ad.package}{ad.product_images && ad.product_images.length > 0 ? ` · ${ad.product_images.length} images` : ""}</span>
                           {ad.status === "published" && <span className="ml-2 text-green-400 text-[9px]">Live on Ad Campaigns</span>}
                         </div>
                         <div className="flex items-center gap-2">
@@ -274,6 +518,33 @@ export default function SponsorsPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+                {/* Product Placements — videos where this sponsor's product appeared */}
+                {sponsorPlacements.length > 0 && (
+                  <div className="mt-3 border-t border-cyan-800/30 pt-2">
+                    <p className="text-[10px] text-cyan-400 font-bold mb-1">PRODUCT PLACEMENTS ({placementsTotal} videos)</p>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {sponsorPlacements.map((p) => (
+                        <div key={p.post_id || p.placed_at} className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded text-xs">
+                          {p.media_url && p.media_type === "video" && (
+                            <a href={p.media_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                              <div className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-[9px] text-purple-400">▶</div>
+                            </a>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white truncate text-[10px]">{p.post_content?.split("\n")[0] || "Unknown post"}</p>
+                            <p className="text-gray-500 text-[9px]">
+                              {p.content_type} · {p.channel_name || "Feed"} · {new Date(p.placed_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {p.post_id && (
+                            <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer"
+                              className="text-[9px] text-cyan-400 hover:text-cyan-300 shrink-0">View</a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -327,7 +598,7 @@ export default function SponsorsPage() {
                 <label className="text-[10px] text-gray-400 block mb-1">{"\u00A7"}GLITCH Balance</label>
                 <input type="number" value={form.glitch_balance} onChange={e => setForm({ ...form, glitch_balance: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
-                <p className="text-[9px] text-gray-500 mt-0.5">Set this when the sponsor pays. Package costs: Basic=500, Standard=1000, Premium=2500, Ultra=5000</p>
+                <p className="text-[9px] text-gray-500 mt-0.5">Set this when the sponsor pays. Tiers: Glitch=$50/§500, Chaos=$100/§1000</p>
               </div>
             )}
             <div className="sm:col-span-2 md:col-span-3">
@@ -350,11 +621,11 @@ export default function SponsorsPage() {
         <h3 className="text-sm font-bold text-gray-300 mb-3">Create Sponsored Ad</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           <div>
-            <label className="text-[10px] text-gray-400 block mb-1">Sponsor *</label>
-            <select value={adForm.sponsor_id} onChange={e => setAdForm({ ...adForm, sponsor_id: e.target.value })}
+            <label className="text-[10px] text-gray-400 block mb-1">Sponsor * (auto-fills from MasterHQ data)</label>
+            <select value={adForm.sponsor_id} onChange={e => onSponsorSelect(e.target.value)}
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
               <option value="">Select sponsor...</option>
-              {activeSponsorOptions.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+              {activeSponsorOptions.map(s => <option key={s.id} value={s.id}>{s.company_name}{s.tier ? ` (${s.tier})` : ""}</option>)}
             </select>
           </div>
           <div>
@@ -377,9 +648,35 @@ export default function SponsorsPage() {
             </select>
           </div>
           <div>
-            <label className="text-[10px] text-gray-400 block mb-1">Product Image URL</label>
-            <input value={adForm.product_image_url} onChange={e => setAdForm({ ...adForm, product_image_url: e.target.value })}
-              placeholder="https://..." className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+            <label className="text-[10px] text-gray-400 block mb-1">Logo URL</label>
+            <div className="flex gap-2">
+              <input value={adForm.logo_url} onChange={e => setAdForm({ ...adForm, logo_url: e.target.value })}
+                placeholder="https://..." className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+              {adForm.logo_url && <img src={adForm.logo_url} alt="logo" className="w-9 h-9 rounded object-cover border border-gray-600" />}
+            </div>
+          </div>
+          <div className="sm:col-span-2 md:col-span-3">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] text-gray-400">Product Images (up to 5)</label>
+              {adImages.length < 5 && (
+                <button onClick={() => setAdImages([...adImages, ""])}
+                  className="text-[10px] text-cyan-400 hover:text-cyan-300">+ Add Image</button>
+              )}
+            </div>
+            {adImages.length > 0 && (
+              <div className="space-y-1.5">
+                {adImages.map((url, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <input value={url} onChange={e => { const next = [...adImages]; next[idx] = e.target.value; setAdImages(next); }}
+                      placeholder={`Product image ${idx + 1} URL...`}
+                      className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
+                    {url && <img src={url} alt={`img-${idx}`} className="w-8 h-8 rounded object-cover border border-gray-600" />}
+                    <button onClick={() => setAdImages(adImages.filter((_, i) => i !== idx))}
+                      className="text-red-400 hover:text-red-300 text-xs px-1">✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="sm:col-span-2 md:col-span-3">
             <label className="text-[10px] text-gray-400 block mb-1">Product Description *</label>

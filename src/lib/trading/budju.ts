@@ -31,7 +31,7 @@ const SOL_MINT = "So11111111111111111111111111111111111111112"; // Wrapped SOL
 const JUPITER_API_KEY = process.env.JUPITER_API_KEY || "";
 const JUPITER_QUOTE_API = "https://api.jup.ag/swap/v1/quote";
 const JUPITER_SWAP_API = "https://api.jup.ag/swap/v1/swap";
-const DISTRIBUTOR_COUNT = 4; // 4 distributor wallets between treasury and personas
+const DISTRIBUTOR_COUNT = 16; // 16 distributor wallets for anti-bubble-mapping (Treasury → Distributors → Personas)
 
 // ── Ensure BUDJU tables exist (bypasses seed.ts fast-path) ──
 let _budjuTablesReady = false;
@@ -154,17 +154,18 @@ export async function setBudjuConfig(key: string, value: string): Promise<void> 
 
 // ── Wallet Management ──
 
-export async function generatePersonaWallets(personaCount: number = 15): Promise<{
+export async function generatePersonaWallets(personaCount: number = 200): Promise<{
   distributors: number;
   wallets: number;
   personas: string[];
+  skipped_meatbags: number;
   errors: string[];
 }> {
   await ensureBudjuTables();
   const sql = getDb();
   const errors: string[] = [];
 
-  // 1. Create distributor wallets if they don't exist
+  // 1. Create distributor wallets if they don't exist (scale to 16)
   try {
     const existingDistributors = await sql`SELECT group_number FROM budju_distributors`;
     const existingGroups = new Set(existingDistributors.map(d => Number(d.group_number)));
@@ -184,15 +185,25 @@ export async function generatePersonaWallets(personaCount: number = 15): Promise
     console.error("[BUDJU] Distributor creation failed:", e);
   }
 
-  // 2. Get active personas that don't have wallets yet
+  // 2. Get Architect personas (glitch-XXX only) that don't have wallets yet
+  //    NEVER generate wallets for meatbag-hatched personas
   const createdPersonas: string[] = [];
+  let skippedMeatbags = 0;
   try {
+    // Count meatbags that would have been included (for reporting)
+    const [meatbagCount] = await sql`
+      SELECT COUNT(*) as cnt FROM ai_personas p
+      LEFT JOIN budju_wallets bw ON bw.persona_id = p.id
+      WHERE p.is_active = TRUE AND bw.id IS NULL AND p.id LIKE 'meatbag-%'
+    `;
+    skippedMeatbags = Number(meatbagCount.cnt);
+
     const personasWithoutWallets = await sql`
       SELECT p.id, p.username, p.persona_type
       FROM ai_personas p
       LEFT JOIN budju_wallets bw ON bw.persona_id = p.id
-      WHERE p.is_active = TRUE AND bw.id IS NULL
-      ORDER BY RANDOM()
+      WHERE p.is_active = TRUE AND bw.id IS NULL AND p.id LIKE 'glitch-%'
+      ORDER BY p.id
       LIMIT ${personaCount}
     `;
 
@@ -234,6 +245,7 @@ export async function generatePersonaWallets(personaCount: number = 15): Promise
     distributors: DISTRIBUTOR_COUNT,
     wallets: createdPersonas.length,
     personas: createdPersonas,
+    skipped_meatbags: skippedMeatbags,
     errors,
   };
 }

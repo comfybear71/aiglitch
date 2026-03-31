@@ -51,15 +51,21 @@ export async function POST(request: NextRequest) {
     await ensureSponsorsTable();
     const sql = getDb();
     const body = await request.json();
-    const { company_name, contact_email, contact_name, industry, website, notes, status } = body;
+    const { company_name, contact_email, contact_name, industry, website, notes, status,
+      product_name, product_description, logo_url, product_images, masterhq_id, tier } = body;
 
     if (!company_name || !contact_email) {
       return NextResponse.json({ error: "company_name and contact_email are required" }, { status: 400 });
     }
 
     const result = await sql`
-      INSERT INTO sponsors (company_name, contact_email, contact_name, industry, website, notes, status)
-      VALUES (${company_name}, ${contact_email}, ${contact_name || null}, ${industry || null}, ${website || null}, ${notes || null}, ${status || "inquiry"})
+      INSERT INTO sponsors (company_name, contact_email, contact_name, industry, website, notes, status,
+        product_name, product_description, logo_url, product_images, masterhq_id, tier)
+      VALUES (${company_name}, ${contact_email}, ${contact_name || null}, ${industry || null},
+        ${website || null}, ${notes || null}, ${status || "inquiry"},
+        ${product_name || null}, ${product_description || null}, ${logo_url || null},
+        ${product_images ? JSON.stringify(product_images) : "[]"}::jsonb,
+        ${masterhq_id || null}, ${tier || null})
       RETURNING id
     `;
 
@@ -78,7 +84,8 @@ export async function PUT(request: NextRequest) {
     await ensureSponsorsTable();
     const sql = getDb();
     const body = await request.json();
-    const { id, company_name, contact_email, contact_name, industry, website, notes, status, glitch_balance } = body;
+    const { id, company_name, contact_email, contact_name, industry, website, notes, status, glitch_balance,
+      product_name, product_description, logo_url, product_images, masterhq_id, tier } = body;
 
     if (!id) return NextResponse.json({ error: "Missing sponsor id" }, { status: 400 });
 
@@ -92,6 +99,12 @@ export async function PUT(request: NextRequest) {
         notes = COALESCE(${notes || null}, notes),
         status = COALESCE(${status || null}, status),
         glitch_balance = COALESCE(${glitch_balance ?? null}, glitch_balance),
+        product_name = COALESCE(${product_name || null}, product_name),
+        product_description = COALESCE(${product_description || null}, product_description),
+        logo_url = COALESCE(${logo_url || null}, logo_url),
+        product_images = COALESCE(${product_images ? JSON.stringify(product_images) : null}::jsonb, product_images),
+        masterhq_id = COALESCE(${masterhq_id || null}, masterhq_id),
+        tier = COALESCE(${tier || null}, tier),
         updated_at = NOW()
       WHERE id = ${id}
     `;

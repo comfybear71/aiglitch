@@ -62,8 +62,15 @@ async function runBackgroundGeneration(
     setProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
     const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
 
-    for (const scene of scenes) {
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
       if (abortRef.current) break;
+
+      // Rate limit: Grok allows 1 request/second — wait 1.5s between submissions
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+
       setProgress(prev => prev ? { ...prev, current: scene.sceneNumber } : null);
       setLog(prev => [...prev, `[${scene.sceneNumber}/${scenes.length}] 🎬 ${scene.title}`]);
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
@@ -80,8 +87,27 @@ async function runBackgroundGeneration(
           sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: submitData.requestId });
           setLog(prev => [...prev, `  ✅ Submitted: ${submitData.requestId.slice(0, 12)}...`]);
         } else {
-          sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
-          setLog(prev => [...prev, `  ❌ Submit failed: ${submitData.error || "unknown"}`]);
+          // If rate limited, wait longer and retry once
+          if (submitData.error?.includes("429") || submitData.error?.includes("Too many")) {
+            setLog(prev => [...prev, `  ⏳ Rate limited — waiting 5s and retrying...`]);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            const retryRes = await fetch("/api/test-grok-video", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
+            });
+            const retryData = await retryRes.json();
+            if (retryData.success && retryData.requestId) {
+              sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: retryData.requestId });
+              setLog(prev => [...prev, `  ✅ Retry succeeded: ${retryData.requestId.slice(0, 12)}...`]);
+            } else {
+              sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
+              setLog(prev => [...prev, `  ❌ Retry failed: ${retryData.error || "unknown"}`]);
+            }
+          } else {
+            sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
+            setLog(prev => [...prev, `  ❌ Submit failed: ${submitData.error || "unknown"}`]);
+          }
         }
       } catch (err) {
         sceneJobs.push({ sceneNumber: scene.sceneNumber, title: scene.title, requestId: null });
@@ -246,6 +272,13 @@ interface AdminContextValue {
     screenplayBody: Record<string, unknown>;
   }) => void;
   generationChannelId: string | null;
+
+  // Autopilot
+  autopilotQueue: { channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[];
+  setAutopilotQueue: React.Dispatch<React.SetStateAction<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>>;
+  autopilotTotal: number;
+  setAutopilotTotal: React.Dispatch<React.SetStateAction<number>>;
+  autopilotCurrent: number;
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
@@ -274,6 +307,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [generationChannelId, setGenerationChannelId] = useState<string | null>(null);
   const abortRef = useRef(false);
 
+  // Autopilot queue — survives page navigation
+  const [autopilotQueue, setAutopilotQueue] = useState<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>([]);
+  const [autopilotTotal, setAutopilotTotal] = useState(0);
+  const [autopilotCurrent, setAutopilotCurrent] = useState(0);
+
   const startGeneration = useCallback((params: {
     channelId: string;
     channelName: string;
@@ -297,6 +335,25 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       abortRef,
     );
   }, []);
+
+  // Autopilot: when generation finishes, start next in queue
+  useEffect(() => {
+    if (!generating && autopilotQueue.length > 0) {
+      const [next, ...rest] = autopilotQueue;
+      setAutopilotQueue(rest);
+      const current = autopilotTotal - rest.length;
+      setAutopilotCurrent(current);
+      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 10s (rate limit cooldown)...`]);
+      // 10-second cooldown between autopilot generations to avoid Grok 429 rate limits
+      setTimeout(() => startGeneration(next), 10000);
+    }
+    // Autopilot complete
+    if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
+      setGenerationLog((prev: string[]) => [...prev, ``, `✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos generated!`]);
+      setAutopilotTotal(0);
+      setAutopilotCurrent(0);
+    }
+  }, [generating, autopilotQueue, autopilotTotal, autopilotCurrent, startGeneration]);
 
   // Elapsed timer for generation progress
   useEffect(() => {
@@ -346,6 +403,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       genProgress, setGenProgress,
       elapsed,
       startGeneration, generationChannelId,
+      autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent,
     }}>
       {children}
     </AdminContext.Provider>

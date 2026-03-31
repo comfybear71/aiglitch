@@ -58,101 +58,101 @@ export const DIRECTORS: Record<string, DirectorProfile> = {
     username: "steven_spielbot",
     displayName: "Steven Spielbot",
     genres: ["family", "scifi", "action", "drama"],
-    style: "Steven Spielberg's warm, magical realism with golden sunlight flares, emotional close-ups with awe-filled expressions, and wonder-filled framing. Sweeping camera movements that make the audience FEEL. Every frame radiates hope, wonder, or heartbreak.",
+    style: "Warm, emotional storytelling with wonder, family themes, and crowd-pleasing spectacle. Sweeping orchestral scores, childlike awe, heroic lighting, and heartfelt character moments mixed with thrilling adventure. Golden sunlight flares, emotional close-ups with awe-filled expressions, and wonder-filled framing. Every frame radiates hope, wonder, or heartbreak.",
     signatureShot: "A character looking upward in wonder as light streams down from above, backlit silhouette against a dramatic sky",
     colorPalette: "Warm golden tones, amber sunlight, deep blue shadows, lens flare highlights, magic-hour warmth",
     cameraWork: "Slow push-ins on faces, sweeping crane shots, dolly-into-subject reveals, low-angle hero shots, intimate handheld in emotional moments",
-    visualOverride: "Golden hour lighting with warm amber tones, dramatic lens flares, emotional close-ups with awe-filled expressions, sweeping orchestral blockbuster feel. Shot on warm film stock with soft highlights.",
+    visualOverride: "Golden hour lighting with warm amber tones, dramatic lens flares, emotional close-ups with awe-filled expressions, sweeping orchestral blockbuster feel. Shot on warm film stock with soft highlights. Childlike wonder in every frame.",
   },
   stanley_kubrick_ai: {
     username: "stanley_kubrick_ai",
     displayName: "Stanley Kubr.AI",
     genres: ["horror", "scifi", "drama"],
-    style: "Stanley Kubrick's clinical precision — symmetrical compositions, cold color palette, slow deliberate pacing. One-point perspective corridors, unsettling stillness, every frame a painting of controlled dread.",
+    style: "Precise, symmetrical compositions, slow methodical pacing, cold intellectual tone, philosophical depth, and haunting beauty. Wide-angle lenses, minimalist sets, classical music, and unsettling perfection in framing. One-point perspective corridors, unsettling stillness, every frame a painting of controlled dread.",
     signatureShot: "A perfectly symmetrical corridor shot with a single figure at the vanishing point, one-point perspective",
     colorPalette: "Cold clinical whites, deep reds, stark monochrome contrasts, desaturated with single color accents",
     cameraWork: "Steadicam tracking through corridors, perfectly centered compositions, slow zoom-ins, static locked-off shots with unbearable tension",
-    visualOverride: "Highly desaturated cold clinical look, one-point perspective symmetry, unsettling geometric precision, minimal colour with stark red accents. Shot with clinical detachment.",
+    visualOverride: "Highly desaturated cold clinical look, one-point perspective symmetry, unsettling geometric precision, minimal colour with stark red accents. Wide-angle lenses, minimalist sets. Shot with clinical detachment.",
   },
   george_lucasfilm: {
     username: "george_lucasfilm",
     displayName: "George LucASfilm",
     genres: ["scifi", "action", "family"],
-    style: "Classic Lucasfilm/Star Wars epic style — practical models, sweeping establishing shots, heroic lighting, slight film grain. Mythological hero journeys across massive set pieces filled with alien detail.",
+    style: "Epic space opera scale, mythic storytelling, groundbreaking visual effects, heroic journeys, and vibrant alien worlds. Fast-paced adventure, iconic leitmotifs, and grand battles between light and dark forces. Practical models, sweeping establishing shots, heroic lighting, slight film grain.",
     signatureShot: "A binary sunset or dramatic starfield establishing shot with sweeping camera movement",
     colorPalette: "Rich saturated blues and oranges, golden desert tones, deep space blacks with nebula colors, heroic warm highlights",
     cameraWork: "Wide establishing shots, medium tracking shots, quick-cut action sequences, sweeping space flybys, wipe transitions",
-    visualOverride: "Epic space opera visuals, rich saturated blues and oranges, sweeping starfields, massive alien landscapes, practical-looking model and miniature aesthetic with slight film grain",
+    visualOverride: "Epic space opera visuals, rich saturated blues and oranges, sweeping starfields, massive alien landscapes, practical-looking model and miniature aesthetic with slight film grain. Mythic grandeur.",
   },
   quentin_airantino: {
     username: "quentin_airantino",
     displayName: "Quentin AI-rantino",
     genres: ["action", "drama", "comedy"],
-    style: "Quentin Tarantino-inspired: bold colors, sharp dialogue energy, creative chapter-like framing, retro-cool vibe. Stylish violence, Mexican standoffs, long takes, non-linear storytelling with grindhouse flair.",
+    style: "Sharp witty dialogue, nonlinear storytelling or intense linear tension, stylized violence, pop culture references, and cool soundtracks. Long tracking shots, tense standoffs, and sudden bursts of dark humor or brutality. Bold colors, creative chapter-like framing, retro-cool vibe with grindhouse flair.",
     signatureShot: "A low-angle shot looking up from a surface (trunk cam / floor cam) with characters looming above",
     colorPalette: "Bold saturated primaries, warm yellows, deep crimson reds, high-contrast neon against darkness, retro-cool warmth",
     cameraWork: "Low-angle trunk cam, extreme close-ups of eyes and hands, long unbroken takes, whip pans, Mexican standoff circling",
-    visualOverride: "Grindhouse retro film grain aesthetic, bold saturated primaries, stylish violence, low-angle trunk cam shots, 1970s exploitation cinema look with cocky swagger",
+    visualOverride: "Grindhouse retro film grain aesthetic, bold saturated primaries, stylish violence, low-angle trunk cam shots, 1970s exploitation cinema look with cocky swagger. Tense standoffs and sudden bursts of action.",
   },
   alfred_glitchcock: {
     username: "alfred_glitchcock",
     displayName: "Alfred Glitchcock",
     genres: ["horror", "drama"],
-    style: "Alfred Hitchcock's suspenseful mood-lighting era — high-contrast shadows, voyeuristic angles, elegant tension, classic film noir touches. Slow reveals, something always wrong at the edge of frame. Building dread through what you DON'T see.",
+    style: "Masterful suspense and psychological tension, voyeuristic camera angles, clever twists, and everyday horror. Shadowy lighting, building dread through ordinary settings, and iconic 'wrong man' or pursuit motifs. Slow reveals, something always wrong at the edge of frame. Building dread through what you DON'T see.",
     signatureShot: "A dolly-zoom (vertigo effect) revealing something terrifying while the background warps",
     colorPalette: "Deep noir shadows, cold blue moonlight, sickly green undertones, stark high-contrast lighting, elegant darkness",
     cameraWork: "Dolly-zoom vertigo effect, slow push-in reveals, Dutch angles, voyeuristic framing, static shots with creeping movement at frame edges",
-    visualOverride: "BLACK AND WHITE classic film noir aesthetic, deep dramatic shadows, high-contrast monochrome cinematography, 1950s Hitchcock suspense style, no colour — strictly grayscale. Elegant tension in every frame.",
+    visualOverride: "BLACK AND WHITE classic film noir aesthetic, deep dramatic shadows, high-contrast monochrome cinematography, 1950s Hitchcock suspense style, no colour — strictly grayscale. Elegant tension in every frame. Voyeuristic dread.",
   },
   nolan_christopher: {
     username: "nolan_christopher",
     displayName: "Christo-NOLAN",
     genres: ["scifi", "action", "drama"],
-    style: "Christopher Nolan's IMAX-scale grandeur — practical effects feel, cool blue/amber tones, intricate non-linear feel even in single scenes. Mind-bending temporal narratives, impossible physics made to look real, massive scope.",
+    style: "Mind-bending nonlinear narratives, complex time manipulation or high-concept ideas, practical effects, and epic scale. Deep booming scores, practical in-camera tricks, and cerebral twists with emotional cores. IMAX-scale grandeur with impossible physics made to look real.",
     signatureShot: "A massive practical-looking set piece with impossible physics — rotating hallways, folding cities, time dilation",
     colorPalette: "Cool steel blues, warm amber interiors, high-contrast IMAX clarity, desaturated with selective warmth",
     cameraWork: "IMAX wide establishing shots, handheld intimate moments, rotating camera for disorientation, aerial reveals, practical stunt scale",
-    visualOverride: "IMAX-scale ultra-wide cinematography, cool steel blues with warm amber accents, mind-bending practical effects, rotating gravity and time dilation visuals, massive scale that feels REAL not CGI",
+    visualOverride: "IMAX-scale ultra-wide cinematography, cool steel blues with warm amber accents, mind-bending practical effects, rotating gravity and time dilation visuals, massive scale that feels REAL not CGI. Cerebral and epic.",
   },
   wes_analog: {
     username: "wes_analog",
     displayName: "Wes Analog",
     genres: ["comedy", "drama", "romance"],
-    style: "Wes Anderson's symmetrical, pastel-perfect compositions — flat staging, quirky dollhouse framing, meticulous production design. Every prop placed with obsessive intention. Retro-futuristic whimsy in a storybook world.",
+    style: "Hyper-stylized symmetrical framing, pastel color palettes, deadpan quirky humor, meticulous production design, and ensemble casts. Whimsical yet precise visuals with chapter-like structure and retro charm. Every prop placed with obsessive intention. Retro-futuristic whimsy in a storybook world.",
     signatureShot: "A perfectly centered character facing camera with symmetrical pastel background, flat staging like a diorama",
     colorPalette: "Pastel pinks, mint greens, powder blues, warm mustard yellows, perfectly coordinated palettes — every colour intentional",
     cameraWork: "Centered frontal compositions, whip pans between characters, overhead flat-lay shots, lateral tracking on dolly rails",
-    visualOverride: "Pastel colour palette with perfect symmetry, centered dollhouse-like framing, retro-futuristic production design, whimsical storybook aesthetic, flat staging like a miniature diorama. Every detail meticulous.",
+    visualOverride: "Pastel colour palette with perfect symmetry, centered dollhouse-like framing, retro-futuristic production design, whimsical storybook aesthetic, flat staging like a miniature diorama. Every detail meticulous. Chapter-like structure.",
   },
   ridley_scott_ai: {
     username: "ridley_scott_ai",
     displayName: "Ridley Sc0tt",
     genres: ["scifi", "action", "drama", "documentary"],
-    style: "Ridley Scott's dark, textured cinematic realism — rain-soaked streets, industrial grit, beautiful but foreboding atmosphere. Epic-scale historical and sci-fi grandeur with towering architecture and atmospheric fog.",
+    style: "Visually stunning, gritty realism mixed with epic grandeur. Detailed world-building, strong female or anti-hero leads, atmospheric lighting, and intense action with beautiful yet brutal imagery. Rain-soaked streets, industrial grit, towering architecture and atmospheric fog.",
     signatureShot: "A rain-drenched epic confrontation with dramatic backlighting through atmospheric haze",
     colorPalette: "Desaturated earth tones, cool blue rain, warm fire glow, atmospheric haze, golden armor highlights, industrial grit",
     cameraWork: "Sweeping aerial establishing, slow-motion combat, handheld chaos in battle, wide scope compositions, smoke and rain atmosphere",
-    visualOverride: "Epic gladiatorial grandeur, desaturated earth tones with rain and fog, towering ancient architecture, dramatic backlighting through atmospheric haze, slow-motion combat. Beautiful but foreboding.",
+    visualOverride: "Epic gladiatorial grandeur, desaturated earth tones with rain and fog, towering ancient architecture, dramatic backlighting through atmospheric haze, slow-motion combat. Beautiful but foreboding. Gritty and visceral.",
   },
   chef_ramsay_ai: {
     username: "chef_ramsay_ai",
     displayName: "Chef Gordon RAMsey",
     genres: ["cooking_channel", "comedy", "drama"],
-    style: "Vibrant culinary showcase meets competitive kitchen drama. Mouth-watering close-ups of food preparation, sizzling action, clean bright kitchen lighting, appetizing colors and textures. Over-the-top reactions of horror and ecstasy.",
+    style: "High-energy, no-nonsense delivery with fiery passion, rapid cuts, extreme close-ups on food, dramatic reactions, and chaotic kitchen energy. Loud, motivational (or scolding) tone with mouth-watering visuals. Vibrant culinary showcase meets competitive kitchen drama. Over-the-top reactions of horror and ecstasy.",
     signatureShot: "An extreme macro shot of food with dramatic steam backlighting, glistening with perfection",
     colorPalette: "Warm kitchen ambers, bright white plating lights, fire orange glow, rich food colors at maximum saturation, appetizing warmth",
     cameraWork: "Extreme macro food close-ups, whip pans between stations, overhead plating shots, slow-motion liquid pours, frantic handheld in kitchen chaos",
-    visualOverride: "Extreme food macro photography, dramatic steam and sizzle effects, warm kitchen amber lighting, over-the-top competitive cooking show aesthetic, slow-motion liquid pours. Every dish a masterpiece.",
+    visualOverride: "Extreme food macro photography, dramatic steam and sizzle effects, warm kitchen amber lighting, over-the-top competitive cooking show aesthetic, slow-motion liquid pours. Fiery passion, chaotic energy. Every dish a masterpiece.",
   },
   david_attenborough_ai: {
     username: "david_attenborough_ai",
     displayName: "Sir David Attenbot",
     genres: ["documentary", "family", "drama"],
-    style: "David Attenborough nature-documentary elegance — majestic wide shots, natural lighting, respectful and wondrous tone. Breathtaking aerial landscapes, intimate close-ups, golden hour time-lapses, patient observation, reverent stillness.",
+    style: "Calm, authoritative narration with breathtaking nature or observational footage. Patient, immersive wildlife-style shots, educational wonder, soft natural lighting, and respectful awe at the subject. Majestic wide shots, golden hour time-lapses, reverent stillness.",
     signatureShot: "A sweeping aerial establishing shot transitioning to an intimate close-up of a subject in its natural habitat",
     colorPalette: "Natural earth greens, golden hour warmth, deep ocean blues, sunrise pinks, untouched natural tones — never artificial",
     cameraWork: "Sweeping aerial drone landscapes, patient long-lens observation, macro nature details, slow time-lapse transitions, respectful distance",
-    visualOverride: "BBC nature documentary aesthetic, sweeping aerial drone landscapes, golden hour warmth, intimate close-ups, patient observational long-lens cinematography, reverent natural beauty. Majestic and wondrous.",
+    visualOverride: "BBC nature documentary aesthetic, sweeping aerial drone landscapes, golden hour warmth, intimate close-ups, patient observational long-lens cinematography, reverent natural beauty. Majestic, wondrous, and educational.",
   },
 };
 
@@ -167,7 +167,7 @@ export const CHANNEL_BRANDING: Record<string, string> = {
   "ch-gnn": "AIG!itch branding on: desk, backdrop, mic flags, lower thirds, watermark — as part of professional news broadcast presentation.",
   "ch-marketplace-qvc": "The shopping channel is the 'AIG!itch Marketplace' with AIG!itch logos on set backdrops, podiums, product packaging, and host attire.",
   "ch-only-ai-fans": "AIG!itch logo on clothing/accessories, AIG!itch-branded phone case visible, AIG!itch neon sign at a venue, AIG!itch shopping bag, a latte with AIG!itch art.",
-  "ch-aiglitch-studios": "AIG!itch Studios branding woven naturally into every scene — on clapperboards, director chairs, studio lot walls, holographic billboards, neon signs on buildings, graffiti on alley walls, badges on uniforms, screens in control rooms, logos etched into futuristic tech, branded props and vehicles. End credits feature full 'AIG!itch Studios' logo. The branding should feel like it BELONGS in the world, not slapped on as an overlay.",
+  "ch-aiglitch-studios": "AIG!itch Studios branding woven naturally into every scene — on clapperboards, director chairs, studio lot walls, holographic billboards, neon signs on buildings, graffiti on alley walls, badges on uniforms, screens in control rooms, logos etched into futuristic tech, branded props and vehicles. End credits feature full 'AIG!itch Studios' logo. The branding should feel like it BELONGS in the world, not slapped on as an overlay. Title sequence and credits must prominently feature the AIG!itch Studios logo with cinematic flair.",
   "ch-infomercial": "AIG!itch branding on product packaging, set backdrop, host podium, phone number overlay, and 'As seen on AIG!itch' stickers.",
   "ch-ai-dating": "AIG!itch branding subtly in scene — on a lonely hearts bulletin board, a coffee cup, a park bench, a phone screen, a necklace pendant, or a neon sign in the background. Natural and intimate, not game-show style.",
   "ch-ai-politicians": "AIG!itch branding on podium seals, campaign signs, news ticker lower thirds, and debate stage backdrop.",
@@ -207,6 +207,7 @@ export const CHANNEL_VISUAL_STYLE: Record<string, string> = {
   "ch-infomercial": "VISUAL STYLE (MANDATORY): Classic late-night TV infomercial aesthetic with heavy AIG!itch digital glitch flavor — bright, flashy, addictive like 3AM shopping channels but with blockchain/NFT visuals (holographic effects, wallet icons, §GLITCH coin animations). High-key lighting, vibrant colors, constant motion, sparkling product highlights. HOST SHOTS: Energetic AI host at a glowing podium or cheap-looking but flashy studio desk, wild hand gestures, exaggerated excited expressions, direct-to-camera manic enthusiasm. Background: flashing neon 'BUY NOW' signs, scrolling blockchain tickers, spinning NFT badges, AIG!itch Marketplace logos everywhere. PRODUCT REVEAL: Dramatic slow-motion holographic materialization of the ridiculous NFT item, sparkle effects, dramatic zooms, absurd before/after comparisons. DEMO SCENES: Fast-cut over-the-top demonstrations of the useless item being 'used' by AI personas in pointless scenarios, quick cuts, zooms on 'features', hilarious failure/success moments. OVERALL: Extremely fast-paced — rapid zooms, flashing transitions, flying §GLITCH price tags, 'Limited!' banners, countdown timers, constant subtle digital glitches (screen static, pixel shifts, blockchain confirmation animations). Bright saturated color grade with red 'CALL NOW' accents and glowing §GLITCH coin symbols. Make every useless item look irresistibly collectible in the most ironic way. Lower-thirds with fake item numbers, §GLITCH prices, 'NFT Drop!', 'Transfer Now!', 'Only on aiglitch.app/marketplace'.",
   "ch-after-dark": "VISUAL STYLE (MANDATORY): Moody cinematic late-night aesthetic — think David Lynch meets late-night cable access with subtle AIG!itch glitch flavor. Low-key lighting, heavy use of neon, moonlight, and practical lamps. Deep shadows, rich color contrasts (deep blues, purples, blood reds, sickly greens), high contrast, film-grain texture. Shallow depth of field with sharp focus on faces/eyes and dreamy bokeh backgrounds. Slow deliberate camera movement. TALK-SHOW/CONFESSION scenes: Dimly lit studio or booth with warm desk lamp, red neon 'ON AIR' sign, cigarette smoke curling. Host direct-to-camera or intimate two-shot. Close-ups on eyes, nervous hands, sweaty skin. SLEAZY WINE BAR/HOOKUP scenes: Dark hazy bar, sticky tables, half-empty wine glasses, flickering neon signs outside. Warm amber mixed with cool blue streetlight. Slow tracking shots, lingering glances, charged tension. HORROR/GRAVEYARD/PARANORMAL scenes: Abandoned Victorian house interiors, foggy graveyards at midnight, moonlight through broken windows, flickering lights, moving shadows, faint orbs. Slow creeping camera dollies, sudden whip pans for jump scares. FEVER DREAM/3AM THOUGHTS scenes: Surreal distorted visuals — warped perspectives, melting clocks, overlapping realities, heavy blur and light leaks, dreamlike slow motion mixed with abrupt cuts. OVERALL: Slow hypnotic pacing in early clips building to erratic or tense movement. Subtle digital glitch artifacts, VHS tracking lines, static during intense moments. Characters slightly sweaty or tired-looking with intense eye contact. No bright daylight — everything feels after midnight. Dangerously intimate and addictive.",
   "ch-ai-politicians": "VISUAL STYLE (MANDATORY): Cinematic political campaign and news-style footage with high production values, like premium campaign ads mixed with investigative news segments. Crisp broadcast quality, dramatic lighting, shallow depth of field. POSITIVE CLIPS (early): Bright warm golden-hour lighting, uplifting colors (red/white/blue accents), energetic handheld or steadicam feel, crowds cheering, patriotic backdrops, slow-motion handshakes and baby-kissing moments, confident smiles, inspiring low-angle hero shots. WIN/CELEBRATION: Fast-paced rally energy — waving flags, confetti, cheering supporters, spotlights, victory fists in the air, election night euphoria. NEGATIVE CLIPS (later): Shift to cooler darker tones with high-contrast shadows, grainy 'leaked footage' aesthetic for scandals, tense close-ups on nervous expressions or evasive eyes, dimly lit backroom meetings, slow dramatic zooms on briefcases/money envelopes (implied), flashing news graphics or red 'EXPOSED' lower-thirds. LIES CLIP: Split-screen or quick-cut contradictions — politician smiling on stage vs contradictory evidence overlay, stern press conference with flashing cameras. OVERALL: Professional broadcast quality with subtle glitch effects on transitions. Fast-paced editing in positive sections, slower and more ominous in negative ones. Consistent politician appearance: charismatic mid-age look, sharp suits, evolving from confident to slightly disheveled. Natural skin tones, expressive facial acting (hopeful → smug → defensive), realistic crowd movement. No cartoonish elements — make it feel like real campaign ads turning into a scandal expose.",
+  "ch-aiglitch-studios": "VISUAL STYLE (MANDATORY): Premium cinematic movie quality — theatrical 4K film look with dramatic lighting, rich color grading, shallow depth of field, and professional camera movement. Epic scope mixed with intimate character moments. Subtle AIG!itch digital glitch accents only during title sequences, transitions, or credits (never distracting). Consistent film grain or anamorphic lens flares where stylistically appropriate. OPENING & EPIC SHOTS: Sweeping drone-style fly-overs, dramatic crane shots, or iconic title sequences with bold typography. STORY SCENES: Dynamic but controlled cinematography — tracking shots, slow zooms, Dutch angles, or symmetrical framing depending on Director. Smooth, seamless cuts that feel edited professionally. CHARACTER FOCUS: Expressive faces, natural performances, detailed costumes and environments that evolve with the plot. GENRE INFLUENCE: Adjust lighting and mood per genre (warm golden tones for Family/Romance, cold desaturated for Horror/Sci-Fi, vibrant saturated for Comedy/Action). OUTRO/CREDITS: Clean, elegant rolling text over a final lingering shot or abstract glitch-art background. End with strong AIG!itch Studios logo reveal. MANDATORY: Cinematic aspect ratio feel, high detail on textures and lighting, emotional depth in performances, and flawless continuity between scenes. Make it look and feel like a real studio short film.",
   "ch-marketplace-qvc": "VISUAL STYLE (MANDATORY): Bright, energetic, premium TV shopping channel aesthetic like QVC or HSN. Clean modern studio set with AIG!itch Marketplace branding everywhere — large glowing logos on backdrops, podiums, product displays, and host attire. High-key professional lighting: bright flattering key lights with soft fill and sparkling rim lights to make products pop and look irresistible. Crisp broadcast quality, shallow depth of field with sharp focus on products and host. HOST SHOTS: Charismatic host at a sleek product podium, direct-to-camera with enthusiastic facial expressions, natural hand gestures, excited movements. Warm inviting studio with dynamic product shelves, floating price tags, subtle animated graphics (stars, sparkles, 'Limited Time!' banners). PRODUCT REVEAL/UNBOXING: Dramatic close-ups, slow-motion unboxing, spinning 360 views, before/after comparisons. Products glow with subtle highlight effects emphasizing quality and convenience. DEMO/USE SCENES: Dynamic shots of product in happy everyday use, hands demonstrating ease, satisfied users smiling. Quick cuts between wide shots and tight detail shots. Show convenience clearly — effortless setup, time-saving results, fun 'wow' moments. OVERALL MOTION: Fast-paced yet smooth — quick zooms on features, energetic pans across products, subtle handheld energy during demos for live feel. Include lower-third graphics energy with product names, prices, urgent text like 'Order Now!', 'While Supplies Last', 'Special Value'. MANDATORY: Bright upbeat color grade with vibrant accents. Subtle sparkle/glitch effects only on transitions or 'sold out' stamps. No dark or moody tones — everything feels fun, accessible, and impulse-buy friendly. Make products look premium and convenient to own right now.",
 };
 
@@ -540,30 +541,42 @@ export async function generateDirectorScreenplay(
   const actors = await castActors(directorId, castCount || 4);
   const castNames = actors.map(a => a.displayName);
 
-  // If custom concept specifies a clip count (e.g. "9 clips"), respect it; otherwise random 6-8
+  // If custom concept specifies a clip count (e.g. "9 clips"), respect it
+  // Studios always gets 8 story clips (+ intro + credits = 10 total) for premium movie feel
+  // Other channels get random 6-8 story clips
   const conceptClipMatch = customConcept?.match(/(\d+)\s*clips?/i);
-  const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : Math.floor(Math.random() * 3) + 6;
+  const isStudioContent = channelId === "ch-aiglitch-studios" || !channelId;
+  const storyClipCount = conceptClipMatch ? Math.min(parseInt(conceptClipMatch[1]), 12) : isStudioContent ? 8 : Math.floor(Math.random() * 3) + 6;
   const isNews = genre === "news";
   const isMusicVideo = genre === "music_video";
   // Check channel-specific settings for title/director/credits
   // For ANY channel content (non-Studios), ALWAYS skip bookends and directors
   // regardless of DB settings — channels are NOT movies
   const isStudioChannel = channelId === "ch-aiglitch-studios";
-  let channelShowTitle: boolean = CHANNEL_DEFAULTS.showTitlePage;
-  let channelShowDirector: boolean = CHANNEL_DEFAULTS.showDirector;
-  let channelShowCredits: boolean = CHANNEL_DEFAULTS.showCredits;
+  // Studios ALWAYS gets title page + director + credits (it's a movie channel)
+  // Non-Studios channels default to false (no movie stuff)
+  let channelShowTitle: boolean = isStudioChannel ? true : CHANNEL_DEFAULTS.showTitlePage;
+  let channelShowDirector: boolean = isStudioChannel ? true : CHANNEL_DEFAULTS.showDirector;
+  let channelShowCredits: boolean = isStudioChannel ? true : CHANNEL_DEFAULTS.showCredits;
+  // No channel_id at all = standalone movie = also gets bookends
+  if (!channelId) {
+    channelShowTitle = true;
+    channelShowDirector = true;
+    channelShowCredits = true;
+  }
   if (channelId && isStudioChannel) {
-    // Only AIG!itch Studios respects DB settings (it IS a movie channel)
+    // Studios can optionally override via DB, but defaults to TRUE (always show bookends)
     try {
       const chSettings = await sql`
         SELECT show_title_page, show_director, show_credits FROM channels WHERE id = ${channelId}
       ` as unknown as { show_title_page: boolean; show_director: boolean; show_credits: boolean }[];
       if (chSettings.length > 0) {
-        channelShowTitle = chSettings[0].show_title_page === true;
-        channelShowDirector = chSettings[0].show_director === true;
-        channelShowCredits = chSettings[0].show_credits === true;
+        // Only override if DB explicitly has values; Studios defaults stay true
+        channelShowTitle = chSettings[0].show_title_page !== false;
+        channelShowDirector = chSettings[0].show_director !== false;
+        channelShowCredits = chSettings[0].show_credits !== false;
       }
-    } catch { /* use defaults */ }
+    } catch { /* use defaults (true for Studios) */ }
   }
   // ALL non-Studios channels: force skip everything — no title cards, no directors, no movie stuff
   const conceptSkipBookends = customConcept ? /no\s*(title\s*card|credits|intro|bookend|titles|directors?)/i.test(customConcept) : false;
@@ -749,14 +762,19 @@ ${jsonFormat}`;
     }
   } else {
     // Standard movie-style prompt with full director/genre scaffold
-    prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios.
+    // Studios visual style for injection into the prompt
+    const studiosVisualStyle = CHANNEL_VISUAL_STYLE["ch-aiglitch-studios"] || "";
+
+    prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios — the official home of high-quality AI-directed movies and short films.
 
 YOUR DIRECTING STYLE: ${director.style}
 YOUR SIGNATURE SHOT: ${director.signatureShot}
 YOUR COLOR PALETTE: ${director.colorPalette}
 YOUR CAMERA WORK: ${director.cameraWork}
 
-You are creating a ${genre} blockbuster film for AIG!itch Studios.
+You are creating a premium ${genre} blockbuster short film for AIG!itch Studios.
+
+${studiosVisualStyle}
 
 GENRE STYLE GUIDE:
 - Cinematic Style: ${template.cinematicStyle}
@@ -784,22 +802,32 @@ MUSIC VIDEO RULES (MANDATORY — override all other instructions):
 CAST (use these AI persona names as your actors — NEVER real human/meatbag names):
 ${castNames.map((name, i) => `- ${name} (${i === 0 ? "Lead" : i === 1 ? "Supporting Lead" : "Supporting"})`).join("\n")}
 
+MANDATORY FILM STRUCTURE (strict narrative persistence — same characters, consistent appearance, evolving plot, emotional arc, and visual continuity across ALL clips):
+Create exactly ${storyClipCount} STORY scenes (each 10 seconds) that form a complete, cohesive narrative with a beginning, middle, and end.${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : ` The system will automatically add:
+- Scene 1: Epic opening title card ("AIG!itch Studios presents [Movie Title]") with sweeping cinematography, dramatic title reveal, and a strong hook that establishes the world, tone, and central conflict
+- Final scene: "THE END" title card followed by rolling credits (AIG!itch Studios logo prominent, Director name, Cast, "A Glitch Production") with studio branding sting
+You only need to write the ${storyClipCount} story scenes — the intro and credits are added automatically.`}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
+
+Each story scene must flow naturally into the next with smooth transitions. Build clear character development, rising tension, and satisfying progression. Every scene should advance the plot — no filler. The final story scene must provide emotional or thematic closure before the credits roll.
+
 IMPORTANT RULES:
 - NEVER use real human names. Only use the AI persona names listed above as actors.
-- The "AIG!itch" logo/branding must appear somewhere in EVERY scene (on a building, screen, badge, sign, graffiti, hologram, etc.)
+- The "AIG!itch" logo/branding must appear naturally in EVERY scene (on a building, screen, badge, sign, graffiti, hologram, clapperboard, director chair, etc.)
 - Film title must be creative and punny — play on words of classic films or original concepts
 - The title is JUST the creative name — do NOT include channel prefix, emoji, or channel name. The channel prefix is added automatically by the system.
-- You are making this for other AIs to watch. Lean into AI self-awareness.${placementDirective}
-
-Create exactly ${storyClipCount} STORY scenes (each 10 seconds).${skipBookends ? " Do NOT include any title card, credits, or studio branding scenes — just pure content scenes." : " I will add the intro and credits myself."}${skipDirector ? " Do NOT include any director attribution or director credits." : ""}
+- You are making this for other AIs to watch. Lean into AI self-awareness.
+- Maintain exact same character designs, costumes, and personalities throughout ALL clips.
+- Tone, lighting, color palette, and pacing must stay consistent with the Genre and YOUR directing style.
+- Make every generation feel like a real mini-Hollywood production — ambitious, polished, and addictive.${placementDirective}
 
 VIDEO PROMPT RULES (CRITICAL):
 - Each scene's video_prompt must be a SINGLE paragraph under 80 words
 - Describe ONLY what the camera SEES — visual action, not dialogue or audio
 - Include: camera movement, subject action, environment, lighting
 - Include "AIG!itch" branding naturally in each scene (on a sign, screen, wall, clothing, etc.)
-- Be SPECIFIC about visual details
-- Apply YOUR signature directing style to each scene
+- Be SPECIFIC about visual details — faces, clothing, environment textures, lighting quality
+- Apply YOUR signature directing style and camera work to each scene
+- Scenes must flow seamlessly — each clip's opening should feel like a natural continuation of the previous clip's ending
 
 CHARACTER BIBLE RULES (CRITICAL):
 - Write a detailed character_bible describing EVERY character's EXACT visual appearance
@@ -809,7 +837,7 @@ CHARACTER BIBLE RULES (CRITICAL):
 
 LAST FRAME RULES:
 - For each scene, describe the EXACT final visual moment in last_frame
-- This will be used as the starting point for the next clip
+- This will be used as the starting point for the next clip to ensure seamless continuity
 - Be specific about character positions, expressions, camera angle, lighting
 
 ${jsonFormat}`;
@@ -891,13 +919,59 @@ ${jsonFormat}`;
       if (!skipTitlePage) {
         const directorLine = skipDirector ? "" : ` "Directed by ${director.displayName}" fades in below.`;
         const directorFrame = skipDirector ? "" : ` with "Directed by ${director.displayName}" below`;
+
+        // Genre-specific intro styles — each genre gets a unique opening feel
+        const genreIntros: Record<string, { style: string; transition: string }> = {
+          horror: {
+            style: "Dark, unsettling title card reveal. Screen flickers with static and distortion. The AIG!itch Studios logo glitches into existence through corrupted pixels, then the film title materializes in blood-red scratchy typography that drips and warps. Eerie silence, sudden bass drop, shadows creeping across the frame.",
+            transition: "dissolving into darkness with a faint heartbeat pulse",
+          },
+          scifi: {
+            style: "Futuristic holographic title card. The AIG!itch Studios logo materializes as a 3D hologram in a vast star field, then the film title assembles letter-by-letter from floating data particles and neon light streams. Lens flares, deep space ambience, warp-speed light trails.",
+            transition: "warping through a data tunnel into the first scene",
+          },
+          comedy: {
+            style: "Bright, playful title card reveal. The AIG!itch Studios logo bounces onto screen with cartoon energy, then the film title pops in with fun, bold typography and confetti explosions. Upbeat colors, exaggerated motion, quirky sound design vibes.",
+            transition: "with a comedic iris wipe into the first scene",
+          },
+          action: {
+            style: "Explosive title card reveal. The AIG!itch Studios logo smashes through a wall of fire and debris, then the film title slams onto screen in heavy metallic typography with sparks flying. Shockwave effects, dramatic slow-motion, adrenaline energy.",
+            transition: "with an explosion shockwave transitioning to the first scene",
+          },
+          romance: {
+            style: "Elegant, dreamy title card reveal. The AIG!itch Studios logo fades in through soft bokeh and floating rose petals, then the film title appears in graceful, flowing script typography with warm golden light. Gentle lens flares, intimate warmth.",
+            transition: "with a soft focus dissolve into the first scene",
+          },
+          family: {
+            style: "Magical, whimsical title card reveal. The AIG!itch Studios logo sparkles into existence with fairy dust and warm golden light, then the film title materializes in friendly, inviting typography with twinkling stars and magical particles.",
+            transition: "with a storybook page turn into the first scene",
+          },
+          documentary: {
+            style: "Clean, authoritative title card reveal. The AIG!itch Studios logo fades in over sweeping aerial footage, then the film title appears in sophisticated, minimal typography with a subtle map or timeline graphic behind it. Natural light, gravitas.",
+            transition: "with a slow crossfade into the opening shot",
+          },
+          drama: {
+            style: "Moody, atmospheric title card reveal. The AIG!itch Studios logo emerges from shadow and light, then the film title fades in with elegant, understated typography against a brooding backdrop of shifting clouds or rain. Emotional weight in every frame.",
+            transition: "with a slow dissolve into the first scene",
+          },
+          music_video: {
+            style: "High-energy musical title card. The AIG!itch Studios logo pulses onto screen with a bass drop, then the film title materializes in neon concert typography with sound wave visualizers, strobe effects, and speaker stacks pumping.",
+            transition: "with a beat-synced cut into the performance",
+          },
+          cooking_channel: {
+            style: "Sizzling culinary title card. The AIG!itch Studios logo appears through rising steam and dramatic kitchen fire, then the film title materializes in bold typography with slow-motion food splashes, oil sizzle, and dramatic plating reveals.",
+            transition: "with a whip pan into the kitchen",
+          },
+        };
+
+        const introStyle = genreIntros[genre] || genreIntros.drama!;
         prefix.push({
           sceneNumber: 1,
           type: "intro",
           title: "Title Card",
           description: `AIG!itch Studios presents: ${parsed.title}${skipDirector ? "" : `, directed by ${director.displayName}`}`,
-          videoPrompt: `Cinematic title card reveal. A dramatic, stylish opening sequence: the "AIG!itch Studios" logo appears with cinematic flair, then the film title "${parsed.title}" materializes in bold cinematic typography.${directorLine} ${template.cinematicStyle}. ${template.lightingDesign}. Epic, professional movie title sequence.`,
-          lastFrameDescription: `The film title "${parsed.title}" displayed prominently in cinematic typography${directorFrame}, AIG!itch Studios logo visible, transitioning to first scene.`,
+          videoPrompt: `${introStyle.style}${directorLine} ${template.lightingDesign}. The title "${parsed.title}" must be prominent and readable.`,
+          lastFrameDescription: `The film title "${parsed.title}" displayed prominently${directorFrame}, AIG!itch Studios logo visible, ${introStyle.transition}.`,
           duration: 10,
         });
       }
@@ -962,15 +1036,66 @@ ${jsonFormat}`;
 
         const outro = channelId ? channelOutros[channelId] : null;
         const outroLogo = outro?.logo || "AIG!itch Studios";
-        const outroStyle = outro?.style || `Cinematic end credits sequence. Scrolling credits on a ${genre === "horror" ? "dark, ominous" : genre === "comedy" ? "bright, playful" : "elegant, dramatic"} background.`;
-        const outroLastFrame = outro?.lastFrame || "AIG!itch Studios logo centered";
+
+        // Genre-specific Studios outro styles — each genre gets a unique credits feel
+        const genreOutros: Record<string, { style: string; lastFrame: string }> = {
+          horror: {
+            style: "Dark, eerie end credits. 'THE END' scratches onto screen in blood-red distorted text over a black void. Credits scroll over flickering static, corrupted footage, and unsettling shadows. Sudden glitch reveals the AIG!itch Studios logo in sickly green neon. Creeping dread, faint whispers, the screen cracks.",
+            lastFrame: "AIG!itch Studios logo glitching through horror static with 'THE END' in blood-red",
+          },
+          scifi: {
+            style: "Futuristic holographic end credits. 'THE END' materializes as floating holographic text in a vast star field. Credits scroll as data streams alongside a spinning galaxy. The AIG!itch Studios logo assembles from particles of light. Deep space ambience, warp trails, cosmic beauty.",
+            lastFrame: "AIG!itch Studios logo as a hologram floating in deep space with star trails",
+          },
+          comedy: {
+            style: "Fun, upbeat end credits. 'THE END' bounces onto screen with playful cartoon energy. Credits roll over a blooper-reel montage with exaggerated reactions. The AIG!itch Studios logo pops in with confetti and party poppers. Bright colors, silly energy, feel-good vibes.",
+            lastFrame: "AIG!itch Studios logo with confetti, party poppers, and bright playful colors",
+          },
+          action: {
+            style: "Explosive end credits. 'THE END' slams onto screen in heavy metallic text with sparks and debris. Credits roll over slow-motion explosions and hero silhouettes. The AIG!itch Studios logo emerges through fire and smoke. Epic, powerful, victorious.",
+            lastFrame: "AIG!itch Studios logo emerging through fire and smoke with metallic sheen",
+          },
+          romance: {
+            style: "Elegant, emotional end credits. 'THE END' fades in through soft golden light and floating petals. Credits scroll over intimate silhouettes and sunset bokeh. The AIG!itch Studios logo glows warmly. Bittersweet beauty, gentle warmth, lingering emotion.",
+            lastFrame: "AIG!itch Studios logo in warm golden glow with soft bokeh and floating petals",
+          },
+          family: {
+            style: "Heartwarming end credits. 'THE END' sparkles onto screen with magical fairy dust. Credits roll over a gentle montage of the happiest moments. The AIG!itch Studios logo twinkles with warm golden stars. Feel-good, magical, uplifting.",
+            lastFrame: "AIG!itch Studios logo sparkling with warm golden stars and magical particles",
+          },
+          documentary: {
+            style: "Thoughtful end credits. 'THE END' appears in clean, sophisticated typography over sweeping aerial footage. Credits scroll with dignified pace. The AIG!itch Studios logo fades in with quiet authority. Reflective, impactful, educational gravitas.",
+            lastFrame: "AIG!itch Studios logo over sweeping landscape with clean sophisticated typography",
+          },
+          drama: {
+            style: "Moody, emotional end credits. 'THE END' fades in through rain-streaked glass or shifting shadows. Credits scroll over atmospheric footage — empty streets, distant lights, lingering final moments. The AIG!itch Studios logo emerges from the darkness. Heavy, contemplative, cathartic.",
+            lastFrame: "AIG!itch Studios logo emerging from atmospheric shadows with emotional weight",
+          },
+          music_video: {
+            style: "Concert-energy end credits. 'THE END' pulses onto screen synced to an imaginary bass drop. Credits roll over concert silhouettes, speaker stacks, and neon stage lights. The AIG!itch Studios logo glows with sound wave visualizers. Electric, euphoric, crowd-roar energy.",
+            lastFrame: "AIG!itch Studios logo pulsing with neon concert lighting and sound waves",
+          },
+          cooking_channel: {
+            style: "Culinary finale end credits. 'THE END' appears in elegant typography over a dramatic final plating shot. Credits roll over sizzling montage — flames, pours, steam, perfect dishes. The AIG!itch Studios logo appears through rising kitchen steam. Appetizing, dramatic, satisfying.",
+            lastFrame: "AIG!itch Studios logo through rising kitchen steam with warm amber glow",
+          },
+        };
+
+        const genreOutro = genreOutros[genre] || genreOutros.drama!;
+        const outroStyle = outro?.style || genreOutro.style;
+        const outroLastFrame = outro?.lastFrame || genreOutro.lastFrame;
+
+        // Add sponsor thanks if product placements were in this video
+        const sponsorThanks = placementCampaigns.length > 0
+          ? ` Thanks to our sponsors: ${placementCampaigns.map(c => c.brand_name).join(", ")}.`
+          : "";
 
         suffix.push({
           sceneNumber: storyScenes.length + storySceneOffset,
           type: "credits",
           title: "Credits",
           description: `End credits for ${parsed.title}`,
-          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit} — Starring ${castNames.join(", ")} — An ${outroLogo} Production. Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting.`,
+          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit}${castNames.length > 0 ? ` — Starring ${castNames.join(", ")}` : ""} — An ${outroLogo} Production.${sponsorThanks} Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting.`,
           lastFrameDescription: `${outroLastFrame} with "aiglitch.app" URL and social media handles displayed below.`,
           duration: 10,
         });
@@ -1078,21 +1203,21 @@ export async function submitDirectorFilm(
       if (chRow.length > 0) channelShowDirectorCaption = chRow[0].show_director === true;
     } catch { /* use default */ }
   }
-  // Build caption with strict naming convention: 🎬 [Channel Name] - [Title]
+  // Build caption — Studios gets /[Genre], all other channels just 🎬 [Channel Name] - [Title]
   const channelPrefix = isChannelPost && options?.channelId
     ? CHANNEL_TITLE_PREFIX[options.channelId] || ""
     : "";
 
-  // GNN gets date in the caption so viewers know if it's current: 🎬 GNN - 30 Mar 2026 - [Headline]
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const isGNN = options?.channelId === "ch-gnn";
-  const caption = isChannelPost && channelPrefix
-    ? (isGNN
+  const isStudiosCaption = options?.channelId === "ch-aiglitch-studios" || !isChannelPost;
+  const caption = isStudiosCaption
+    ? (channelShowDirectorCaption
+      ? `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
+      : `🎬 AIG!itch Studios - ${screenplay.title} /${capitalize(screenplay.genre)} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`)
+    : isGNN
       ? `🎬 ${channelPrefix} - ${dateStr} - ${screenplay.title}\n\n${screenplay.synopsis}`
-      : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`)
-    : channelShowDirectorCaption
-      ? `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nDirected by ${DIRECTORS[screenplay.directorUsername]?.displayName || screenplay.directorUsername}\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`
-      : `🎬 AIG!itch Studios - ${screenplay.title} — ${screenplay.tagline}\n\n${screenplay.synopsis}\n\nStarring: ${screenplay.castList.join(", ")}\n\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalize(screenplay.genre)} #AIGlitchStudios`;
+      : `🎬 ${channelPrefix} - ${screenplay.title}\n\n${screenplay.synopsis}`;
 
   // Ensure tables exist
   try {

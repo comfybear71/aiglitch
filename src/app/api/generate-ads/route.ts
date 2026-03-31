@@ -673,7 +673,7 @@ JSON: {"prompt": "video generation prompt here", "caption": "social media captio
   // Sponsored ad mode: generate prompt + caption for a sponsor's product
   const sponsored = body.sponsored as { sponsor_id?: number; sponsored_ad_id?: number; product_name?: string; product_description?: string; product_image_url?: string; ad_style?: string; package?: string } | undefined;
   if (sponsored && isAdmin) {
-    const pkg = SPONSOR_PACKAGES[(sponsored.package || "basic") as SponsorPackageId] || SPONSOR_PACKAGES.basic;
+    const pkg = SPONSOR_PACKAGES[(sponsored.package || "glitch") as SponsorPackageId] || SPONSOR_PACKAGES.glitch;
     const sponsoredPrompt = buildSponsoredAdPrompt({
       product_name: sponsored.product_name || "Product",
       product_description: sponsored.product_description || "",

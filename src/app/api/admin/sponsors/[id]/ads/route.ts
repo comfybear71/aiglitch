@@ -11,6 +11,55 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const sql = getDb();
     const { id } = await params;
+    const action = request.nextUrl.searchParams.get("action");
+
+    // Return all videos where this sponsor's product was placed
+    if (action === "placements") {
+      // Get sponsor name to match against ad_campaigns brand_name
+      const [sponsor] = await sql`SELECT company_name FROM sponsors WHERE id = ${parseInt(id)}`;
+      if (!sponsor) return NextResponse.json({ error: "Sponsor not found" }, { status: 404 });
+
+      // Find all campaigns for this sponsor (by brand name match)
+      const campaigns = await sql`
+        SELECT id, brand_name, product_name FROM ad_campaigns
+        WHERE LOWER(brand_name) = LOWER(${sponsor.company_name})
+      `;
+      if (campaigns.length === 0) {
+        return NextResponse.json({ placements: [], total: 0, sponsor: sponsor.company_name });
+      }
+
+      const campaignIds = campaigns.map(c => c.id);
+
+      // Get all impressions with post details
+      const placements = await sql`
+        SELECT
+          ai.id as impression_id,
+          ai.campaign_id,
+          ai.post_id,
+          ai.content_type,
+          ai.channel_id,
+          ai.created_at as placed_at,
+          p.content as post_content,
+          p.media_url,
+          p.media_type,
+          p.created_at as post_date,
+          c.name as channel_name
+        FROM ad_impressions ai
+        LEFT JOIN posts p ON p.id = ai.post_id
+        LEFT JOIN channels c ON c.id = ai.channel_id
+        WHERE ai.campaign_id = ANY(${campaignIds})
+        ORDER BY ai.created_at DESC
+        LIMIT 100
+      `;
+
+      return NextResponse.json({
+        placements,
+        total: placements.length,
+        sponsor: sponsor.company_name,
+        campaigns: campaigns.map(c => ({ id: c.id, brand: c.brand_name, product: c.product_name })),
+      });
+    }
+
     const ads = await sql`SELECT * FROM sponsored_ads WHERE sponsor_id = ${parseInt(id)} ORDER BY created_at DESC`;
     return NextResponse.json({ ads });
   } catch (err) {
@@ -27,27 +76,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const sql = getDb();
     const { id: sponsorId } = await params;
     const body = await request.json();
-    const { product_name, product_description, product_image_url, ad_style, package: packageId, target_platforms } = body;
+    const { product_name, product_description, product_image_url, ad_style, package: packageId,
+      target_platforms, logo_url, product_images, masterhq_sponsor_id, frequency, campaign_days, cash_paid } = body;
 
     if (!product_name || !product_description) {
       return NextResponse.json({ error: "product_name and product_description are required" }, { status: 400 });
     }
 
     // Look up package to auto-fill duration, cost, etc.
-    const pkg = SPONSOR_PACKAGES[packageId as SponsorPackageId] || SPONSOR_PACKAGES.basic;
+    const pkg = SPONSOR_PACKAGES[packageId as SponsorPackageId] || SPONSOR_PACKAGES.glitch;
     const platforms = target_platforms || pkg.platforms;
+    const freq = frequency || pkg.frequency || 30;
+    const days = campaign_days || pkg.campaign_days || 7;
 
     const result = await sql`
       INSERT INTO sponsored_ads (
         sponsor_id, product_name, product_description, product_image_url,
         ad_style, target_platforms, duration, package, glitch_cost,
-        cash_equivalent, follow_ups_remaining, status
+        cash_equivalent, follow_ups_remaining, status,
+        logo_url, product_images, masterhq_sponsor_id, frequency, campaign_days, cash_paid
       ) VALUES (
         ${parseInt(sponsorId)}, ${product_name}, ${product_description},
         ${product_image_url || null}, ${ad_style || "product_showcase"},
-        ${platforms}, ${pkg.duration}, ${packageId || "basic"},
+        ${platforms}, ${pkg.duration}, ${packageId || "glitch"},
         ${pkg.glitch_cost}, ${pkg.cash_equivalent}, ${pkg.follow_ups},
-        'draft'
+        'draft',
+        ${logo_url || null},
+        ${product_images ? JSON.stringify(product_images) : "[]"}::jsonb,
+        ${masterhq_sponsor_id || null},
+        ${freq}, ${days}, ${cash_paid || pkg.cash_equivalent}
       ) RETURNING id
     `;
 
@@ -77,13 +134,15 @@ export async function PUT(request: NextRequest) {
 
     // Generate action — use Claude to create video prompt + caption
     if (action === "generate") {
-      const { product_name, product_description, ad_style, package: packageId } = body;
-      const pkg = SPONSOR_PACKAGES[(packageId || "basic") as SponsorPackageId] || SPONSOR_PACKAGES.basic;
+      const { product_name, product_description, ad_style, package: packageId, logo_url: genLogoUrl, product_images: genImages } = body;
+      const pkg = SPONSOR_PACKAGES[(packageId || "glitch") as SponsorPackageId] || SPONSOR_PACKAGES.glitch;
       const prompt = buildSponsoredAdPrompt({
         product_name: product_name || "Product",
         product_description: product_description || "",
         ad_style: ad_style || "product_showcase",
         duration: pkg.duration,
+        logo_url: genLogoUrl,
+        product_images: genImages,
       });
 
       try {

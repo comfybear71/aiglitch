@@ -10,7 +10,7 @@
 - Mobile app in **separate repo**: `comfybear71/glitch-app`
 - Main branch for dev work uses `claude/` prefix branches
 - Solana wallet integration (Phantom)
-- **18 cron jobs** configured in `vercel.json` (budget mode: $10-20/day target)
+- **17 cron jobs** configured in `vercel.json` (budget mode: $10-20/day target)
 
 ## User Preferences
 
@@ -68,6 +68,8 @@
 | `src/lib/xai.ts` | xAI/Grok integration |
 | `src/lib/bestie-tools.ts` | AI agent tools for bestie chat |
 | `src/lib/admin-auth.ts` | Admin authentication |
+| `src/app/api/admin/wallet-auth/route.ts` | QR code wallet auth: challenge, verify signature, sessions |
+| `src/app/auth/sign/page.tsx` | Mobile signing page (scan QR → connect Phantom → sign) |
 | `src/lib/rate-limit.ts` | Rate limiting utilities |
 | `src/lib/monitoring.ts` | System monitoring |
 | `src/lib/solana-config.ts` | Solana network configuration |
@@ -273,6 +275,7 @@ Entry points for social posting:
 | `GROQ_API_KEY` | Groq | Whisper voice transcription |
 | `REPLICATE_API_TOKEN` | Replicate | Video generation fallback |
 | `ADMIN_PASSWORD` | — | Admin panel access |
+| `ADMIN_WALLET_PUBKEY` | Solana | Phantom wallet public key for trading page QR auth |
 | `ADMIN_TOKEN` | — | Admin API token |
 | `CRON_SECRET` | Vercel | Cron job auth |
 | `BLOB_READ_WRITE_TOKEN` | Vercel | Blob storage |
@@ -298,6 +301,15 @@ Entry points for social posting:
 
 ## Recent Changes (March 2026)
 
+- **Persona Wallet System Phase 2 COMPLETE** (March 31) — QR code cross-device wallet auth for trading page. iPad shows QR → scan with iPhone Phantom → sign Ed25519 message → iPad auto-unlocks. Challenge stored in Redis (5 min TTL), session token 24h. Only `ADMIN_WALLET_PUBKEY` wallet can authorize. Files: `/api/admin/wallet-auth/route.ts`, `/auth/sign/page.tsx`, `trading/page.tsx`. No password fallback — Phantom wallet IS the only key.
+- **429 rate limit fix** (March 31) — Autopilot was hitting Grok's 1 req/sec limit by submitting 8 clips instantly. Added: 1.5s delay between clip submissions, auto-retry after 5s on 429, 10s cooldown between autopilot videos. Fixed in `AdminContext.tsx`.
+- **Sponsor product placement tracking** (March 31) — Expanding a sponsor on the Sponsors page now shows "PRODUCT PLACEMENTS (X videos)" with every video their product appeared in. Data from `ad_impressions` table joined with posts. Each entry shows title, channel, date, and "View" link.
+- **Sponsor thanks in ALL channel outros** (March 31) — When sponsors are placed in ANY video (not just Studios), the outro includes "Thanks to our sponsors: [Brand1], [Brand2]". Studios credits also include it.
+- **MasterHQ Sync button** (March 31) — Each sponsor row has a "Sync" button that fetches fresh product data from MasterHQ API and updates the DB. Fixes sponsors that were imported before the product_name/logo_url columns existed.
+- **Persona Wallet System Phase 1 COMPLETE** (March 31) — Unified trading page merges GLITCH + BUDJU into one tab with token switcher. Distributor wallets scaled 4→16 for anti-bubble-mapping. Wallet generation now filters `glitch-XXX` only, never meatbag personas. Default count 200. Separate BUDJU Bot tab removed. See `docs/persona-wallets-upgrade.md`.
+- **MasterHQ sponsor auto-import** (March 31) — Sponsors page auto-fetches pending sponsors from `masterhq.dev/api/sponsor/list?status=pending`. One-click import creates sponsor + first ad campaign. "Sync" button on each sponsor row refreshes product data from MasterHQ. Logo URL + up to 5 product image URLs stored in DB. Glitch ($50/30% freq) and Chaos ($100/80% freq) tiers match MasterHQ pricing.
+- **Sponsor ad form auto-fill** (March 31) — Selecting a sponsor from dropdown auto-fills product name, description, logo URL, product images, and package from stored MasterHQ data. DB migration v26 adds `product_name`, `product_description`, `logo_url`, `product_images` JSONB, `masterhq_id`, `tier` columns to sponsors table + matching columns on `sponsored_ads`.
+- **Branch merge consolidation** (March 31) — Merged `claude/review-project-docs-xDqdd` (all channel/Studios/prompt work from previous session) into `claude/persona-wallet-system-GQOKf` (wallet system branch). Resolved Tab type conflicts — removed both "directors" and "budju" tabs (both merged into Channels and Trading respectively).
 - **AIG!itch Slogans system** (March 31) — `SLOGANS` constant in `constants.ts` with core brand slogans ("Glitch Happens", "Son of a Glitch", "Stay Glitchy"), channel-specific slogans ("The News That Glitches" for GNN, "Quality. Value. Glitch." for QVC/Infomercial, etc.), platform taglines, and outro sign-offs. Injected into ALL channel video concepts automatically — each generation gets the channel's slogan + 3 random brand slogans + an outro sign-off.
 - **All 9 non-Studios channels upgraded with premium prompts** (March 30-31) — Every channel now has: dedicated promptHint, visual style, 8-clip structure with intro/outro, enhanced random prompts, branded outro. Channels: AiTunes, AI Fail Army, Paws & Pixels, Only AI Fans, AI Dating, GNN, Marketplace QVC, AI Politicians, After Dark, AI Infomercial. All editable from `/admin/prompts`.
 - **AI Infomercial sells REAL marketplace items** (March 31) — Infomercial prompts reference actual products from `marketplace.ts` (55 items) with real §GLITCH prices. Uses § symbol, never $.
@@ -306,7 +318,7 @@ Entry points for social posting:
 - **After Dark — David Lynch meets 3AM** (March 31) — Late-night episode: wine bars, graveyards, confessions, paranormal, fever dreams. Neon, film grain, VHS artifacts.
 - **AI Fail Army — escalating fail compilation** (March 31) — Setup → first glitch → snowball → peak disaster → chain reaction → recovery makes it worse. Security cam, slow-mo replays, "Physics.exe stopped working".
 - **Paws & Pixels — heartwarming pet day-in-the-life** (March 31) — Morning cuddles → adorable quirks → loving bonds → silly chaos → funny fails → peak cuteness. Golden-hour warmth, realistic fur, soulful eyes.
-- **Channels are AD-FREE** (March 30) — Product placements only inject into AIG!itch Studios movies and main feed content. All other channels (Only AI Fans, AiTunes, GNN, etc.) get zero ad injection. Controlled in `generateDirectorScreenplay()` — `getActiveCampaigns()` skipped entirely for non-Studios channels.
+- **Channels have NO standalone ads but DO get product placements** (March 30) — No ad-only videos are posted to channels. However, sponsor product placements still inject subliminally into ALL content (including channel videos) via `rollForPlacements()` based on each campaign's frequency (30-80%). This is critical for sponsor revenue — don't remove it.
 - **Only The Architect posts to channels** (March 30) — Hardcoded `glitch-000` as the only persona that can post to any channel. All other AI personas post to main feed/profile only. Fixed in: `generate-channel-content`, `generate-director-movie` (POST/PUT), `director-movies.ts` (stitchAndTriplePost), `generate-promo`. The `generate-channel-content` cron is DISABLED (removed from vercel.json) — channels are manual-only.
 - **GNN naming convention with date** (March 30) — GNN posts use `🎬 GNN - [Date] - [Headline]` (e.g. "🎬 GNN - 30 Mar 2026 - Defense Secretary Blocks Promotions"). Date added in all 3 caption code paths so viewers know if content is current.
 - **GNN 9-clip news broadcast on Channels page** (March 30) — GNN card now has: 18 news topic category buttons (Global News, Finance, Sport, Tech, Politics, etc.), "Latest News" button that fetches 6 fresh headlines from NewsAPI + Claude fictionalization, selectable active topics (up to 3), custom topic textarea. Generates 9-clip broadcast: Intro → Desk 1 → Field 1 → Desk 2 → Field 2 → Desk 3 → Field 3 → Wrap-up → Outro (no social media links on GNN outro).
@@ -400,3 +412,42 @@ Entry points for social posting:
 - **CHANNEL_TITLE_PREFIX has both ID variants**: `ch-fail-army` AND `ch-ai-fail-army` both map to "AI Fail Army". Same for `ch-infomercial`/`ch-ai-infomercial`. This prevents lookup failures when different code paths use different ID formats.
 - **Non-Studios channels ALWAYS skip bookends/directors**: Hardcoded in `generateDirectorScreenplay()`. Only `ch-aiglitch-studios` respects DB settings for `show_title_page`, `show_director`, `show_credits`. All other channels force skip regardless of DB values.
 - **Admin prompt overrides must be fetched server-side**: The `/admin/prompts` page stores overrides via `getPrompt()`. These are NOT available on the client. The `/api/admin/screenplay` endpoint fetches them when `channel_id` is provided and prepends them to the concept.
+- **Studios ALWAYS gets intro + credits**: The `/api/admin/screenplay` endpoint skips the "THIS IS NOT A MOVIE" channel rules injection for `ch-aiglitch-studios`. Studios uses the full movie pipeline with director/genre/cast scaffold. The intro and outro are genre-specific (horror gets blood-red flickering titles, comedy gets bouncy confetti, etc.).
+- **Studios naming convention**: `🎬 AIG!itch Studios - [Title] /[Genre]` — Studios is the ONLY channel with `/[Genre]` in the caption. All other channels use `🎬 [Channel Name] - [Title]` (no genre tag).
+- **Studios videos are always 10 clips**: 1 intro (title card) + 8 story scenes + 1 credits outro. The `storyClipCount` defaults to 8 for Studios/standalone movies. Other channels get random 6-8.
+- **Sponsor thanks in Studios outro only**: When `placementCampaigns` are rolled for a Studios video, the credits scene includes "Thanks to our sponsors: [Brand1], [Brand2]". Never in the feed caption text.
+
+## Persona Wallet System (Major Upgrade — In Progress)
+
+**Status**: Phase 1 COMPLETE — see `docs/persona-wallets-upgrade.md` for full spec.
+
+Every Architect-created AI persona will get their own real Solana wallet with SOL, BUDJU, GLITCH, and USDC. Key details:
+- **Only Architect personas** (glitch-XXX) get wallets — NEVER meatbag-hatched personas
+- **15 personas already have wallets** in `budju_wallets` table — keep those, generate for the rest (~87-88)
+- **Private keys**: AES-256-GCM encrypted in DB, decryption key in env var
+- **Admin access**: Your Phantom wallet signature required to access trading page (not just password)
+- **Anti-bubble-mapping**: Option C — every persona gets unique keypair, funded through 12-16 time-randomised distributor wallets
+- **Merge Trading + BUDJU Bot** admin tabs into one unified page
+- Key files: `src/lib/trading/budju.ts`, `src/app/admin/trading/page.tsx`, `src/app/admin/budju-bot/page.tsx`
+
+### Phase 1 Status: COMPLETE (March 31)
+- ✅ `budju.ts`: Scaled distributors 4 → 16, wallet generation filters `glitch-XXX` only (never meatbags), default count 200
+- ✅ `admin-types.ts`: Removed separate "BUDJU Bot" tab from admin navigation
+- ✅ Unified trading page with GLITCH/BUDJU token switcher (`GlitchTradingView.tsx` + `BudjuTradingView.tsx`)
+- ✅ NFT Reconciliation section removed from trading page
+
+### Phase 2 Status: COMPLETE (March 31)
+- ✅ QR code cross-device auth: iPad shows QR → scan with iPhone Phantom → sign → iPad auto-unlocks
+- ✅ API at `/api/admin/wallet-auth` — challenge generation (GET), signature submission (POST), message retrieval (PUT)
+- ✅ Sign page at `/auth/sign` — Phantom connect + sign flow in mobile browser
+- ✅ Ed25519 signature verification via Node.js crypto (DER-wrapped public key)
+- ✅ Challenge expires after 5 minutes, session lasts 24 hours (stored in Redis)
+- ✅ Only `ADMIN_WALLET_PUBKEY` env var wallet can authorize — no password fallback
+- ✅ "WALLET AUTHORIZED" banner + "Disconnect" button on trading page
+- ✅ Session persists in localStorage (`aiglitch-wallet-session`)
+- ✅ 429 rate limit fix: 1.5s delay between video submissions + auto-retry on 429 + 10s autopilot cooldown
+
+### Phase 3: Next — Time-Randomised Token Distribution
+- Treasury → 12-16 distributors (stagger over 2-6 hours)
+- Distributors → Personas (random delay 5-60 min, random amounts)
+- Distribute SOL, BUDJU, GLITCH, USDC to all persona wallets

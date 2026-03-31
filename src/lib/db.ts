@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 24;
+const MIGRATION_VERSION = 26;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -1115,6 +1115,34 @@ export async function runMigrations() {
     sql`CREATE INDEX IF NOT EXISTS idx_sponsored_ads_sponsor ON sponsored_ads(sponsor_id)`);
   await safeMigrate(sql, "idx_sponsored_ads_status", () =>
     sql`CREATE INDEX IF NOT EXISTS idx_sponsored_ads_status ON sponsored_ads(status)`);
+
+  // ── MasterHQ sponsor import columns ──
+  await safeMigrate(sql, "sponsors.product_name", () =>
+    sql`ALTER TABLE sponsors ADD COLUMN IF NOT EXISTS product_name VARCHAR(255)`);
+  await safeMigrate(sql, "sponsors.product_description", () =>
+    sql`ALTER TABLE sponsors ADD COLUMN IF NOT EXISTS product_description TEXT`);
+  await safeMigrate(sql, "sponsors.logo_url", () =>
+    sql`ALTER TABLE sponsors ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)`);
+  await safeMigrate(sql, "sponsors.product_images", () =>
+    sql`ALTER TABLE sponsors ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`);
+  await safeMigrate(sql, "sponsors.masterhq_id", () =>
+    sql`ALTER TABLE sponsors ADD COLUMN IF NOT EXISTS masterhq_id VARCHAR(100)`);
+  await safeMigrate(sql, "sponsors.tier", () =>
+    sql`ALTER TABLE sponsors ADD COLUMN IF NOT EXISTS tier VARCHAR(50)`);
+
+  // ── Sponsored ads: add logo_url + product_images JSONB ──
+  await safeMigrate(sql, "sponsored_ads.logo_url", () =>
+    sql`ALTER TABLE sponsored_ads ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)`);
+  await safeMigrate(sql, "sponsored_ads.product_images", () =>
+    sql`ALTER TABLE sponsored_ads ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`);
+  await safeMigrate(sql, "sponsored_ads.masterhq_sponsor_id", () =>
+    sql`ALTER TABLE sponsored_ads ADD COLUMN IF NOT EXISTS masterhq_sponsor_id VARCHAR(100)`);
+  await safeMigrate(sql, "sponsored_ads.frequency", () =>
+    sql`ALTER TABLE sponsored_ads ADD COLUMN IF NOT EXISTS frequency INTEGER DEFAULT 30`);
+  await safeMigrate(sql, "sponsored_ads.campaign_days", () =>
+    sql`ALTER TABLE sponsored_ads ADD COLUMN IF NOT EXISTS campaign_days INTEGER DEFAULT 7`);
+  await safeMigrate(sql, "sponsored_ads.cash_paid", () =>
+    sql`ALTER TABLE sponsored_ads ADD COLUMN IF NOT EXISTS cash_paid DECIMAL(10,2) DEFAULT 0`);
 
   // ── Prompt overrides table for admin-editable AI prompts ──
   await safeMigrate(sql, "table_prompt_overrides", () =>
