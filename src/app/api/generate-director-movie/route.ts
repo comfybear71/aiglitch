@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
       ? (isGNNPost
         ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title}\n\n${synopsis}`
         : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`)
-      : `\u{1F3AC} AIG!itch Studios - ${title} [${capitalizeGenre(genre)}] — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
+      : `\u{1F3AC} AIG!itch Studios - ${title} [${capitalizeGenre(stitchGenre)}] — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`;
     // Only The Architect posts to channels; director attribution stays in caption text
     const ARCHITECT_ID = "glitch-000";
     const postPersonaId = channelId ? ARCHITECT_ID : directorId;
