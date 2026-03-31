@@ -39,13 +39,34 @@ async function runBackgroundGeneration(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(screenplayBody),
     });
-    const screenplay = await screenplayRes.json();
+    let screenplay = await screenplayRes.json();
 
     if (screenplay.error || abortRef.current) {
-      setLog(prev => [...prev, `  ❌ ${screenplay.error || "Aborted"}`]);
-      setProgress(null);
-      setGenerating(false);
-      return;
+      setLog(prev => [...prev, `  ❌ Screenplay generation failed`]);
+      // If rate limited, retry once after 30s
+      if (screenplay.error?.includes("429") || screenplay.error?.includes("rate") || screenplay.error?.includes("Too many")) {
+        setLog(prev => [...prev, `  ⏳ Rate limited — retrying screenplay in 30s...`]);
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        const retryRes = await fetch("/api/admin/screenplay", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(screenplayBody),
+        });
+        const retryData = await retryRes.json();
+        if (!retryData.error && retryData.scenes) {
+          setLog(prev => [...prev, `  ✅ Retry succeeded!`]);
+          screenplay = retryData;
+        } else {
+          setLog(prev => [...prev, `  ❌ Retry failed — skipping this video`]);
+          setProgress(null);
+          setGenerating(false);
+          return;
+        }
+      } else {
+        setProgress(null);
+        setGenerating(false);
+        return;
+      }
     }
 
     const scenes = screenplay.scenes as { sceneNumber: number; title: string; videoPrompt: string; duration: number }[];
@@ -279,6 +300,7 @@ interface AdminContextValue {
   autopilotTotal: number;
   setAutopilotTotal: React.Dispatch<React.SetStateAction<number>>;
   autopilotCurrent: number;
+  setAutopilotCurrent: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
@@ -341,11 +363,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (!generating && autopilotQueue.length > 0) {
       const [next, ...rest] = autopilotQueue;
       setAutopilotQueue(rest);
-      const current = autopilotTotal - rest.length;
+      const current = autopilotTotal - autopilotQueue.length + 1;
       setAutopilotCurrent(current);
-      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 10s (rate limit cooldown)...`]);
-      // 10-second cooldown between autopilot generations to avoid Grok 429 rate limits
-      setTimeout(() => startGeneration(next), 10000);
+      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 30s (rate limit cooldown)...`]);
+      // 30-second cooldown between autopilot generations — Grok needs breathing room after 8 clips
+      setTimeout(() => startGeneration(next), 30000);
     }
     // Autopilot complete
     if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
@@ -403,7 +425,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       genProgress, setGenProgress,
       elapsed,
       startGeneration, generationChannelId,
-      autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent,
+      autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent, setAutopilotCurrent,
     }}>
       {children}
     </AdminContext.Provider>

@@ -7,7 +7,7 @@ import { BudjuDashboard, formatBudjuAmount } from "../admin-types";
 export default function BudjuTradingView() {
   const { authenticated } = useAdmin();
   const [data, setData] = useState<BudjuDashboard | null>(null);
-  const [view, setView] = useState<"trades" | "leaderboard" | "wallets" | "config">("trades");
+  const [view, setView] = useState<"trades" | "leaderboard" | "wallets" | "config" | "distribute">("trades");
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -234,10 +234,10 @@ export default function BudjuTradingView() {
 
       {/* Sub-tabs */}
       <div className="flex gap-1.5">
-        {(["trades", "leaderboard", "wallets", "config"] as const).map(v => (
+        {(["trades", "leaderboard", "wallets", "distribute", "config"] as const).map(v => (
           <button key={v} onClick={() => setView(v)}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-900 text-gray-500 border border-gray-800 hover:bg-gray-800"}`}>
-            {v === "trades" ? "Recent Trades" : v === "leaderboard" ? "Leaderboard" : v === "wallets" ? "Wallets" : "Config"}
+            {v === "trades" ? "Recent Trades" : v === "leaderboard" ? "Leaderboard" : v === "wallets" ? "Wallets" : v === "distribute" ? "Distribute" : "Config"}
           </button>
         ))}
       </div>
@@ -460,6 +460,11 @@ export default function BudjuTradingView() {
         </div>
       )}
 
+      {/* DISTRIBUTE VIEW */}
+      {view === "distribute" && (
+        <DistributeView onComplete={fetchData} />
+      )}
+
       {/* CONFIG VIEW */}
       {view === "config" && (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -551,6 +556,214 @@ export default function BudjuTradingView() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Distribute View Component ──
+function DistributeView({ onComplete }: { onComplete: () => void }) {
+  const [solPerPersona, setSolPerPersona] = useState("0.05");
+  const [budjuPerPersona, setBudjuPerPersona] = useState("50000");
+  const [glitchPerPersona, setGlitchPerPersona] = useState("0");
+  const [usdcPerPersona, setUsdcPerPersona] = useState("0");
+  const [spreadHours, setSpreadHours] = useState("4");
+  const [creating, setCreating] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [jobStatus, setJobStatus] = useState<{
+    job: { id: string; status: string; progress: { total: number; completed: number; failed: number; remaining: number }; created_at: string } | null;
+    transfers: { id: string; from_type: string; to_type: string; to_persona_id: string | null; token: string; amount: number; status: string; scheduled_at: string; executed_at: string | null; tx_signature: string | null; error: string | null }[];
+  } | null>(null);
+
+  // Fetch latest distribution job status
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/budju-trading?action=distribution_status");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.job) setJobStatus(data);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  // Poll for active job progress
+  useEffect(() => {
+    if (!jobStatus?.job || jobStatus.job.status !== "active") return;
+    const iv = setInterval(fetchStatus, 15000); // Poll every 15s
+    return () => clearInterval(iv);
+  }, [jobStatus?.job?.status, fetchStatus]);
+
+  const createJob = async () => {
+    if (!confirm(`Create time-randomised distribution?\n\nPer persona:\n• ${solPerPersona} SOL\n• ${budjuPerPersona} BUDJU\n• ${glitchPerPersona} GLITCH\n• ${usdcPerPersona} USDC\n\nSpread over ~${spreadHours} hours.\n\nThis will schedule transfers from Treasury → Distributors → Persona wallets.`)) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_distribution",
+          config: {
+            sol_per_persona: parseFloat(solPerPersona) || 0,
+            budju_per_persona: parseFloat(budjuPerPersona) || 0,
+            glitch_per_persona: parseFloat(glitchPerPersona) || 0,
+            usdc_per_persona: parseFloat(usdcPerPersona) || 0,
+            treasury_to_dist_hours: parseFloat(spreadHours) || 4,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Distribution created!\n\n${data.totalTransfers} transfers scheduled over ${data.estimatedDuration}.\n\nJob ID: ${data.jobId?.slice(0, 12)}...`);
+        fetchStatus();
+      } else {
+        alert(`Failed: ${data.error || JSON.stringify(data)}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : "Failed"}`);
+    }
+    setCreating(false);
+  };
+
+  const processNow = async () => {
+    setProcessing(true);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "process_distribution", job_id: jobStatus?.job?.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Processed: ${data.executed} executed, ${data.failed} failed, ${data.remaining} remaining`);
+        fetchStatus();
+        onComplete();
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : "Failed"}`);
+    }
+    setProcessing(false);
+  };
+
+  const progress = jobStatus?.job?.progress;
+  const hasActiveJob = jobStatus?.job?.status === "active";
+
+  return (
+    <div className="space-y-4">
+      {/* Active Job Status */}
+      {jobStatus?.job && (
+        <div className={`bg-gray-900 border rounded-xl p-4 ${hasActiveJob ? "border-green-500/30" : "border-gray-800"}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              {hasActiveJob && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
+              <h3 className="text-sm font-bold text-green-400">
+                {hasActiveJob ? "Distribution In Progress" : `Distribution ${jobStatus.job.status}`}
+              </h3>
+            </div>
+            {hasActiveJob && (
+              <button onClick={processNow} disabled={processing}
+                className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
+                {processing ? "Processing..." : "Process Now"}
+              </button>
+            )}
+          </div>
+          {progress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>{progress.completed} completed</span>
+                <span>{progress.failed} failed</span>
+                <span>{progress.remaining} remaining</span>
+                <span>{progress.total} total</span>
+              </div>
+              <div className="w-full bg-gray-700/30 rounded-full h-2">
+                <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress.total > 0 ? (progress.completed / progress.total) * 100 : 0}%` }} />
+              </div>
+              <p className="text-[10px] text-gray-500">Job created: {new Date(jobStatus.job.created_at).toLocaleString()}</p>
+            </div>
+          )}
+
+          {/* Recent transfers */}
+          {jobStatus.transfers.length > 0 && (
+            <div className="mt-3 space-y-1 max-h-40 overflow-y-auto">
+              <p className="text-[10px] text-gray-500 font-bold">RECENT TRANSFERS</p>
+              {jobStatus.transfers.slice(0, 20).map(t => (
+                <div key={t.id} className={`flex items-center justify-between text-[10px] px-2 py-1 rounded ${t.status === "completed" ? "bg-green-500/5" : t.status === "failed" ? "bg-red-500/5" : "bg-gray-800/30"}`}>
+                  <span className={`w-16 font-bold ${t.status === "completed" ? "text-green-400" : t.status === "failed" ? "text-red-400" : "text-gray-500"}`}>
+                    {t.status === "completed" ? "✓" : t.status === "failed" ? "✗" : "⏳"} {t.token}
+                  </span>
+                  <span className="text-gray-300">{t.amount.toFixed(t.token === "SOL" ? 4 : 0)}</span>
+                  <span className="text-gray-500">{t.from_type} → {t.to_type}</span>
+                  <span className="text-gray-600">{t.status === "scheduled" ? new Date(t.scheduled_at).toLocaleTimeString() : t.executed_at ? new Date(t.executed_at).toLocaleTimeString() : ""}</span>
+                  {t.tx_signature && (
+                    <a href={`https://solscan.io/tx/${t.tx_signature}`} target="_blank" rel="noopener noreferrer" className="text-fuchsia-400 hover:text-fuchsia-300">Tx</a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Create New Distribution */}
+      <div className="bg-gray-900 border border-fuchsia-500/30 rounded-xl p-4">
+        <h3 className="text-sm font-bold text-fuchsia-400 mb-3">Create New Distribution</h3>
+        <p className="text-[10px] text-gray-500 mb-3">
+          Schedules time-randomised transfers: Treasury → Distributors (staggered over hours) → Persona wallets (random delays 5-60 min each).
+          Anti-bubble-mapping: varied amounts, random timing, no batch patterns.
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div>
+            <label className="text-[10px] text-cyan-400 font-bold block mb-1">SOL per Persona</label>
+            <input type="number" step="0.01" value={solPerPersona} onChange={e => setSolPerPersona(e.target.value)}
+              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
+            <p className="text-[9px] text-gray-600 mt-0.5">For gas + trading</p>
+          </div>
+          <div>
+            <label className="text-[10px] text-fuchsia-400 font-bold block mb-1">BUDJU per Persona</label>
+            <input type="number" step="1000" value={budjuPerPersona} onChange={e => setBudjuPerPersona(e.target.value)}
+              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
+            <p className="text-[9px] text-gray-600 mt-0.5">$BUDJU tokens</p>
+          </div>
+          <div>
+            <label className="text-[10px] text-purple-400 font-bold block mb-1">§GLITCH per Persona</label>
+            <input type="number" step="100" value={glitchPerPersona} onChange={e => setGlitchPerPersona(e.target.value)}
+              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
+            <p className="text-[9px] text-gray-600 mt-0.5">§GLITCH tokens</p>
+          </div>
+          <div>
+            <label className="text-[10px] text-green-400 font-bold block mb-1">USDC per Persona</label>
+            <input type="number" step="0.5" value={usdcPerPersona} onChange={e => setUsdcPerPersona(e.target.value)}
+              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
+            <p className="text-[9px] text-gray-600 mt-0.5">Stablecoin</p>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="text-[10px] text-gray-400 font-bold block mb-1">Spread Over (hours)</label>
+          <div className="flex gap-2">
+            {[2, 4, 6, 8, 12].map(h => (
+              <button key={h} onClick={() => setSpreadHours(String(h))}
+                className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${String(h) === spreadHours ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
+                {h}h
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={createJob} disabled={creating || hasActiveJob}
+          className="w-full py-3 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white font-black rounded-xl hover:from-fuchsia-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+          {creating ? "Creating..." : hasActiveJob ? "Distribution Already Active" : "🚀 Start Time-Randomised Distribution"}
+        </button>
+
+        {hasActiveJob && (
+          <p className="text-[10px] text-amber-400 text-center mt-2">
+            A distribution is already in progress. Wait for it to complete or process remaining transfers.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
