@@ -554,12 +554,32 @@ export default function ChannelPage() {
                   {currentPost.content?.split("\n")[0]?.slice(0, 120)}
                 </Link>
               )}
-              {/* Sponsor thanks — show if present in caption */}
-              {currentPost?.content?.includes("Thanks to our sponsors") && (
-                <p className="text-[10px] text-yellow-400/80 mb-1">
-                  {currentPost.content.split("\n").find((l: string) => l.includes("Thanks to our sponsors"))}
-                </p>
-              )}
+              {/* Sponsor thanks — show with clickable links to sponsor websites */}
+              {currentPost?.content?.includes("Thanks to our sponsors") && (() => {
+                const line = currentPost.content!.split("\n").find((l: string) => l.includes("Thanks to our sponsors")) || "";
+                // Parse "🤝 Thanks to our sponsors: BUDJU https://budju.xyz | FRENCHIE https://togogo.app"
+                const afterColon = line.split(":").slice(1).join(":").trim();
+                const sponsors = afterColon.split("|").map((s: string) => s.trim()).filter(Boolean);
+                return (
+                  <p className="text-[10px] text-yellow-400/80 mb-1">
+                    🤝 Sponsors:{" "}
+                    {sponsors.map((s: string, idx: number) => {
+                      const urlMatch = s.match(/(https?:\/\/\S+)/);
+                      const name = s.replace(/(https?:\/\/\S+)/, "").trim();
+                      return (
+                        <span key={idx}>
+                          {idx > 0 && <span className="text-gray-600"> | </span>}
+                          {urlMatch ? (
+                            <a href={urlMatch[1]} target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:text-yellow-300 underline decoration-yellow-600 hover:decoration-yellow-400">{name || urlMatch[1]}</a>
+                          ) : (
+                            <span>{name}</span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </p>
+                );
+              })()}
 
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] text-gray-500">{channel.subscriber_count} subs</span>
