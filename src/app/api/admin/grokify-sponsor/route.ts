@@ -48,24 +48,33 @@ export async function POST(request: NextRequest) {
   const productImageUrl = (body.productImageUrl || "") as string;
   const productImages = (body.productImages || []) as string[];
   const sceneIndex = (body.sceneIndex || 0) as number;
+  const isOutro = (body.isOutro || false) as boolean;
 
   if (!scenePrompt) {
     return NextResponse.json({ error: "scenePrompt required" }, { status: 400 });
   }
 
-  // Pick the source image — rotate through product images, fall back to logo
+  // Pick source images — logo first for outro, rotate product images for content scenes
   const allImages = [...productImages];
   if (productImageUrl && !allImages.includes(productImageUrl)) allImages.unshift(productImageUrl);
-  if (logoUrl && !allImages.includes(logoUrl)) allImages.push(logoUrl);
-  const sourceImageUrl = allImages.length > 0 ? allImages[sceneIndex % allImages.length] : null;
+  if (logoUrl && !allImages.includes(logoUrl)) {
+    if (isOutro) allImages.unshift(logoUrl); // logo first for outro
+    else allImages.push(logoUrl);
+  }
 
   const sceneContext = scenePrompt.slice(0, 400);
 
-  // Build the edit prompt — tells Grok to place this product into the scene
-  const editPrompt = `Place this ${productName} product subliminally into a cinematic scene. The scene: ${sceneContext}. The product/logo must appear naturally in the environment — on a table, as a poster on a wall, on a billboard, on a phone screen, on packaging, on a neon sign, on clothing, on a coffee cup. The product is NOT the focus — it's just naturally THERE, like product placement in a Hollywood movie. Keep the product recognizable but make it feel like part of the world. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
+  // Different prompts for content scenes vs outro
+  let editPrompt: string;
+  if (isOutro) {
+    // Outro: sponsor logo is PROMINENT — this is the "thank you" acknowledgment
+    editPrompt = `Create a premium sponsor acknowledgment scene. The ${brandName} logo must be PROMINENTLY displayed — large, centered, beautifully lit. The scene behind it: ${sceneContext}. The logo is the HERO of this frame — think awards show sponsor card, Super Bowl sponsor moment, or luxury brand commercial. The ${brandName} branding is elegant, prestigious, unmissable. Dark cinematic background with dramatic lighting on the logo. Neon accents, lens flares, shallow depth of field. 9:16 vertical format.`;
+  } else {
+    // Content scenes: subliminal placement — product is naturally part of the world
+    editPrompt = `Place this ${productName} product subliminally into a cinematic scene. The scene: ${sceneContext}. The product/logo must appear naturally in the environment — on a table, as a poster on a wall, on a billboard, on a phone screen, on packaging, on a neon sign, on clothing, on a coffee cup. The product is NOT the focus — it's just naturally THERE, like product placement in a Hollywood movie. Keep the product recognizable but make it feel like part of the world. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
+  }
 
   // Build the images array — up to 5 source images for multi-reference editing
-  // This lets Grok see multiple product images (logo, product shots) and weave them all in
   const imageRefs = allImages.slice(0, 5).map(url => ({ url }));
 
   console.log(`[grokify-sponsor] ${brandName} — ${imageRefs.length > 0 ? `IMAGE EDIT mode (${imageRefs.length} source image(s))` : "TEXT-TO-IMAGE mode (no source images)"}`);
@@ -163,13 +172,14 @@ export async function POST(request: NextRequest) {
       addRandomSuffix: false,
     });
 
-    console.log(`[grokify-sponsor] Saved: ${blob.url} (${(imgBuffer.length / 1024 / 1024).toFixed(2)}MB) [${sourceImageUrl ? "edited" : "generated"}]`);
+    const mode = imageRefs.length > 0 ? "image-edit" : "text-to-image";
+    console.log(`[grokify-sponsor] Saved: ${blob.url} (${(imgBuffer.length / 1024 / 1024).toFixed(2)}MB) [${mode}${isOutro ? " outro" : ""}]`);
 
     return NextResponse.json({
       grokifiedUrl: blob.url,
       brandName,
       productName,
-      mode: sourceImageUrl ? "image-edit" : "text-to-image",
+      mode,
       sizeMb: (imgBuffer.length / 1024 / 1024).toFixed(2),
     });
   } catch (err) {

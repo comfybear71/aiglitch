@@ -123,25 +123,38 @@ async function runBackgroundGeneration(
         // frame for the video clip, so the product is baked into the scene throughout.
         let sceneImageUrl: string | undefined;
         const isContentScene = i > 0 && i < scenes.length - 1; // skip intro (0) and outro (last)
-        const shouldGrokify = hasSponsorVisuals && isContentScene && maxGrokifyScenes > 0 && grokifiedCount < maxGrokifyScenes;
+        const isOutro = i === scenes.length - 1; // last scene = outro
+        // Grokify content scenes up to the campaign limit, PLUS always Grokify the outro
+        // so sponsors are visually acknowledged with their actual logo in the closing scene
+        const shouldGrokify = hasSponsorVisuals && maxGrokifyScenes > 0 && (
+          (isContentScene && grokifiedCount < maxGrokifyScenes) || isOutro
+        );
 
         if (shouldGrokify) {
+          // For outro: use ALL sponsor campaigns. For content scenes: rotate through them
           const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[] };
-          if (campaign?.visualPrompt) {
-            setLog(prev => [...prev, `  🖼️ Grokifying ${campaign.brandName || "sponsor"} into scene...`]);
+          const allBrandNames = sponsorCampaigns.map((c: { brandName?: string }) => c.brandName).filter(Boolean).join(", ");
+          if (campaign?.visualPrompt || isOutro) {
+            const logLabel = isOutro ? `Sponsor acknowledgment (${allBrandNames})` : (campaign.brandName || "sponsor");
+            setLog(prev => [...prev, `  🖼️ Grokifying ${logLabel} into scene...`]);
             try {
+              // For the outro, override the prompt to show sponsor acknowledgment
+              const outroVisualPrompt = isOutro
+                ? `The ${allBrandNames} brand logo prominently displayed. Sponsor acknowledgment — the logo is the hero, large, centered, beautifully lit, prestigious.`
+                : campaign.visualPrompt || "";
               const grokRes = await fetch("/api/admin/grokify-sponsor", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   scenePrompt: scene.videoPrompt,
-                  visualPrompt: campaign.visualPrompt,
-                  brandName: campaign.brandName || "Sponsor",
-                  productName: campaign.productName || "Product",
+                  visualPrompt: outroVisualPrompt,
+                  brandName: isOutro ? allBrandNames : (campaign.brandName || "Sponsor"),
+                  productName: isOutro ? allBrandNames : (campaign.productName || "Product"),
                   logoUrl: campaign.logoUrl || "",
                   productImageUrl: campaign.productImageUrl || "",
                   productImages: sponsorImages,
                   sceneIndex: i,
+                  isOutro,
                 }),
               });
               const grokData = await grokRes.json();
