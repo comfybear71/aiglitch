@@ -213,7 +213,14 @@ export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
-    body = Object.fromEntries(formData.entries());
+    // Convert ALL FormData entries to strings explicitly (Grok's recommendation)
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        body[key] = value;
+      } else {
+        body[key] = value.toString();
+      }
+    }
     if (typeof body.sceneUrls === "string") {
       try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
     }
@@ -223,6 +230,8 @@ export async function POST(request: NextRequest) {
   } else {
     try { body = await request.json(); } catch { /* empty body */ }
   }
+
+  console.log(`[generate-director-movie] POST body keys: ${Object.keys(body).join(", ")}, sponsorPlacements raw: ${JSON.stringify(body.sponsorPlacements)}`);
 
   // If sceneUrls present, this is a stitch request (from directors page FormData)
   if (body.sceneUrls) {
@@ -237,9 +246,17 @@ export async function POST(request: NextRequest) {
     const castList = (body.castList || []) as string[];
     const channelId = (body.channelId || body.channel_id) as string | undefined;
     const folder = (body.folder) as string | undefined;
+    // Robust sponsorPlacements parsing (handles FormData quirks)
     let sponsorPlacements: string[] = [];
-    try { sponsorPlacements = JSON.parse(String(body.sponsorPlacements || "[]")); } catch { sponsorPlacements = []; }
-    console.log(`[generate-director-movie] STITCH: title="${title}", channelId=${channelId}, sponsorPlacements=${JSON.stringify(sponsorPlacements)}, raw body.sponsorPlacements=${JSON.stringify(body.sponsorPlacements)}, body keys=${Object.keys(body).join(",")}`);
+    const rawPlacements = body.sponsorPlacements || body["sponsorPlacements[]"] || "[]";
+    try {
+      const parsed = typeof rawPlacements === "string" ? JSON.parse(rawPlacements) : rawPlacements;
+      sponsorPlacements = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      console.error("[generate-director-movie] sponsorPlacements parse FAILED, raw:", rawPlacements);
+      sponsorPlacements = [];
+    }
+    console.log(`[generate-director-movie] STITCH: title="${title}", sponsors=${JSON.stringify(sponsorPlacements)}, channelId=${channelId}`);
 
     if (!sceneUrls || !title) {
       return NextResponse.json({ error: "Missing required fields", hint: `Received keys: ${Object.keys(body).join(", ")}` }, { status: 400 });
