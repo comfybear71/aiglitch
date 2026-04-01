@@ -1292,6 +1292,21 @@ export async function runMigrations() {
     await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify(allProductImages)}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
   });
 
+  // ── Sync ALL sponsors' images to their ad campaigns (product_images array) ──
+  await safeMigrate(sql, "sync_sponsor_images_to_campaigns_v27b", async () => {
+    try { await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`; } catch { /* exists */ }
+    const sponsors = await sql`SELECT company_name, logo_url, product_images FROM sponsors WHERE product_images IS NOT NULL`;
+    for (const s of sponsors) {
+      const name = s.company_name as string;
+      const images = s.product_images as string[];
+      const logo = s.logo_url as string;
+      if (name && images && images.length > 0) {
+        await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(images)}::jsonb, logo_url = COALESCE(${logo || null}, logo_url) WHERE LOWER(brand_name) = LOWER(${name})`;
+        console.log(`[migrate] Synced ${images.length} images from sponsor "${name}" to ad campaign`);
+      }
+    }
+  });
+
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
     sql`INSERT INTO platform_settings (key, value, updated_at)
