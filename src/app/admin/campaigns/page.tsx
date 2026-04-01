@@ -30,6 +30,7 @@ interface Campaign {
   duration_days: number;
   price_glitch: number;
   frequency: number;
+  grokify_scenes: number;  // how many scenes per video get Grokified (0 = text only)
   impressions: number;
   video_impressions: number;
   image_impressions: number;
@@ -651,11 +652,28 @@ export default function CampaignsPage() {
                 {c.website_url && (
                   <p className="text-[10px] text-cyan-400 mb-1">🌐 {c.website_url}</p>
                 )}
-                <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs">
+                <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs items-center">
                   <span className="text-purple-400">{"\u{1F3AC}"} {c.video_impressions}</span>
                   <span className="text-blue-400">{"\u{1F5BC}"} {c.image_impressions}</span>
                   <span className="text-green-400">{"\u{1F4AC}"} {c.post_impressions}</span>
                   <span className="text-white font-bold">{c.impressions} total</span>
+                  <span className="text-gray-600">|</span>
+                  <span className="text-yellow-400">🖼️ {c.grokify_scenes || 3} Grokify/video</span>
+                  <div className="flex items-center gap-1">
+                    {[0, 1, 2, 3, 4, 5, 6].map(n => (
+                      <button key={n} onClick={async () => {
+                        await fetch("/api/admin/ad-campaigns", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "update", campaign_id: c.id, grokify_scenes: n }),
+                        });
+                        fetchCampaigns();
+                      }}
+                        className={`w-5 h-5 text-[9px] rounded ${(c.grokify_scenes ?? 3) === n ? "bg-yellow-500 text-black font-bold" : "bg-gray-700 text-gray-400 hover:bg-gray-600"}`}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
               {/* Actions */}

@@ -51,6 +51,7 @@ async function ensureSchema() {
     // Add columns that may be missing if tables existed before schema updates
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_image_url TEXT`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS grokify_scenes INTEGER DEFAULT 3`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS video_impressions INTEGER DEFAULT 0`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS image_impressions INTEGER DEFAULT 0`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS post_impressions INTEGER DEFAULT 0`;
@@ -218,7 +219,7 @@ export async function POST(request: NextRequest) {
     const {
       campaign_id, brand_name, product_name, product_emoji, visual_prompt, text_prompt,
       logo_url, product_image_url, website_url, target_channels, target_persona_types,
-      duration_days, price_glitch, frequency, notes,
+      duration_days, price_glitch, frequency, grokify_scenes, notes,
     } = body;
 
     if (!campaign_id) {
@@ -240,6 +241,7 @@ export async function POST(request: NextRequest) {
         duration_days = COALESCE(${duration_days || null}, duration_days),
         price_glitch = COALESCE(${price_glitch || null}, price_glitch),
         frequency = COALESCE(${frequency || null}, frequency),
+        grokify_scenes = COALESCE(${grokify_scenes !== undefined ? grokify_scenes : null}, grokify_scenes),
         notes = COALESCE(${notes || null}, notes),
         updated_at = NOW()
       WHERE id = ${campaign_id}

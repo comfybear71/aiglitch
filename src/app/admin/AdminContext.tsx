@@ -95,10 +95,14 @@ async function runBackgroundGeneration(
     const sponsorCampaigns = screenplay.sponsorCampaigns || [];
     const sponsorImages: string[] = screenplay.sponsorImages || (screenplay.sponsorImageUrl ? [screenplay.sponsorImageUrl] : []);
     const hasSponsorVisuals = sponsorCampaigns.length > 0 && sponsorCampaigns.some((c: { visualPrompt?: string }) => c.visualPrompt);
+    // Max grokify scenes across all campaigns (each campaign controls its own count)
+    const maxGrokifyScenes = Math.max(0, ...sponsorCampaigns.map((c: { grokifyScenes?: number }) => c.grokifyScenes ?? 3));
 
-    if (hasSponsorVisuals) {
-      setLog(prev => [...prev, `  💰 ${sponsors.length} sponsor(s) — product images will be Grokified into scenes`]);
+    if (hasSponsorVisuals && maxGrokifyScenes > 0) {
+      setLog(prev => [...prev, `  💰 ${sponsors.length} sponsor(s) — up to ${maxGrokifyScenes} scenes will be Grokified`]);
     }
+
+    let grokifiedCount = 0;
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
@@ -119,7 +123,7 @@ async function runBackgroundGeneration(
         // frame for the video clip, so the product is baked into the scene throughout.
         let sceneImageUrl: string | undefined;
         const isContentScene = i > 0 && i < scenes.length - 1; // skip intro (0) and outro (last)
-        const shouldGrokify = hasSponsorVisuals && isContentScene && i % 2 === 1;
+        const shouldGrokify = hasSponsorVisuals && isContentScene && maxGrokifyScenes > 0 && grokifiedCount < maxGrokifyScenes;
 
         if (shouldGrokify) {
           const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[] };
@@ -143,8 +147,9 @@ async function runBackgroundGeneration(
               const grokData = await grokRes.json();
               if (grokData.grokifiedUrl) {
                 sceneImageUrl = grokData.grokifiedUrl;
+                grokifiedCount++;
                 const mode = grokData.mode === "image-edit" ? "actual product image edited into scene" : "generated from description";
-                setLog(prev => [...prev, `  ✅ Grokified — ${mode}`]);
+                setLog(prev => [...prev, `  ✅ Grokified (${grokifiedCount}/${maxGrokifyScenes}) — ${mode}`]);
               } else {
                 setLog(prev => [...prev, `  ⚠️ Grokify returned no image: ${grokData.error || "unknown"}`]);
               }

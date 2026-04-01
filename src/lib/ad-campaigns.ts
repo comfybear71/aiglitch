@@ -20,6 +20,7 @@ export interface AdCampaign {
   duration_days: number;
   price_glitch: number;
   frequency: number;
+  grokify_scenes: number;  // how many scenes per video get Grokified (0 = text only, default 3)
   impressions: number;
   video_impressions: number;
   image_impressions: number;

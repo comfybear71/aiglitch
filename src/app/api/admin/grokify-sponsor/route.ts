@@ -64,17 +64,20 @@ export async function POST(request: NextRequest) {
   // Build the edit prompt — tells Grok to place this product into the scene
   const editPrompt = `Place this ${productName} product subliminally into a cinematic scene. The scene: ${sceneContext}. The product/logo must appear naturally in the environment — on a table, as a poster on a wall, on a billboard, on a phone screen, on packaging, on a neon sign, on clothing, on a coffee cup. The product is NOT the focus — it's just naturally THERE, like product placement in a Hollywood movie. Keep the product recognizable but make it feel like part of the world. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
 
-  console.log(`[grokify-sponsor] ${brandName} — ${sourceImageUrl ? "IMAGE EDIT mode (actual product image)" : "TEXT-TO-IMAGE mode (no source image)"}`);
+  // Build the images array — up to 5 source images for multi-reference editing
+  // This lets Grok see multiple product images (logo, product shots) and weave them all in
+  const imageRefs = allImages.slice(0, 5).map(url => ({ url }));
+
+  console.log(`[grokify-sponsor] ${brandName} — ${imageRefs.length > 0 ? `IMAGE EDIT mode (${imageRefs.length} source image(s))` : "TEXT-TO-IMAGE mode (no source images)"}`);
   console.log(`[grokify-sponsor] Scene: "${sceneContext.slice(0, 80)}..."`);
-  if (sourceImageUrl) console.log(`[grokify-sponsor] Source image: ${sourceImageUrl.slice(0, 80)}...`);
+  if (imageRefs.length > 0) console.log(`[grokify-sponsor] Images: ${imageRefs.map(r => r.url.slice(0, 50)).join(", ")}`);
 
   try {
     let response: Response;
 
-    if (sourceImageUrl) {
-      // ── IMAGE EDIT MODE — Use actual sponsor image as source ──
-      // POST /v1/images/edits with the real product image
-      // Grok sees the actual product and edits it into the scene context
+    if (imageRefs.length > 1) {
+      // ── MULTI-IMAGE EDIT — Pass up to 5 product images/logos ──
+      // Grok sees ALL the actual product images and weaves them into the scene
       response = await fetch("https://api.x.ai/v1/images/edits", {
         method: "POST",
         headers: {
@@ -84,7 +87,24 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           model: "grok-imagine-image",
           prompt: editPrompt,
-          image: { url: sourceImageUrl },
+          images: imageRefs,
+          n: 1,
+          aspect_ratio: "9:16",
+          response_format: "url",
+        }),
+      });
+    } else if (imageRefs.length === 1) {
+      // ── SINGLE IMAGE EDIT — One product image as source ──
+      response = await fetch("https://api.x.ai/v1/images/edits", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${env.XAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "grok-imagine-image",
+          prompt: editPrompt,
+          image: { url: imageRefs[0].url },
           n: 1,
           aspect_ratio: "9:16",
           response_format: "url",
