@@ -115,7 +115,8 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
   const screenplay = result;
 
   const sponsorNames = screenplay._adCampaigns?.map((c: { brand_name: string }) => c.brand_name) || [];
-  console.log(`[screenplay] RETURNING: title="${screenplay.title}", sponsors=${JSON.stringify(sponsorNames)}, scenes=${screenplay.scenes?.length}`);
+  const sponsorImage = screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || null;
+  console.log(`[screenplay] RETURNING: title="${screenplay.title}", sponsors=${JSON.stringify(sponsorNames)}, sponsorImage=${sponsorImage || "NONE"}, scenes=${screenplay.scenes?.length}`);
 
   return NextResponse.json({
     title: screenplay.title,
