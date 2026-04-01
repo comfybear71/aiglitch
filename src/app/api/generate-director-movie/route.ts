@@ -274,6 +274,17 @@ export async function POST(request: NextRequest) {
       stitched = clipBuffers[0];
     }
 
+    // Add sponsor text overlay to the last 5 seconds if sponsors were placed
+    if (sponsorPlacements && sponsorPlacements.length > 0) {
+      try {
+        const { addSponsorOverlay } = await import("@/lib/media/sponsor-overlay");
+        console.log(`[generate-director-movie] Adding sponsor overlay: ${sponsorPlacements.join(", ")}`);
+        stitched = await addSponsorOverlay(stitched, sponsorPlacements);
+      } catch (err) {
+        console.error("[generate-director-movie] Sponsor overlay failed, using original video:", err instanceof Error ? err.message : err);
+      }
+    }
+
     const { v4: uuidv4 } = await import("uuid");
     const blob = await put(`premiere/${stitchGenre}/${uuidv4()}.mp4`, stitched, { access: "public", contentType: "video/mp4", addRandomSuffix: false });
     const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
