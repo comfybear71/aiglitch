@@ -91,10 +91,49 @@ async function runBackgroundGeneration(
     setProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
     const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
 
-    // Collect all sponsor product images for rotation across scenes
+    // Collect all sponsor product images for Grokification
     const sponsorImages: string[] = screenplay.sponsorImages || (screenplay.sponsorImageUrl ? [screenplay.sponsorImageUrl] : []);
     if (sponsorImages.length > 0) {
-      setLog(prev => [...prev, `  🖼️ ${sponsorImages.length} sponsor product image(s) available for scene injection`]);
+      setLog(prev => [...prev, `  🖼️ ${sponsorImages.length} sponsor product image(s) will be Grokified into scenes`]);
+    }
+
+    // Pre-generate Grokified scene images for sponsor product placement
+    // We Grokify images for every 3rd scene (scenes 2, 5, 8 etc.)
+    // This generates scene-appropriate images with sponsor products naturally placed
+    const grokifiedImages: Record<number, string> = {};
+    if (sponsorImages.length > 0) {
+      setLog(prev => [...prev, `🖼️ Grokifying sponsor product images for scene injection...`]);
+      const scenesToGrokify = scenes.filter((_, idx) => idx % 3 === 1);
+      for (let g = 0; g < scenesToGrokify.length; g++) {
+        const scene = scenesToGrokify[g];
+        const imgUrl = sponsorImages[g % sponsorImages.length];
+        try {
+          setLog(prev => [...prev, `  🎨 Grokifying for scene ${scene.sceneNumber}: "${scene.title}"...`]);
+          const grokRes = await fetch("/api/admin/grokify-sponsor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sponsorImageUrl: imgUrl,
+              scenePrompt: scene.videoPrompt,
+              brandName: sponsors[g % sponsors.length] || "Sponsor",
+              productName: sponsors[g % sponsors.length] || "Product",
+            }),
+          });
+          const grokData = await grokRes.json();
+          if (grokData.grokifiedUrl) {
+            grokifiedImages[scene.sceneNumber] = grokData.grokifiedUrl;
+            setLog(prev => [...prev, `  ✅ Grokified${grokData.fallback ? " (fallback to original)" : ""}: ${grokData.grokifiedUrl.slice(0, 50)}...`]);
+          }
+          // Rate limit between Grok image calls
+          if (g < scenesToGrokify.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+        } catch (err) {
+          setLog(prev => [...prev, `  ⚠️ Grokify failed for scene ${scene.sceneNumber}: ${err instanceof Error ? err.message : "unknown"}`]);
+        }
+      }
+      setLog(prev => [...prev, `  🖼️ ${Object.keys(grokifiedImages).length} scenes will have sponsor product images`]);
+      setLog(prev => [...prev, ``]);
     }
 
     for (let i = 0; i < scenes.length; i++) {
@@ -111,12 +150,10 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
-        // Rotate sponsor product images across scenes (every 3rd scene gets one)
-        // This distributes product visibility without overwhelming every scene
-        let sceneImageUrl: string | undefined;
-        if (sponsorImages.length > 0 && i % 3 === 1) {
-          sceneImageUrl = sponsorImages[Math.floor(i / 3) % sponsorImages.length];
-          setLog(prev => [...prev, `  🖼️ Injecting sponsor product image into this scene`]);
+        // Use pre-Grokified scene image if available for this scene
+        const sceneImageUrl = grokifiedImages[scene.sceneNumber] || undefined;
+        if (sceneImageUrl) {
+          setLog(prev => [...prev, `  🖼️ Using Grokified sponsor image as starting frame`]);
         }
         const submitRes = await fetch("/api/test-grok-video", {
           method: "POST",
