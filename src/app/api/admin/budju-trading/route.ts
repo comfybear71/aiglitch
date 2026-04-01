@@ -323,6 +323,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Cancel active distribution ──
+  if (action === "cancel_distribution") {
+    try {
+      const sql = (await import("@/lib/db")).getDb();
+      await sql`UPDATE distribution_jobs SET status = 'cancelled', updated_at = NOW() WHERE status IN ('pending', 'active')`;
+      await sql`UPDATE distribution_transfers SET status = 'skipped' WHERE status = 'scheduled'`;
+      return NextResponse.json({ success: true, message: "Distribution cancelled. All pending transfers skipped." });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   // ── Check underfunded wallets ──
   if (action === "equalize_wallets") {
     try {
