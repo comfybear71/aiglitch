@@ -488,7 +488,8 @@ export async function POST(request: NextRequest) {
   // Process pending transfers (execute scheduled transfers that are due)
   if (action === "process_distribution") {
     try {
-      const result = await processDistributionJob(body.job_id);
+      // When user clicks "Process Now", force process ALL pending transfers
+      const result = await processDistributionJob(body.job_id, true);
       return NextResponse.json({ success: true, ...result });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to process distribution" }, { status: 500 });

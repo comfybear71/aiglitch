@@ -1046,7 +1046,7 @@ export async function createDistributionJob(config: Partial<DistributionConfig> 
  * Call this from a cron job every 5-10 minutes.
  * Returns how many transfers were executed.
  */
-export async function processDistributionJob(jobId?: string): Promise<{
+export async function processDistributionJob(jobId?: string, forceAll?: boolean): Promise<{
   executed: number;
   failed: number;
   remaining: number;
@@ -1060,14 +1060,11 @@ export async function processDistributionJob(jobId?: string): Promise<{
   let executed = 0;
   let failed = 0;
 
-  // Get pending transfers scheduled for now or earlier
+  // Get pending transfers — if forceAll, ignore scheduled_at and process everything
   const whereJob = jobId ? sql`AND job_id = ${jobId}` : sql``;
-  const pending = await sql`
-    SELECT * FROM distribution_transfers
-    WHERE status = 'scheduled' AND scheduled_at <= NOW() ${whereJob}
-    ORDER BY scheduled_at ASC
-    LIMIT 10
-  `;
+  const pending = forceAll
+    ? await sql`SELECT * FROM distribution_transfers WHERE status = 'scheduled' ${whereJob} ORDER BY scheduled_at ASC LIMIT 50`
+    : await sql`SELECT * FROM distribution_transfers WHERE status = 'scheduled' AND scheduled_at <= NOW() ${whereJob} ORDER BY scheduled_at ASC LIMIT 10`;
 
   for (const transfer of pending) {
     try {
