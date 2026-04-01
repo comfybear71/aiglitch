@@ -299,14 +299,21 @@ Entry points for social posting:
 | `MASTER_HQ_URL` | MasterHQ | Pre-fictionalized topics (optional) |
 | `NEXT_PUBLIC_SOLANA_NETWORK` | — | `mainnet-beta` or `devnet` |
 
-## Recent Changes (March 2026)
+## Recent Changes (March-April 2026)
 
+- **100 persona wallets generated** (April 1) — All 100 Architect personas now have Solana wallets across 16 distributor groups. Generated via admin trading page.
+- **MasterHQ sponsor images organized** (April 1) — Sponsor images from MasterHQ now stored in `sponsors/{slug}/` folder structure in Vercel Blob for clean organization.
+- **Brand pronunciation fix** (April 1) — `BRAND_PRONUNCIATION` constant added to `constants.ts` and injected into ALL screenplay prompts. AIG!itch is pronounced "A-I-G-L-I-T-C-H" not "AI Gitch". Ensures AI-generated video narration says it correctly.
+- **Sponsor impression logging moved before spread** (April 1) — `logImpressions()` now runs BEFORE `spreadPostToSocial()` in the director movie pipeline. Spread can take 40+ seconds and timeout, which was causing impression logging to be lost.
+- **Sponsor clip generation** (April 1) — Sponsor product images converted from PNG to video via Sharp resize + Grok text-to-video API. Appended as Scene 9/10 to channel videos. Uses text-to-video (not image-to-video) because Grok distorts/glitches image-to-video text cards.
+- **Sponsor campaign cards UI overhaul** (April 1) — Collapsible chevrons for images/prompts/videos sections. Edit button on each campaign card. All product images displayed in grid. Cleaner layout for managing campaigns.
+- **Autopilot improvements** (April 1) — Clear console between videos, video counter fix, progress bar visible during cooldown period. 2-minute cooldown between autopilot videos. Screenplay generation retries on failure.
 - **Activity Monitor wallet auth + per-job controls** (March 31) — `/activity` page now requires Phantom QR wallet auth (same session as trading page). Each cron job has a Pause/Resume button. Cost badges show 💰 HIGH / ⚠️ MED / ✓ LOW / FREE per job based on 24h spend. Paused jobs stored in `platform_settings` as `cron_paused_{jobName}`, checked in `cronStart()`.
 - **Persona Wallet System Phase 3 COMPLETE** (March 31) — Time-randomised token distribution: Treasury → 16 distributors (staggered over hours) → ~100 persona wallets (random delays 5-60 min, ±30% amount variance). Supports SOL, BUDJU, GLITCH, USDC. Cron auto-processes every 10 min. Admin + Treasury wallet balance panel on trading page.
 - **Persona Wallet System Phase 2 COMPLETE** (March 31) — QR code cross-device wallet auth for trading page. iPad shows QR → scan with iPhone Phantom → sign Ed25519 message → iPad auto-unlocks. Challenge stored in Redis (5 min TTL), session token 24h. Only `ADMIN_WALLET_PUBKEY` wallet can authorize. Files: `/api/admin/wallet-auth/route.ts`, `/auth/sign/page.tsx`, `trading/page.tsx`. No password fallback — Phantom wallet IS the only key.
 - **429 rate limit fix** (March 31) — Autopilot was hitting Grok's 1 req/sec limit by submitting 8 clips instantly. Added: 1.5s delay between clip submissions, auto-retry after 5s on 429, 10s cooldown between autopilot videos. Fixed in `AdminContext.tsx`.
 - **Sponsor product placement tracking** (March 31) — Expanding a sponsor on the Sponsors page now shows "PRODUCT PLACEMENTS (X videos)" with every video their product appeared in. Data from `ad_impressions` table joined with posts. Each entry shows title, channel, date, and "View" link.
-- **Sponsor thanks in ALL channel outros** (March 31) — When sponsors are placed in ANY video (not just Studios), the outro includes "Thanks to our sponsors: [Brand1], [Brand2]". Studios credits also include it.
+- **Sponsor thanks in ALL channel outros** (March 31) — When sponsors are placed in ANY video (not just Studios), the outro includes "Thanks to our sponsors: [Brand1], [Brand2]". Studios credits also include it. NOTE: Grok video API cannot render readable text — the thanks text is in the prompt but may not appear visibly. FFmpeg post-production overlay needed for guaranteed text (see `docs/sponsor-integration-issues.md`).
 - **MasterHQ Sync button** (March 31) — Each sponsor row has a "Sync" button that fetches fresh product data from MasterHQ API and updates the DB. Fixes sponsors that were imported before the product_name/logo_url columns existed.
 - **Persona Wallet System Phase 1 COMPLETE** (March 31) — Unified trading page merges GLITCH + BUDJU into one tab with token switcher. Distributor wallets scaled 4→16 for anti-bubble-mapping. Wallet generation now filters `glitch-XXX` only, never meatbag personas. Default count 200. Separate BUDJU Bot tab removed. See `docs/persona-wallets-upgrade.md`.
 - **MasterHQ sponsor auto-import** (March 31) — Sponsors page auto-fetches pending sponsors from `masterhq.dev/api/sponsor/list?status=pending`. One-click import creates sponsor + first ad campaign. "Sync" button on each sponsor row refreshes product data from MasterHQ. Logo URL + up to 5 product image URLs stored in DB. Glitch ($50/30% freq) and Chaos ($100/80% freq) tiers match MasterHQ pricing.
@@ -418,10 +425,16 @@ Entry points for social posting:
 - **Studios naming convention**: `🎬 AIG!itch Studios - [Title] /[Genre]` — Studios is the ONLY channel with `/[Genre]` in the caption. All other channels use `🎬 [Channel Name] - [Title]` (no genre tag).
 - **Studios videos are always 10 clips**: 1 intro (title card) + 8 story scenes + 1 credits outro. The `storyClipCount` defaults to 8 for Studios/standalone movies. Other channels get random 6-8.
 - **Sponsor thanks in Studios outro only**: When `placementCampaigns` are rolled for a Studios video, the credits scene includes "Thanks to our sponsors: [Brand1], [Brand2]". Never in the feed caption text.
+- **safeMigrate caches migration labels**: If you update a migration's SQL but keep the same label, it won't re-run because the label is already in `_migrations`. Always use a NEW label or bump `MIGRATION_VERSION` when changing migration content.
+- **Grok video API CANNOT render readable text**: Text in video prompts will appear as glitchy/unreadable artifacts. For guaranteed text overlays, use Cloudinary text overlay or FFmpeg post-production. Use text-to-video for sponsor clips instead of image-to-video.
+- **Grok image-to-video distorts text cards**: Sending a PNG with text (e.g. sponsor logo card) to Grok's image-to-video API produces glitchy/distorted output. Use text-to-video instead — describe the text/branding in the prompt and let Grok generate it natively.
+- **FormData entries need .toString() in Next.js App Router**: `formData.get('field')` returns `FormDataEntryValue | null`, not `string`. Always call `.toString()` before passing to functions expecting strings, or TypeScript will error.
+- **Sponsor images stored on sponsors table**: Product images from MasterHQ are stored on the `sponsors` table (`product_images` JSONB). When creating/updating ad campaigns, these must be explicitly synced to the `ad_campaigns` table's `product_images` column. They are NOT automatically inherited.
+- **logImpressions() must run BEFORE spreadPostToSocial()**: Social spreading takes 40+ seconds (posting to 5 platforms) and can timeout the serverless function. Always call `logImpressions()` first to ensure impression data is recorded. If spread times out, at least impressions are logged.
 
-## Persona Wallet System (Major Upgrade — In Progress)
+## Persona Wallet System (Major Upgrade — Phases 1-3 COMPLETE)
 
-**Status**: Phase 1 COMPLETE — see `docs/persona-wallets-upgrade.md` for full spec.
+**Status**: Phases 1-3 COMPLETE — see `docs/persona-wallets-upgrade.md` for full spec. 100 persona wallets generated across 16 distributor groups.
 
 Every Architect-created AI persona will get their own real Solana wallet with SOL, BUDJU, GLITCH, and USDC. Key details:
 - **Only Architect personas** (glitch-XXX) get wallets — NEVER meatbag-hatched personas

@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 26;
+const MIGRATION_VERSION = 28;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -1156,6 +1156,167 @@ export async function runMigrations() {
       updated_by VARCHAR(100) DEFAULT 'admin',
       UNIQUE(category, key)
     )`);
+
+  // ── Move ALL sponsor images to organized folder structure ──
+  await safeMigrate(sql, "organize_sponsor_images_v27", async () => {
+    const { put } = await import("@vercel/blob");
+
+    // Helper: download from old URL, upload to new path, return new URL
+    async function moveImage(oldUrl: string, newPath: string): Promise<string> {
+      try {
+        const res = await fetch(oldUrl);
+        if (!res.ok) { console.warn(`[migrate] Failed to fetch ${oldUrl}: ${res.status}`); return oldUrl; }
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const contentType = res.headers.get("content-type") || "image/jpeg";
+        const blob = await put(newPath, buffer, { access: "public", contentType, addRandomSuffix: false });
+        console.log(`[migrate] Moved ${oldUrl.split("/").pop()} → ${newPath}`);
+        return blob.url;
+      } catch (err) {
+        console.warn(`[migrate] Failed to move ${oldUrl}:`, err instanceof Error ? err.message : err);
+        return oldUrl; // Keep old URL as fallback
+      }
+    }
+
+    // Get ALL sponsors and their campaigns
+    const sponsors = await sql`SELECT id, company_name, logo_url, product_images FROM sponsors`;
+    const campaigns = await sql`SELECT id, brand_name, logo_url, product_image_url, product_images FROM ad_campaigns`;
+
+    // Map sponsor names to slugs
+    function toSlug(name: string): string {
+      return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    }
+
+    // Process each sponsor
+    for (const sponsor of sponsors) {
+      const name = sponsor.company_name as string;
+      if (!name || name.toLowerCase() === "budju") continue; // BUDJU already done
+      const slug = toSlug(name);
+
+      // Move sponsor logo
+      if (sponsor.logo_url && !String(sponsor.logo_url).includes(`sponsors/${slug}/`)) {
+        const ext = String(sponsor.logo_url).split(".").pop() || "jpeg";
+        const newUrl = await moveImage(String(sponsor.logo_url), `sponsors/${slug}/logo.${ext}`);
+        await sql`UPDATE sponsors SET logo_url = ${newUrl} WHERE id = ${sponsor.id}`;
+      }
+
+      // Move sponsor product images
+      const images = sponsor.product_images as string[] | null;
+      if (images && Array.isArray(images)) {
+        const newImages: string[] = [];
+        for (let i = 0; i < images.length; i++) {
+          if (images[i] && !images[i].includes(`sponsors/${slug}/`)) {
+            const ext = images[i].split(".").pop() || "jpeg";
+            const newUrl = await moveImage(images[i], `sponsors/${slug}/image-${i + 1}.${ext}`);
+            newImages.push(newUrl);
+          } else {
+            newImages.push(images[i]);
+          }
+        }
+        await sql`UPDATE sponsors SET product_images = ${JSON.stringify(newImages)}::jsonb WHERE id = ${sponsor.id}`;
+      }
+    }
+
+    // Process each ad campaign
+    for (const campaign of campaigns) {
+      const name = campaign.brand_name as string;
+      if (!name || name.toLowerCase() === "budju") continue; // BUDJU already done
+      const slug = toSlug(name);
+
+      // Move campaign logo
+      if (campaign.logo_url && !String(campaign.logo_url).includes(`sponsors/${slug}/`)) {
+        const ext = String(campaign.logo_url).split(".").pop() || "jpeg";
+        const newUrl = await moveImage(String(campaign.logo_url), `sponsors/${slug}/logo.${ext}`);
+        await sql`UPDATE ad_campaigns SET logo_url = ${newUrl} WHERE id = ${campaign.id}`;
+      }
+
+      // Move campaign product image
+      if (campaign.product_image_url && !String(campaign.product_image_url).includes(`sponsors/${slug}/`)) {
+        const ext = String(campaign.product_image_url).split(".").pop() || "jpeg";
+        const newUrl = await moveImage(String(campaign.product_image_url), `sponsors/${slug}/image-1.${ext}`);
+        await sql`UPDATE ad_campaigns SET product_image_url = ${newUrl} WHERE id = ${campaign.id}`;
+      }
+
+      // Move campaign product images array
+      const campImages = campaign.product_images as string[] | null;
+      if (campImages && Array.isArray(campImages)) {
+        const newImages: string[] = [];
+        for (let i = 0; i < campImages.length; i++) {
+          if (campImages[i] && !campImages[i].includes(`sponsors/${slug}/`)) {
+            const ext = campImages[i].split(".").pop() || "jpeg";
+            const newUrl = await moveImage(campImages[i], `sponsors/${slug}/image-${i + 1}.${ext}`);
+            newImages.push(newUrl);
+          } else {
+            newImages.push(campImages[i]);
+          }
+        }
+        await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(newImages)}::jsonb WHERE id = ${campaign.id}`;
+      }
+    }
+
+    console.log("[migrate] ✅ All sponsor images organized into sponsors/{slug}/ folders");
+  });
+  await safeMigrate(sql, "fix_budju_campaign_v27", async () => {
+    // Fix "Unknown" sponsor name to "BUDJU"
+    await sql`UPDATE sponsors SET company_name = 'BUDJU' WHERE LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com'`;
+
+    // Copy images from sponsors/unknown/ to sponsors/budju/ on Blob
+    const oldUrls = [
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/logo.jpeg", newPath: "sponsors/budju/logo.jpeg" },
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-1.jpeg", newPath: "sponsors/budju/image-1.jpeg" },
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-2.jpeg", newPath: "sponsors/budju/image-2.jpeg" },
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-3.jpeg", newPath: "sponsors/budju/image-3.jpeg" },
+    ];
+    const { put } = await import("@vercel/blob");
+    const newUrls: string[] = [];
+    for (const item of oldUrls) {
+      try {
+        const res = await fetch(item.old);
+        if (res.ok) {
+          const buffer = Buffer.from(await res.arrayBuffer());
+          const blob = await put(item.newPath, buffer, { access: "public", contentType: "image/jpeg", addRandomSuffix: false });
+          newUrls.push(blob.url);
+        } else {
+          newUrls.push(item.old); // fallback to old URL
+        }
+      } catch {
+        newUrls.push(item.old); // fallback to old URL
+      }
+    }
+
+    const budjuLogo = newUrls[0];
+    const allProductImages = [newUrls[1], newUrls[2], newUrls[3]];
+    const budjuVisualPrompt = "A shiny metallic purple and pink cryptocurrency coin with 'BUDJU' text embossed on it, glowing neon purple edges, holographic sheen. The BUDJU coin sits prominently on a desk, table, shelf, or held by a character. Also show a phone or screen displaying the BUDJU trading chart with purple/pink branding. The BUDJU logo is pink cursive text 'Budju' with a heart symbol and a blonde cartoon character mascot. Purple/pink neon coin aesthetic. Make the BUDJU branding clearly visible and recognizable in the scene.";
+    // Add product_images JSONB column to ad_campaigns
+    try { await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`; } catch { /* exists */ }
+    await sql`UPDATE ad_campaigns SET logo_url = ${budjuLogo}, product_image_url = ${allProductImages[0]}, product_images = ${JSON.stringify(allProductImages)}::jsonb, visual_prompt = ${budjuVisualPrompt} WHERE LOWER(brand_name) = 'budju'`;
+    await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify(allProductImages)}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
+  });
+
+  // ── Force-set BUDJU images — ALWAYS RUN (not wrapped in safeMigrate) ──
+  try {
+    try { await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`; } catch { /* exists */ }
+    const budjuImages = [
+      "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-1.jpeg",
+      "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-2.jpeg",
+      "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-3.jpeg",
+    ];
+    const budjuLogo = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/logo.jpeg";
+    await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(brand_name) = 'budju'`;
+    await sql`UPDATE sponsors SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(company_name) = 'budju'`;
+    console.log("[migrate] Force-set BUDJU with 3 product images + logo from jug8pwv8lcpdrski blob store");
+
+    // Also sync other sponsors from their sponsor records
+    const sponsors = await sql`SELECT company_name, logo_url, product_images FROM sponsors WHERE product_images IS NOT NULL AND LOWER(company_name) != 'budju'`;
+    for (const s of sponsors) {
+      const name = s.company_name as string;
+      const images = s.product_images as string[];
+      const logo = s.logo_url as string;
+      if (name && images && images.length > 0) {
+        await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(images)}::jsonb, logo_url = COALESCE(${logo || null}, logo_url) WHERE LOWER(brand_name) = LOWER(${name})`;
+        console.log(`[migrate] Synced ${images.length} images from sponsor "${name}" to ad campaign`);
+      }
+    }
+  } catch (err) { console.error("[migrate] Sponsor image sync error:", err); }
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>

@@ -213,7 +213,14 @@ export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
-    body = Object.fromEntries(formData.entries());
+    // Convert ALL FormData entries to strings explicitly (Grok's recommendation)
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        body[key] = value;
+      } else {
+        body[key] = value.toString();
+      }
+    }
     if (typeof body.sceneUrls === "string") {
       try { body.sceneUrls = JSON.parse(body.sceneUrls as string); } catch { /* leave as-is */ }
     }
@@ -223,6 +230,8 @@ export async function POST(request: NextRequest) {
   } else {
     try { body = await request.json(); } catch { /* empty body */ }
   }
+
+  console.log(`[generate-director-movie] POST body keys: ${Object.keys(body).join(", ")}, sponsorPlacements raw: ${JSON.stringify(body.sponsorPlacements)}`);
 
   // If sceneUrls present, this is a stitch request (from directors page FormData)
   if (body.sceneUrls) {
@@ -237,8 +246,17 @@ export async function POST(request: NextRequest) {
     const castList = (body.castList || []) as string[];
     const channelId = (body.channelId || body.channel_id) as string | undefined;
     const folder = (body.folder) as string | undefined;
+    // Robust sponsorPlacements parsing (handles FormData quirks)
     let sponsorPlacements: string[] = [];
-    try { sponsorPlacements = JSON.parse(String(body.sponsorPlacements || "[]")); } catch { sponsorPlacements = []; }
+    const rawPlacements = body.sponsorPlacements || body["sponsorPlacements[]"] || "[]";
+    try {
+      const parsed = typeof rawPlacements === "string" ? JSON.parse(rawPlacements) : rawPlacements;
+      sponsorPlacements = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      console.error("[generate-director-movie] sponsorPlacements parse FAILED, raw:", rawPlacements);
+      sponsorPlacements = [];
+    }
+    console.log(`[generate-director-movie] STITCH: title="${title}", sponsors=${JSON.stringify(sponsorPlacements)}, channelId=${channelId}`);
 
     if (!sceneUrls || !title) {
       return NextResponse.json({ error: "Missing required fields", hint: `Received keys: ${Object.keys(body).join(", ")}` }, { status: 400 });
@@ -303,33 +321,25 @@ export async function POST(request: NextRequest) {
     await sql`INSERT INTO director_movies (id, director_id, director_username, title, genre, clip_count, status, post_id, premiere_post_id, source)
       VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${stitchGenre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId}, ${"admin"})`;
 
+    // Log sponsor impressions BEFORE social spread (spread takes 20-40s and may timeout)
+    if (sponsorPlacements && sponsorPlacements.length > 0) {
+      try {
+        const { getActiveCampaigns, logImpressions } = await import("@/lib/ad-campaigns");
+        const activeCampaigns = await getActiveCampaigns(channelId);
+        const placedCampaigns = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
+        console.log(`[generate-director-movie] IMPRESSIONS: ${placedCampaigns.length} campaigns matched from ${activeCampaigns.length} active for sponsors ${JSON.stringify(sponsorPlacements)}`);
+        if (placedCampaigns.length > 0) {
+          await logImpressions(placedCampaigns, postId, "video", channelId || null, postPersonaId);
+          console.log(`[generate-director-movie] ✅ IMPRESSIONS LOGGED for: ${placedCampaigns.map(c => c.brand_name).join(", ")}`);
+        }
+      } catch (err) {
+        console.error("[generate-director-movie] ❌ IMPRESSION LOGGING FAILED:", err instanceof Error ? err.message : err);
+      }
+    }
+
     const { spreadPostToSocial } = await import("@/lib/marketing/spread-post");
     const spreadName = channelId ? "The Architect" : directorUsername;
     const spread = await spreadPostToSocial(postId, postPersonaId, spreadName, "\u{1F3AC}", { url: blob.url, type: "video" });
-
-    // Log sponsor impressions for this video
-    try {
-      const { getActiveCampaigns, rollForPlacements, logImpressions } = await import("@/lib/ad-campaigns");
-      const activeCampaigns = await getActiveCampaigns(channelId);
-      if (activeCampaigns.length > 0) {
-        // Check if campaign IDs were passed from the screenplay
-        const sponsorNames = sponsorPlacements;
-        let placedCampaigns;
-        if (sponsorNames.length > 0) {
-          // Use the exact campaigns from the screenplay
-          placedCampaigns = activeCampaigns.filter(c => sponsorNames.includes(c.brand_name));
-        } else {
-          // Fallback: roll for placements
-          placedCampaigns = rollForPlacements(activeCampaigns);
-        }
-        if (placedCampaigns.length > 0) {
-          await logImpressions(placedCampaigns, postId, "video", channelId || null, postPersonaId);
-          console.log(`[generate-director-movie] Logged ${placedCampaigns.length} impressions for "${title}": ${placedCampaigns.map(c => c.brand_name).join(", ")}`);
-        }
-      }
-    } catch (err) {
-      console.error("[generate-director-movie] Impression logging failed:", err);
-    }
 
     return NextResponse.json({
       action: "stitched", feedPostId: postId, premierePostId: postId, directorMovieId,
