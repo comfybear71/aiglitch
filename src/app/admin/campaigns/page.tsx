@@ -654,10 +654,10 @@ export default function CampaignsPage() {
                   <p className="text-[10px] text-cyan-400 mb-1">🌐 {c.website_url}</p>
                 )}
                 <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs items-center">
-                  <span className="text-purple-400">{"\u{1F3AC}"} {c.video_impressions}</span>
-                  <span className="text-blue-400">{"\u{1F5BC}"} {c.image_impressions}</span>
-                  <span className="text-green-400">{"\u{1F4AC}"} {c.post_impressions}</span>
-                  <span className="text-white font-bold">{c.impressions} total</span>
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-purple-400 hover:text-purple-300 cursor-pointer underline decoration-purple-800 hover:decoration-purple-400">{"\u{1F3AC}"} {c.video_impressions}</button>
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-blue-400 hover:text-blue-300 cursor-pointer underline decoration-blue-800 hover:decoration-blue-400">{"\u{1F5BC}"} {c.image_impressions}</button>
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-green-400 hover:text-green-300 cursor-pointer underline decoration-green-800 hover:decoration-green-400">{"\u{1F4AC}"} {c.post_impressions}</button>
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-white font-bold hover:text-cyan-400 cursor-pointer underline decoration-gray-600 hover:decoration-cyan-400">{c.impressions} total</button>
                   <span className="text-gray-600">|</span>
                   <span className="text-yellow-400">🖼️ {c.grokify_scenes || 3} Grokify/video</span>
                   <div className="flex items-center gap-1">
