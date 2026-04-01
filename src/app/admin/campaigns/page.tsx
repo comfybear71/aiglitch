@@ -311,7 +311,7 @@ export default function CampaignsPage() {
   const saveCampaignEdit = async (campaignId: string) => {
     try {
       await fetch("/api/admin/ad-campaigns", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "update",
