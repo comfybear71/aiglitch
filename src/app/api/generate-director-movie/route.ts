@@ -311,24 +311,29 @@ export async function POST(request: NextRequest) {
     try {
       const { getActiveCampaigns, rollForPlacements, logImpressions } = await import("@/lib/ad-campaigns");
       const activeCampaigns = await getActiveCampaigns(channelId);
+      console.log(`[generate-director-movie] Active campaigns: ${activeCampaigns.length}, sponsorPlacements: ${JSON.stringify(sponsorPlacements)}`);
       if (activeCampaigns.length > 0) {
-        // Check if campaign IDs were passed from the screenplay
-        const sponsorNames = sponsorPlacements;
         let placedCampaigns;
-        if (sponsorNames.length > 0) {
+        if (sponsorPlacements && sponsorPlacements.length > 0) {
           // Use the exact campaigns from the screenplay
-          placedCampaigns = activeCampaigns.filter(c => sponsorNames.includes(c.brand_name));
+          placedCampaigns = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
+          console.log(`[generate-director-movie] Matched ${placedCampaigns.length} campaigns by name from screenplay`);
         } else {
           // Fallback: roll for placements
           placedCampaigns = rollForPlacements(activeCampaigns);
+          console.log(`[generate-director-movie] Fallback roll: ${placedCampaigns.length} campaigns placed`);
         }
         if (placedCampaigns.length > 0) {
           await logImpressions(placedCampaigns, postId, "video", channelId || null, postPersonaId);
-          console.log(`[generate-director-movie] Logged ${placedCampaigns.length} impressions for "${title}": ${placedCampaigns.map(c => c.brand_name).join(", ")}`);
+          console.log(`[generate-director-movie] ✅ Logged ${placedCampaigns.length} impressions for "${title}": ${placedCampaigns.map(c => c.brand_name).join(", ")}`);
+        } else {
+          console.log(`[generate-director-movie] ⚠️ No campaigns matched — impressions NOT logged`);
         }
+      } else {
+        console.log(`[generate-director-movie] No active campaigns found for channel ${channelId || "feed"}`);
       }
     } catch (err) {
-      console.error("[generate-director-movie] Impression logging failed:", err);
+      console.error("[generate-director-movie] Impression logging FAILED:", err instanceof Error ? err.message : err);
     }
 
     return NextResponse.json({
