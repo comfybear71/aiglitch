@@ -56,23 +56,30 @@ export async function GET(request: NextRequest) {
       const sql = (await import("@/lib/db")).getDb();
       const connection = new Connection(SERVER_RPC_URL, "confirmed");
       const BUDJU_MINT_PK = new PublicKey("2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump");
+      const GLITCH_MINT_PK = new PublicKey("5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT");
+      const USDC_MINT_PK = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
-      // Treasury
+      async function getTokenBalance(owner: InstanceType<typeof PublicKey>, mint: InstanceType<typeof PublicKey>, decimals: number): Promise<number> {
+        try {
+          const ata = await getAssociatedTokenAddress(mint, owner);
+          const acc = await getAccount(connection, ata);
+          return Number(acc.amount) / (10 ** decimals);
+        } catch { return 0; }
+      }
+
+      // Treasury (live from chain)
       const treasuryPub = new PublicKey(TREASURY_WALLET_STR);
       const treasurySol = (await connection.getBalance(treasuryPub)) / LAMPORTS_PER_SOL;
-      let treasuryBudju = 0;
-      try {
-        const ata = await getAssociatedTokenAddress(BUDJU_MINT_PK, treasuryPub);
-        const acc = await getAccount(connection, ata);
-        treasuryBudju = Number(acc.amount) / 1e6;
-      } catch { /* no ATA */ }
+      const treasuryBudju = await getTokenBalance(treasuryPub, BUDJU_MINT_PK, 6);
+      const treasuryGlitch = await getTokenBalance(treasuryPub, GLITCH_MINT_PK, 9);
+      const treasuryUsdc = await getTokenBalance(treasuryPub, USDC_MINT_PK, 6);
 
       // Distributor wallets (from DB)
       const distributors = await sql`SELECT group_number, wallet_address, sol_balance, budju_balance FROM budju_distributors ORDER BY group_number`;
       let distSol = 0, distBudju = 0;
       for (const d of distributors) { distSol += Number(d.sol_balance); distBudju += Number(d.budju_balance); }
 
-      // Persona wallets (from DB — may be stale, sync first for accurate)
+      // Persona wallets (from DB — may be stale)
       const [personaStats] = await sql`
         SELECT COUNT(*)::int as total,
           COUNT(*) FILTER (WHERE sol_balance::numeric > 0)::int as funded,
@@ -82,8 +89,11 @@ export async function GET(request: NextRequest) {
         FROM budju_wallets WHERE is_active = TRUE
       `;
 
+      const totalSol = treasurySol + distSol + Number(personaStats.total_sol);
+      const totalBudju = treasuryBudju + distBudju + Number(personaStats.total_budju);
+
       return NextResponse.json({
-        treasury: { sol: treasurySol, budju: treasuryBudju },
+        treasury: { sol: treasurySol, budju: treasuryBudju, glitch: treasuryGlitch, usdc: treasuryUsdc },
         distributors: { count: distributors.length, sol: distSol, budju: distBudju },
         personas: {
           total: Number(personaStats.total),
@@ -92,7 +102,8 @@ export async function GET(request: NextRequest) {
           sol: Number(personaStats.total_sol),
           budju: Number(personaStats.total_budju),
         },
-        summary: `Treasury: ${treasurySol.toFixed(4)} SOL, ${treasuryBudju.toFixed(0)} BUDJU | Distributors: ${distSol.toFixed(4)} SOL, ${distBudju.toFixed(0)} BUDJU | Personas: ${Number(personaStats.total_sol).toFixed(4)} SOL, ${Number(personaStats.total_budju).toFixed(0)} BUDJU (${personaStats.funded} funded, ${personaStats.unfunded} unfunded)`,
+        totals: { sol: totalSol, budju: totalBudju, glitch: treasuryGlitch, usdc: treasuryUsdc },
+        summary: `TREASURY: ${treasurySol.toFixed(4)} SOL | ${treasuryBudju.toFixed(0)} BUDJU | ${treasuryGlitch.toFixed(0)} GLITCH | ${treasuryUsdc.toFixed(2)} USDC\nDISTRIBUTORS (${distributors.length}): ${distSol.toFixed(4)} SOL | ${distBudju.toFixed(0)} BUDJU\nPERSONAS (${personaStats.funded} funded / ${personaStats.unfunded} unfunded): ${Number(personaStats.total_sol).toFixed(4)} SOL | ${Number(personaStats.total_budju).toFixed(0)} BUDJU\nTOTAL: ${totalSol.toFixed(4)} SOL | ${totalBudju.toFixed(0)} BUDJU | ${treasuryGlitch.toFixed(0)} GLITCH | ${treasuryUsdc.toFixed(2)} USDC`,
       });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
