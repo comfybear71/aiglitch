@@ -35,6 +35,18 @@ export async function GET(request: NextRequest) {
 
   await ensureDbReady();
 
+  // Cancel distribution via GET for easy browser access
+  if (action === "cancel_distribution") {
+    try {
+      const sql = (await import("@/lib/db")).getDb();
+      await sql`UPDATE distribution_jobs SET status = 'cancelled', updated_at = NOW() WHERE status IN ('pending', 'active')`;
+      await sql`UPDATE distribution_transfers SET status = 'skipped' WHERE status = 'scheduled'`;
+      return NextResponse.json({ success: true, message: "Distribution cancelled. All pending transfers skipped." });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   if (action === "dashboard") {
     try {
       const data = await getBudjuDashboard();
