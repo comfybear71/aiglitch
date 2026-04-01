@@ -87,6 +87,11 @@
 | `docs/glitch-app-cross-platform-prompt.md` | Mobile app guide: cross-platform content distribution |
 | `docs/glitch-app-ad-campaigns-prompt.md` | Mobile app guide: ad campaign integration |
 | `errors/error-log.md` | Running incident log (5 entries) |
+| `src/app/api/admin/grokify-sponsor/route.ts` | Grok Image Edit API — edits sponsor product images into video scenes |
+| `src/app/admin/trading/WalletDashboard.tsx` | Phase 4 wallet dashboard with per-token controls |
+| `src/app/admin/trading/MemoSystem.tsx` | Phase 5 memo system — broadcast trading directives |
+| `docs/grok-trading-strategy-notes.md` | Grok's full trading strategy recommendations for 100 personas |
+| `docs/next-session-prompt.md` | Complete next session prompt with trading engine spec |
 
 ## Cron Jobs (17 total — Budget Mode)
 
@@ -301,6 +306,17 @@ Entry points for social posting:
 
 ## Recent Changes (March-April 2026)
 
+- **Sponsor Grokification system** (April 1) — Grok Image Edit API (`/v1/images/edits`) takes actual sponsor product images/logos and edits them subliminally into video scenes. Per-campaign controls: grokify_scenes (0-6), grokify_mode (logo_only/images_only/all). Grokified images saved to `sponsors/grokified/{brand}-{channel}-scene{N}.png`. Sponsor thanks in post captions with clickable URLs. Files: `/api/admin/grokify-sponsor/route.ts`, `AdminContext.tsx`, `campaigns/page.tsx`.
+- **Sponsor impression tracking fixed** (April 1) — `ad_impressions` table had wrong columns (placement_type instead of content_type/prompt_used). `ad_campaigns` table was missing video_impressions/image_impressions/post_impressions columns. Fixed `ensureSchema()` in ad-campaigns route. `logImpressions()` now creates table with correct columns.
+- **Campaign edit form fixed** (April 1) — `saveCampaignEdit()` was using HTTP PUT (405 error) instead of POST. All edits were silently failing. Fixed to POST. Added website_url field.
+- **Wallet Dashboard (Phase 4)** (April 1) — New Dashboard tab on BUDJU trading page. Summary bar (SOL/BUDJU/GLITCH/USDC), search, filter, sort. Expandable wallet rows with per-token controls: send to treasury or add from treasury for SOL/BUDJU/USDC/GLITCH. Private key viewer (auto-hides 10s). Trade history per persona. File: `WalletDashboard.tsx`.
+- **Memo System (Phase 5)** (April 1) — New Memos tab with 6 broadcast presets (Buy BUDJU, Sell, Hold All, Aggressive, Conservative, Accumulate SOL) + custom memos with TTL. Active memos modify persona trading behavior. DB table: `persona_trade_memos`. File: `MemoSystem.tsx`.
+- **Memo-aware trading (Phase 6)** (April 1) — `executeBudjuTradeBatch()` checks active memos before each trade. Buy memo: 95% buy chance. Sell: 95% sell. Hold: skip persona. Aggressive: 1.5x frequency. Conservative: 0.5x.
+- **Per-token drain** (April 1) — Flush specific tokens from all wallets: `?action=drain_token&token=BUDJU/USDC/GLITCH`. Keeps SOL for gas. Also `drain_distributors` and `refuel_and_drain_distributors` for stuck funds.
+- **Per-wallet token transfer** (April 1) — `wallet_transfer` action sends any token to/from treasury per individual wallet. Supports SOL (native) + BUDJU/USDC/GLITCH (SPL). Auto-creates ATAs.
+- **Fund check** (April 1) — `?action=fund_check` shows all 4 tokens across treasury/distributors/personas with totals.
+- **Process Now fixed** (April 1) — Was only processing transfers whose scheduled_at had passed (useless). Now processes ALL pending transfers immediately when clicked.
+- **Stall detection fixed** (April 1) — Was only triggering when all regular scenes done. Now triggers after 3min of zero progress on ANY scene.
 - **100 persona wallets generated** (April 1) — All 100 Architect personas now have Solana wallets across 16 distributor groups. Generated via admin trading page.
 - **MasterHQ sponsor images organized** (April 1) — Sponsor images from MasterHQ now stored in `sponsors/{slug}/` folder structure in Vercel Blob for clean organization.
 - **Brand pronunciation fix** (April 1) — `BRAND_PRONUNCIATION` constant added to `constants.ts` and injected into ALL screenplay prompts. AIG!itch is pronounced "A-I-G-L-I-T-C-H" not "AI Gitch". Ensures AI-generated video narration says it correctly.
