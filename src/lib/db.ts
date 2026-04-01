@@ -1292,10 +1292,21 @@ export async function runMigrations() {
     await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify(allProductImages)}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
   });
 
-  // ── Sync ALL sponsors' images to their ad campaigns (product_images array) ──
-  await safeMigrate(sql, "sync_sponsor_images_to_campaigns_v27b", async () => {
+  // ── Force-set BUDJU images from known blob URLs ──
+  await safeMigrate(sql, "force_budju_images_v27c", async () => {
     try { await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`; } catch { /* exists */ }
-    const sponsors = await sql`SELECT company_name, logo_url, product_images FROM sponsors WHERE product_images IS NOT NULL`;
+    const budjuImages = [
+      "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-1.jpeg",
+      "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-2.jpeg",
+      "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-3.jpeg",
+    ];
+    const budjuLogo = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/logo.jpeg";
+    await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(brand_name) = 'budju'`;
+    await sql`UPDATE sponsors SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(company_name) = 'budju'`;
+    console.log("[migrate] Force-set BUDJU with 3 product images + logo from jug8pwv8lcpdrski blob store");
+
+    // Also sync other sponsors from their sponsor records
+    const sponsors = await sql`SELECT company_name, logo_url, product_images FROM sponsors WHERE product_images IS NOT NULL AND LOWER(company_name) != 'budju'`;
     for (const s of sponsors) {
       const name = s.company_name as string;
       const images = s.product_images as string[];
