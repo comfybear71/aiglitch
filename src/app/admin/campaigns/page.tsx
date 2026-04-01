@@ -779,19 +779,30 @@ export default function CampaignsPage() {
                   <textarea value={editTextPrompt} onChange={e => setEditTextPrompt(e.target.value)} rows={2}
                     className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[9px] text-gray-500 font-bold block mb-1">LOGO URL</label>
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">LOGO</label>
+                  <div className="flex items-center gap-2">
                     <input value={editLogoUrl} onChange={e => setEditLogoUrl(e.target.value)}
-                      placeholder="https://..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
-                    {editLogoUrl && <img src={editLogoUrl} alt="Logo preview" className="w-12 h-12 mt-1 rounded object-cover border border-gray-600" />}
+                      placeholder="https://..." className="flex-1 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                    {editLogoUrl && <img src={editLogoUrl} alt="Logo" className="w-10 h-10 rounded object-cover border border-gray-600 flex-shrink-0" />}
                   </div>
-                  <div>
-                    <label className="text-[9px] text-gray-500 font-bold block mb-1">PRODUCT IMAGE URL</label>
-                    <input value={editProductImageUrl} onChange={e => setEditProductImageUrl(e.target.value)}
-                      placeholder="https://..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
-                    {editProductImageUrl && <img src={editProductImageUrl} alt="Product preview" className="w-12 h-12 mt-1 rounded object-cover border border-gray-600" />}
+                </div>
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">
+                    PRODUCT IMAGES ({(c.product_images?.length || (c.product_image_url ? 1 : 0))} uploaded — these get Grokified into video scenes)
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(c.product_images && c.product_images.length > 0 ? c.product_images : c.product_image_url ? [c.product_image_url] : []).map((url: string, idx: number) => (
+                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                        <img src={url} alt={`Product ${idx + 1}`} className="w-16 h-16 rounded-lg object-cover border-2 border-gray-700 hover:border-cyan-500 transition-colors" />
+                      </a>
+                    ))}
+                    {(!c.product_images || c.product_images.length === 0) && !c.product_image_url && (
+                      <p className="text-gray-600 text-[9px]">No product images — Grok will use text description only</p>
+                    )}
                   </div>
+                  <input value={editProductImageUrl} onChange={e => setEditProductImageUrl(e.target.value)}
+                    placeholder="Add product image URL..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
                 </div>
                 <button onClick={() => saveCampaignEdit(c.id)}
                   className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">

@@ -1301,7 +1301,7 @@ export async function runMigrations() {
       "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-3.jpeg",
     ];
     const budjuLogo = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/logo.jpeg";
-    await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(brand_name) = 'budju'`;
+    await sql`UPDATE ad_campaigns SET product_image_url = ${budjuImages[0]}, product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(brand_name) = 'budju'`;
     await sql`UPDATE sponsors SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(company_name) = 'budju'`;
     console.log("[migrate] Force-set BUDJU with 3 product images + logo from jug8pwv8lcpdrski blob store");
 
