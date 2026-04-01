@@ -1316,7 +1316,7 @@ export async function runMigrations() {
         console.log(`[migrate] Synced ${images.length} images from sponsor "${name}" to ad campaign`);
       }
     }
-  });
+  } catch (err) { console.error("[migrate] Sponsor image sync error:", err); }
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
