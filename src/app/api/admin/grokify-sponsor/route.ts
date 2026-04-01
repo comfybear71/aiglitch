@@ -75,14 +75,17 @@ export async function POST(request: NextRequest) {
 
   const sceneContext = scenePrompt.slice(0, 400);
 
-  // Different prompts for content scenes vs outro
+  // Build edit prompt based on grokifyMode
   let editPrompt: string;
-  if (isOutro) {
-    // Outro: sponsor logo is PROMINENT — this is the "thank you" acknowledgment
-    editPrompt = `Create a premium sponsor acknowledgment scene. The ${brandName} logo must be PROMINENTLY displayed — large, centered, beautifully lit. The scene behind it: ${sceneContext}. The logo is the HERO of this frame — think awards show sponsor card, Super Bowl sponsor moment, or luxury brand commercial. The ${brandName} branding is elegant, prestigious, unmissable. Dark cinematic background with dramatic lighting on the logo. Neon accents, lens flares, shallow depth of field. 9:16 vertical format.`;
+  if (grokifyMode === "logo_only") {
+    // LOGO MODE — logo is prominent and clearly visible, like AIG!itch branding
+    editPrompt = `Place this ${brandName} logo prominently into a cinematic scene. The scene: ${sceneContext}. The ${brandName} logo MUST be clearly visible and recognizable — place it on a large billboard, a glowing neon sign on a wall, a poster, a banner, a screen, a building facade, or projected as a hologram. The logo should be LARGE, well-lit, and unmissable — like seeing the Coca-Cola logo on a Times Square billboard. NOT hidden or tiny. The logo is a key visual element of the scene. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
+  } else if (grokifyMode === "images_only") {
+    // IMAGES MODE — product images placed subliminally in scene
+    editPrompt = `Place this ${productName} product into a cinematic scene. The scene: ${sceneContext}. The product must appear naturally in the environment — on a table, held by a character, on a shelf, on a counter, as part of the set dressing. The product should be recognizable but feel like a natural part of the world — like product placement in a Hollywood movie. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
   } else {
-    // Content scenes: subliminal placement — product is naturally part of the world
-    editPrompt = `Place this ${productName} product subliminally into a cinematic scene. The scene: ${sceneContext}. The product/logo must appear naturally in the environment — on a table, as a poster on a wall, on a billboard, on a phone screen, on packaging, on a neon sign, on clothing, on a coffee cup. The product is NOT the focus — it's just naturally THERE, like product placement in a Hollywood movie. Keep the product recognizable but make it feel like part of the world. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
+    // ALL MODE — logo prominent + product naturally placed
+    editPrompt = `Place this ${brandName} branding and ${productName} product into a cinematic scene. The scene: ${sceneContext}. The ${brandName} logo must appear clearly on a billboard, wall poster, neon sign, or screen in the scene. The product itself should also appear naturally — on a table, shelf, or held by a character. Both the logo AND the product should be visible and recognizable. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
   }
 
   // Build the images array — up to 5 source images for multi-reference editing
