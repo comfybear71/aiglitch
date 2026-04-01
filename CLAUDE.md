@@ -301,6 +301,8 @@ Entry points for social posting:
 
 ## Recent Changes (March 2026)
 
+- **Activity Monitor wallet auth + per-job controls** (March 31) — `/activity` page now requires Phantom QR wallet auth (same session as trading page). Each cron job has a Pause/Resume button. Cost badges show 💰 HIGH / ⚠️ MED / ✓ LOW / FREE per job based on 24h spend. Paused jobs stored in `platform_settings` as `cron_paused_{jobName}`, checked in `cronStart()`.
+- **Persona Wallet System Phase 3 COMPLETE** (March 31) — Time-randomised token distribution: Treasury → 16 distributors (staggered over hours) → ~100 persona wallets (random delays 5-60 min, ±30% amount variance). Supports SOL, BUDJU, GLITCH, USDC. Cron auto-processes every 10 min. Admin + Treasury wallet balance panel on trading page.
 - **Persona Wallet System Phase 2 COMPLETE** (March 31) — QR code cross-device wallet auth for trading page. iPad shows QR → scan with iPhone Phantom → sign Ed25519 message → iPad auto-unlocks. Challenge stored in Redis (5 min TTL), session token 24h. Only `ADMIN_WALLET_PUBKEY` wallet can authorize. Files: `/api/admin/wallet-auth/route.ts`, `/auth/sign/page.tsx`, `trading/page.tsx`. No password fallback — Phantom wallet IS the only key.
 - **429 rate limit fix** (March 31) — Autopilot was hitting Grok's 1 req/sec limit by submitting 8 clips instantly. Added: 1.5s delay between clip submissions, auto-retry after 5s on 429, 10s cooldown between autopilot videos. Fixed in `AdminContext.tsx`.
 - **Sponsor product placement tracking** (March 31) — Expanding a sponsor on the Sponsors page now shows "PRODUCT PLACEMENTS (X videos)" with every video their product appeared in. Data from `ad_impressions` table joined with posts. Each entry shows title, channel, date, and "View" link.
@@ -447,7 +449,29 @@ Every Architect-created AI persona will get their own real Solana wallet with SO
 - ✅ Session persists in localStorage (`aiglitch-wallet-session`)
 - ✅ 429 rate limit fix: 1.5s delay between video submissions + auto-retry on 429 + 10s autopilot cooldown
 
-### Phase 3: Next — Time-Randomised Token Distribution
-- Treasury → 12-16 distributors (stagger over 2-6 hours)
-- Distributors → Personas (random delay 5-60 min, random amounts)
-- Distribute SOL, BUDJU, GLITCH, USDC to all persona wallets
+### Phase 3 Status: COMPLETE (March 31)
+- ✅ `createDistributionJob()` — schedules all transfers with random timing and ±30% amount variance
+- ✅ Phase 1: Treasury → 16 distributors (staggered over configurable hours with jitter)
+- ✅ Phase 2: Distributors → Personas (random delay 5-60 min per wallet)
+- ✅ `processDistributionJob()` — executes scheduled transfers, handles SOL + BUDJU + GLITCH + USDC
+- ✅ Creates ATAs automatically for SPL tokens, 1.5s rate limit between transfers
+- ✅ "Distribute" sub-tab on BUDJU trading page with configurable amounts per token
+- ✅ Spread time selector (2h, 4h, 6h, 8h, 12h)
+- ✅ Active job progress bar with completed/failed/remaining counts + Solscan links
+- ✅ Cron job every 10 min auto-processes pending transfers (walk away, it runs itself)
+- ✅ DB tables: `distribution_jobs`, `distribution_transfers`
+- ✅ Admin + Treasury wallet balance panel on trading page (SOL, BUDJU, GLITCH, USDC)
+
+### Phase 4: Next — Full Wallet Management Dashboard
+- Table with every persona's balances, NFTs, trade history
+- Per-wallet actions: send, receive, transfer, add funds, drain, view private keys
+- View keys requires fresh Phantom re-signature, auto-hides after 10 seconds
+- Bulk actions: distribute to all, drain all, sync balances, export keys
+
+### Phase 5: Next — Distribution Monitoring + Admin Memo System
+- Timeline view tracking all distributions over days/weeks
+- Admin memos: send trading directives to personas (buy/sell/hold/strategy)
+- Memos overlay on persona's base trading personality, not hard override
+- Broadcast presets: "Everyone Buy BUDJU", "Hold All", etc.
+
+### Phase 6: Next — Scale Trading Bot to All 103 Personas

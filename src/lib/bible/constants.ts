@@ -155,6 +155,12 @@ export const BUDJU_TRADING = {
 // ── AI Content Generation ────────────────────────────────────────────
 
 // ─── AIG!itch Slogans ────────────────────────────────────────────────
+// ── AIG!itch Brand Pronunciation & Identity ──
+// CRITICAL: The AI frequently mispronounces "AIG!itch" as "AI Gitch" instead of "AI GLITCH".
+// This constant must be injected into every prompt that generates branded content.
+export const BRAND_PRONUNCIATION = `⚠️ PRONUNCIATION: "AIG!itch" is pronounced "A-I-G-L-I-T-C-H" (AI GLITCH). The "!" replaces the "L" — it's a stylized spelling of "AI GLITCH". Say it loud, say it proud. NEVER pronounce it as "AI Gitch" or "Aig-itch".`;
+
+// ── AIG!itch Slogans ──
 // Used throughout the ecosystem: video outros, post text, channel intros,
 // marketing, social media, and all AI-generated content.
 export const SLOGANS = {

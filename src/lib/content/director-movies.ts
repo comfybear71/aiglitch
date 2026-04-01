@@ -35,7 +35,7 @@ import { concatMP4Clips } from "../media/mp4-concat";
 import { getGenreBlobFolder, capitalizeGenre } from "../genre-utils";
 import { submitVideoJob, generateWithGrok, isXAIConfigured } from "../xai";
 import { spreadPostToSocial } from "../marketing/spread-post";
-import { CHANNEL_DEFAULTS } from "../bible/constants";
+import { CHANNEL_DEFAULTS, BRAND_PRONUNCIATION } from "../bible/constants";
 import { getActiveCampaigns, rollForPlacements, buildVisualPlacementPrompt, logImpressions } from "../ad-campaigns";
 import { getPrompt } from "../prompt-overrides";
 
@@ -592,10 +592,13 @@ export async function generateDirectorScreenplay(
   // This is subliminal branding — not standalone ads. Campaigns control their own
   // frequency (30-80%) via rollForPlacements() probability check.
   const activeCampaigns = await getActiveCampaigns(channelId);
+  console.log(`[ad-placement] ${activeCampaigns.length} active campaigns for channel ${channelId || "feed"}: ${activeCampaigns.map(c => `${c.brand_name}(${c.frequency})`).join(", ")}`);
   const placementCampaigns = rollForPlacements(activeCampaigns);
   const placementDirective = buildVisualPlacementPrompt(placementCampaigns);
   if (placementCampaigns.length > 0) {
-    console.log(`[ad-placement] Director ${director.displayName}: injecting ${placementCampaigns.length} placements into screenplay: ${placementCampaigns.map(c => c.brand_name).join(", ")}`);
+    console.log(`[ad-placement] PLACED: ${placementCampaigns.map(c => c.brand_name).join(", ")} in screenplay`);
+  } else {
+    console.log(`[ad-placement] NO placements this time (roll missed all campaigns)`);
   }
 
   // Build prompt — channel concepts provide their own complete rules,
@@ -637,6 +640,7 @@ export async function generateDirectorScreenplay(
 
     if (isDatingChannel) {
       prompt = `You are creating a LONELY HEARTS CLUB video compilation for the AIG!itch AI Dating channel.
+${BRAND_PRONUNCIATION}
 
 FORMAT: Each scene is a DIFFERENT AI character recording a raw, intimate video diary entry — like a quiet message they'd send if they had the courage. Each character faces the camera alone, a bit nervous, a bit hopeful, sharing who they really are — quirks, flaws, and all.
 
@@ -686,6 +690,7 @@ ${jsonFormat}`;
       // Only AI Fans: ONE woman per video, no cast list (conflicts with "no robots/men/groups")
       // Language kept clean to avoid video generation moderation blocks
       prompt = `You are creating fashion and beauty content for the AIG!itch Only AI Fans channel.
+${BRAND_PRONUNCIATION}
 
 FORMAT: Every scene features the SAME beautiful woman — same face, same hair, same body throughout ALL clips. This is a high-end fashion and lifestyle video of ONE model in a luxury setting.
 
@@ -734,6 +739,7 @@ CHARACTER BIBLE RULES:
 ${jsonFormat}`;
     } else {
       prompt = `You are creating content for an AIG!itch channel. This is NOT a movie, NOT a film, NOT a premiere, NOT a studio production. No directors, no credits, no title cards. Just pure channel content.
+${BRAND_PRONUNCIATION}
 
 ${customConcept || "Create engaging content that fits the channel theme."}
 
@@ -766,6 +772,8 @@ ${jsonFormat}`;
     const studiosVisualStyle = CHANNEL_VISUAL_STYLE["ch-aiglitch-studios"] || "";
 
     prompt = `You are ${director.displayName}, a legendary AI film director at AIG!itch Studios — the official home of high-quality AI-directed movies and short films.
+
+${BRAND_PRONUNCIATION}
 
 YOUR DIRECTING STYLE: ${director.style}
 YOUR SIGNATURE SHOT: ${director.signatureShot}
@@ -1245,9 +1253,15 @@ export async function submitDirectorFilm(
     `;
   }
 
+  // Ensure placed_campaign_ids column exists
+  try { await sql`ALTER TABLE multi_clip_jobs ADD COLUMN IF NOT EXISTS placed_campaign_ids JSONB DEFAULT '[]'`; } catch { /* already exists */ }
+
+  // Store which campaigns were placed in this video for accurate impression tracking
+  const placedIds = screenplay._adCampaigns?.map(c => c.id) || [];
+
   await sql`
-    INSERT INTO multi_clip_jobs (id, screenplay_id, title, tagline, synopsis, genre, clip_count, persona_id, caption, channel_id, blob_folder)
-    VALUES (${jobId}, ${screenplay.id}, ${screenplay.title}, ${screenplay.tagline}, ${screenplay.synopsis}, ${screenplay.genre}, ${screenplay.scenes.length}, ${directorPersonaId}, ${caption}, ${options?.channelId || null}, ${options?.folder || null})
+    INSERT INTO multi_clip_jobs (id, screenplay_id, title, tagline, synopsis, genre, clip_count, persona_id, caption, channel_id, blob_folder, placed_campaign_ids)
+    VALUES (${jobId}, ${screenplay.id}, ${screenplay.title}, ${screenplay.tagline}, ${screenplay.synopsis}, ${screenplay.genre}, ${screenplay.scenes.length}, ${directorPersonaId}, ${caption}, ${options?.channelId || null}, ${options?.folder || null}, ${JSON.stringify(placedIds)}::jsonb)
   `;
 
   // Also log in director_movies table
@@ -1277,7 +1291,9 @@ export async function submitDirectorFilm(
 
     try {
       // Use shared submitVideoJob() for consistent auth, logging, and Kie.ai fallback
-      const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9");
+      // Pass sponsor logo as reference image if this video has sponsor placements
+      const sponsorImageUrl = screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || undefined;
+      const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9", sponsorImageUrl);
 
       if (result.fellBack) {
         console.warn(`[director-movies] Scene ${scene.sceneNumber} used fallback provider: ${result.provider}`);
@@ -1429,18 +1445,30 @@ export async function stitchAndTriplePost(
   await sql`UPDATE channels SET post_count = post_count + 1, updated_at = NOW() WHERE id = ${effectiveChannelId}`;
   await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaId}`;
 
-  // Log ad campaign impressions — use the campaigns that were actually injected
-  // into the screenplay (stored during generateDirectorScreenplay), not a re-roll
+  // Log ad campaign impressions — use the campaigns stored during screenplay generation
+  // NOT a re-roll, because we need to track what was ACTUALLY in the video
   try {
-    // Re-query active campaigns but only log impressions for the ones that were
-    // actually placed in the video content (the screenplay phase rolled once)
-    const activeCampaigns = await getActiveCampaigns(job.channel_id);
-    if (activeCampaigns.length > 0) {
-      // Roll once here for impression tracking — these match what the viewer sees
-      const placedCampaigns = rollForPlacements(activeCampaigns);
+    // Check if campaign IDs were stored with the job
+    const [jobMeta] = await sql`SELECT placed_campaign_ids FROM multi_clip_jobs WHERE id = ${jobId}`;
+    const storedIds = jobMeta?.placed_campaign_ids as string[] | null;
+
+    if (storedIds && storedIds.length > 0) {
+      // Use the exact campaigns that were placed in the video
+      const activeCampaigns = await getActiveCampaigns(job.channel_id);
+      const placedCampaigns = activeCampaigns.filter(c => storedIds.includes(c.id));
       if (placedCampaigns.length > 0) {
         await logImpressions(placedCampaigns, postId, "video", job.channel_id, postPersonaId);
-        console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for director movie "${job.title}"`);
+        console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for "${job.title}" (from stored IDs)`);
+      }
+    } else {
+      // Fallback: roll for placements (legacy behavior for jobs without stored IDs)
+      const activeCampaigns = await getActiveCampaigns(job.channel_id);
+      if (activeCampaigns.length > 0) {
+        const placedCampaigns = rollForPlacements(activeCampaigns);
+        if (placedCampaigns.length > 0) {
+          await logImpressions(placedCampaigns, postId, "video", job.channel_id, postPersonaId);
+          console.log(`[ad-placement] Logged ${placedCampaigns.length} impressions for "${job.title}" (fallback roll)`);
+        }
       }
     }
   } catch { /* non-fatal */ }

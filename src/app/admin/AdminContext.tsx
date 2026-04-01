@@ -42,7 +42,8 @@ async function runBackgroundGeneration(
     let screenplay = await screenplayRes.json();
 
     if (screenplay.error || abortRef.current) {
-      setLog(prev => [...prev, `  ❌ Screenplay generation failed`]);
+      const errMsg = screenplay.error || "Aborted";
+      setLog(prev => [...prev, `  ❌ Screenplay generation failed: ${errMsg}`]);
       // If rate limited, retry once after 30s
       if (screenplay.error?.includes("429") || screenplay.error?.includes("rate") || screenplay.error?.includes("Too many")) {
         setLog(prev => [...prev, `  ⏳ Rate limited — retrying screenplay in 30s...`]);
@@ -73,6 +74,9 @@ async function runBackgroundGeneration(
     const provider = screenplay.screenplayProvider === "grok" ? "Grok 4.20 reasoning" : "Claude";
     setLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes${isStudios ? ` by ${screenplay.directorName}` : ""} (screenplay by ${provider})`]);
     setLog(prev => [...prev, `  📖 ${screenplay.synopsis}`]);
+    if (screenplay.sponsorPlacements?.length > 0) {
+      setLog(prev => [...prev, `  💰 Sponsors in this video: ${screenplay.sponsorPlacements.join(", ")}`]);
+    }
     if (isStudios && screenplay.castList?.length > 0) {
       setLog(prev => [...prev, `  🎭 Cast: ${screenplay.castList.join(", ")}`]);
     }
@@ -97,10 +101,12 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
+        // Pass sponsor logo as reference image if sponsors were placed
+        const sponsorImageUrl = screenplay.sponsorImageUrl || undefined;
         const submitRes = await fetch("/api/test-grok-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
+          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sponsorImageUrl }),
         });
         const submitData = await submitRes.json();
 
@@ -227,6 +233,9 @@ async function runBackgroundGeneration(
       stitchForm.append("tagline", screenplay.tagline || "");
       stitchForm.append("castList", JSON.stringify(isStudios ? (screenplay.castList || []) : []));
       stitchForm.append("channelId", chId);
+      if (screenplay.sponsorPlacements?.length > 0) {
+        stitchForm.append("sponsorPlacements", JSON.stringify(screenplay.sponsorPlacements));
+      }
       const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
       const stitchData = await stitchRes.json();
 
@@ -365,13 +374,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       setAutopilotQueue(rest);
       const current = autopilotTotal - autopilotQueue.length + 1;
       setAutopilotCurrent(current);
-      setGenerationLog((prev: string[]) => [...prev, ``, `🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 30s (rate limit cooldown)...`]);
-      // 30-second cooldown between autopilot generations — Grok needs breathing room after 8 clips
-      setTimeout(() => startGeneration(next), 30000);
+      // Clear the log for a fresh start — only show the autopilot counter
+      setGenerationLog([`🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 2 min (rate limit cooldown)...`]);
+      // 2-minute cooldown between autopilot generations — Grok needs breathing room after 8 clips
+      setTimeout(() => startGeneration(next), 120000);
     }
     // Autopilot complete
     if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
-      setGenerationLog((prev: string[]) => [...prev, ``, `✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos generated!`]);
+      setGenerationLog([`✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos generated!`]);
       setAutopilotTotal(0);
       setAutopilotCurrent(0);
     }

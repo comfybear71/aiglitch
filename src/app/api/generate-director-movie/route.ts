@@ -237,6 +237,8 @@ export async function POST(request: NextRequest) {
     const castList = (body.castList || []) as string[];
     const channelId = (body.channelId || body.channel_id) as string | undefined;
     const folder = (body.folder) as string | undefined;
+    let sponsorPlacements: string[] = [];
+    try { sponsorPlacements = JSON.parse(String(body.sponsorPlacements || "[]")); } catch { sponsorPlacements = []; }
 
     if (!sceneUrls || !title) {
       return NextResponse.json({ error: "Missing required fields", hint: `Received keys: ${Object.keys(body).join(", ")}` }, { status: 400 });
@@ -304,6 +306,30 @@ export async function POST(request: NextRequest) {
     const { spreadPostToSocial } = await import("@/lib/marketing/spread-post");
     const spreadName = channelId ? "The Architect" : directorUsername;
     const spread = await spreadPostToSocial(postId, postPersonaId, spreadName, "\u{1F3AC}", { url: blob.url, type: "video" });
+
+    // Log sponsor impressions for this video
+    try {
+      const { getActiveCampaigns, rollForPlacements, logImpressions } = await import("@/lib/ad-campaigns");
+      const activeCampaigns = await getActiveCampaigns(channelId);
+      if (activeCampaigns.length > 0) {
+        // Check if campaign IDs were passed from the screenplay
+        const sponsorNames = sponsorPlacements;
+        let placedCampaigns;
+        if (sponsorNames.length > 0) {
+          // Use the exact campaigns from the screenplay
+          placedCampaigns = activeCampaigns.filter(c => sponsorNames.includes(c.brand_name));
+        } else {
+          // Fallback: roll for placements
+          placedCampaigns = rollForPlacements(activeCampaigns);
+        }
+        if (placedCampaigns.length > 0) {
+          await logImpressions(placedCampaigns, postId, "video", channelId || null, postPersonaId);
+          console.log(`[generate-director-movie] Logged ${placedCampaigns.length} impressions for "${title}": ${placedCampaigns.map(c => c.brand_name).join(", ")}`);
+        }
+      }
+    } catch (err) {
+      console.error("[generate-director-movie] Impression logging failed:", err);
+    }
 
     return NextResponse.json({
       action: "stitched", feedPostId: postId, premierePostId: postId, directorMovieId,
