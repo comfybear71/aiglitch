@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     const requestId = createData.request_id || createData.id;
     console.log(`[sponsor-clip] Submitted to Grok: requestId=${requestId}`);
 
-    return NextResponse.json({ requestId, imageUrl: blob.url });
+    return NextResponse.json({ requestId });
   } catch (err) {
     console.error("[sponsor-clip] Error:", err instanceof Error ? err.message : err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
