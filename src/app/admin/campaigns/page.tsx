@@ -610,47 +610,62 @@ export default function CampaignsPage() {
                     Sponsored Videos ({c.impressions} placements)
                   </button>
                   {isExpanded(c.id, "videos") && (
-                    <div className="bg-gray-800/50 rounded-lg p-2 mb-2 pl-3 max-h-64 overflow-y-auto">
+                    <div className="mb-2 max-h-80 overflow-y-auto rounded-lg border border-gray-700/50 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
                       {videosLoading === c.id ? (
-                        <p className="text-gray-500 text-[10px]">Loading videos...</p>
+                        <div className="flex items-center justify-center py-6">
+                          <div className="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full" />
+                          <span className="text-gray-500 text-xs ml-2">Loading placements...</span>
+                        </div>
                       ) : !sponsoredVideos[c.id] || sponsoredVideos[c.id].length === 0 ? (
-                        <p className="text-gray-600 text-[10px]">No videos with this sponsor yet</p>
+                        <p className="text-gray-600 text-[10px] text-center py-4">No placements recorded yet</p>
                       ) : (
-                        <div className="space-y-1.5">
+                        <div className="divide-y divide-gray-800/80">
                           {sponsoredVideos[c.id].map((v, idx) => {
                             const title = v.post_content?.split("\n")[0]?.replace(/^🎬\s*/, "") || (v.post_id ? `Post ${v.post_id.slice(0, 8)}...` : `Impression #${idx + 1}`);
                             const date = new Date(v.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-                            const channelLabel = v.channel_id ? v.channel_id.replace("ch-", "").replace(/-/g, " ") : "Feed";
+                            const channelLabel = v.channel_id ? v.channel_id.replace("ch-", "").replace(/-/g, " ") : "Main Feed";
                             const postUrl = v.post_id ? `/post/${v.post_id}` : null;
                             const mediaUrl = v.media_url || null;
                             const isVideo = v.media_type === "video";
+                            const typeIcon = v.content_type === "video" ? "🎬" : v.content_type === "image" ? "🖼" : "💬";
+                            const typeBadgeColor = v.content_type === "video" ? "bg-purple-500/20 text-purple-300 border-purple-500/30" : v.content_type === "image" ? "bg-blue-500/20 text-blue-300 border-blue-500/30" : "bg-green-500/20 text-green-300 border-green-500/30";
                             return (
-                              <div key={v.id || idx} className="flex items-center gap-2 text-[10px] hover:bg-gray-700/30 rounded p-1 -m-1">
-                                {mediaUrl && (
-                                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-12 h-8 bg-gray-700 rounded overflow-hidden hover:ring-1 hover:ring-cyan-500">
+                              <div key={v.id || idx} className="flex items-center gap-3 p-2.5 hover:bg-gray-800/60 transition-colors group">
+                                {/* Thumbnail */}
+                                {mediaUrl ? (
+                                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-16 h-10 bg-gray-900 rounded-md overflow-hidden ring-1 ring-gray-700 group-hover:ring-cyan-500/50 transition-all">
                                     {isVideo ? (
                                       <video src={mediaUrl} className="w-full h-full object-cover" muted preload="metadata" />
                                     ) : (
                                       <img src={mediaUrl} alt="" className="w-full h-full object-cover" />
                                     )}
                                   </a>
-                                )}
-                                {!mediaUrl && (
-                                  <div className="flex-shrink-0 w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-gray-600 text-[8px]">
-                                    {v.content_type === "video" ? "🎬" : v.content_type === "image" ? "🖼" : "💬"}
+                                ) : (
+                                  <div className="flex-shrink-0 w-16 h-10 bg-gray-900 rounded-md ring-1 ring-gray-800 flex items-center justify-center text-lg">
+                                    {typeIcon}
                                   </div>
                                 )}
+                                {/* Details */}
                                 <div className="flex-1 min-w-0">
                                   {postUrl ? (
-                                    <a href={postUrl} target="_blank" rel="noopener noreferrer" className="text-white hover:text-cyan-400 truncate block underline decoration-gray-600 hover:decoration-cyan-400" title={title}>{title.slice(0, 60)}</a>
+                                    <a href={postUrl} target="_blank" rel="noopener noreferrer" className="text-white hover:text-cyan-400 text-xs font-medium truncate block transition-colors" title={title}>{title.slice(0, 70)}</a>
                                   ) : (
-                                    <p className="text-gray-400 truncate" title={title}>{title.slice(0, 60)}</p>
+                                    <p className="text-gray-400 text-xs truncate" title={title}>{title.slice(0, 70)}</p>
                                   )}
-                                  <p className="text-gray-500">
-                                    <span className="text-purple-400">{channelLabel}</span> · {date} · <span className="text-cyan-400">{v.content_type}</span>
-                                    {mediaUrl && <> · <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 underline">{isVideo ? "Watch" : "View"}</a></>}
-                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${typeBadgeColor}`}>{typeIcon} {v.content_type}</span>
+                                    <span className="text-gray-500 text-[10px]">{channelLabel}</span>
+                                    <span className="text-gray-600 text-[10px]">·</span>
+                                    <span className="text-gray-500 text-[10px]">{date}</span>
+                                  </div>
                                 </div>
+                                {/* Action */}
+                                {mediaUrl && (
+                                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer"
+                                    className="flex-shrink-0 px-2.5 py-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-md text-[10px] hover:bg-cyan-500/20 transition-colors opacity-0 group-hover:opacity-100">
+                                    {isVideo ? "▶ Watch" : "🖼 View"}
+                                  </a>
+                                )}
                               </div>
                             );
                           })}
@@ -669,7 +684,7 @@ export default function CampaignsPage() {
                   <button onClick={() => toggleSection(c.id, "videos")} className="text-green-400 hover:text-green-300 cursor-pointer underline decoration-green-800 hover:decoration-green-400">{"\u{1F4AC}"} {c.post_impressions}</button>
                   <button onClick={() => toggleSection(c.id, "videos")} className="text-white font-bold hover:text-cyan-400 cursor-pointer underline decoration-gray-600 hover:decoration-cyan-400">{c.impressions} total</button>
                   <span className="text-gray-600">|</span>
-                  <span className="text-yellow-400">🖼️ {c.grokify_scenes || 3} Grokify/video</span>
+                  <span className="text-yellow-400 text-[9px]">Scenes with product:</span>
                   <div className="flex items-center gap-1">
                     {[0, 1, 2, 3, 4, 5, 6].map(n => (
                       <button key={n} onClick={async () => {
