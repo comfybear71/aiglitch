@@ -302,7 +302,7 @@ export async function initializeDb() {
 // sequentially = 26s. Running in 4 parallel batches = ~1-2s.
 // Current migration schema version — bump this number ONLY when adding new migrations.
 // On cold start, if DB already has this version stored, ALL migrations are skipped (single query).
-const MIGRATION_VERSION = 26;
+const MIGRATION_VERSION = 27;
 
 export async function runMigrations() {
   const sql = getDb();
@@ -1156,6 +1156,19 @@ export async function runMigrations() {
       updated_by VARCHAR(100) DEFAULT 'admin',
       UNIQUE(category, key)
     )`);
+
+  // ── Fix BUDJU sponsor & campaign data ──
+  await safeMigrate(sql, "fix_budju_campaign_v27", async () => {
+    // Fix "Unknown" sponsor name to "BUDJU"
+    await sql`UPDATE sponsors SET company_name = 'BUDJU' WHERE LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com'`;
+    // Update BUDJU ad campaign with logo and product images
+    const budjuLogo = "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/logo.jpeg";
+    const budjuProduct = "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-1.jpeg";
+    const budjuVisualPrompt = "A shiny metallic purple and pink cryptocurrency coin with 'BUDJU' text embossed on it, glowing neon purple edges, holographic sheen. The BUDJU coin sits prominently on a desk, table, shelf, or held by a character. Also show a phone or screen displaying the BUDJU trading chart with purple/pink branding. The BUDJU logo is pink cursive text 'Budju' with a heart symbol and a blonde cartoon character mascot. Purple/pink neon coin aesthetic. Make the BUDJU branding clearly visible and recognizable in the scene.";
+    await sql`UPDATE ad_campaigns SET logo_url = ${budjuLogo}, product_image_url = ${budjuProduct}, visual_prompt = ${budjuVisualPrompt} WHERE LOWER(brand_name) = 'budju'`;
+    // Also update the sponsor record
+    await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify([budjuProduct, "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-2.jpeg", "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-3.jpeg"])}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
+  });
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
