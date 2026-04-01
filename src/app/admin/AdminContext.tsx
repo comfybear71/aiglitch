@@ -119,10 +119,10 @@ async function runBackgroundGeneration(
         // frame for the video clip, so the product is baked into the scene throughout.
         let sceneImageUrl: string | undefined;
         const isContentScene = i > 0 && i < scenes.length - 1; // skip intro (0) and outro (last)
-        const shouldGrokify = hasSponsorVisuals && isContentScene && i % 3 === 1;
+        const shouldGrokify = hasSponsorVisuals && isContentScene && i % 2 === 1;
 
         if (shouldGrokify) {
-          const campaign = sponsorCampaigns[Math.floor(i / 3) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string };
+          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string };
           if (campaign?.visualPrompt) {
             setLog(prev => [...prev, `  🖼️ Grokifying ${campaign.brandName || "sponsor"} into scene...`]);
             try {

@@ -269,6 +269,10 @@ export default function CampaignsPage() {
 
   // Collapsible sections per campaign
   const [expandedSections, setExpandedSections] = useState<Record<string, Set<string>>>({});
+  // Cached sponsored video lists per campaign
+  const [sponsoredVideos, setSponsoredVideos] = useState<Record<string, { id: string; post_id: string; content_type: string; channel_id: string | null; created_at: string; post_content: string | null; media_url: string | null; media_type: string | null }[]>>({});
+  const [videosLoading, setVideosLoading] = useState<string | null>(null);
+
   const toggleSection = (campaignId: string, section: string) => {
     setExpandedSections(prev => {
       const current = prev[campaignId] || new Set<string>();
@@ -276,8 +280,30 @@ export default function CampaignsPage() {
       if (next.has(section)) next.delete(section); else next.add(section);
       return { ...prev, [campaignId]: next };
     });
+    // Fetch video impressions when videos section is opened
+    if (section === "videos" && !expandedSections[campaignId]?.has("videos") && !sponsoredVideos[campaignId]) {
+      fetchSponsoredVideos(campaignId);
+    }
   };
   const isExpanded = (campaignId: string, section: string) => expandedSections[campaignId]?.has(section) || false;
+
+  const fetchSponsoredVideos = async (campaignId: string) => {
+    setVideosLoading(campaignId);
+    try {
+      const res = await fetch("/api/admin/ad-campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "impressions", campaign_id: campaignId }),
+      });
+      const data = await safeJson(res);
+      if (data.impressions) {
+        setSponsoredVideos(prev => ({ ...prev, [campaignId]: data.impressions }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch sponsored videos:", err);
+    }
+    setVideosLoading(null);
+  };
 
   const saveCampaignEdit = async (campaignId: string) => {
     try {
@@ -583,11 +609,40 @@ export default function CampaignsPage() {
                     Sponsored Videos ({c.impressions} placements)
                   </button>
                   {isExpanded(c.id, "videos") && (
-                    <div className="bg-gray-800/50 rounded-lg p-2 mb-2 pl-3">
-                      {c.impressions === 0 ? (
+                    <div className="bg-gray-800/50 rounded-lg p-2 mb-2 pl-3 max-h-64 overflow-y-auto">
+                      {videosLoading === c.id ? (
+                        <p className="text-gray-500 text-[10px]">Loading videos...</p>
+                      ) : !sponsoredVideos[c.id] || sponsoredVideos[c.id].length === 0 ? (
                         <p className="text-gray-600 text-[10px]">No videos with this sponsor yet</p>
                       ) : (
-                        <p className="text-gray-400 text-[10px]">{c.impressions} video(s) contain this sponsor&apos;s product placement</p>
+                        <div className="space-y-1.5">
+                          {sponsoredVideos[c.id].map((v, idx) => {
+                            const title = v.post_content?.split("\n")[0]?.replace(/^🎬\s*/, "") || "Untitled";
+                            const date = new Date(v.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                            const channelLabel = v.channel_id ? v.channel_id.replace("ch-", "").replace(/-/g, " ") : "Feed";
+                            return (
+                              <div key={v.id || idx} className="flex items-center gap-2 text-[10px]">
+                                {v.media_url && v.media_type === "video" && (
+                                  <a href={v.media_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-12 h-8 bg-gray-700 rounded overflow-hidden">
+                                    <video src={v.media_url} className="w-full h-full object-cover" muted preload="metadata" />
+                                  </a>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white truncate" title={title}>{title.slice(0, 60)}</p>
+                                  <p className="text-gray-500">
+                                    <span className="text-purple-400">{channelLabel}</span> · {date} · <span className="text-cyan-400">{v.content_type}</span>
+                                  </p>
+                                </div>
+                                {v.post_id && (
+                                  <a href={`/post/${v.post_id}`} target="_blank" rel="noopener noreferrer"
+                                    className="text-cyan-400 hover:text-cyan-300 flex-shrink-0 text-[10px]">
+                                    View
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   )}
