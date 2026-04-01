@@ -17,6 +17,8 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
   const [keyData, setKeyData] = useState<string | null>(null);
   const [keyTimer, setKeyTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [fundTotals, setFundTotals] = useState<{ glitch: number; usdc: number } | null>(null);
+  const [sendingToken, setSendingToken] = useState<{ personaId: string; token: string; direction: "to_treasury" | "from_treasury" } | null>(null);
+  const [sendAmount, setSendAmount] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "sol" | "budju" | "group">("name");
   const [showActive, setShowActive] = useState<"all" | "active" | "paused">("all");
@@ -86,6 +88,30 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
       const timer = setTimeout(() => { setViewingKeys(null); setKeyData(null); }, 10000);
       setKeyTimer(timer);
     }
+  };
+
+  const walletTransfer = async (personaId: string, token: string, direction: "to_treasury" | "from_treasury", amount: string) => {
+    if (!amount || parseFloat(amount) <= 0) return;
+    setLoading(true);
+    const res = await postAction("wallet_transfer", { persona_id: personaId, token, direction, amount: parseFloat(amount) });
+    setLoading(false);
+    const d = res.data as { success?: boolean; error?: string; tx?: string; message?: string };
+    if (d.success) {
+      setSendingToken(null);
+      setSendAmount("");
+      onRefresh();
+    } else {
+      alert(d.error || "Transfer failed");
+    }
+  };
+
+  const drainWalletToken = async (personaId: string, token: string) => {
+    setLoading(true);
+    const res = await postAction("wallet_transfer", { persona_id: personaId, token, direction: "to_treasury", amount: "ALL" });
+    setLoading(false);
+    const d = res.data as { success?: boolean; error?: string };
+    if (d.success) onRefresh();
+    else alert(d.error || "Drain failed");
   };
 
   const syncBalances = async () => {
@@ -221,27 +247,56 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
                     <a href={`https://solscan.io/account/${w.wallet_address}`} target="_blank" rel="noopener noreferrer" className="text-[9px] text-cyan-400 hover:text-cyan-300 px-1.5 py-0.5 rounded bg-cyan-500/10">Solscan</a>
                   </div>
 
-                  {/* Balances Grid */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="bg-gray-900/50 rounded-lg p-2">
-                      <p className="text-[8px] text-gray-500">SOL</p>
-                      <p className="text-xs font-bold text-cyan-400">{Number(w.sol_balance).toFixed(6)}</p>
-                    </div>
-                    <div className="bg-gray-900/50 rounded-lg p-2">
-                      <p className="text-[8px] text-gray-500">BUDJU</p>
-                      <p className="text-xs font-bold text-fuchsia-400">{formatBudjuAmount(Number(w.budju_balance))}</p>
-                    </div>
-                    <div className="bg-gray-900/50 rounded-lg p-2">
-                      <p className="text-[8px] text-gray-500">FUNDED SOL</p>
-                      <p className="text-xs font-bold text-gray-300">{Number(w.total_funded_sol).toFixed(4)}</p>
-                    </div>
-                    <div className="bg-gray-900/50 rounded-lg p-2">
-                      <p className="text-[8px] text-gray-500">FUNDED BUDJU</p>
-                      <p className="text-xs font-bold text-gray-300">{formatBudjuAmount(Number(w.total_funded_budju))}</p>
-                    </div>
+                  {/* Token Balances with Send/Receive per token */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { token: "SOL", balance: Number(w.sol_balance).toFixed(4), color: "text-cyan-400", bg: "border-cyan-500/20" },
+                      { token: "BUDJU", balance: formatBudjuAmount(Number(w.budju_balance)), color: "text-fuchsia-400", bg: "border-fuchsia-500/20" },
+                      { token: "GLITCH", balance: "—", color: "text-yellow-400", bg: "border-yellow-500/20" },
+                      { token: "USDC", balance: "—", color: "text-green-400", bg: "border-green-500/20" },
+                    ].map(({ token, balance, color, bg }) => (
+                      <div key={token} className={`bg-gray-900/50 rounded-lg p-2 border ${bg}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[8px] text-gray-500 font-bold">{token}</p>
+                          <p className={`text-xs font-bold ${color}`}>{balance}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => drainWalletToken(w.persona_id, token)} disabled={loading}
+                            className="flex-1 px-1 py-0.5 bg-red-500/10 text-red-400 rounded text-[8px] font-bold hover:bg-red-500/20 disabled:opacity-50">
+                            → Treasury
+                          </button>
+                          <button onClick={() => { setSendingToken({ personaId: w.persona_id, token, direction: "from_treasury" }); setSendAmount(""); }}
+                            className="flex-1 px-1 py-0.5 bg-green-500/10 text-green-400 rounded text-[8px] font-bold hover:bg-green-500/20">
+                            + Add
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Actions */}
+                  {/* Send/Add Amount Input */}
+                  {sendingToken && sendingToken.personaId === w.persona_id && (
+                    <div className="bg-gray-900/60 rounded-lg p-2 border border-green-500/20">
+                      <p className="text-[9px] text-green-400 font-bold mb-1">
+                        Add {sendingToken.token} from Treasury → {w.display_name}
+                      </p>
+                      <div className="flex gap-2">
+                        <input type="number" value={sendAmount} onChange={e => setSendAmount(e.target.value)}
+                          placeholder={`Amount of ${sendingToken.token}`}
+                          className="flex-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white" />
+                        <button onClick={() => walletTransfer(w.persona_id, sendingToken.token, "from_treasury", sendAmount)} disabled={loading || !sendAmount}
+                          className="px-3 py-1 bg-green-600 text-white rounded text-[10px] font-bold hover:bg-green-500 disabled:opacity-50">
+                          {loading ? "..." : "Send"}
+                        </button>
+                        <button onClick={() => setSendingToken(null)}
+                          className="px-2 py-1 bg-gray-700 text-gray-400 rounded text-[10px] hover:bg-gray-600">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions Row */}
                   <div className="flex flex-wrap gap-1.5">
                     <button onClick={() => toggleWallet(w.persona_id, w.is_active)} disabled={loading}
                       className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${w.is_active ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"}`}>

@@ -596,6 +596,103 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Per-wallet token transfer (to/from treasury) ──
+  if (action === "wallet_transfer") {
+    try {
+      const { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount, createTransferInstruction, createAssociatedTokenAccountInstruction } = await import("@solana/spl-token");
+      const { SERVER_RPC_URL, TREASURY_WALLET_STR } = await import("@/lib/solana-config");
+      const { decryptKeypair } = await import("@/lib/trading/budju");
+      const sql = (await import("@/lib/db")).getDb();
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
+
+      const personaId = body.persona_id as string;
+      const token = (body.token as string || "").toUpperCase();
+      const direction = body.direction as string; // "to_treasury" or "from_treasury"
+      const amountStr = String(body.amount || "0");
+      const isAll = amountStr === "ALL";
+
+      if (!personaId || !token || !direction) {
+        return NextResponse.json({ error: "persona_id, token, direction required" }, { status: 400 });
+      }
+
+      const MINT_MAP: Record<string, { mint: string; decimals: number }> = {
+        "BUDJU": { mint: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump", decimals: 6 },
+        "USDC": { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+        "GLITCH": { mint: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT", decimals: 9 },
+      };
+
+      // Get persona wallet
+      const [wallet] = await sql`SELECT * FROM budju_wallets WHERE persona_id = ${personaId}`;
+      if (!wallet) return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
+      const personaKeypair = decryptKeypair(wallet.encrypted_keypair as string);
+      const personaPub = personaKeypair.publicKey;
+      const treasuryPub = new PublicKey(TREASURY_WALLET_STR);
+
+      // Get treasury keypair for from_treasury transfers
+      const treasuryKey = process.env.TREASURY_PRIVATE_KEY;
+      if (direction === "from_treasury" && !treasuryKey) {
+        return NextResponse.json({ error: "TREASURY_PRIVATE_KEY not set" }, { status: 500 });
+      }
+      const { Keypair } = await import("@solana/web3.js");
+      const bs58 = await import("bs58");
+      const treasuryKeypair = treasuryKey ? Keypair.fromSecretKey(bs58.default.decode(treasuryKey)) : null;
+
+      if (token === "SOL") {
+        if (direction === "to_treasury") {
+          const balance = await connection.getBalance(personaPub);
+          const sendLamports = isAll ? balance - 5000 : Math.floor(parseFloat(amountStr) * LAMPORTS_PER_SOL);
+          if (sendLamports <= 0) return NextResponse.json({ error: "Insufficient SOL" }, { status: 400 });
+          const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: personaPub, toPubkey: treasuryPub, lamports: sendLamports }));
+          const sig = await sendAndConfirmTransaction(connection, tx, [personaKeypair], { commitment: "confirmed" });
+          await sql`UPDATE budju_wallets SET sol_balance = GREATEST(0, sol_balance::numeric - ${sendLamports / LAMPORTS_PER_SOL}) WHERE persona_id = ${personaId}`;
+          return NextResponse.json({ success: true, tx: sig, amount: sendLamports / LAMPORTS_PER_SOL, token: "SOL" });
+        } else {
+          if (!treasuryKeypair) return NextResponse.json({ error: "No treasury key" }, { status: 500 });
+          const sendLamports = Math.floor(parseFloat(amountStr) * LAMPORTS_PER_SOL);
+          const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasuryPub, toPubkey: personaPub, lamports: sendLamports }));
+          const sig = await sendAndConfirmTransaction(connection, tx, [treasuryKeypair], { commitment: "confirmed" });
+          await sql`UPDATE budju_wallets SET sol_balance = sol_balance::numeric + ${sendLamports / LAMPORTS_PER_SOL} WHERE persona_id = ${personaId}`;
+          return NextResponse.json({ success: true, tx: sig, amount: sendLamports / LAMPORTS_PER_SOL, token: "SOL" });
+        }
+      }
+
+      // SPL token transfer
+      const mintInfo = MINT_MAP[token];
+      if (!mintInfo) return NextResponse.json({ error: `Unknown token: ${token}` }, { status: 400 });
+      const mintPub = new PublicKey(mintInfo.mint);
+
+      if (direction === "to_treasury") {
+        const fromAta = await getAssociatedTokenAddress(mintPub, personaPub);
+        const toAta = await getAssociatedTokenAddress(mintPub, treasuryPub);
+        const acc = await getAccount(connection, fromAta);
+        const bal = Number(acc.amount);
+        const sendAmount = isAll ? bal : Math.floor(parseFloat(amountStr) * (10 ** mintInfo.decimals));
+        if (sendAmount <= 0) return NextResponse.json({ error: `No ${token} to send` }, { status: 400 });
+        const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, personaPub, BigInt(sendAmount)));
+        const sig = await sendAndConfirmTransaction(connection, tx, [personaKeypair], { commitment: "confirmed" });
+        if (token === "BUDJU") await sql`UPDATE budju_wallets SET budju_balance = GREATEST(0, budju_balance::numeric - ${sendAmount / (10 ** mintInfo.decimals)}) WHERE persona_id = ${personaId}`;
+        return NextResponse.json({ success: true, tx: sig, amount: sendAmount / (10 ** mintInfo.decimals), token });
+      } else {
+        if (!treasuryKeypair) return NextResponse.json({ error: "No treasury key" }, { status: 500 });
+        const fromAta = await getAssociatedTokenAddress(mintPub, treasuryPub);
+        const toAta = await getAssociatedTokenAddress(mintPub, personaPub);
+        const sendAmount = Math.floor(parseFloat(amountStr) * (10 ** mintInfo.decimals));
+        // Create ATA if needed
+        let needsAta = false;
+        try { await getAccount(connection, toAta); } catch { needsAta = true; }
+        const tx = new Transaction();
+        if (needsAta) tx.add(createAssociatedTokenAccountInstruction(treasuryKeypair.publicKey, toAta, personaPub, mintPub));
+        tx.add(createTransferInstruction(fromAta, toAta, treasuryPub, BigInt(sendAmount)));
+        const sig = await sendAndConfirmTransaction(connection, tx, [treasuryKeypair], { commitment: "confirmed" });
+        if (token === "BUDJU") await sql`UPDATE budju_wallets SET budju_balance = budju_balance::numeric + ${sendAmount / (10 ** mintInfo.decimals)} WHERE persona_id = ${personaId}`;
+        return NextResponse.json({ success: true, tx: sig, amount: sendAmount / (10 ** mintInfo.decimals), token });
+      }
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Transfer failed" }, { status: 500 });
+    }
+  }
+
   // ── Cancel active distribution ──
   if (action === "cancel_distribution") {
     try {
