@@ -91,50 +91,8 @@ async function runBackgroundGeneration(
     setProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
     const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
 
-    // Collect all sponsor product images for Grokification
+    // Sponsor product images available for the thank-you clip
     const sponsorImages: string[] = screenplay.sponsorImages || (screenplay.sponsorImageUrl ? [screenplay.sponsorImageUrl] : []);
-    if (sponsorImages.length > 0) {
-      setLog(prev => [...prev, `  🖼️ ${sponsorImages.length} sponsor product image(s) will be Grokified into scenes`]);
-    }
-
-    // Pre-generate Grokified scene images for sponsor product placement
-    // We Grokify images for every 3rd scene (scenes 2, 5, 8 etc.)
-    // This generates scene-appropriate images with sponsor products naturally placed
-    const grokifiedImages: Record<number, string> = {};
-    if (sponsorImages.length > 0) {
-      setLog(prev => [...prev, `🖼️ Grokifying sponsor product images for scene injection...`]);
-      const scenesToGrokify = scenes.filter((_, idx) => idx % 3 === 1);
-      for (let g = 0; g < scenesToGrokify.length; g++) {
-        const scene = scenesToGrokify[g];
-        const imgUrl = sponsorImages[g % sponsorImages.length];
-        try {
-          setLog(prev => [...prev, `  🎨 Grokifying for scene ${scene.sceneNumber}: "${scene.title}"...`]);
-          const grokRes = await fetch("/api/admin/grokify-sponsor", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sponsorImageUrl: imgUrl,
-              scenePrompt: scene.videoPrompt,
-              brandName: sponsors[g % sponsors.length] || "Sponsor",
-              productName: sponsors[g % sponsors.length] || "Product",
-            }),
-          });
-          const grokData = await grokRes.json();
-          if (grokData.grokifiedUrl) {
-            grokifiedImages[scene.sceneNumber] = grokData.grokifiedUrl;
-            setLog(prev => [...prev, `  ✅ Grokified${grokData.fallback ? " (fallback to original)" : ""}: ${grokData.grokifiedUrl.slice(0, 50)}...`]);
-          }
-          // Rate limit between Grok image calls
-          if (g < scenesToGrokify.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-          }
-        } catch (err) {
-          setLog(prev => [...prev, `  ⚠️ Grokify failed for scene ${scene.sceneNumber}: ${err instanceof Error ? err.message : "unknown"}`]);
-        }
-      }
-      setLog(prev => [...prev, `  🖼️ ${Object.keys(grokifiedImages).length} scenes will have sponsor product images`]);
-      setLog(prev => [...prev, ``]);
-    }
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
@@ -150,15 +108,14 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
-        // Use pre-Grokified scene image if available for this scene
-        const sceneImageUrl = grokifiedImages[scene.sceneNumber] || undefined;
-        if (sceneImageUrl) {
-          setLog(prev => [...prev, `  🖼️ Using Grokified sponsor image as starting frame`]);
-        }
+        // Sponsor products are placed subliminally via the text prompt — buildVisualPlacementPrompt()
+        // already injected product descriptions into the screenplay, so each scene's videoPrompt
+        // naturally includes sponsor products (e.g. "a BUDJU coin on the table").
+        // We do NOT pass image_url here — that would make it a first-frame animation, not subliminal.
         const submitRes = await fetch("/api/test-grok-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sceneImageUrl }),
+          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
         });
         const submitData = await submitRes.json();
 

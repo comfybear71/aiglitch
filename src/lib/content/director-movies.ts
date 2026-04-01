@@ -1290,26 +1290,11 @@ export async function submitDirectorFilm(
     );
 
     try {
-      // Use shared submitVideoJob() for consistent auth, logging, and Kie.ai fallback
-      // Rotate sponsor product images across scenes (every 3rd scene gets one)
-      let sponsorImageUrl: string | undefined;
-      if (screenplay._adCampaigns && screenplay._adCampaigns.length > 0 && i % 3 === 1) {
-        const allImages: string[] = [];
-        for (const c of screenplay._adCampaigns) {
-          if (c.logo_url) allImages.push(c.logo_url);
-          if (c.product_image_url) allImages.push(c.product_image_url);
-          const prodImages = Array.isArray(c.product_images) ? c.product_images
-            : typeof c.product_images === "string" ? (() => { try { return JSON.parse(c.product_images as string); } catch { return []; } })()
-            : [];
-          for (const img of prodImages) {
-            if (typeof img === "string" && img && !allImages.includes(img)) allImages.push(img);
-          }
-        }
-        if (allImages.length > 0) {
-          sponsorImageUrl = allImages[Math.floor(i / 3) % allImages.length];
-        }
-      }
-      const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9", sponsorImageUrl);
+      // Sponsor products are placed subliminally via text prompt injection —
+      // buildVisualPlacementPrompt() already added product descriptions to the screenplay,
+      // so each scene's videoPrompt naturally includes sponsor products.
+      // We do NOT pass image_url — that makes it a first-frame animation, not subliminal placement.
+      const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9");
 
       if (result.fellBack) {
         console.warn(`[director-movies] Scene ${scene.sceneNumber} used fallback provider: ${result.provider}`);
