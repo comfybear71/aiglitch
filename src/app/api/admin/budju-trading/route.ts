@@ -39,9 +39,61 @@ export async function GET(request: NextRequest) {
   if (action === "cancel_distribution") {
     try {
       const sql = (await import("@/lib/db")).getDb();
-      await sql`UPDATE distribution_jobs SET status = 'cancelled', updated_at = NOW() WHERE status IN ('pending', 'active')`;
-      await sql`UPDATE distribution_transfers SET status = 'skipped' WHERE status = 'scheduled'`;
-      return NextResponse.json({ success: true, message: "Distribution cancelled. All pending transfers skipped." });
+      const cancelled = await sql`UPDATE distribution_jobs SET status = 'cancelled', updated_at = NOW() WHERE status IN ('pending', 'active') RETURNING id`;
+      const skipped = await sql`UPDATE distribution_transfers SET status = 'skipped' WHERE status = 'scheduled'`;
+      return NextResponse.json({ success: true, jobsCancelled: cancelled.length, transfersSkipped: (skipped as unknown as { count: number }).count || 0, message: "Distribution cancelled. All pending transfers skipped." });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
+  // Check all fund locations — where is the money?
+  if (action === "fund_check") {
+    try {
+      const { Connection, PublicKey, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+      const { SERVER_RPC_URL, TREASURY_WALLET_STR } = await import("@/lib/solana-config");
+      const sql = (await import("@/lib/db")).getDb();
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
+      const BUDJU_MINT_PK = new PublicKey("2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump");
+
+      // Treasury
+      const treasuryPub = new PublicKey(TREASURY_WALLET_STR);
+      const treasurySol = (await connection.getBalance(treasuryPub)) / LAMPORTS_PER_SOL;
+      let treasuryBudju = 0;
+      try {
+        const ata = await getAssociatedTokenAddress(BUDJU_MINT_PK, treasuryPub);
+        const acc = await getAccount(connection, ata);
+        treasuryBudju = Number(acc.amount) / 1e6;
+      } catch { /* no ATA */ }
+
+      // Distributor wallets (from DB)
+      const distributors = await sql`SELECT group_number, wallet_address, sol_balance, budju_balance FROM budju_distributors ORDER BY group_number`;
+      let distSol = 0, distBudju = 0;
+      for (const d of distributors) { distSol += Number(d.sol_balance); distBudju += Number(d.budju_balance); }
+
+      // Persona wallets (from DB — may be stale, sync first for accurate)
+      const [personaStats] = await sql`
+        SELECT COUNT(*)::int as total,
+          COUNT(*) FILTER (WHERE sol_balance::numeric > 0)::int as funded,
+          COUNT(*) FILTER (WHERE sol_balance::numeric <= 0 OR sol_balance IS NULL)::int as unfunded,
+          COALESCE(SUM(sol_balance::numeric), 0) as total_sol,
+          COALESCE(SUM(budju_balance::numeric), 0) as total_budju
+        FROM budju_wallets WHERE is_active = TRUE
+      `;
+
+      return NextResponse.json({
+        treasury: { sol: treasurySol, budju: treasuryBudju },
+        distributors: { count: distributors.length, sol: distSol, budju: distBudju },
+        personas: {
+          total: Number(personaStats.total),
+          funded: Number(personaStats.funded),
+          unfunded: Number(personaStats.unfunded),
+          sol: Number(personaStats.total_sol),
+          budju: Number(personaStats.total_budju),
+        },
+        summary: `Treasury: ${treasurySol.toFixed(4)} SOL, ${treasuryBudju.toFixed(0)} BUDJU | Distributors: ${distSol.toFixed(4)} SOL, ${distBudju.toFixed(0)} BUDJU | Personas: ${Number(personaStats.total_sol).toFixed(4)} SOL, ${Number(personaStats.total_budju).toFixed(0)} BUDJU (${personaStats.funded} funded, ${personaStats.unfunded} unfunded)`,
+      });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
     }
