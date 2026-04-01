@@ -143,8 +143,52 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`[grokify-sponsor] Grok failed: ${response.status} ${errText.slice(0, 200)}`);
-      return NextResponse.json({ grokifiedUrl: null, error: `Grok failed: ${response.status}` });
+      console.error(`[grokify-sponsor] Grok failed: ${response.status} ${errText.slice(0, 500)}`);
+      console.error(`[grokify-sponsor] Request had ${imageRefs.length} images: ${imageRefs.map(r => r.url.slice(0, 60)).join(", ")}`);
+      console.error(`[grokify-sponsor] Prompt length: ${editPrompt.length} chars`);
+
+      // If multi-image failed, retry with single image
+      if (imageRefs.length > 1) {
+        console.log(`[grokify-sponsor] Retrying with single image instead of ${imageRefs.length}...`);
+        try {
+          const retryRes = await fetch("https://api.x.ai/v1/images/edits", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${env.XAI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "grok-imagine-image",
+              prompt: editPrompt,
+              image: { url: imageRefs[0].url },
+              n: 1,
+              aspect_ratio: "9:16",
+              response_format: "url",
+            }),
+          });
+          if (retryRes.ok) {
+            const retryData = await retryRes.json();
+            const retryImage = retryData.data?.[0];
+            if (retryImage?.url) {
+              console.log(`[grokify-sponsor] Single-image retry SUCCEEDED`);
+              // Continue with this result — fall through to persist logic
+              const grokUrl = retryImage.url as string;
+              const imgRes = await fetch(grokUrl);
+              if (imgRes.ok) {
+                const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+                const blob = await put(`sponsors/grokified/${uuidv4()}.png`, imgBuffer, { access: "public", contentType: "image/png", addRandomSuffix: false });
+                return NextResponse.json({ grokifiedUrl: blob.url, brandName, productName, mode: "image-edit", sizeMb: (imgBuffer.length / 1024 / 1024).toFixed(2) });
+              }
+            }
+          }
+          const retryErr = await retryRes.text().catch(() => "");
+          console.error(`[grokify-sponsor] Single-image retry also failed: ${retryRes.status} ${retryErr.slice(0, 200)}`);
+        } catch (retryErr) {
+          console.error(`[grokify-sponsor] Retry error:`, retryErr);
+        }
+      }
+
+      return NextResponse.json({ grokifiedUrl: null, error: `Grok failed: ${response.status}: ${errText.slice(0, 100)}` });
     }
 
     const data = await response.json();
