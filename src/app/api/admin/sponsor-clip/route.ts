@@ -24,39 +24,17 @@ export async function POST(request: NextRequest) {
     const width = 1280;
     const height = 720;
 
-    // Generate PNG card with Sharp
-    const svg = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#0a0a1a" />
-            <stop offset="100%" style="stop-color:#1a0a2e" />
-          </linearGradient>
-          <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" style="stop-color:#a855f7" />
-            <stop offset="100%" style="stop-color:#06b6d4" />
-          </linearGradient>
-        </defs>
-        <rect width="${width}" height="${height}" fill="url(#bg)" />
-        <rect x="0" y="${height * 0.28}" width="${width}" height="1" fill="#a855f7" opacity="0.2" />
-        <rect x="0" y="${height * 0.72}" width="${width}" height="1" fill="#06b6d4" opacity="0.2" />
-        <text x="${width / 2}" y="${height * 0.38}" text-anchor="middle"
-              font-family="Arial,Helvetica,sans-serif" font-size="32" font-weight="bold"
-              fill="url(#glow)">${thanksLine}</text>
-        <text x="${width / 2}" y="${height * 0.52}" text-anchor="middle"
-              font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="bold"
-              fill="white">${namesLine}</text>
-        <text x="${width / 2}" y="${height * 0.7}" text-anchor="middle"
-              font-family="Arial,Helvetica,sans-serif" font-size="22"
-              fill="#a855f7" opacity="0.8">AIG!itch</text>
-        <text x="${width / 2}" y="${height * 0.8}" text-anchor="middle"
-              font-family="Arial,Helvetica,sans-serif" font-size="16"
-              fill="#555555">aiglitch.app</text>
-      </svg>
-    `;
+    // Generate a simple gradient background PNG (no SVG text — fontconfig not available on Vercel)
+    const pngBuffer = await sharp({
+      create: {
+        width,
+        height,
+        channels: 4,
+        background: { r: 10, g: 10, b: 30, alpha: 1 },
+      },
+    }).png().toBuffer();
 
-    const pngBuffer = await sharp(Buffer.from(svg)).resize(width, height).png().toBuffer();
-    console.log(`[sponsor-clip] Generated PNG card (${(pngBuffer.length / 1024).toFixed(0)}KB) for: ${sponsorNames.join(", ")}`);
+    console.log(`[sponsor-clip] Generated background PNG (${(pngBuffer.length / 1024).toFixed(0)}KB) for: ${sponsorNames.join(", ")}`);
 
     // Upload to Blob
     const blob = await put(
@@ -80,7 +58,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "grok-imagine-video",
-        prompt: "Gentle cinematic zoom out from a professional sponsor thank-you card. Subtle neon purple and cyan particle effects drift slowly around the text. The card glows softly with elegant light accents. Dark background. Clean, professional, 5 seconds.",
+        prompt: `Professional sponsor thank-you card on dark purple background. Large white bold text centered reads "${thanksLine}: ${namesLine}". Below in smaller purple text "AIG!itch" and "aiglitch.app". Subtle neon purple and cyan glow effects. Elegant, clean, simple. The text must be clearly readable and prominent. Gentle zoom effect.`,
         image_url: blob.url,
         duration: 5,
         aspect_ratio: "16:9",
