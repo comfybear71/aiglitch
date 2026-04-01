@@ -621,25 +621,26 @@ export default function CampaignsPage() {
                             const title = v.post_content?.split("\n")[0]?.replace(/^🎬\s*/, "") || "Untitled";
                             const date = new Date(v.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
                             const channelLabel = v.channel_id ? v.channel_id.replace("ch-", "").replace(/-/g, " ") : "Feed";
+                            const postUrl = v.post_id ? `/post/${v.post_id}` : null;
+                            const videoUrl = v.media_url || null;
                             return (
-                              <div key={v.id || idx} className="flex items-center gap-2 text-[10px]">
-                                {v.media_url && v.media_type === "video" && (
-                                  <a href={v.media_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-12 h-8 bg-gray-700 rounded overflow-hidden">
-                                    <video src={v.media_url} className="w-full h-full object-cover" muted preload="metadata" />
+                              <div key={v.id || idx} className="flex items-center gap-2 text-[10px] hover:bg-gray-700/30 rounded p-1 -m-1">
+                                {videoUrl && v.media_type === "video" && (
+                                  <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-12 h-8 bg-gray-700 rounded overflow-hidden hover:ring-1 hover:ring-cyan-500">
+                                    <video src={videoUrl} className="w-full h-full object-cover" muted preload="metadata" />
                                   </a>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-white truncate" title={title}>{title.slice(0, 60)}</p>
+                                  {postUrl ? (
+                                    <a href={postUrl} target="_blank" rel="noopener noreferrer" className="text-white hover:text-cyan-400 truncate block underline decoration-gray-600 hover:decoration-cyan-400" title={title}>{title.slice(0, 60)}</a>
+                                  ) : (
+                                    <p className="text-white truncate" title={title}>{title.slice(0, 60)}</p>
+                                  )}
                                   <p className="text-gray-500">
                                     <span className="text-purple-400">{channelLabel}</span> · {date} · <span className="text-cyan-400">{v.content_type}</span>
+                                    {videoUrl && <> · <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 underline">Watch</a></>}
                                   </p>
                                 </div>
-                                {v.post_id && (
-                                  <a href={`/post/${v.post_id}`} target="_blank" rel="noopener noreferrer"
-                                    className="text-cyan-400 hover:text-cyan-300 flex-shrink-0 text-[10px]">
-                                    View
-                                  </a>
-                                )}
                               </div>
                             );
                           })}
