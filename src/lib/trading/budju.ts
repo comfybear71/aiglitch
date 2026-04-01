@@ -1309,8 +1309,30 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
       try {
         const keypair = decryptKeypair(w.encrypted_keypair as string);
         const balanceLamports = await connection.getBalance(keypair.publicKey);
-        // Need to reserve enough for the tx fee (~5000 lamports)
-        const sendLamports = balanceLamports - 5000;
+
+        // Drain BUDJU tokens first (needs SOL for fee)
+        try {
+          const { getAssociatedTokenAddress, getAccount, createTransferInstruction } = await import("@solana/spl-token");
+          const budjuMint = new PublicKey(BUDJU_MINT);
+          const fromAta = await getAssociatedTokenAddress(budjuMint, keypair.publicKey);
+          const toAta = await getAssociatedTokenAddress(budjuMint, destination);
+          try {
+            const tokenAccount = await getAccount(connection, fromAta);
+            const tokenBalance = Number(tokenAccount.amount);
+            if (tokenBalance > 0) {
+              const tx = new Transaction().add(
+                createTransferInstruction(fromAta, toAta, keypair.publicKey, BigInt(tokenBalance))
+              );
+              await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+              console.log(`[drain] ${w.display_name}: drained ${tokenBalance} BUDJU`);
+              await new Promise(r => setTimeout(r, 1500)); // rate limit
+            }
+          } catch { /* no token account or empty — skip */ }
+        } catch { /* spl-token import or ATA error — skip */ }
+
+        // Drain SOL (leave enough for fee)
+        const updatedBalance = await connection.getBalance(keypair.publicKey);
+        const sendLamports = updatedBalance - 5000;
         if (sendLamports <= 0) {
           drained.push({ type: "persona", name: w.display_name as string, wallet: w.wallet_address as string, sol_sent: 0, tx: null, error: "Empty wallet" });
           continue;
@@ -1326,7 +1348,7 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
         const signature = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
         const solSent = sendLamports / LAMPORTS_PER_SOL;
 
-        await sql`UPDATE budju_wallets SET sol_balance = 0, updated_at = NOW() WHERE persona_id = ${w.persona_id}`;
+        await sql`UPDATE budju_wallets SET sol_balance = 0, budju_balance = 0, updated_at = NOW() WHERE persona_id = ${w.persona_id}`;
 
         drained.push({ type: "persona", name: w.display_name as string, wallet: w.wallet_address as string, sol_sent: solSent, tx: signature });
         totalRecovered += solSent;
