@@ -14,7 +14,7 @@ export default function BudjuTradingView() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/budju-trading");
+      const res = await fetch(`/api/admin/budju-trading?t=${Date.now()}`);
       if (res.ok) {
         const d = await res.json();
         if (!d.error) setData(d);
@@ -25,8 +25,8 @@ export default function BudjuTradingView() {
   }, []);
 
   useEffect(() => {
-    if (authenticated && !data) fetchData();
-  }, [authenticated, data, fetchData]);
+    if (authenticated) fetchData();
+  }, [authenticated, fetchData]);
 
   const postAction = async (action: string, body: Record<string, unknown> = {}) => {
     setLoading(true);
