@@ -298,17 +298,35 @@ export async function POST(request: NextRequest) {
 
     const sql = getDb();
     const postId = uuidv4();
+
+    // Build sponsor thanks line for the caption (before post insert)
+    let sponsorThanksLine = "";
+    let placedCampaignsForLog: import("@/lib/ad-campaigns").AdCampaign[] = [];
+    if (sponsorPlacements && sponsorPlacements.length > 0) {
+      try {
+        const { getActiveCampaigns } = await import("@/lib/ad-campaigns");
+        const activeCampaigns = await getActiveCampaigns(channelId);
+        placedCampaignsForLog = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
+        if (placedCampaignsForLog.length > 0) {
+          const sponsorCredits = placedCampaignsForLog.map(c =>
+            c.website_url ? `${c.brand_name} ${c.website_url}` : c.brand_name
+          ).join(" | ");
+          sponsorThanksLine = `\n\n🤝 Thanks to our sponsors: ${sponsorCredits}`;
+        }
+      } catch { /* non-fatal */ }
+    }
+
     // Use strict naming convention: 🎬 [Channel Name] - [Title] for channel posts
     // GNN gets date: 🎬 GNN - 30 Mar 2026 - [Headline]
     const channelPrefix = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
     const isGNNPost = channelId === "ch-gnn";
     const dateStrPost = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     const isStudiosPost = channelId === "ch-aiglitch-studios" || !channelPrefix;
-    const caption = isStudiosPost
+    const caption = (isStudiosPost
       ? `\u{1F3AC} AIG!itch Studios - ${title} /${capitalizeGenre(stitchGenre)} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`
       : isGNNPost
         ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title}\n\n${synopsis}`
-        : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`;
+        : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`) + sponsorThanksLine;
     // Only The Architect posts to channels; director attribution stays in caption text
     const ARCHITECT_ID = "glitch-000";
     const postPersonaId = channelId ? ARCHITECT_ID : directorId;
@@ -322,16 +340,12 @@ export async function POST(request: NextRequest) {
       VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${stitchGenre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId}, ${"admin"})`;
 
     // Log sponsor impressions BEFORE social spread (spread takes 20-40s and may timeout)
-    if (sponsorPlacements && sponsorPlacements.length > 0) {
+    if (placedCampaignsForLog.length > 0) {
       try {
-        const { getActiveCampaigns, logImpressions } = await import("@/lib/ad-campaigns");
-        const activeCampaigns = await getActiveCampaigns(channelId);
-        const placedCampaigns = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
-        console.log(`[generate-director-movie] IMPRESSIONS: ${placedCampaigns.length} campaigns matched from ${activeCampaigns.length} active for sponsors ${JSON.stringify(sponsorPlacements)}`);
-        if (placedCampaigns.length > 0) {
-          await logImpressions(placedCampaigns, postId, "video", channelId || null, postPersonaId);
-          console.log(`[generate-director-movie] ✅ IMPRESSIONS LOGGED for: ${placedCampaigns.map(c => c.brand_name).join(", ")}`);
-        }
+        const { logImpressions } = await import("@/lib/ad-campaigns");
+        console.log(`[generate-director-movie] IMPRESSIONS: ${placedCampaignsForLog.length} campaigns for sponsors ${JSON.stringify(sponsorPlacements)}`);
+        await logImpressions(placedCampaignsForLog, postId, "video", channelId || null, postPersonaId);
+        console.log(`[generate-director-movie] ✅ IMPRESSIONS LOGGED for: ${placedCampaignsForLog.map(c => c.brand_name).join(", ")}`);
       } catch (err) {
         console.error("[generate-director-movie] ❌ IMPRESSION LOGGING FAILED:", err instanceof Error ? err.message : err);
       }
@@ -603,6 +617,17 @@ export async function PUT(request: NextRequest) {
   const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
   console.log(`[director-movie] Stitched ${clipBuffers.length} clips into ${sizeMb}MB video -> ${blobFolder}`);
 
+  // Build sponsor thanks line for caption
+  let sponsorThanksPut = "";
+  try {
+    const { getActiveCampaigns } = await import("@/lib/ad-campaigns");
+    const activePut = await getActiveCampaigns(channelId);
+    if (activePut.length > 0) {
+      const credits = activePut.map(c => c.website_url ? `${c.brand_name} ${c.website_url}` : c.brand_name).join(" | ");
+      sponsorThanksPut = `\n\n🤝 Thanks to our sponsors: ${credits}`;
+    }
+  } catch { /* non-fatal */ }
+
   // Build caption — use strict naming convention for channel posts
   const directorProfile = DIRECTORS[directorUsername];
   const directorName = directorProfile?.displayName || directorUsername;
@@ -610,11 +635,11 @@ export async function PUT(request: NextRequest) {
   const isGNNPut = channelId === "ch-gnn";
   const dateStrPut = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const isStudiosPut = channelId === "ch-aiglitch-studios" || !channelPrefixPut;
-  const caption = isStudiosPut
+  const caption = (isStudiosPut
     ? `🎬 AIG!itch Studios - ${title} /${capitalizeGenre(genre)} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`
     : isGNNPut
       ? `🎬 ${channelPrefixPut} - ${dateStrPut} - ${title}\n\n${synopsis || ""}`
-      : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`;
+      : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`) + sponsorThanksPut;
 
   // Create a single premiere post — the full-length stitched movie is the ONLY asset
   const postId = uuidv4();
