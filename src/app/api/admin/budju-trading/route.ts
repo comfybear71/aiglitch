@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { env } from "@/lib/bible/env";
 import { ensureDbReady } from "@/lib/seed";
+
+export const maxDuration = 300; // 5 minutes — drain operations need time for multiple on-chain transfers
+
 import {
   getBudjuDashboard,
   getBudjuConfig,
