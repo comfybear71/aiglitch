@@ -1,140 +1,121 @@
-# Next Session Prompt — AIG!itch Sponsor Integration + Wallet Phases 4-6
+# Next Session Prompt — AIG!itch Jupiter Trading + Wallet Features
 
-## Branch: `claude/persona-wallet-system-GQOKf`
+## Branch: `claude/sponsor-wallet-fix-IHHlZ`
 
-Read CLAUDE.md and docs/sponsor-integration-issues.md for full context.
-
----
-
-## PRIORITY 1: Fix Sponsor Impressions (STILL 0)
-
-The Ad Campaigns page shows "0 total" impressions for ALL campaigns despite sponsors being placed in videos (confirmed in Vercel logs).
-
-### What's confirmed working:
-- `getActiveCampaigns()` returns 3 active campaigns (verified in logs)
-- `rollForPlacements()` places BUDJU at 100% frequency (verified)
-- Screenplay API returns `sponsorPlacements: ["BUDJU"]` (verified)
-- AdminContext shows `💰 Sponsors in this video: BUDJU` in the UI (verified)
-- `sponsorPlacements` FormData field reaches POST handler (verified: `sponsors=["BUDJU"]` in logs)
-
-### What's NOT working:
-- `logImpressions()` in `generate-director-movie/route.ts` POST handler never produces any log output
-- The impression code was moved BEFORE `spreadPostToSocial()` (which takes 40s) but still no logs
-- The `ad_impressions` table may be missing the `prompt_used` column — auto-migration added but unverified
-- The `logImpressions()` function has per-campaign try/catch with ✅/❌ logging but no output appears
-
-### Files:
-- `src/app/api/generate-director-movie/route.ts` — POST handler, line ~310 (impression logging)
-- `src/lib/ad-campaigns.ts` — `logImpressions()` function, line ~155
-- `src/app/admin/AdminContext.tsx` — client stitch call with FormData, line ~255
-
-### How to verify:
-1. Generate a video from any channel
-2. Check Vercel logs for `[generate-director-movie] IMPRESSIONS:`
-3. If no log appears, the code section is being skipped entirely
-4. Check if the function hits the `return` before reaching the impression code
+Read CLAUDE.md for full project context.
 
 ---
 
-## PRIORITY 2: Sponsor Thank-You Clip (Glitchy Text)
+## PRIORITY 1: Jupiter Perps Trading Platform (GLITCH Trading Tab)
 
-A "Thanks to our sponsors: BUDJU" clip IS being generated and stitched as Scene 9/10. But:
+The user has a fully-fledged Jupiter trading program already built. The GLITCH Trading tab (currently "Simulated in-app token") needs to become a real trading platform using Jupiter API/SDK for the 100 persona bots.
 
-- Grok's text-to-video produces glitchy/unreadable text
-- Image-to-video also produces glitchy results
-- Sharp SVG text rendering fails on Vercel (no fontconfig)
-- FFmpeg doesn't work on Vercel Turbopack
-
-### Current approach (partially working):
-- `POST /api/admin/sponsor-clip` generates a dark PNG background with Sharp
-- Submits to Grok text-to-video with explicit text prompt
-- Client polls it like any other scene
-- Gets stitched as the last clip
-
-### Recommended fix (from Grok):
-- **Cloudinary** — upload stitched video, add text overlay via URL transformation, download back
-- Needs: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` env vars
-- OR: Accept that AI-generated text is imperfect and focus on getting the clip to at least show the sponsor names visually
-
-### Files:
-- `src/app/api/admin/sponsor-clip/route.ts` — generates the sponsor clip
-- `src/app/admin/AdminContext.tsx` — submits sponsor clip as Scene N+1, line ~150
-
----
-
-## PRIORITY 3: Sponsor Product Images in Video Clips
-
-Sponsors uploaded logo + product images via MasterHQ. These are stored in:
-- `ad_campaigns` table: `logo_url`, `product_image_url`, `product_images` JSONB
-- `sponsors` table: `logo_url`, `product_images` JSONB
-- Blob store: `sponsors/{slug}/logo.jpeg`, `sponsors/{slug}/image-{n}.jpeg`
-
-But the generated video clips don't show the actual sponsor images/logos.
+### What's needed:
+- Integrate existing Jupiter trading program into the GLITCH Trading tab
+- Each persona already has a Solana wallet with SOL for gas
+- Support spot swaps + perpetual futures (Jupiter Perps)
+- Position management: open/close/modify per persona
+- P&L tracking per persona
+- Risk management: stop losses, max position sizes
+- Dashboard showing all open positions across all personas
+- Trading personality system for perps (aggressive vs conservative)
+- SOL/USDC pairs with leverage options
 
 ### Current state:
-- `image_url` parameter is passed to Grok video API but it makes the image the FIRST FRAME (animation), not a reference
-- Text prompt describes the product but Grok renders generic objects, not the actual logo
-
-### Grok's recommendation:
-- Use **multi-reference images** (up to 7) with Grok Imagine's reference-to-video capability
-- Step 1: Generate a scene IMAGE with sponsor product using Grok image API + references
-- Step 2: Use that generated image as `image_url` for video clip generation
-- Reference images guide style/objects throughout without forcing as first frame
+- Jupiter SDK already integrated for BUDJU spot swaps in `src/lib/trading/budju.ts`
+- `executeJupiterSwap()` function exists and works
+- 100 persona wallets funded with SOL + BUDJU
+- Trading personality system exists (`getTradingPersonality()`)
+- Memo system for broadcast directives ("Everyone Buy", "Hold All", etc.)
 
 ### Files:
-- `src/lib/xai.ts` — `submitVideoJob()` accepts optional `imageUrl` parameter
-- `src/lib/content/director-movies.ts` — scene submission loop, line ~1294
-- `src/lib/ad-campaigns.ts` — `buildVisualPlacementPrompt()` includes logo/image URLs in text
+- `src/app/admin/trading/GlitchTradingView.tsx` — current simulated trading UI
+- `src/lib/trading/budju.ts` — Jupiter swap integration, wallet management
+- `src/app/api/admin/budju-trading/route.ts` — trading API actions
 
 ---
 
-## PRIORITY 4: Wallet System Phases 4-6
+## PRIORITY 2: Per-Group Distributor Funding
 
-### Phase 4: Full Wallet Management Dashboard
-- Table with every persona's balances (SOL, BUDJU, GLITCH, USDC), NFTs, trade history
-- Per-wallet actions: send, receive, transfer, add funds, drain, view private keys
-- View keys requires fresh Phantom re-signature, auto-hides after 10 seconds
-- Bulk actions: distribute to all, drain all, sync balances, export keys
+User wants to click on a distributor group and send SOL/BUDJU/USDC/GLITCH to it, then the group auto-distributes evenly to its persona wallets.
 
-### Phase 5: Distribution Monitoring + Admin Memo System
-- Timeline view tracking all distributions over days/weeks
-- Admin memos: send trading directives to personas (buy/sell/hold/strategy)
-- Memos overlay on persona's base trading personality, not hard override
-- Broadcast presets: "Everyone Buy BUDJU", "Hold All", etc.
+### What's needed:
+- Click a group card → expand with token input fields (SOL, BUDJU, GLITCH, USDC)
+- "Send to Group" button → transfers from treasury to that distributor
+- "Distribute to Personas" button → distributor splits evenly to its group members
+- Show balance per token per distributor (currently only SOL shown)
 
-### Phase 6: Scale Trading Bot to All 103 Personas
-
-### Current state (Phases 1-3 COMPLETE):
-- 100 persona wallets across 16 distributor groups
-- QR code Phantom wallet auth on trading page + activity page
-- Time-randomised distribution system with cron every 10 min
-- Admin + Treasury wallet balance panel
-- Distribution job tracking with progress bar
-
-### Files:
-- `src/lib/trading/budju.ts` — wallet generation, distribution engine
-- `src/app/admin/trading/page.tsx` — QR auth + wallet balance panel
-- `src/app/admin/trading/BudjuTradingView.tsx` — Distribute tab
-- `docs/persona-wallets-upgrade.md` — full spec
+### Current state:
+- 16 distributor groups with 3-10 personas each
+- Group cards show address + persona count + SOL balance
+- Distribution system exists but is "all or nothing" — no per-group control
+- Per-wallet token controls already built (send to/from treasury per persona)
 
 ---
 
-## KNOWN ISSUES / GOTCHAS
+## PRIORITY 3: GLITCH + USDC Balance Tracking Per Wallet
 
-1. **safeMigrate caches labels** — if you update a migration, use a NEW label name or bump MIGRATION_VERSION
-2. **Grok video API CANNOT render readable text** — use Cloudinary or accept imperfect results
-3. **Grok image-to-video distorts text cards** — use text-to-video instead (still imperfect)
-4. **FormData entries need .toString()** in Next.js App Router POST handlers
-5. **Sponsor images on sponsors table must be synced to ad_campaigns table** — they're separate
-6. **logImpressions() must run BEFORE spreadPostToSocial()** — spread takes 40s and can timeout
-7. **Sharp SVG text rendering fails on Vercel** — no fontconfig installed
-8. **FFmpeg doesn't work with Turbopack** — @ffmpeg-installer/ffmpeg build fails
-9. **Autopilot needs 2-min cooldown** between videos to avoid Grok 429 rate limits
-10. **CHANNEL_DEFAULTS.showTitlePage = false** — Studios must override to true for intro/outro
+Currently `budju_wallets` table only tracks `sol_balance` and `budju_balance`. Need to add:
+- `glitch_balance` column
+- `usdc_balance` column
+- Sync from chain via `syncWalletBalances()`
+- Show in wallet table + expanded detail
 
-## DO NOT
-- Do NOT make multiple small incremental attempts — research the ENTIRE code path first
-- Do NOT use safeMigrate for data fixes — use direct SQL or bump MIGRATION_VERSION
-- Do NOT try FFmpeg on Vercel — it doesn't work with Turbopack
-- Do NOT put logImpressions after spreadPostToSocial — it will timeout
-- Do NOT assume Grok can render text in video — it cannot
+---
+
+## COMPLETED THIS SESSION
+
+### Sponsor Integration (ALL WORKING)
+- ✅ Impression tracking fixed (schema mismatch: ad_impressions table had wrong columns)
+- ✅ Grokify pipeline — Grok Image Edit API edits actual sponsor product images into video scenes
+- ✅ Per-campaign controls: frequency slider, grokify scenes count (0-6), mode (logo/images/all)
+- ✅ Sponsor thanks in post captions: "🤝 Thanks to our sponsors: BUDJU https://budju.xyz"
+- ✅ Sponsor thanks visible on channel player with clickable links to sponsor websites
+- ✅ Post titles clickable on channel player → links to /post/{id}
+- ✅ Sponsored videos list on campaign cards (collapsible, thumbnails, links)
+- ✅ Campaign edit form saves correctly (was using PUT instead of POST — 405 error)
+- ✅ Re-activate button for expired campaigns
+- ✅ Sponsor image organization in Blob (sponsors/{slug}/ folder structure)
+- ✅ Grokified images named properly: sponsors/grokified/{brand}-{channel}-scene{N}.png
+- ✅ All sponsor logos/images/URLs synced from sponsors table to ad_campaigns
+- ✅ TikTok 6-hour spam cooldown (avoids downloading 30MB videos for nothing)
+- ✅ Stall detection fixed (breaks after 3min of no progress, not just sponsor clip)
+- ✅ Removed broken sponsor thank-you clip (Grok can't render text in video)
+
+### Wallet System Phases 4-6 (ALL COMPLETE)
+- ✅ Phase 4: Dashboard tab with summary bar, search, filter, sort, expandable rows
+- ✅ Phase 4: Per-wallet token controls (SOL/BUDJU/USDC/GLITCH → treasury and back)
+- ✅ Phase 4: Private key viewer (auto-hides after 10s)
+- ✅ Phase 4: Per-wallet trade history
+- ✅ Phase 5: Memo system with 6 broadcast presets + custom memos with TTL
+- ✅ Phase 6: Memo-aware trading (buy/sell/hold/aggressive/conservative directives)
+- ✅ Process Now actually processes immediately (was only processing scheduled transfers)
+- ✅ Fund check endpoint showing all tokens across treasury/distributors/personas
+- ✅ Cancel distribution action
+- ✅ Per-token drain (flush BUDJU/USDC/GLITCH from all wallets, keep SOL)
+- ✅ Drain distributors with refuel (sends SOL for fees, then drains SPL tokens)
+- ✅ Wallet data refresh without re-login (cache busting)
+- ✅ GLITCH + USDC totals in dashboard summary bar
+- ✅ 85 out of 100 personas funded with SOL + BUDJU
+- ✅ 4 action buttons on single row (Generate, Sync, Drain, Export)
+
+### Key URLs for Admin:
+- Fund check: `/api/admin/budju-trading?action=fund_check`
+- Cancel distribution: `/api/admin/budju-trading?action=cancel_distribution`
+- Drain BUDJU: `/api/admin/budju-trading?action=drain_token&token=BUDJU`
+- Drain USDC: `/api/admin/budju-trading?action=drain_token&token=USDC`
+- Drain GLITCH: `/api/admin/budju-trading?action=drain_token&token=GLITCH`
+- Drain distributors: `/api/admin/budju-trading?action=drain_distributors`
+- Refuel + drain: `/api/admin/budju-trading?action=refuel_and_drain_distributors`
+- Share grokified: `/api/admin/blob-upload?action=share_grokified`
+- Organize sponsors: `/api/admin/blob-upload?action=organize_sponsors`
+
+---
+
+## KNOWN ISSUES
+
+1. **15 personas still unfunded** — distribution completed 192/232, 40 failed (USDC insufficient)
+2. **GLITCH + USDC not tracked per wallet** — only totals shown, not per-persona balances
+3. **Grokified images sometimes get 400 errors** — Grok Image Edit API rejects some requests, auto-retries with single image
+4. **Some videos don't show sponsor thanks** — only videos generated AFTER the caption code deploy have the thanks line
+5. **BUDJU holdings uneven** — some personas have 1.1M, others have 47.5K. Need to drain and redistribute evenly
