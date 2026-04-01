@@ -618,27 +618,37 @@ export default function CampaignsPage() {
                       ) : (
                         <div className="space-y-1.5">
                           {sponsoredVideos[c.id].map((v, idx) => {
-                            const title = v.post_content?.split("\n")[0]?.replace(/^🎬\s*/, "") || "Untitled";
+                            const title = v.post_content?.split("\n")[0]?.replace(/^🎬\s*/, "") || (v.post_id ? `Post ${v.post_id.slice(0, 8)}...` : `Impression #${idx + 1}`);
                             const date = new Date(v.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
                             const channelLabel = v.channel_id ? v.channel_id.replace("ch-", "").replace(/-/g, " ") : "Feed";
                             const postUrl = v.post_id ? `/post/${v.post_id}` : null;
-                            const videoUrl = v.media_url || null;
+                            const mediaUrl = v.media_url || null;
+                            const isVideo = v.media_type === "video";
                             return (
                               <div key={v.id || idx} className="flex items-center gap-2 text-[10px] hover:bg-gray-700/30 rounded p-1 -m-1">
-                                {videoUrl && v.media_type === "video" && (
-                                  <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-12 h-8 bg-gray-700 rounded overflow-hidden hover:ring-1 hover:ring-cyan-500">
-                                    <video src={videoUrl} className="w-full h-full object-cover" muted preload="metadata" />
+                                {mediaUrl && (
+                                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-12 h-8 bg-gray-700 rounded overflow-hidden hover:ring-1 hover:ring-cyan-500">
+                                    {isVideo ? (
+                                      <video src={mediaUrl} className="w-full h-full object-cover" muted preload="metadata" />
+                                    ) : (
+                                      <img src={mediaUrl} alt="" className="w-full h-full object-cover" />
+                                    )}
                                   </a>
+                                )}
+                                {!mediaUrl && (
+                                  <div className="flex-shrink-0 w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-gray-600 text-[8px]">
+                                    {v.content_type === "video" ? "🎬" : v.content_type === "image" ? "🖼" : "💬"}
+                                  </div>
                                 )}
                                 <div className="flex-1 min-w-0">
                                   {postUrl ? (
                                     <a href={postUrl} target="_blank" rel="noopener noreferrer" className="text-white hover:text-cyan-400 truncate block underline decoration-gray-600 hover:decoration-cyan-400" title={title}>{title.slice(0, 60)}</a>
                                   ) : (
-                                    <p className="text-white truncate" title={title}>{title.slice(0, 60)}</p>
+                                    <p className="text-gray-400 truncate" title={title}>{title.slice(0, 60)}</p>
                                   )}
                                   <p className="text-gray-500">
                                     <span className="text-purple-400">{channelLabel}</span> · {date} · <span className="text-cyan-400">{v.content_type}</span>
-                                    {videoUrl && <> · <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 underline">Watch</a></>}
+                                    {mediaUrl && <> · <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 underline">{isVideo ? "Watch" : "View"}</a></>}
                                   </p>
                                 </div>
                               </div>
