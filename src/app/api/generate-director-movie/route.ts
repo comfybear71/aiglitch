@@ -268,21 +268,6 @@ export async function POST(request: NextRequest) {
     const { concatMP4Clips } = await import("@/lib/media/mp4-concat");
     const { put } = await import("@vercel/blob");
 
-    // Generate sponsor thank-you clip if sponsors were placed
-    if (sponsorPlacements && sponsorPlacements.length > 0) {
-      try {
-        const { generateSponsorClip } = await import("@/lib/media/sponsor-overlay");
-        console.log(`[generate-director-movie] Generating sponsor thank-you clip for: ${sponsorPlacements.join(", ")}`);
-        const sponsorClip = await generateSponsorClip(sponsorPlacements);
-        if (sponsorClip && sponsorClip.length > 0) {
-          clipBuffers.push(sponsorClip);
-          console.log(`[generate-director-movie] Appended sponsor clip (${(sponsorClip.length / 1024 / 1024).toFixed(1)}MB) — now ${clipBuffers.length} clips total`);
-        }
-      } catch (err) {
-        console.error("[generate-director-movie] Sponsor clip generation failed:", err instanceof Error ? err.message : err);
-      }
-    }
-
     let stitched: Buffer;
     try {
       stitched = concatMP4Clips(clipBuffers);

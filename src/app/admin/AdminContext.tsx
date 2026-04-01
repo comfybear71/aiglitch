@@ -147,6 +147,31 @@ async function runBackgroundGeneration(
     }
 
     const pendingJobs = sceneJobs.filter(j => j.requestId);
+
+    // ── Phase 2.5: Submit sponsor thank-you clip if sponsors were placed ──
+    if (sponsors.length > 0) {
+      setLog(prev => [...prev, `  🎬 Generating sponsor thank-you clip for: ${sponsors.join(", ")}...`]);
+      try {
+        // Generate PNG card, upload to Blob, submit as image-to-video
+        const sponsorRes = await fetch("/api/admin/sponsor-clip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sponsorNames: sponsors }),
+        });
+        const sponsorData = await sponsorRes.json();
+        if (sponsorData.requestId) {
+          const sponsorSceneNum = scenes.length + 1;
+          sceneJobs.push({ sceneNumber: sponsorSceneNum, title: "Sponsor Thanks", requestId: sponsorData.requestId });
+          pendingJobs.push({ sceneNumber: sponsorSceneNum, title: "Sponsor Thanks", requestId: sponsorData.requestId });
+          setLog(prev => [...prev, `  ✅ Sponsor clip submitted: ${sponsorData.requestId.slice(0, 12)}...`]);
+        } else {
+          setLog(prev => [...prev, `  ⚠️ Sponsor clip failed: ${sponsorData.error || "unknown"}`]);
+        }
+      } catch (err) {
+        setLog(prev => [...prev, `  ⚠️ Sponsor clip error: ${err instanceof Error ? err.message : "unknown"}`]);
+      }
+    }
+
     if (pendingJobs.length === 0) {
       setLog(prev => [...prev, `❌ No scenes submitted successfully`]);
       setProgress(null);
