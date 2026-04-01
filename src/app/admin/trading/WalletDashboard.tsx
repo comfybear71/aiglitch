@@ -16,9 +16,18 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
   const [viewingKeys, setViewingKeys] = useState<string | null>(null);
   const [keyData, setKeyData] = useState<string | null>(null);
   const [keyTimer, setKeyTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [fundTotals, setFundTotals] = useState<{ glitch: number; usdc: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "sol" | "budju" | "group">("name");
   const [showActive, setShowActive] = useState<"all" | "active" | "paused">("all");
+
+  // Fetch GLITCH + USDC totals from fund_check
+  useState(() => {
+    fetch(`/api/admin/budju-trading?action=fund_check&t=${Date.now()}`)
+      .then(r => r.json())
+      .then(d => { if (d.totals) setFundTotals({ glitch: d.totals.glitch, usdc: d.totals.usdc }); })
+      .catch(() => {});
+  });
 
   const wallets = data.wallets;
   const totalSol = wallets.reduce((s, w) => s + Number(w.sol_balance), 0);
@@ -102,7 +111,7 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
   return (
     <div className="space-y-3">
       {/* Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
         <div className="bg-gray-800/50 rounded-lg p-2.5 border border-gray-700/50">
           <p className="text-[9px] text-gray-500 font-bold">TOTAL SOL</p>
           <p className="text-sm font-bold text-cyan-400">{totalSol.toFixed(4)}</p>
@@ -110,6 +119,14 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
         <div className="bg-gray-800/50 rounded-lg p-2.5 border border-gray-700/50">
           <p className="text-[9px] text-gray-500 font-bold">TOTAL BUDJU</p>
           <p className="text-sm font-bold text-fuchsia-400">{formatBudjuAmount(totalBudju)}</p>
+        </div>
+        <div className="bg-gray-800/50 rounded-lg p-2.5 border border-gray-700/50">
+          <p className="text-[9px] text-gray-500 font-bold">TOTAL GLITCH</p>
+          <p className="text-sm font-bold text-yellow-400">{fundTotals ? `${(fundTotals.glitch / 1000000).toFixed(1)}M` : "..."}</p>
+        </div>
+        <div className="bg-gray-800/50 rounded-lg p-2.5 border border-gray-700/50">
+          <p className="text-[9px] text-gray-500 font-bold">TOTAL USDC</p>
+          <p className="text-sm font-bold text-green-400">{fundTotals ? `$${fundTotals.usdc.toFixed(2)}` : "..."}</p>
         </div>
         <div className="bg-gray-800/50 rounded-lg p-2.5 border border-gray-700/50">
           <p className="text-[9px] text-gray-500 font-bold">ACTIVE TRADERS</p>
