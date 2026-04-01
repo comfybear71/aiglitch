@@ -50,6 +50,95 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Refuel distributors with SOL then drain all SPL tokens back to treasury
+  if (action === "refuel_and_drain_distributors") {
+    try {
+      const { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount, createTransferInstruction } = await import("@solana/spl-token");
+      const { SERVER_RPC_URL, TREASURY_WALLET_STR } = await import("@/lib/solana-config");
+      const sql = (await import("@/lib/db")).getDb();
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
+      const treasuryPub = new PublicKey(TREASURY_WALLET_STR);
+
+      // Get treasury keypair
+      const treasuryKey = process.env.TREASURY_PRIVATE_KEY;
+      if (!treasuryKey) return NextResponse.json({ error: "TREASURY_PRIVATE_KEY not set" }, { status: 500 });
+      const { Keypair } = await import("@solana/web3.js");
+      const bs58 = await import("bs58");
+      const treasuryKeypair = Keypair.fromSecretKey(bs58.default.decode(treasuryKey));
+
+      const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
+      const { decryptKeypair } = await import("@/lib/trading/budju");
+
+      const MINTS = [
+        { name: "BUDJU", mint: new PublicKey("2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump"), decimals: 6 },
+        { name: "USDC", mint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), decimals: 6 },
+        { name: "GLITCH", mint: new PublicKey("5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT"), decimals: 9 },
+      ];
+
+      const results: { group: number; step: string; amount?: number; token?: string; tx?: string; error?: string }[] = [];
+
+      for (const d of distributors) {
+        const distPub = new PublicKey(d.wallet_address as string);
+        const groupNum = Number(d.group_number);
+
+        // Step 1: Send 0.003 SOL from treasury for fee
+        try {
+          const fuelLamports = 3_000_000; // 0.003 SOL
+          const fuelTx = new Transaction().add(
+            SystemProgram.transfer({ fromPubkey: treasuryKeypair.publicKey, toPubkey: distPub, lamports: fuelLamports })
+          );
+          const fuelSig = await sendAndConfirmTransaction(connection, fuelTx, [treasuryKeypair], { commitment: "confirmed" });
+          results.push({ group: groupNum, step: "refuel", amount: 0.003, token: "SOL", tx: fuelSig });
+          await new Promise(r => setTimeout(r, 1000));
+        } catch (err) {
+          results.push({ group: groupNum, step: "refuel", error: err instanceof Error ? err.message : String(err) });
+          continue; // Can't drain without SOL
+        }
+
+        // Step 2: Drain each SPL token
+        try {
+          const distKeypair = decryptKeypair(d.encrypted_keypair as string);
+          for (const { name, mint, decimals } of MINTS) {
+            try {
+              const fromAta = await getAssociatedTokenAddress(mint, distKeypair.publicKey);
+              const acc = await getAccount(connection, fromAta);
+              const bal = Number(acc.amount);
+              if (bal <= 0) continue;
+              const toAta = await getAssociatedTokenAddress(mint, treasuryPub);
+              const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, distKeypair.publicKey, BigInt(bal)));
+              const sig = await sendAndConfirmTransaction(connection, tx, [distKeypair], { commitment: "confirmed" });
+              results.push({ group: groupNum, step: "drain", amount: bal / (10 ** decimals), token: name, tx: sig });
+              await new Promise(r => setTimeout(r, 1500));
+            } catch { /* no ATA or empty */ }
+          }
+
+          // Step 3: Send remaining SOL back
+          const remainingSol = await connection.getBalance(distKeypair.publicKey);
+          if (remainingSol > 5000) {
+            const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: distKeypair.publicKey, toPubkey: treasuryPub, lamports: remainingSol - 5000 }));
+            await sendAndConfirmTransaction(connection, tx, [distKeypair], { commitment: "confirmed" });
+            results.push({ group: groupNum, step: "drain_sol", amount: (remainingSol - 5000) / LAMPORTS_PER_SOL, token: "SOL" });
+          }
+        } catch (err) {
+          results.push({ group: groupNum, step: "drain", error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
+      await sql`UPDATE budju_distributors SET sol_balance = 0, budju_balance = 0`;
+
+      const recovered = results.filter(r => r.step === "drain" && !r.error);
+      return NextResponse.json({
+        success: true,
+        recovered: recovered.length,
+        total_results: results.length,
+        results,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   // Drain distributor wallets back to treasury — recovers stuck funds
   if (action === "drain_distributors") {
     try {

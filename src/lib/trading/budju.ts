@@ -154,7 +154,7 @@ function encryptKeypair(secretKey: Uint8Array): string {
   return bs58.encode(encrypted);
 }
 
-function decryptKeypair(encrypted: string): Keypair {
+export function decryptKeypair(encrypted: string): Keypair {
   const encBytes = bs58.decode(encrypted);
   const keyBytes = new TextEncoder().encode(ENCRYPTION_KEY);
   const decrypted = new Uint8Array(encBytes.length);
