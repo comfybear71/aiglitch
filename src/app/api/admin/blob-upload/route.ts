@@ -102,3 +102,42 @@ export async function POST(request: NextRequest) {
     results,
   });
 }
+
+/**
+ * PUT — Copy an image from a source URL to a destination path in Blob storage.
+ * Used for organizing sponsor images into sponsors/{slug}/ folders.
+ *
+ * Body: { sourceUrl: string, destPath: string } or { copies: [{ sourceUrl, destPath }] }
+ */
+export async function PUT(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const copies: { sourceUrl: string; destPath: string }[] = body.copies || (body.sourceUrl ? [{ sourceUrl: body.sourceUrl, destPath: body.destPath }] : []);
+
+  if (copies.length === 0) {
+    return NextResponse.json({ error: "No copies specified. Send { sourceUrl, destPath } or { copies: [...] }" }, { status: 400 });
+  }
+
+  const results: { destPath: string; url?: string; sizeMb?: string; error?: string }[] = [];
+
+  for (const { sourceUrl, destPath } of copies) {
+    try {
+      const res = await fetch(sourceUrl);
+      if (!res.ok) {
+        results.push({ destPath, error: `Download failed: HTTP ${res.status}` });
+        continue;
+      }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const contentType = res.headers.get("content-type") || "image/jpeg";
+      const blob = await put(destPath, buffer, { access: "public", contentType, addRandomSuffix: false });
+      results.push({ destPath, url: blob.url, sizeMb: (buffer.length / 1024 / 1024).toFixed(2) });
+    } catch (err) {
+      results.push({ destPath, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  return NextResponse.json({ success: results.every(r => !r.error), results });
+}
