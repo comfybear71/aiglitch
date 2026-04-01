@@ -74,8 +74,12 @@ async function runBackgroundGeneration(
     const provider = screenplay.screenplayProvider === "grok" ? "Grok 4.20 reasoning" : "Claude";
     setLog(prev => [...prev, `  ✅ "${screenplay.title}" — ${scenes.length} scenes${isStudios ? ` by ${screenplay.directorName}` : ""} (screenplay by ${provider})`]);
     setLog(prev => [...prev, `  📖 ${screenplay.synopsis}`]);
-    if (screenplay.sponsorPlacements?.length > 0) {
-      setLog(prev => [...prev, `  💰 Sponsors in this video: ${screenplay.sponsorPlacements.join(", ")}`]);
+    // Debug: always show sponsor status
+    const sponsors = screenplay.sponsorPlacements || [];
+    if (sponsors.length > 0) {
+      setLog(prev => [...prev, `  💰 Sponsors in this video: ${sponsors.join(", ")}`]);
+    } else {
+      setLog(prev => [...prev, `  ℹ️ No sponsors placed in this video (sponsorPlacements: ${JSON.stringify(screenplay.sponsorPlacements)})`]);
     }
     if (isStudios && screenplay.castList?.length > 0) {
       setLog(prev => [...prev, `  🎭 Cast: ${screenplay.castList.join(", ")}`]);
