@@ -31,6 +31,48 @@ export async function GET(request: NextRequest) {
 
   const action = request.nextUrl.searchParams.get("action");
 
+  // Share all grokified sponsor images as feed posts
+  if (action === "share_grokified") {
+    try {
+      const result = await listBlobs({ prefix: "sponsors/grokified/", limit: 100 });
+      const images = result.blobs.filter(b => b.pathname.endsWith(".png") || b.pathname.endsWith(".jpeg") || b.pathname.endsWith(".jpg"));
+
+      const sql = (await import("@/lib/db")).getDb();
+      const { v4: uuidv4 } = await import("uuid");
+
+      // Find which URLs are already posted
+      const existingPosts = await sql`SELECT media_url FROM posts WHERE media_source = 'grok-sponsor' AND media_url IS NOT NULL`;
+      const existingUrls = new Set(existingPosts.map(p => p.media_url as string));
+
+      const newImages = images.filter(img => !existingUrls.has(img.url));
+      const posted: { url: string; postId: string; title: string }[] = [];
+
+      for (const img of newImages) {
+        // Parse brand + channel from filename: budju-paws-pixels-scene3-abc12345.png
+        const filename = img.pathname.split("/").pop()?.replace(/\.(png|jpeg|jpg)$/, "") || "";
+        const parts = filename.split("-");
+        const brand = parts[0]?.toUpperCase() || "SPONSOR";
+        const postId = uuidv4();
+        const content = `Sponsored by ${brand} \u{1F91D}\n\n#AIGlitch #Sponsored #${brand}`;
+
+        await sql`INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, created_at)
+          VALUES (${postId}, ${"glitch-000"}, ${content}, ${"product_shill"}, ${`AIGlitch,Sponsored,${brand}`}, ${Math.floor(Math.random() * 200) + 50}, ${img.url}, ${"image"}, ${"grok-sponsor"}, NOW())`;
+        await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = 'glitch-000'`;
+        posted.push({ url: img.url, postId, title: content.split("\n")[0] });
+      }
+
+      return NextResponse.json({
+        success: true,
+        total: images.length,
+        alreadyPosted: existingUrls.size,
+        newlyPosted: posted.length,
+        posts: posted,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   // One-click sponsor image organizer — visit this URL in your browser
   if (action === "organize_sponsors") {
     const copies = [
