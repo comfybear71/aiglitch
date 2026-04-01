@@ -95,14 +95,14 @@ async function runBackgroundGeneration(
     const sponsorCampaigns = screenplay.sponsorCampaigns || [];
     const sponsorImages: string[] = screenplay.sponsorImages || (screenplay.sponsorImageUrl ? [screenplay.sponsorImageUrl] : []);
     const hasSponsorVisuals = sponsorCampaigns.length > 0 && sponsorCampaigns.some((c: { visualPrompt?: string }) => c.visualPrompt);
-    // Max grokify scenes across all campaigns (each campaign controls its own count)
-    const maxGrokifyScenes = Math.max(0, ...sponsorCampaigns.map((c: { grokifyScenes?: number }) => c.grokifyScenes ?? 3));
+    // Track Grokify count PER CAMPAIGN — each sponsor gets their own scene budget
+    const grokifyCountPerCampaign: Record<number, number> = {};
+    const totalGrokifyBudget = sponsorCampaigns.reduce((sum: number, c: { grokifyScenes?: number }) => sum + (c.grokifyScenes ?? 3), 0);
 
-    if (hasSponsorVisuals && maxGrokifyScenes > 0) {
-      setLog(prev => [...prev, `  💰 ${sponsors.length} sponsor(s) — up to ${maxGrokifyScenes} scenes will be Grokified`]);
+    if (hasSponsorVisuals && totalGrokifyBudget > 0) {
+      const breakdown = sponsorCampaigns.map((c: { brandName?: string; grokifyScenes?: number }, idx: number) => `${c.brandName}=${c.grokifyScenes ?? 3}`).join(", ");
+      setLog(prev => [...prev, `  💰 ${sponsors.length} sponsor(s) — ${totalGrokifyBudget} total Grokified scenes (${breakdown})`]);
     }
-
-    let grokifiedCount = 0;
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
@@ -118,21 +118,31 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
-        // Grokify: For every 3rd content scene (not intro/outro), generate a scene image
-        // with the sponsor product subliminally placed. This image becomes the starting
-        // frame for the video clip, so the product is baked into the scene throughout.
         let sceneImageUrl: string | undefined;
-        const isContentScene = i > 0 && i < scenes.length - 1; // skip intro (0) and outro (last)
-        const isOutro = i === scenes.length - 1; // last scene = outro
-        // Grokify content scenes up to the campaign limit, PLUS always Grokify the outro
-        // so sponsors are visually acknowledged with their actual logo in the closing scene
-        const shouldGrokify = hasSponsorVisuals && maxGrokifyScenes > 0 && (
-          (isContentScene && grokifiedCount < maxGrokifyScenes) || isOutro
-        );
+        const isContentScene = i > 0 && i < scenes.length - 1;
+        const isOutro = i === scenes.length - 1;
+
+        // Find the next sponsor that still has Grokify budget remaining
+        let campaignIdx = -1;
+        if (isContentScene && hasSponsorVisuals) {
+          for (let c = 0; c < sponsorCampaigns.length; c++) {
+            // Round-robin: start from scene-based offset to distribute evenly
+            const idx = (i + c) % sponsorCampaigns.length;
+            const limit = (sponsorCampaigns[idx] as { grokifyScenes?: number }).grokifyScenes ?? 3;
+            const used = grokifyCountPerCampaign[idx] || 0;
+            if (limit > 0 && used < limit) {
+              campaignIdx = idx;
+              break;
+            }
+          }
+        }
+        const shouldGrokify = (isContentScene && campaignIdx >= 0) || (isOutro && hasSponsorVisuals && totalGrokifyBudget > 0);
 
         if (shouldGrokify) {
-          // For outro: use ALL sponsor campaigns. For content scenes: rotate through them
-          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[]; grokifyMode?: string };
+          // For content scenes: use the campaign with remaining budget. For outro: use first campaign.
+          const campaign = isOutro
+            ? sponsorCampaigns[0] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[]; grokifyMode?: string }
+            : sponsorCampaigns[campaignIdx] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[]; grokifyMode?: string };
           const allBrandNames = sponsorCampaigns.map((c: { brandName?: string }) => c.brandName).filter(Boolean).join(", ");
           if (campaign?.visualPrompt || isOutro) {
             const logLabel = isOutro ? `Sponsor acknowledgment (${allBrandNames})` : (campaign.brandName || "sponsor");
@@ -163,9 +173,13 @@ async function runBackgroundGeneration(
               const grokData = await grokRes.json();
               if (grokData.grokifiedUrl) {
                 sceneImageUrl = grokData.grokifiedUrl;
-                grokifiedCount++;
-                const mode = grokData.mode === "image-edit" ? "actual product image edited into scene" : "generated from description";
-                setLog(prev => [...prev, `  ✅ Grokified (${grokifiedCount}/${maxGrokifyScenes}) — ${mode}`]);
+                if (!isOutro && campaignIdx >= 0) {
+                  grokifyCountPerCampaign[campaignIdx] = (grokifyCountPerCampaign[campaignIdx] || 0) + 1;
+                }
+                const used = isOutro ? 0 : (grokifyCountPerCampaign[campaignIdx] || 0);
+                const limit = isOutro ? 0 : ((sponsorCampaigns[campaignIdx] as { grokifyScenes?: number })?.grokifyScenes ?? 3);
+                const mode = grokData.mode === "image-edit" ? "product image edited in" : "generated from description";
+                setLog(prev => [...prev, `  ✅ Grokified ${campaign.brandName || "sponsor"}${!isOutro ? ` (${used}/${limit})` : ""} — ${mode}`]);
               } else {
                 setLog(prev => [...prev, `  ⚠️ Grokify returned no image: ${grokData.error || "unknown"}`]);
               }
