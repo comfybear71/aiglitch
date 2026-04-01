@@ -50,6 +50,96 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Drain a specific token from ALL persona wallets back to treasury (keeps SOL for gas)
+  if (action === "drain_token") {
+    try {
+      const { Connection, PublicKey, Transaction, sendAndConfirmTransaction } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount, createTransferInstruction } = await import("@solana/spl-token");
+      const { SERVER_RPC_URL, TREASURY_WALLET_STR } = await import("@/lib/solana-config");
+      const { decryptKeypair } = await import("@/lib/trading/budju");
+      const sql = (await import("@/lib/db")).getDb();
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
+      const treasuryPub = new PublicKey(TREASURY_WALLET_STR);
+
+      const token = (request.nextUrl.searchParams.get("token") || "").toUpperCase();
+      const MINT_MAP: Record<string, { mint: string; decimals: number; dbCol: string }> = {
+        "BUDJU": { mint: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump", decimals: 6, dbCol: "budju_balance" },
+        "USDC": { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6, dbCol: "" },
+        "GLITCH": { mint: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT", decimals: 9, dbCol: "" },
+      };
+
+      if (!MINT_MAP[token]) {
+        return NextResponse.json({ error: `Invalid token: ${token}. Use BUDJU, USDC, or GLITCH` }, { status: 400 });
+      }
+
+      const { mint, decimals, dbCol } = MINT_MAP[token];
+      const mintPub = new PublicKey(mint);
+      const toAta = await getAssociatedTokenAddress(mintPub, treasuryPub);
+
+      const wallets = await sql`
+        SELECT bw.*, p.display_name FROM budju_wallets bw
+        JOIN ai_personas p ON p.id = bw.persona_id
+        WHERE bw.is_active = TRUE
+      `;
+
+      let drained = 0, failed = 0, totalAmount = 0;
+      const errors: string[] = [];
+
+      for (const w of wallets) {
+        try {
+          const keypair = decryptKeypair(w.encrypted_keypair as string);
+          const fromAta = await getAssociatedTokenAddress(mintPub, keypair.publicKey);
+          const acc = await getAccount(connection, fromAta);
+          const bal = Number(acc.amount);
+          if (bal <= 0) continue;
+
+          const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, keypair.publicKey, BigInt(bal)));
+          await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+          totalAmount += bal / (10 ** decimals);
+          drained++;
+          if (dbCol === "budju_balance") await sql`UPDATE budju_wallets SET budju_balance = 0 WHERE persona_id = ${w.persona_id}`;
+          await new Promise(r => setTimeout(r, 1000));
+        } catch (err) {
+          // Skip wallets with no ATA or no balance
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes("could not find account") && !msg.includes("TokenAccountNotFound")) {
+            failed++;
+            errors.push(`${w.display_name}: ${msg.slice(0, 80)}`);
+          }
+        }
+      }
+
+      // Also drain from distributors
+      const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
+      for (const d of distributors) {
+        try {
+          const keypair = decryptKeypair(d.encrypted_keypair as string);
+          const fromAta = await getAssociatedTokenAddress(mintPub, keypair.publicKey);
+          const acc = await getAccount(connection, fromAta);
+          const bal = Number(acc.amount);
+          if (bal <= 0) continue;
+          const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, keypair.publicKey, BigInt(bal)));
+          await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+          totalAmount += bal / (10 ** decimals);
+          drained++;
+          await new Promise(r => setTimeout(r, 1000));
+        } catch { /* skip */ }
+      }
+
+      return NextResponse.json({
+        success: true,
+        token,
+        drained,
+        failed,
+        totalRecovered: totalAmount,
+        message: `Drained ${totalAmount.toFixed(2)} ${token} from ${drained} wallets back to treasury. SOL untouched.`,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   // Refuel distributors with SOL then drain all SPL tokens back to treasury
   if (action === "refuel_and_drain_distributors") {
     try {
