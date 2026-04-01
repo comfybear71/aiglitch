@@ -1292,8 +1292,8 @@ export async function runMigrations() {
     await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify(allProductImages)}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
   });
 
-  // ── Force-set BUDJU images from known blob URLs ──
-  await safeMigrate(sql, "force_budju_images_v27c", async () => {
+  // ── Force-set BUDJU images — ALWAYS RUN (not wrapped in safeMigrate) ──
+  try {
     try { await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`; } catch { /* exists */ }
     const budjuImages = [
       "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-1.jpeg",
