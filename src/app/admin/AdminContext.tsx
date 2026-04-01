@@ -136,7 +136,9 @@ async function runBackgroundGeneration(
             }
           }
         }
-        const shouldGrokify = (isContentScene && campaignIdx >= 0) || (isOutro && hasSponsorVisuals && totalGrokifyBudget > 0);
+        // Only Grokify content scenes — outro keeps its channel branding clean.
+        // Sponsor thanks handled in post caption text instead.
+        const shouldGrokify = isContentScene && campaignIdx >= 0;
 
         if (shouldGrokify) {
           // For content scenes: use the campaign with remaining budget. For outro: use first campaign.
