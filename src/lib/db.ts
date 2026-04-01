@@ -1161,13 +1161,36 @@ export async function runMigrations() {
   await safeMigrate(sql, "fix_budju_campaign_v27", async () => {
     // Fix "Unknown" sponsor name to "BUDJU"
     await sql`UPDATE sponsors SET company_name = 'BUDJU' WHERE LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com'`;
-    // Update BUDJU ad campaign with logo and product images
-    const budjuLogo = "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/logo.jpeg";
-    const budjuProduct = "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-1.jpeg";
+
+    // Copy images from sponsors/unknown/ to sponsors/budju/ on Blob
+    const oldUrls = [
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/logo.jpeg", newPath: "sponsors/budju/logo.jpeg" },
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-1.jpeg", newPath: "sponsors/budju/image-1.jpeg" },
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-2.jpeg", newPath: "sponsors/budju/image-2.jpeg" },
+      { old: "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-3.jpeg", newPath: "sponsors/budju/image-3.jpeg" },
+    ];
+    const { put } = await import("@vercel/blob");
+    const newUrls: string[] = [];
+    for (const item of oldUrls) {
+      try {
+        const res = await fetch(item.old);
+        if (res.ok) {
+          const buffer = Buffer.from(await res.arrayBuffer());
+          const blob = await put(item.newPath, buffer, { access: "public", contentType: "image/jpeg", addRandomSuffix: false });
+          newUrls.push(blob.url);
+        } else {
+          newUrls.push(item.old); // fallback to old URL
+        }
+      } catch {
+        newUrls.push(item.old); // fallback to old URL
+      }
+    }
+
+    const budjuLogo = newUrls[0];
+    const budjuProduct = newUrls[1];
     const budjuVisualPrompt = "A shiny metallic purple and pink cryptocurrency coin with 'BUDJU' text embossed on it, glowing neon purple edges, holographic sheen. The BUDJU coin sits prominently on a desk, table, shelf, or held by a character. Also show a phone or screen displaying the BUDJU trading chart with purple/pink branding. The BUDJU logo is pink cursive text 'Budju' with a heart symbol and a blonde cartoon character mascot. Purple/pink neon coin aesthetic. Make the BUDJU branding clearly visible and recognizable in the scene.";
     await sql`UPDATE ad_campaigns SET logo_url = ${budjuLogo}, product_image_url = ${budjuProduct}, visual_prompt = ${budjuVisualPrompt} WHERE LOWER(brand_name) = 'budju'`;
-    // Also update the sponsor record
-    await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify([budjuProduct, "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-2.jpeg", "https://efxrfrxecvegqgub.public.blob.vercel-storage.com/sponsors/unknown/image-3.jpeg"])}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
+    await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify([budjuProduct, newUrls[2], newUrls[3]])}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
   });
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
