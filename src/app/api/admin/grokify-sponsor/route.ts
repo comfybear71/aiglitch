@@ -9,22 +9,23 @@ export const maxDuration = 60;
 /**
  * POST /api/admin/grokify-sponsor
  *
- * Takes a sponsor's product image/logo and a scene description,
- * uses Grok Image API to generate a new scene image with the
- * sponsor product naturally placed in the scene context.
+ * Generates a scene image with sponsor products subliminally placed.
+ * Uses the scene's actual video prompt as the base, then weaves in
+ * the sponsor's visual_prompt so the product appears naturally —
+ * on a table, as a poster on a wall, on a screen in the background.
  *
- * The returned blob URL can then be used as `image_url` for
- * Grok video generation, so the video clip starts from a frame
- * where the sponsor product is already visible.
+ * The returned blob URL is used as `image_url` for Grok video generation.
+ * The video clip animates from this frame, keeping the product visible
+ * throughout the scene subliminally.
  *
  * Body:
- *   - sponsorImageUrl: string — the sponsor's product image or logo URL
- *   - scenePrompt: string — the scene's video prompt (used to match visual style)
+ *   - scenePrompt: string — the scene's video prompt (the actual scene content)
+ *   - visualPrompt: string — the sponsor's visual_prompt (how the product should appear)
  *   - brandName: string — sponsor brand name
  *   - productName: string — sponsor product name
  *
  * Returns:
- *   - grokifiedUrl: string — Vercel Blob URL of the Grokified scene image
+ *   - grokifiedUrl: string — Vercel Blob URL of the scene image with product placed
  */
 export async function POST(request: NextRequest) {
   const isAdmin = await isAdminAuthenticated(request);
@@ -37,31 +38,28 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const sponsorImageUrl = body.sponsorImageUrl as string | undefined;
   const scenePrompt = (body.scenePrompt || "") as string;
+  const visualPrompt = (body.visualPrompt || "") as string;
   const brandName = (body.brandName || "Sponsor") as string;
   const productName = (body.productName || brandName) as string;
 
-  if (!sponsorImageUrl) {
-    return NextResponse.json({ error: "sponsorImageUrl required" }, { status: 400 });
+  if (!scenePrompt) {
+    return NextResponse.json({ error: "scenePrompt required" }, { status: 400 });
   }
 
-  // Extract scene context — take first 300 chars of the scene prompt for style matching
-  const sceneContext = scenePrompt.slice(0, 300);
+  // Build a prompt that IS the scene but with the sponsor product placed subliminally.
+  // The scene prompt describes what's happening. The visual prompt describes the product.
+  // We merge them so the product is IN the scene — on a table, poster, background, etc.
+  const sceneContext = scenePrompt.slice(0, 500);
+  const productDesc = visualPrompt.slice(0, 400);
 
-  // Build a prompt that places the sponsor product naturally in a scene
-  // The Grok Image API will generate a NEW image that looks like a frame from the video
-  // but with the sponsor product clearly visible
-  const imagePrompt = `A cinematic 16:9 film frame from a professional video production. The scene shows: ${sceneContext}. IMPORTANT: Prominently featured in this scene is the ${productName} by ${brandName} — the product is naturally placed in the scene (on a table, held by a character, on a shelf, on a screen, or as part of the environment). The product must be clearly visible, well-lit, and recognizable but feel like a natural part of the scene — not a cut-out or overlay. Think product placement in a Hollywood movie: subtle but unmissable. Cinematic lighting, shallow depth of field, professional color grading. 16:9 widescreen aspect ratio.`;
+  const imagePrompt = `A cinematic 16:9 widescreen film frame. The scene: ${sceneContext}. Subliminally placed in this scene — NOT the focus, just naturally present in the environment: ${productDesc}. The product appears naturally: on a table in the foreground, as a poster/billboard in the background, on a shelf, on a screen, as packaging on a counter — like product placement in a Hollywood movie. The SCENE is the focus. The product is just THERE, part of the world. Cinematic lighting, shallow depth of field, professional color grading. 9:16 vertical format.`;
 
-  console.log(`[grokify-sponsor] Generating scene image for ${brandName} (${productName})`);
-  console.log(`[grokify-sponsor] Image URL: ${sponsorImageUrl.slice(0, 60)}...`);
+  console.log(`[grokify-sponsor] Generating scene with ${brandName} product placement`);
+  console.log(`[grokify-sponsor] Scene: "${sceneContext.slice(0, 80)}..."`);
+  console.log(`[grokify-sponsor] Product: "${productDesc.slice(0, 80)}..."`);
 
   try {
-    // Use Grok Image API to generate the scene image
-    // Note: grok-imagine-image doesn't support reference/input images directly,
-    // so we describe the product in text. The sponsor's actual image URL is used
-    // later as image_url for the video clip (animating FROM the Grokified scene).
     const response = await fetch("https://api.x.ai/v1/images/generations", {
       method: "POST",
       headers: {
@@ -72,7 +70,7 @@ export async function POST(request: NextRequest) {
         model: "grok-imagine-image",
         prompt: imagePrompt,
         n: 1,
-        aspect_ratio: "16:9",
+        aspect_ratio: "9:16",
         resolution: "2k",
         response_format: "url",
       }),
@@ -80,39 +78,26 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`[grokify-sponsor] Grok image API failed: ${response.status} ${errText.slice(0, 200)}`);
-      // Fall back to using the original sponsor image directly
-      return NextResponse.json({
-        grokifiedUrl: sponsorImageUrl,
-        fallback: true,
-        error: `Grok image failed: ${response.status}`,
-      });
+      console.error(`[grokify-sponsor] Grok image failed: ${response.status} ${errText.slice(0, 200)}`);
+      return NextResponse.json({ grokifiedUrl: null, error: `Grok image failed: ${response.status}` });
     }
 
     const data = await response.json();
     const imageData = data.data?.[0];
 
     if (!imageData?.url) {
-      console.error("[grokify-sponsor] Grok returned no image URL");
-      return NextResponse.json({
-        grokifiedUrl: sponsorImageUrl,
-        fallback: true,
-        error: "No image in response",
-      });
+      console.error("[grokify-sponsor] No image in response");
+      return NextResponse.json({ grokifiedUrl: null, error: "No image in response" });
     }
 
-    // Persist to Vercel Blob (Grok URLs are ephemeral — they expire quickly)
+    // Persist to Vercel Blob — Grok URLs expire quickly
     const grokUrl = imageData.url as string;
-    console.log(`[grokify-sponsor] Grok generated: ${grokUrl.slice(0, 80)}...`);
+    console.log(`[grokify-sponsor] Generated: ${grokUrl.slice(0, 80)}...`);
 
     const imgRes = await fetch(grokUrl);
     if (!imgRes.ok) {
-      console.error(`[grokify-sponsor] Failed to download Grok image: ${imgRes.status}`);
-      return NextResponse.json({
-        grokifiedUrl: sponsorImageUrl,
-        fallback: true,
-        error: "Failed to download generated image",
-      });
+      console.error(`[grokify-sponsor] Download failed: ${imgRes.status}`);
+      return NextResponse.json({ grokifiedUrl: null, error: "Failed to download generated image" });
     }
 
     const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
@@ -122,22 +107,16 @@ export async function POST(request: NextRequest) {
       addRandomSuffix: false,
     });
 
-    console.log(`[grokify-sponsor] Persisted to Blob: ${blob.url}`);
+    console.log(`[grokify-sponsor] Saved to Blob: ${blob.url} (${(imgBuffer.length / 1024 / 1024).toFixed(2)}MB)`);
 
     return NextResponse.json({
       grokifiedUrl: blob.url,
-      fallback: false,
       brandName,
       productName,
       sizeMb: (imgBuffer.length / 1024 / 1024).toFixed(2),
     });
   } catch (err) {
     console.error("[grokify-sponsor] Error:", err instanceof Error ? err.message : err);
-    // Fall back to using the original sponsor image
-    return NextResponse.json({
-      grokifiedUrl: sponsorImageUrl,
-      fallback: true,
-      error: err instanceof Error ? err.message : "Failed",
-    });
+    return NextResponse.json({ grokifiedUrl: null, error: err instanceof Error ? err.message : "Failed" });
   }
 }

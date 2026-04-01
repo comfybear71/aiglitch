@@ -86,13 +86,19 @@ async function runBackgroundGeneration(
     }
     setLog(prev => [...prev, ``]);
 
-    // ── Phase 2: Submit each scene to Grok ──
+    // ── Phase 2: Grokify sponsor images + Submit each scene to Grok ──
     setLog(prev => [...prev, `📡 Submitting ${scenes.length} scenes to xAI...`]);
     setProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
     const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
 
-    // Sponsor product images available for the thank-you clip
+    // Sponsor campaign details for Grokifying product images into scenes
+    const sponsorCampaigns = screenplay.sponsorCampaigns || [];
     const sponsorImages: string[] = screenplay.sponsorImages || (screenplay.sponsorImageUrl ? [screenplay.sponsorImageUrl] : []);
+    const hasSponsorVisuals = sponsorCampaigns.length > 0 && sponsorCampaigns.some((c: { visualPrompt?: string }) => c.visualPrompt);
+
+    if (hasSponsorVisuals) {
+      setLog(prev => [...prev, `  💰 ${sponsors.length} sponsor(s) — product images will be Grokified into scenes`]);
+    }
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
@@ -108,14 +114,47 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
-        // Sponsor products are placed subliminally via the text prompt — buildVisualPlacementPrompt()
-        // already injected product descriptions into the screenplay, so each scene's videoPrompt
-        // naturally includes sponsor products (e.g. "a BUDJU coin on the table").
-        // We do NOT pass image_url here — that would make it a first-frame animation, not subliminal.
+        // Grokify: For every 3rd content scene (not intro/outro), generate a scene image
+        // with the sponsor product subliminally placed. This image becomes the starting
+        // frame for the video clip, so the product is baked into the scene throughout.
+        let sceneImageUrl: string | undefined;
+        const isContentScene = i > 0 && i < scenes.length - 1; // skip intro (0) and outro (last)
+        const shouldGrokify = hasSponsorVisuals && isContentScene && i % 3 === 1;
+
+        if (shouldGrokify) {
+          const campaign = sponsorCampaigns[Math.floor(i / 3) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string };
+          if (campaign?.visualPrompt) {
+            setLog(prev => [...prev, `  🖼️ Grokifying ${campaign.brandName || "sponsor"} into scene...`]);
+            try {
+              const grokRes = await fetch("/api/admin/grokify-sponsor", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  scenePrompt: scene.videoPrompt,
+                  visualPrompt: campaign.visualPrompt,
+                  brandName: campaign.brandName || "Sponsor",
+                  productName: campaign.productName || "Product",
+                }),
+              });
+              const grokData = await grokRes.json();
+              if (grokData.grokifiedUrl) {
+                sceneImageUrl = grokData.grokifiedUrl;
+                setLog(prev => [...prev, `  ✅ Grokified — product placed in scene`]);
+              } else {
+                setLog(prev => [...prev, `  ⚠️ Grokify returned no image: ${grokData.error || "unknown"}`]);
+              }
+              // Rate limit before video submission
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            } catch (err) {
+              setLog(prev => [...prev, `  ⚠️ Grokify failed: ${err instanceof Error ? err.message : "unknown"}`]);
+            }
+          }
+        }
+
         const submitRes = await fetch("/api/test-grok-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder }),
+          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sceneImageUrl }),
         });
         const submitData = await submitRes.json();
 
