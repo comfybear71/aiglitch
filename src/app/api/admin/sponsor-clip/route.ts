@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
-import { put } from "@vercel/blob";
 import { env } from "@/lib/bible/env";
 
 /**
@@ -21,34 +19,14 @@ export async function POST(request: NextRequest) {
 
     const thanksLine = "Thanks to our sponsors";
     const namesLine = sponsorNames.join("  •  ");
-    const width = 1280;
-    const height = 720;
 
-    // Generate a simple gradient background PNG (no SVG text — fontconfig not available on Vercel)
-    const pngBuffer = await sharp({
-      create: {
-        width,
-        height,
-        channels: 4,
-        background: { r: 10, g: 10, b: 30, alpha: 1 },
-      },
-    }).png().toBuffer();
-
-    console.log(`[sponsor-clip] Generated background PNG (${(pngBuffer.length / 1024).toFixed(0)}KB) for: ${sponsorNames.join(", ")}`);
-
-    // Upload to Blob
-    const blob = await put(
-      `sponsor-cards/${Date.now()}.png`,
-      pngBuffer,
-      { access: "public", contentType: "image/png", addRandomSuffix: true },
-    );
-    console.log(`[sponsor-clip] Uploaded card to: ${blob.url}`);
-
-    // Submit to Grok image-to-video
+    // Submit text-to-video (NOT image-to-video — that distorts/glitches the card)
     const apiKey = env.XAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "XAI_API_KEY not set" }, { status: 500 });
     }
+
+    console.log(`[sponsor-clip] Submitting text-to-video for: ${sponsorNames.join(", ")}`);
 
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
@@ -58,8 +36,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "grok-imagine-video",
-        prompt: `Professional sponsor thank-you card on dark purple background. Large white bold text centered reads "${thanksLine}: ${namesLine}". Below in smaller purple text "AIG!itch" and "aiglitch.app". Subtle neon purple and cyan glow effects. Elegant, clean, simple. The text must be clearly readable and prominent. Gentle zoom effect.`,
-        image_url: blob.url,
+        prompt: `A professional, clean, static sponsor thank-you card. Dark navy/purple gradient background. In the center of the frame, large crisp white bold text reads: "${thanksLine}" on the first line. Below it in even larger white text: "${namesLine}". Below that, smaller purple glowing text: "AIG!itch" and below "aiglitch.app". Subtle neon purple and cyan accent lines at top and bottom edges. The card is STATIC — minimal movement, just a very subtle glow pulse on the text. Think TV end credits sponsor acknowledgment. The text MUST be the main focus, clearly readable, centered, and prominent against the dark background. Professional broadcast quality.`,
         duration: 5,
         aspect_ratio: "16:9",
         resolution: "720p",
