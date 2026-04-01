@@ -237,9 +237,10 @@ async function runBackgroundGeneration(
       stitchForm.append("tagline", screenplay.tagline || "");
       stitchForm.append("castList", JSON.stringify(isStudios ? (screenplay.castList || []) : []));
       stitchForm.append("channelId", chId);
-      if (screenplay.sponsorPlacements?.length > 0) {
-        stitchForm.append("sponsorPlacements", JSON.stringify(screenplay.sponsorPlacements));
-      }
+      // Always append sponsorPlacements (even if empty) so the POST handler knows
+      const sponsorList = screenplay.sponsorPlacements || [];
+      stitchForm.append("sponsorPlacements", JSON.stringify(sponsorList));
+      console.log("[AdminContext] Appending sponsorPlacements to stitch form:", JSON.stringify(sponsorList));
       const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
       const stitchData = await stitchRes.json();
 
