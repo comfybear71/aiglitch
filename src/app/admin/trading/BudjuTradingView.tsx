@@ -4,11 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { useAdmin } from "../AdminContext";
 import { BudjuDashboard, formatBudjuAmount } from "../admin-types";
 import WalletDashboard from "./WalletDashboard";
+import MemoSystem from "./MemoSystem";
 
 export default function BudjuTradingView() {
   const { authenticated } = useAdmin();
   const [data, setData] = useState<BudjuDashboard | null>(null);
-  const [view, setView] = useState<"dashboard" | "trades" | "leaderboard" | "wallets" | "config" | "distribute">("dashboard");
+  const [view, setView] = useState<"dashboard" | "trades" | "leaderboard" | "wallets" | "distribute" | "memos" | "config">("dashboard");
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -235,10 +236,10 @@ export default function BudjuTradingView() {
 
       {/* Sub-tabs */}
       <div className="flex gap-1.5">
-        {(["dashboard", "trades", "leaderboard", "wallets", "distribute", "config"] as const).map(v => (
+        {(["dashboard", "trades", "leaderboard", "wallets", "distribute", "memos", "config"] as const).map(v => (
           <button key={v} onClick={() => setView(v)}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-900 text-gray-500 border border-gray-800 hover:bg-gray-800"}`}>
-            {v === "dashboard" ? "Dashboard" : v === "trades" ? "Recent Trades" : v === "leaderboard" ? "Leaderboard" : v === "wallets" ? "Wallets" : v === "distribute" ? "Distribute" : "Config"}
+            {v === "dashboard" ? "Dashboard" : v === "trades" ? "Trades" : v === "leaderboard" ? "Leaderboard" : v === "wallets" ? "Wallets" : v === "distribute" ? "Distribute" : v === "memos" ? "Memos" : "Config"}
           </button>
         ))}
       </div>
@@ -470,6 +471,9 @@ export default function BudjuTradingView() {
       {view === "distribute" && (
         <DistributeView onComplete={fetchData} />
       )}
+
+      {/* MEMOS VIEW */}
+      {view === "memos" && <MemoSystem />}
 
       {/* CONFIG VIEW */}
       {view === "config" && (

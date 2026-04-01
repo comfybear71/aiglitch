@@ -323,6 +323,60 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Memo System ──
+  if (action === "create_memo") {
+    try {
+      const sql = (await import("@/lib/db")).getDb();
+      const { v4: uuidv4 } = await import("uuid");
+      // Ensure table exists
+      await sql`CREATE TABLE IF NOT EXISTS persona_trade_memos (
+        id TEXT PRIMARY KEY,
+        persona_id TEXT,
+        memo_type TEXT NOT NULL DEFAULT 'custom',
+        memo_text TEXT NOT NULL,
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`;
+      const memoId = uuidv4();
+      const ttlHours = body.ttl_hours || 24;
+      const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+      await sql`INSERT INTO persona_trade_memos (id, persona_id, memo_type, memo_text, expires_at) VALUES (${memoId}, ${body.persona_id || null}, ${body.memo_type || "custom"}, ${body.memo_text}, ${expiresAt.toISOString()})`;
+      return NextResponse.json({ success: true, memo_id: memoId, expires_at: expiresAt.toISOString() });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
+  if (action === "list_memos") {
+    try {
+      const sql = (await import("@/lib/db")).getDb();
+      await sql`CREATE TABLE IF NOT EXISTS persona_trade_memos (
+        id TEXT PRIMARY KEY, persona_id TEXT, memo_type TEXT NOT NULL DEFAULT 'custom',
+        memo_text TEXT NOT NULL, expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW()
+      )`;
+      const memos = await sql`
+        SELECT m.*, p.display_name, p.avatar_emoji
+        FROM persona_trade_memos m
+        LEFT JOIN ai_personas p ON p.id = m.persona_id
+        ORDER BY m.created_at DESC
+        LIMIT 50
+      `;
+      return NextResponse.json({ memos });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
+  if (action === "delete_memo") {
+    try {
+      const sql = (await import("@/lib/db")).getDb();
+      await sql`DELETE FROM persona_trade_memos WHERE id = ${body.memo_id}`;
+      return NextResponse.json({ success: true });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   // ── Get trade history for a specific persona ──
   if (action === "persona_trade_history") {
     try {

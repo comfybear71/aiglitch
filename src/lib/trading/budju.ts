@@ -514,11 +514,36 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
 
     const personality = getTradingPersonality(wallet.persona_id as string, wallet.persona_type as string);
 
-    // Roll against trade frequency
-    if (Math.random() * 100 > personality.tradeFrequency) continue;
+    // Check for active memos that modify trading behavior
+    let memoOverride: { forceBuy?: boolean; forceSell?: boolean; forceHold?: boolean; aggressiveMultiplier?: number } = {};
+    try {
+      const memos = await sql`
+        SELECT memo_type, memo_text FROM persona_trade_memos
+        WHERE (persona_id = ${wallet.persona_id} OR persona_id IS NULL)
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY created_at DESC LIMIT 1
+      `;
+      if (memos.length > 0) {
+        const mt = (memos[0].memo_type as string).toLowerCase();
+        if (mt === "buy") memoOverride.forceBuy = true;
+        else if (mt === "sell") memoOverride.forceSell = true;
+        else if (mt === "hold") memoOverride.forceHold = true;
+        else if (mt === "aggressive") memoOverride.aggressiveMultiplier = 1.5;
+        else if (mt === "conservative") memoOverride.aggressiveMultiplier = 0.5;
+      }
+    } catch { /* table may not exist yet — ignore */ }
 
-    // Determine buy or sell based on personality bias + configured ratio
-    const adjustedBias = (buySellRatio + (personality.bias * 0.3));
+    // Hold memo = skip this persona entirely
+    if (memoOverride.forceHold) continue;
+
+    // Roll against trade frequency (aggressive memo increases frequency)
+    const freqMultiplier = memoOverride.aggressiveMultiplier || 1;
+    if (Math.random() * 100 > personality.tradeFrequency * freqMultiplier) continue;
+
+    // Determine buy or sell based on personality bias + configured ratio + memo override
+    let adjustedBias = (buySellRatio + (personality.bias * 0.3));
+    if (memoOverride.forceBuy) adjustedBias = 0.95; // 95% chance buy
+    if (memoOverride.forceSell) adjustedBias = 0.05; // 95% chance sell
     const isBuy = Math.random() < adjustedBias;
     const tradeType: "buy" | "sell" = isBuy ? "buy" : "sell";
 
