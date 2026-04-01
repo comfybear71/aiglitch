@@ -323,5 +323,24 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Get trade history for a specific persona ──
+  if (action === "persona_trade_history") {
+    try {
+      const sql = (await import("@/lib/db")).getDb();
+      const personaId = body.persona_id as string;
+      if (!personaId) return NextResponse.json({ error: "persona_id required" }, { status: 400 });
+      const trades = await sql`
+        SELECT id, trade_type, budju_amount, sol_amount, usd_value, status, created_at
+        FROM budju_trades
+        WHERE persona_id = ${personaId}
+        ORDER BY created_at DESC
+        LIMIT 20
+      `;
+      return NextResponse.json({ trades });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }
