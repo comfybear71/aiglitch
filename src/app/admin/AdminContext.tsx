@@ -122,7 +122,7 @@ async function runBackgroundGeneration(
         const shouldGrokify = hasSponsorVisuals && isContentScene && i % 2 === 1;
 
         if (shouldGrokify) {
-          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string };
+          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string };
           if (campaign?.visualPrompt) {
             setLog(prev => [...prev, `  🖼️ Grokifying ${campaign.brandName || "sponsor"} into scene...`]);
             try {
@@ -134,6 +134,7 @@ async function runBackgroundGeneration(
                   visualPrompt: campaign.visualPrompt,
                   brandName: campaign.brandName || "Sponsor",
                   productName: campaign.productName || "Product",
+                  logoUrl: campaign.logoUrl || "",
                 }),
               });
               const grokData = await grokRes.json();

@@ -42,18 +42,22 @@ export async function POST(request: NextRequest) {
   const visualPrompt = (body.visualPrompt || "") as string;
   const brandName = (body.brandName || "Sponsor") as string;
   const productName = (body.productName || brandName) as string;
+  const logoUrl = (body.logoUrl || "") as string;
 
   if (!scenePrompt) {
     return NextResponse.json({ error: "scenePrompt required" }, { status: 400 });
   }
 
-  // Build a prompt that IS the scene but with the sponsor product placed subliminally.
+  // Build a prompt that IS the scene but with the sponsor product AND logo placed subliminally.
   // The scene prompt describes what's happening. The visual prompt describes the product.
-  // We merge them so the product is IN the scene — on a table, poster, background, etc.
-  const sceneContext = scenePrompt.slice(0, 500);
-  const productDesc = visualPrompt.slice(0, 400);
+  // The logo gets placed on environmental surfaces throughout the scene.
+  const sceneContext = scenePrompt.slice(0, 400);
+  const productDesc = visualPrompt.slice(0, 300);
 
-  const imagePrompt = `A cinematic 16:9 widescreen film frame. The scene: ${sceneContext}. Subliminally placed in this scene — NOT the focus, just naturally present in the environment: ${productDesc}. The product appears naturally: on a table in the foreground, as a poster/billboard in the background, on a shelf, on a screen, as packaging on a counter — like product placement in a Hollywood movie. The SCENE is the focus. The product is just THERE, part of the world. Cinematic lighting, shallow depth of field, professional color grading. 9:16 vertical format.`;
+  // Logo placement — the brand logo/name appears on surfaces throughout the scene
+  const logoPlacement = `The "${brandName}" brand logo and name appear subliminally throughout: on a billboard in the background, as a poster on a wall, on a phone screen a character holds, on a branded shopping bag, printed on a coffee cup, on a neon sign, as graffiti art, on clothing/t-shirt, on a laptop sticker, on a bus stop ad, on product packaging. At least 2-3 of these logo placements must be visible in the scene.`;
+
+  const imagePrompt = `A cinematic 9:16 vertical film frame. The scene: ${sceneContext}. SUBLIMINAL PRODUCT PLACEMENT (naturally part of the world, NOT the focus): ${productDesc}. ${logoPlacement} The SCENE is the main focus — the product and logos are just naturally THERE, like product placement in a Hollywood movie. Cinematic lighting, shallow depth of field, professional color grading.`;
 
   console.log(`[grokify-sponsor] Generating scene with ${brandName} product placement`);
   console.log(`[grokify-sponsor] Scene: "${sceneContext.slice(0, 80)}..."`);
