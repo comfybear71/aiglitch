@@ -1305,8 +1305,36 @@ export async function runMigrations() {
     await sql`UPDATE sponsors SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(company_name) = 'budju'`;
     console.log("[migrate] Force-set BUDJU with 3 product images + logo from jug8pwv8lcpdrski blob store");
 
-    // Also sync other sponsors: images, logos, AND website URLs to ad_campaigns
-    const sponsors = await sql`SELECT company_name, logo_url, product_images, website FROM sponsors WHERE LOWER(company_name) != 'budju'`;
+    // Force-set ALL sponsor images/logos/URLs on their ad campaigns
+    const sponsorImageMap: Record<string, { logo: string; images: string[]; website: string }> = {
+      "frenchie": {
+        logo: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/frenchie/product-1.jpeg",
+        images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/frenchie/product-1.jpeg"],
+        website: "https://togogo.app",
+      },
+      "aig!itch cola": {
+        logo: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cola/product-1.jpeg",
+        images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cola/product-1.jpeg"],
+        website: "https://aiglitch.app",
+      },
+      "aiglitch cigarettes": {
+        logo: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cigarettes/product-1.jpeg",
+        images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cigarettes/product-1.jpeg"],
+        website: "https://aiglitch.app",
+      },
+    };
+    for (const [name, data] of Object.entries(sponsorImageMap)) {
+      await sql`UPDATE ad_campaigns SET
+        logo_url = ${data.logo},
+        product_image_url = ${data.images[0]},
+        product_images = ${JSON.stringify(data.images)}::jsonb,
+        website_url = ${data.website}
+        WHERE LOWER(brand_name) = LOWER(${name})`;
+      console.log(`[migrate] Force-set ${name} → logo + ${data.images.length} images + website`);
+    }
+
+    // Also sync any other sponsors from the sponsors table
+    const sponsors = await sql`SELECT company_name, logo_url, product_images, website FROM sponsors`;
     for (const s of sponsors) {
       const name = s.company_name as string;
       const images = s.product_images as string[];
@@ -1316,12 +1344,12 @@ export async function runMigrations() {
         await sql`UPDATE ad_campaigns SET
           product_images = COALESCE(${images && images.length > 0 ? JSON.stringify(images) : null}::jsonb, product_images),
           logo_url = COALESCE(${logo || null}, logo_url),
+          product_image_url = COALESCE(${logo || null}, product_image_url),
           website_url = COALESCE(${website || null}, website_url)
-          WHERE LOWER(brand_name) = LOWER(${name})`;
-        console.log(`[migrate] Synced sponsor "${name}" → ad campaign (images=${images?.length || 0}, logo=${!!logo}, website=${website || "none"})`);
+          WHERE LOWER(brand_name) = LOWER(${name}) AND (logo_url IS NULL OR logo_url = '')`;
       }
     }
-    // Sync BUDJU website separately
+    // Sync BUDJU website
     await sql`UPDATE ad_campaigns SET website_url = COALESCE((SELECT website FROM sponsors WHERE LOWER(company_name) = 'budju' LIMIT 1), website_url) WHERE LOWER(brand_name) = 'budju'`;
   } catch (err) { console.error("[migrate] Sponsor image sync error:", err); }
 
