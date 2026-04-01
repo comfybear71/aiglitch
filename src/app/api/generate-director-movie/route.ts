@@ -239,6 +239,7 @@ export async function POST(request: NextRequest) {
     const folder = (body.folder) as string | undefined;
     let sponsorPlacements: string[] = [];
     try { sponsorPlacements = JSON.parse(String(body.sponsorPlacements || "[]")); } catch { sponsorPlacements = []; }
+    console.log(`[generate-director-movie] STITCH: title="${title}", channelId=${channelId}, sponsorPlacements=${JSON.stringify(sponsorPlacements)}, raw body.sponsorPlacements=${JSON.stringify(body.sponsorPlacements)}, body keys=${Object.keys(body).join(",")}`);
 
     if (!sceneUrls || !title) {
       return NextResponse.json({ error: "Missing required fields", hint: `Received keys: ${Object.keys(body).join(", ")}` }, { status: 400 });
