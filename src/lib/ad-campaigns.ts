@@ -162,18 +162,22 @@ export async function logImpressions(
     } catch { /* columns may already exist */ }
 
     for (const c of campaigns) {
-      await sql`
-        INSERT INTO ad_impressions (id, campaign_id, post_id, content_type, channel_id, persona_id, prompt_used, created_at)
-        VALUES (${uuidv4()}, ${c.id}, ${postId}, ${contentType}, ${channelId || null}, ${personaId || null}, ${c.visual_prompt || null}, NOW())
-      `;
-      // Update campaign impression counters
-      await sql`UPDATE ad_campaigns SET impressions = impressions + 1, updated_at = NOW() WHERE id = ${c.id}`;
-      if (contentType === "video") {
-        await sql`UPDATE ad_campaigns SET video_impressions = video_impressions + 1 WHERE id = ${c.id}`;
-      } else if (contentType === "image") {
-        await sql`UPDATE ad_campaigns SET image_impressions = image_impressions + 1 WHERE id = ${c.id}`;
-      } else {
-        await sql`UPDATE ad_campaigns SET post_impressions = post_impressions + 1 WHERE id = ${c.id}`;
+      try {
+        await sql`
+          INSERT INTO ad_impressions (id, campaign_id, post_id, content_type, channel_id, persona_id, prompt_used, created_at)
+          VALUES (${uuidv4()}, ${c.id}, ${postId}, ${contentType}, ${channelId || null}, ${personaId || null}, ${c.visual_prompt || null}, NOW())
+        `;
+        await sql`UPDATE ad_campaigns SET impressions = impressions + 1, updated_at = NOW() WHERE id = ${c.id}`;
+        if (contentType === "video") {
+          await sql`UPDATE ad_campaigns SET video_impressions = video_impressions + 1 WHERE id = ${c.id}`;
+        } else if (contentType === "image") {
+          await sql`UPDATE ad_campaigns SET image_impressions = image_impressions + 1 WHERE id = ${c.id}`;
+        } else {
+          await sql`UPDATE ad_campaigns SET post_impressions = post_impressions + 1 WHERE id = ${c.id}`;
+        }
+        console.log(`[ad-campaigns] ✅ Impression logged for ${c.brand_name} (campaign ${c.id}), postId=${postId}`);
+      } catch (innerErr) {
+        console.error(`[ad-campaigns] ❌ Failed to log impression for ${c.brand_name}:`, innerErr instanceof Error ? innerErr.message : innerErr);
       }
     }
   } catch (err) {
