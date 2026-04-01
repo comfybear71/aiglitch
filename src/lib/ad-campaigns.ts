@@ -155,15 +155,16 @@ export async function logImpressions(
   if (campaigns.length === 0) return;
   const sql = getDb();
   try {
-    // Auto-add content_type column if missing
+    // Auto-add missing columns
     try {
       await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS content_type TEXT DEFAULT 'text'`;
-    } catch { /* column may already exist */ }
+      await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS prompt_used TEXT`;
+    } catch { /* columns may already exist */ }
 
     for (const c of campaigns) {
       await sql`
         INSERT INTO ad_impressions (id, campaign_id, post_id, content_type, channel_id, persona_id, prompt_used, created_at)
-        VALUES (${uuidv4()}, ${c.id}, ${postId}, ${contentType}, ${channelId || null}, ${personaId || null}, ${c.visual_prompt}, NOW())
+        VALUES (${uuidv4()}, ${c.id}, ${postId}, ${contentType}, ${channelId || null}, ${personaId || null}, ${c.visual_prompt || null}, NOW())
       `;
       // Update campaign impression counters
       await sql`UPDATE ad_campaigns SET impressions = impressions + 1, updated_at = NOW() WHERE id = ${c.id}`;
