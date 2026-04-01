@@ -268,6 +268,7 @@ export default function CampaignsPage() {
   const [editTextPrompt, setEditTextPrompt] = useState("");
   const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editProductImageUrl, setEditProductImageUrl] = useState("");
+  const [editWebsiteUrl, setEditWebsiteUrl] = useState("");
 
   // Collapsible sections per campaign
   const [expandedSections, setExpandedSections] = useState<Record<string, Set<string>>>({});
@@ -319,6 +320,7 @@ export default function CampaignsPage() {
           text_prompt: editTextPrompt || undefined,
           logo_url: editLogoUrl || undefined,
           product_image_url: editProductImageUrl || undefined,
+          website_url: editWebsiteUrl || undefined,
         }),
       });
       setEditingCampaign(null);
@@ -789,6 +791,7 @@ export default function CampaignsPage() {
                     setEditTextPrompt(c.text_prompt || "");
                     setEditLogoUrl(c.logo_url || "");
                     setEditProductImageUrl(c.product_image_url || "");
+                    setEditWebsiteUrl(c.website_url || "");
                   }
                 }}
                   className="px-3 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg text-xs hover:bg-yellow-500/30 transition">
@@ -809,6 +812,11 @@ export default function CampaignsPage() {
                   <label className="text-[9px] text-gray-500 font-bold block mb-1">TEXT PROMPT (caption/post text)</label>
                   <textarea value={editTextPrompt} onChange={e => setEditTextPrompt(e.target.value)} rows={2}
                     className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">WEBSITE URL (shown in sponsor thanks)</label>
+                  <input value={editWebsiteUrl} onChange={e => setEditWebsiteUrl(e.target.value)}
+                    placeholder="https://budju.xyz" className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
                 </div>
                 <div>
                   <label className="text-[9px] text-gray-500 font-bold block mb-1">LOGO</label>

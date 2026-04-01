@@ -517,8 +517,17 @@ async function getValidTikTokToken(account: PlatformAccount): Promise<string | n
   return newToken || account.access_token || null; // Fall back to existing token
 }
 
+// Track TikTok spam cooldown in memory (resets on redeploy, which is fine)
+let tiktokSpamCooldownUntil = 0;
+
 async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
+    // Skip TikTok if we hit spam_risk recently (avoids downloading 30MB video for nothing)
+    if (Date.now() < tiktokSpamCooldownUntil) {
+      const minsLeft = Math.ceil((tiktokSpamCooldownUntil - Date.now()) / 60000);
+      console.error(`[tiktok] >>> SKIP: spam cooldown active (${minsLeft}min remaining)`);
+      return { success: false, error: `TikTok: spam cooldown — ${minsLeft}min remaining` };
+    }
     console.error(`[tiktok] >>> START: mediaUrl=${mediaUrl?.slice(0, 100)}, hasToken=${!!account.access_token}`);
 
     if (!mediaUrl) {
@@ -641,7 +650,10 @@ async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: s
     if (initData.error && initData.error.code !== "ok") {
       const errCode = initData.error.code || "";
       if (errCode.includes("spam_risk") || errCode.includes("too_many_pending")) {
-        return { success: false, error: `TikTok: too many pending uploads — wait ~24h for old uploads to expire, then try again` };
+        // Set 6-hour cooldown to avoid wasting bandwidth downloading videos we can't upload
+        tiktokSpamCooldownUntil = Date.now() + 6 * 60 * 60 * 1000;
+        console.error(`[tiktok] >>> SPAM COOLDOWN SET: 6 hours from now`);
+        return { success: false, error: `TikTok: too many pending uploads — cooldown set for 6h. Wait for old uploads to expire.` };
       }
       if (errCode.includes("rate_limit")) {
         return { success: false, error: `TikTok: rate limited — try again later` };

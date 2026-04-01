@@ -1305,17 +1305,24 @@ export async function runMigrations() {
     await sql`UPDATE sponsors SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(company_name) = 'budju'`;
     console.log("[migrate] Force-set BUDJU with 3 product images + logo from jug8pwv8lcpdrski blob store");
 
-    // Also sync other sponsors from their sponsor records
-    const sponsors = await sql`SELECT company_name, logo_url, product_images FROM sponsors WHERE product_images IS NOT NULL AND LOWER(company_name) != 'budju'`;
+    // Also sync other sponsors: images, logos, AND website URLs to ad_campaigns
+    const sponsors = await sql`SELECT company_name, logo_url, product_images, website FROM sponsors WHERE LOWER(company_name) != 'budju'`;
     for (const s of sponsors) {
       const name = s.company_name as string;
       const images = s.product_images as string[];
       const logo = s.logo_url as string;
-      if (name && images && images.length > 0) {
-        await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(images)}::jsonb, logo_url = COALESCE(${logo || null}, logo_url) WHERE LOWER(brand_name) = LOWER(${name})`;
-        console.log(`[migrate] Synced ${images.length} images from sponsor "${name}" to ad campaign`);
+      const website = s.website as string;
+      if (name) {
+        await sql`UPDATE ad_campaigns SET
+          product_images = COALESCE(${images && images.length > 0 ? JSON.stringify(images) : null}::jsonb, product_images),
+          logo_url = COALESCE(${logo || null}, logo_url),
+          website_url = COALESCE(${website || null}, website_url)
+          WHERE LOWER(brand_name) = LOWER(${name})`;
+        console.log(`[migrate] Synced sponsor "${name}" → ad campaign (images=${images?.length || 0}, logo=${!!logo}, website=${website || "none"})`);
       }
     }
+    // Sync BUDJU website separately
+    await sql`UPDATE ad_campaigns SET website_url = COALESCE((SELECT website FROM sponsors WHERE LOWER(company_name) = 'budju' LIMIT 1), website_url) WHERE LOWER(brand_name) = 'budju'`;
   } catch (err) { console.error("[migrate] Sponsor image sync error:", err); }
 
   // ── Stamp the migration version so future cold starts skip all of the above ──
