@@ -267,6 +267,18 @@ export default function CampaignsPage() {
   const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editProductImageUrl, setEditProductImageUrl] = useState("");
 
+  // Collapsible sections per campaign
+  const [expandedSections, setExpandedSections] = useState<Record<string, Set<string>>>({});
+  const toggleSection = (campaignId: string, section: string) => {
+    setExpandedSections(prev => {
+      const current = prev[campaignId] || new Set<string>();
+      const next = new Set(current);
+      if (next.has(section)) next.delete(section); else next.add(section);
+      return { ...prev, [campaignId]: next };
+    });
+  };
+  const isExpanded = (campaignId: string, section: string) => expandedSections[campaignId]?.has(section) || false;
+
   const saveCampaignEdit = async (campaignId: string) => {
     try {
       await fetch("/api/admin/ad-campaigns", {
@@ -513,37 +525,76 @@ export default function CampaignsPage() {
                   {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
                   {c.product_image_url && <span className="ml-1 text-purple-400">{"\u{1F5BC}"}</span>}
                 </div>
-                {/* Product images row */}
+                {/* Collapsible: Images */}
                 {(c.logo_url || c.product_image_url || (c.product_images && c.product_images.length > 0)) && (
-                  <div className="flex gap-2 mb-2 flex-wrap">
-                    {c.logo_url && (
-                      <div className="relative">
-                        <img src={c.logo_url} alt="Logo" className="w-16 h-16 rounded-lg object-cover border border-purple-500/30" />
-                        <span className="absolute -bottom-1 -right-1 text-[8px] bg-purple-900 text-purple-300 px-1 rounded">Logo</span>
+                  <div className="mb-1">
+                    <button onClick={() => toggleSection(c.id, "images")} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-white mb-1">
+                      <span className={`transition-transform ${isExpanded(c.id, "images") ? "rotate-90" : ""}`}>▶</span>
+                      Images ({(c.product_images?.length || (c.product_image_url ? 1 : 0)) + (c.logo_url ? 1 : 0)})
+                    </button>
+                    {isExpanded(c.id, "images") && (
+                      <div className="flex gap-2 mb-2 flex-wrap pl-3">
+                        {c.logo_url && (
+                          <div className="relative">
+                            <img src={c.logo_url} alt="Logo" className="w-16 h-16 rounded-lg object-cover border border-purple-500/30" />
+                            <span className="absolute -bottom-1 -right-1 text-[8px] bg-purple-900 text-purple-300 px-1 rounded">Logo</span>
+                          </div>
+                        )}
+                        {(c.product_images && c.product_images.length > 0 ? c.product_images : c.product_image_url ? [c.product_image_url] : []).map((url: string, idx: number) => (
+                          <div key={idx} className="relative">
+                            <img src={url} alt={`Product ${idx + 1}`} className="w-16 h-16 rounded-lg object-cover border border-cyan-500/30" />
+                            <span className="absolute -bottom-1 -right-1 text-[8px] bg-cyan-900 text-cyan-300 px-1 rounded">Image {idx + 1}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    {(c.product_images && c.product_images.length > 0 ? c.product_images : c.product_image_url ? [c.product_image_url] : []).map((url: string, idx: number) => (
-                      <div key={idx} className="relative">
-                        <img src={url} alt={`Product ${idx + 1}`} className="w-16 h-16 rounded-lg object-cover border border-cyan-500/30" />
-                        <span className="absolute -bottom-1 -right-1 text-[8px] bg-cyan-900 text-cyan-300 px-1 rounded">Image {idx + 1}</span>
-                      </div>
-                    ))}
                   </div>
                 )}
-                {/* Visual prompt — full, editable */}
-                <div className="bg-gray-800/50 rounded-lg p-2 mb-2">
-                  <p className="text-[9px] text-gray-500 font-bold mb-1">VISUAL PROMPT</p>
-                  <p className="text-gray-400 text-[10px] sm:text-xs">{c.visual_prompt}</p>
+                {/* Collapsible: Visual Prompt */}
+                <div className="mb-1">
+                  <button onClick={() => toggleSection(c.id, "visual")} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-white mb-1">
+                    <span className={`transition-transform ${isExpanded(c.id, "visual") ? "rotate-90" : ""}`}>▶</span>
+                    Visual Prompt
+                  </button>
+                  {isExpanded(c.id, "visual") && (
+                    <div className="bg-gray-800/50 rounded-lg p-2 mb-2 pl-3">
+                      <p className="text-gray-400 text-[10px] sm:text-xs">{c.visual_prompt}</p>
+                    </div>
+                  )}
                 </div>
+                {/* Collapsible: Text Prompt */}
                 {c.text_prompt && (
-                  <div className="bg-gray-800/50 rounded-lg p-2 mb-2">
-                    <p className="text-[9px] text-gray-500 font-bold mb-1">TEXT PROMPT</p>
-                    <p className="text-gray-400 text-[10px] sm:text-xs">{c.text_prompt}</p>
+                  <div className="mb-1">
+                    <button onClick={() => toggleSection(c.id, "text")} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-white mb-1">
+                      <span className={`transition-transform ${isExpanded(c.id, "text") ? "rotate-90" : ""}`}>▶</span>
+                      Text Prompt
+                    </button>
+                    {isExpanded(c.id, "text") && (
+                      <div className="bg-gray-800/50 rounded-lg p-2 mb-2 pl-3">
+                        <p className="text-gray-400 text-[10px] sm:text-xs">{c.text_prompt}</p>
+                      </div>
+                    )}
                   </div>
                 )}
+                {/* Collapsible: Videos (sponsored placements) */}
+                <div className="mb-1">
+                  <button onClick={() => toggleSection(c.id, "videos")} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-white mb-1">
+                    <span className={`transition-transform ${isExpanded(c.id, "videos") ? "rotate-90" : ""}`}>▶</span>
+                    Sponsored Videos ({c.impressions} placements)
+                  </button>
+                  {isExpanded(c.id, "videos") && (
+                    <div className="bg-gray-800/50 rounded-lg p-2 mb-2 pl-3">
+                      {c.impressions === 0 ? (
+                        <p className="text-gray-600 text-[10px]">No videos with this sponsor yet</p>
+                      ) : (
+                        <p className="text-gray-400 text-[10px]">{c.impressions} video(s) contain this sponsor&apos;s product placement</p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {/* Website */}
                 {c.website_url && (
-                  <p className="text-[10px] text-cyan-400 mb-2">🌐 {c.website_url}</p>
+                  <p className="text-[10px] text-cyan-400 mb-1">🌐 {c.website_url}</p>
                 )}
                 <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs">
                   <span className="text-purple-400">{"\u{1F3AC}"} {c.video_impressions}</span>
