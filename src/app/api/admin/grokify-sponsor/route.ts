@@ -49,7 +49,9 @@ export async function POST(request: NextRequest) {
   const productImages = (body.productImages || []) as string[];
   const sceneIndex = (body.sceneIndex || 0) as number;
   const isOutro = (body.isOutro || false) as boolean;
-  const grokifyMode = (body.grokifyMode || "all") as string; // "logo_only", "images_only", or "all"
+  const grokifyMode = (body.grokifyMode || "all") as string;
+  const channelId = (body.channelId || "feed") as string;
+  const sceneNumber = (body.sceneNumber || sceneIndex) as number;
 
   if (!scenePrompt) {
     return NextResponse.json({ error: "scenePrompt required" }, { status: 400 });
@@ -144,7 +146,7 @@ export async function POST(request: NextRequest) {
           prompt: fallbackPrompt,
           n: 1,
           aspect_ratio: "9:16",
-          resolution: "2k",
+          resolution: "1k",
           response_format: "url",
         }),
       });
@@ -185,7 +187,10 @@ export async function POST(request: NextRequest) {
               const imgRes = await fetch(grokUrl);
               if (imgRes.ok) {
                 const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
-                const blob = await put(`sponsors/grokified/${uuidv4()}.png`, imgBuffer, { access: "public", contentType: "image/png", addRandomSuffix: false });
+                const rBrandSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+                const rChannelSlug = channelId.replace("ch-", "").replace(/[^a-z0-9]+/g, "-");
+                const rLabel = isOutro ? "outro" : `scene${sceneNumber}`;
+                const blob = await put(`sponsors/grokified/${rBrandSlug}-${rChannelSlug}-${rLabel}-${uuidv4().slice(0, 8)}.png`, imgBuffer, { access: "public", contentType: "image/png", addRandomSuffix: false });
                 return NextResponse.json({ grokifiedUrl: blob.url, brandName, productName, mode: "image-edit", sizeMb: (imgBuffer.length / 1024 / 1024).toFixed(2) });
               }
             }
@@ -219,7 +224,12 @@ export async function POST(request: NextRequest) {
     }
 
     const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
-    const blob = await put(`sponsors/grokified/${uuidv4()}.png`, imgBuffer, {
+    // Naming convention: sponsors/grokified/{brand}-{channel}-scene{N}.png
+    const brandSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const channelSlug = channelId.replace("ch-", "").replace(/[^a-z0-9]+/g, "-");
+    const sceneLabel = isOutro ? "outro" : `scene${sceneNumber}`;
+    const blobName = `sponsors/grokified/${brandSlug}-${channelSlug}-${sceneLabel}-${uuidv4().slice(0, 8)}.png`;
+    const blob = await put(blobName, imgBuffer, {
       access: "public",
       contentType: "image/png",
       addRandomSuffix: false,

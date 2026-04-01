@@ -156,6 +156,8 @@ async function runBackgroundGeneration(
                   sceneIndex: i,
                   isOutro,
                   grokifyMode: campaign.grokifyMode || "all",
+                  channelId: chId,
+                  sceneNumber: scene.sceneNumber,
                 }),
               });
               const grokData = await grokRes.json();
