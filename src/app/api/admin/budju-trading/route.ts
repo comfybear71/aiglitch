@@ -323,6 +323,56 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Check underfunded wallets ──
+  if (action === "equalize_wallets") {
+    try {
+      const sql = (await import("@/lib/db")).getDb();
+      await ensureDbReady();
+
+      // Get average SOL balance across all active wallets
+      const [avg] = await sql`
+        SELECT AVG(sol_balance::numeric) as avg_sol, AVG(budju_balance::numeric) as avg_budju, COUNT(*)::int as total
+        FROM budju_wallets WHERE is_active = TRUE
+      `;
+      const avgSol = Number(avg.avg_sol) || 0;
+      const avgBudju = Number(avg.avg_budju) || 0;
+      const total = Number(avg.total) || 0;
+
+      // Find wallets with less than 50% of the average
+      const underfunded = await sql`
+        SELECT bw.persona_id, bw.wallet_address, bw.sol_balance, bw.budju_balance, p.display_name
+        FROM budju_wallets bw
+        JOIN ai_personas p ON p.id = bw.persona_id
+        WHERE bw.is_active = TRUE AND (bw.sol_balance::numeric < ${avgSol * 0.5} OR bw.budju_balance::numeric < ${avgBudju * 0.5})
+        ORDER BY bw.sol_balance::numeric ASC
+      `;
+
+      // Find wallets with zero balance
+      const zeroBalance = await sql`
+        SELECT COUNT(*)::int as count FROM budju_wallets
+        WHERE is_active = TRUE AND (sol_balance::numeric <= 0 OR sol_balance IS NULL)
+      `;
+
+      return NextResponse.json({
+        underfunded: underfunded.length,
+        zeroBalance: Number(zeroBalance[0]?.count) || 0,
+        total,
+        avgSol: avgSol.toFixed(6),
+        avgBudju: avgBudju.toFixed(0),
+        message: underfunded.length > 0
+          ? `${underfunded.length} wallets have less than 50% of the average balance (avg: ${avgSol.toFixed(4)} SOL, ${avgBudju.toFixed(0)} BUDJU). ${Number(zeroBalance[0]?.count) || 0} wallets have zero SOL. Run a distribution from the Distribute tab to fund them equally.`
+          : "All wallets are funded equally!",
+        wallets: underfunded.slice(0, 20).map(w => ({
+          persona: w.display_name,
+          sol: Number(w.sol_balance).toFixed(6),
+          budju: Number(w.budju_balance).toFixed(0),
+        })),
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   // ── Memo System ──
   if (action === "create_memo") {
     try {

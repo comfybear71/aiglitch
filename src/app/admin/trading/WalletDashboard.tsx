@@ -86,6 +86,19 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
     setLoading(false);
   };
 
+  const equalizeWallets = async () => {
+    setLoading(true);
+    const res = await postAction("equalize_wallets");
+    setLoading(false);
+    const d = res.data as { underfunded?: number; message?: string; error?: string };
+    if (res.ok && d.underfunded !== undefined) {
+      alert(`${d.underfunded} wallets need funding.\n\n${d.message || "Create a distribution job from the Distribute tab to fund them."}`);
+    } else {
+      alert(d.error || "Failed");
+    }
+    onRefresh();
+  };
+
   return (
     <div className="space-y-3">
       {/* Summary Bar */}
@@ -133,9 +146,13 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
             </button>
           ))}
         </div>
+        <button onClick={equalizeWallets} disabled={loading}
+          className="px-2.5 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-[10px] font-bold hover:bg-amber-500/30 disabled:opacity-50 ml-auto">
+          {loading ? "Checking..." : "Check Underfunded"}
+        </button>
         <button onClick={syncBalances} disabled={loading}
-          className="px-2.5 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 disabled:opacity-50 ml-auto">
-          {loading ? "Syncing..." : "Sync All Balances"}
+          className="px-2.5 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 disabled:opacity-50">
+          {loading ? "Syncing..." : "Sync Balances"}
         </button>
       </div>
 
