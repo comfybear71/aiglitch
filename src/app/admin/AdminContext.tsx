@@ -132,7 +132,7 @@ async function runBackgroundGeneration(
 
         if (shouldGrokify) {
           // For outro: use ALL sponsor campaigns. For content scenes: rotate through them
-          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[] };
+          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[]; grokifyMode?: string };
           const allBrandNames = sponsorCampaigns.map((c: { brandName?: string }) => c.brandName).filter(Boolean).join(", ");
           if (campaign?.visualPrompt || isOutro) {
             const logLabel = isOutro ? `Sponsor acknowledgment (${allBrandNames})` : (campaign.brandName || "sponsor");
@@ -155,6 +155,7 @@ async function runBackgroundGeneration(
                   productImages: sponsorImages,
                   sceneIndex: i,
                   isOutro,
+                  grokifyMode: campaign.grokifyMode || "all",
                 }),
               });
               const grokData = await grokRes.json();

@@ -49,17 +49,26 @@ export async function POST(request: NextRequest) {
   const productImages = (body.productImages || []) as string[];
   const sceneIndex = (body.sceneIndex || 0) as number;
   const isOutro = (body.isOutro || false) as boolean;
+  const grokifyMode = (body.grokifyMode || "all") as string; // "logo_only", "images_only", or "all"
 
   if (!scenePrompt) {
     return NextResponse.json({ error: "scenePrompt required" }, { status: 400 });
   }
 
-  // Pick source images — logo first for outro, rotate product images for content scenes
-  const allImages = [...productImages];
-  if (productImageUrl && !allImages.includes(productImageUrl)) allImages.unshift(productImageUrl);
-  if (logoUrl && !allImages.includes(logoUrl)) {
-    if (isOutro) allImages.unshift(logoUrl); // logo first for outro
-    else allImages.push(logoUrl);
+  // Build image array based on grokifyMode
+  const allImages: string[] = [];
+  if (grokifyMode === "logo_only" || grokifyMode === "all") {
+    if (logoUrl) allImages.push(logoUrl);
+  }
+  if (grokifyMode === "images_only" || grokifyMode === "all") {
+    if (productImageUrl && !allImages.includes(productImageUrl)) allImages.push(productImageUrl);
+    for (const img of productImages) {
+      if (img && !allImages.includes(img)) allImages.push(img);
+    }
+  }
+  // Outro always includes logo regardless of mode
+  if (isOutro && logoUrl && !allImages.includes(logoUrl)) {
+    allImages.unshift(logoUrl);
   }
 
   const sceneContext = scenePrompt.slice(0, 400);

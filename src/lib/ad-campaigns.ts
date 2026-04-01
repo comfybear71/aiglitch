@@ -21,6 +21,7 @@ export interface AdCampaign {
   price_glitch: number;
   frequency: number;
   grokify_scenes: number;  // how many scenes per video get Grokified (0 = text only, default 3)
+  grokify_mode: string;    // "logo_only", "images_only", or "all" (default "all")
   impressions: number;
   video_impressions: number;
   image_impressions: number;

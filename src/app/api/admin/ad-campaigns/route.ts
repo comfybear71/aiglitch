@@ -52,6 +52,7 @@ async function ensureSchema() {
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_image_url TEXT`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS grokify_scenes INTEGER DEFAULT 3`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS grokify_mode TEXT DEFAULT 'all'`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS video_impressions INTEGER DEFAULT 0`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS image_impressions INTEGER DEFAULT 0`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS post_impressions INTEGER DEFAULT 0`;
@@ -199,11 +200,24 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // ── Pause / Resume / Cancel ──
-  if (action === "pause" || action === "resume" || action === "cancel") {
+  // ── Pause / Resume / Cancel / Reactivate ──
+  if (action === "pause" || action === "resume" || action === "cancel" || action === "reactivate") {
     const { campaign_id } = body;
     if (!campaign_id) {
       return NextResponse.json({ error: "campaign_id required" }, { status: 400 });
+    }
+
+    if (action === "reactivate") {
+      // Re-activate an expired/completed campaign for another 7 days
+      const [campaign] = await sql`SELECT * FROM ad_campaigns WHERE id = ${campaign_id}`;
+      const durationDays = Number(campaign?.duration_days) || 7;
+      const startsAt = new Date();
+      const expiresAt = new Date(startsAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
+      await sql`
+        UPDATE ad_campaigns SET status = 'active', starts_at = ${startsAt.toISOString()}, expires_at = ${expiresAt.toISOString()}, updated_at = NOW()
+        WHERE id = ${campaign_id}
+      `;
+      return NextResponse.json({ success: true, campaign_id, status: "active", starts_at: startsAt.toISOString(), expires_at: expiresAt.toISOString() });
     }
 
     const newStatus = action === "pause" ? "paused" : action === "resume" ? "active" : "cancelled";
@@ -242,6 +256,7 @@ export async function POST(request: NextRequest) {
         price_glitch = COALESCE(${price_glitch || null}, price_glitch),
         frequency = COALESCE(${frequency || null}, frequency),
         grokify_scenes = COALESCE(${grokify_scenes !== undefined ? grokify_scenes : null}, grokify_scenes),
+        grokify_mode = COALESCE(${body.grokify_mode || null}, grokify_mode),
         notes = COALESCE(${notes || null}, notes),
         updated_at = NOW()
       WHERE id = ${campaign_id}

@@ -31,6 +31,7 @@ interface Campaign {
   price_glitch: number;
   frequency: number;
   grokify_scenes: number;  // how many scenes per video get Grokified (0 = text only)
+  grokify_mode: string;    // "logo_only", "images_only", or "all"
   impressions: number;
   video_impressions: number;
   image_impressions: number;
@@ -712,10 +713,34 @@ export default function CampaignsPage() {
                       ))}
                     </div>
                   </div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-gray-400 text-[9px] w-28">Grokify using:</span>
+                    <div className="flex items-center gap-0.5">
+                      {[
+                        { value: "logo_only", label: "Logo Only", icon: "🏷️" },
+                        { value: "images_only", label: "Images Only", icon: "🖼️" },
+                        { value: "all", label: "Logo + Images", icon: "✨" },
+                      ].map(mode => (
+                        <button key={mode.value} onClick={async () => {
+                          await fetch("/api/admin/ad-campaigns", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "update", campaign_id: c.id, grokify_mode: mode.value }),
+                          });
+                          fetchCampaigns();
+                        }}
+                          className={`px-2 py-0.5 text-[9px] rounded-md transition-all ${(c.grokify_mode || "all") === mode.value
+                            ? "bg-yellow-500 text-black font-bold"
+                            : "bg-gray-700 text-gray-400 hover:bg-gray-600"}`}>
+                          {mode.icon} {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <p className="text-gray-500 text-[8px] leading-tight">
                     {(c.grokify_scenes ?? 3) === 0
                       ? "Text-only placement — Grok describes the product but doesn\u2019t see actual images"
-                      : `${c.grokify_scenes ?? 3} scene${(c.grokify_scenes ?? 3) > 1 ? "s" : ""} per video will have your logo + product images edited in by Grok AI (subliminal placement on tables, walls, screens, billboards)`}
+                      : `${c.grokify_scenes ?? 3} scene${(c.grokify_scenes ?? 3) > 1 ? "s" : ""} per video will have your ${(c.grokify_mode || "all") === "logo_only" ? "logo" : (c.grokify_mode || "all") === "images_only" ? "product images" : "logo + product images"} edited in by Grok AI`}
                   </p>
                 </div>
               </div>
@@ -749,6 +774,12 @@ export default function CampaignsPage() {
                   <button onClick={() => campaignAction(c.id, "cancel")}
                     className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition">
                     Cancel
+                  </button>
+                )}
+                {(c.status === "completed" || c.status === "cancelled") && (
+                  <button onClick={() => campaignAction(c.id, "reactivate")}
+                    className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
+                    Re-activate 7d
                   </button>
                 )}
                 <button onClick={() => {

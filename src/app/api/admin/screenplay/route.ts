@@ -146,6 +146,7 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
       productImageUrl: c.product_image_url,
       productImages: campaignImages as string[],
       grokifyScenes: (c as unknown as { grokify_scenes?: number }).grokify_scenes ?? 3,
+      grokifyMode: (c as unknown as { grokify_mode?: string }).grokify_mode || "all",
     };
   });
 

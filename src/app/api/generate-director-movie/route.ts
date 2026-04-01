@@ -302,18 +302,24 @@ export async function POST(request: NextRequest) {
     // Build sponsor thanks line for the caption (before post insert)
     let sponsorThanksLine = "";
     let placedCampaignsForLog: import("@/lib/ad-campaigns").AdCampaign[] = [];
+    console.log(`[generate-director-movie] SPONSOR THANKS: sponsorPlacements=${JSON.stringify(sponsorPlacements)}`);
     if (sponsorPlacements && sponsorPlacements.length > 0) {
       try {
         const { getActiveCampaigns } = await import("@/lib/ad-campaigns");
         const activeCampaigns = await getActiveCampaigns(channelId);
+        console.log(`[generate-director-movie] Active campaigns: ${activeCampaigns.map(c => `${c.brand_name}(${c.status})`).join(", ")}`);
         placedCampaignsForLog = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
+        console.log(`[generate-director-movie] Matched for thanks: ${placedCampaignsForLog.map(c => `${c.brand_name}(url=${c.website_url || "NONE"})`).join(", ")}`);
         if (placedCampaignsForLog.length > 0) {
           const sponsorCredits = placedCampaignsForLog.map(c =>
             c.website_url ? `${c.brand_name} ${c.website_url}` : c.brand_name
           ).join(" | ");
           sponsorThanksLine = `\n\n🤝 Thanks to our sponsors: ${sponsorCredits}`;
+          console.log(`[generate-director-movie] THANKS LINE: "${sponsorThanksLine}"`);
         }
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        console.error(`[generate-director-movie] Sponsor thanks error:`, err instanceof Error ? err.message : err);
+      }
     }
 
     // Use strict naming convention: 🎬 [Channel Name] - [Title] for channel posts
