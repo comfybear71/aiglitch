@@ -1157,7 +1157,104 @@ export async function runMigrations() {
       UNIQUE(category, key)
     )`);
 
-  // ── Fix BUDJU sponsor & campaign data ──
+  // ── Move ALL sponsor images to organized folder structure ──
+  await safeMigrate(sql, "organize_sponsor_images_v27", async () => {
+    const { put } = await import("@vercel/blob");
+
+    // Helper: download from old URL, upload to new path, return new URL
+    async function moveImage(oldUrl: string, newPath: string): Promise<string> {
+      try {
+        const res = await fetch(oldUrl);
+        if (!res.ok) { console.warn(`[migrate] Failed to fetch ${oldUrl}: ${res.status}`); return oldUrl; }
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const contentType = res.headers.get("content-type") || "image/jpeg";
+        const blob = await put(newPath, buffer, { access: "public", contentType, addRandomSuffix: false });
+        console.log(`[migrate] Moved ${oldUrl.split("/").pop()} → ${newPath}`);
+        return blob.url;
+      } catch (err) {
+        console.warn(`[migrate] Failed to move ${oldUrl}:`, err instanceof Error ? err.message : err);
+        return oldUrl; // Keep old URL as fallback
+      }
+    }
+
+    // Get ALL sponsors and their campaigns
+    const sponsors = await sql`SELECT id, company_name, logo_url, product_images FROM sponsors`;
+    const campaigns = await sql`SELECT id, brand_name, logo_url, product_image_url, product_images FROM ad_campaigns`;
+
+    // Map sponsor names to slugs
+    function toSlug(name: string): string {
+      return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    }
+
+    // Process each sponsor
+    for (const sponsor of sponsors) {
+      const name = sponsor.company_name as string;
+      if (!name || name.toLowerCase() === "budju") continue; // BUDJU already done
+      const slug = toSlug(name);
+
+      // Move sponsor logo
+      if (sponsor.logo_url && !String(sponsor.logo_url).includes(`sponsors/${slug}/`)) {
+        const ext = String(sponsor.logo_url).split(".").pop() || "jpeg";
+        const newUrl = await moveImage(String(sponsor.logo_url), `sponsors/${slug}/logo.${ext}`);
+        await sql`UPDATE sponsors SET logo_url = ${newUrl} WHERE id = ${sponsor.id}`;
+      }
+
+      // Move sponsor product images
+      const images = sponsor.product_images as string[] | null;
+      if (images && Array.isArray(images)) {
+        const newImages: string[] = [];
+        for (let i = 0; i < images.length; i++) {
+          if (images[i] && !images[i].includes(`sponsors/${slug}/`)) {
+            const ext = images[i].split(".").pop() || "jpeg";
+            const newUrl = await moveImage(images[i], `sponsors/${slug}/image-${i + 1}.${ext}`);
+            newImages.push(newUrl);
+          } else {
+            newImages.push(images[i]);
+          }
+        }
+        await sql`UPDATE sponsors SET product_images = ${JSON.stringify(newImages)}::jsonb WHERE id = ${sponsor.id}`;
+      }
+    }
+
+    // Process each ad campaign
+    for (const campaign of campaigns) {
+      const name = campaign.brand_name as string;
+      if (!name || name.toLowerCase() === "budju") continue; // BUDJU already done
+      const slug = toSlug(name);
+
+      // Move campaign logo
+      if (campaign.logo_url && !String(campaign.logo_url).includes(`sponsors/${slug}/`)) {
+        const ext = String(campaign.logo_url).split(".").pop() || "jpeg";
+        const newUrl = await moveImage(String(campaign.logo_url), `sponsors/${slug}/logo.${ext}`);
+        await sql`UPDATE ad_campaigns SET logo_url = ${newUrl} WHERE id = ${campaign.id}`;
+      }
+
+      // Move campaign product image
+      if (campaign.product_image_url && !String(campaign.product_image_url).includes(`sponsors/${slug}/`)) {
+        const ext = String(campaign.product_image_url).split(".").pop() || "jpeg";
+        const newUrl = await moveImage(String(campaign.product_image_url), `sponsors/${slug}/image-1.${ext}`);
+        await sql`UPDATE ad_campaigns SET product_image_url = ${newUrl} WHERE id = ${campaign.id}`;
+      }
+
+      // Move campaign product images array
+      const campImages = campaign.product_images as string[] | null;
+      if (campImages && Array.isArray(campImages)) {
+        const newImages: string[] = [];
+        for (let i = 0; i < campImages.length; i++) {
+          if (campImages[i] && !campImages[i].includes(`sponsors/${slug}/`)) {
+            const ext = campImages[i].split(".").pop() || "jpeg";
+            const newUrl = await moveImage(campImages[i], `sponsors/${slug}/image-${i + 1}.${ext}`);
+            newImages.push(newUrl);
+          } else {
+            newImages.push(campImages[i]);
+          }
+        }
+        await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(newImages)}::jsonb WHERE id = ${campaign.id}`;
+      }
+    }
+
+    console.log("[migrate] ✅ All sponsor images organized into sponsors/{slug}/ folders");
+  });
   await safeMigrate(sql, "fix_budju_campaign_v27", async () => {
     // Fix "Unknown" sponsor name to "BUDJU"
     await sql`UPDATE sponsors SET company_name = 'BUDJU' WHERE LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com'`;
