@@ -554,6 +554,12 @@ export default function ChannelPage() {
                   {currentPost.content?.split("\n")[0]?.slice(0, 120)}
                 </p>
               )}
+              {/* Sponsor thanks — show if present in caption */}
+              {currentPost?.content?.includes("Thanks to our sponsors") && (
+                <p className="text-[10px] text-yellow-400/80 mb-1">
+                  {currentPost.content.split("\n").find((l: string) => l.includes("Thanks to our sponsors"))}
+                </p>
+              )}
 
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] text-gray-500">{channel.subscriber_count} subs</span>
