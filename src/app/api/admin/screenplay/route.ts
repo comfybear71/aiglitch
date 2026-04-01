@@ -133,13 +133,20 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
   console.log(`[screenplay] RETURNING: title="${screenplay.title}", sponsors=${JSON.stringify(sponsorNames)}, sponsorImages=${allSponsorImages.length}, scenes=${screenplay.scenes?.length}`);
 
   // Build sponsor campaign details for the client (Grokify needs visual_prompt + brand info)
-  const sponsorCampaigns = (screenplay._adCampaigns || []).map(c => ({
-    brandName: c.brand_name,
-    productName: c.product_name,
-    visualPrompt: c.visual_prompt,
-    logoUrl: c.logo_url,
-    productImageUrl: c.product_image_url,
-  }));
+  const sponsorCampaigns = (screenplay._adCampaigns || []).map(c => {
+    // Parse product_images JSONB for this campaign
+    const campaignImages = Array.isArray(c.product_images) ? c.product_images
+      : typeof c.product_images === "string" ? (() => { try { return JSON.parse(c.product_images); } catch { return []; } })()
+      : [];
+    return {
+      brandName: c.brand_name,
+      productName: c.product_name,
+      visualPrompt: c.visual_prompt,
+      logoUrl: c.logo_url,
+      productImageUrl: c.product_image_url,
+      productImages: campaignImages as string[],
+    };
+  });
 
   return NextResponse.json({
     title: screenplay.title,

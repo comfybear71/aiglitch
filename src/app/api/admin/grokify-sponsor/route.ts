@@ -9,20 +9,22 @@ export const maxDuration = 60;
 /**
  * POST /api/admin/grokify-sponsor
  *
- * Generates a scene image with sponsor products subliminally placed.
- * Uses the scene's actual video prompt as the base, then weaves in
- * the sponsor's visual_prompt so the product appears naturally —
- * on a table, as a poster on a wall, on a screen in the background.
+ * Takes the sponsor's ACTUAL product image/logo and uses Grok's Image Edit API
+ * to place it subliminally into a scene context. The source image IS the real
+ * product — Grok edits it into the scene so the actual branding is visible.
  *
- * The returned blob URL is used as `image_url` for Grok video generation.
- * The video clip animates from this frame, keeping the product visible
- * throughout the scene subliminally.
+ * Uses POST https://api.x.ai/v1/images/edits with the source image.
+ * Falls back to text-to-image generation if no product image is available.
  *
  * Body:
  *   - scenePrompt: string — the scene's video prompt (the actual scene content)
- *   - visualPrompt: string — the sponsor's visual_prompt (how the product should appear)
+ *   - visualPrompt: string — the sponsor's visual_prompt description
  *   - brandName: string — sponsor brand name
  *   - productName: string — sponsor product name
+ *   - logoUrl: string — sponsor logo URL (used as source for image editing)
+ *   - productImageUrl: string — sponsor product image URL (preferred source)
+ *   - productImages: string[] — all product images (rotate through them)
+ *   - sceneIndex: number — which scene this is (for rotating through images)
  *
  * Returns:
  *   - grokifiedUrl: string — Vercel Blob URL of the scene image with product placed
@@ -43,47 +45,77 @@ export async function POST(request: NextRequest) {
   const brandName = (body.brandName || "Sponsor") as string;
   const productName = (body.productName || brandName) as string;
   const logoUrl = (body.logoUrl || "") as string;
+  const productImageUrl = (body.productImageUrl || "") as string;
+  const productImages = (body.productImages || []) as string[];
+  const sceneIndex = (body.sceneIndex || 0) as number;
 
   if (!scenePrompt) {
     return NextResponse.json({ error: "scenePrompt required" }, { status: 400 });
   }
 
-  // Build a prompt that IS the scene but with the sponsor product AND logo placed subliminally.
-  // The scene prompt describes what's happening. The visual prompt describes the product.
-  // The logo gets placed on environmental surfaces throughout the scene.
+  // Pick the source image — rotate through product images, fall back to logo
+  const allImages = [...productImages];
+  if (productImageUrl && !allImages.includes(productImageUrl)) allImages.unshift(productImageUrl);
+  if (logoUrl && !allImages.includes(logoUrl)) allImages.push(logoUrl);
+  const sourceImageUrl = allImages.length > 0 ? allImages[sceneIndex % allImages.length] : null;
+
   const sceneContext = scenePrompt.slice(0, 400);
-  const productDesc = visualPrompt.slice(0, 300);
 
-  // Logo placement — the brand logo/name appears on surfaces throughout the scene
-  const logoPlacement = `The "${brandName}" brand logo and name appear subliminally throughout: on a billboard in the background, as a poster on a wall, on a phone screen a character holds, on a branded shopping bag, printed on a coffee cup, on a neon sign, as graffiti art, on clothing/t-shirt, on a laptop sticker, on a bus stop ad, on product packaging. At least 2-3 of these logo placements must be visible in the scene.`;
+  // Build the edit prompt — tells Grok to place this product into the scene
+  const editPrompt = `Place this ${productName} product subliminally into a cinematic scene. The scene: ${sceneContext}. The product/logo must appear naturally in the environment — on a table, as a poster on a wall, on a billboard, on a phone screen, on packaging, on a neon sign, on clothing, on a coffee cup. The product is NOT the focus — it's just naturally THERE, like product placement in a Hollywood movie. Keep the product recognizable but make it feel like part of the world. Cinematic 9:16 vertical format, shallow depth of field, professional color grading.`;
 
-  const imagePrompt = `A cinematic 9:16 vertical film frame. The scene: ${sceneContext}. SUBLIMINAL PRODUCT PLACEMENT (naturally part of the world, NOT the focus): ${productDesc}. ${logoPlacement} The SCENE is the main focus — the product and logos are just naturally THERE, like product placement in a Hollywood movie. Cinematic lighting, shallow depth of field, professional color grading.`;
-
-  console.log(`[grokify-sponsor] Generating scene with ${brandName} product placement`);
+  console.log(`[grokify-sponsor] ${brandName} — ${sourceImageUrl ? "IMAGE EDIT mode (actual product image)" : "TEXT-TO-IMAGE mode (no source image)"}`);
   console.log(`[grokify-sponsor] Scene: "${sceneContext.slice(0, 80)}..."`);
-  console.log(`[grokify-sponsor] Product: "${productDesc.slice(0, 80)}..."`);
+  if (sourceImageUrl) console.log(`[grokify-sponsor] Source image: ${sourceImageUrl.slice(0, 80)}...`);
 
   try {
-    const response = await fetch("https://api.x.ai/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${env.XAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-imagine-image",
-        prompt: imagePrompt,
-        n: 1,
-        aspect_ratio: "9:16",
-        resolution: "2k",
-        response_format: "url",
-      }),
-    });
+    let response: Response;
+
+    if (sourceImageUrl) {
+      // ── IMAGE EDIT MODE — Use actual sponsor image as source ──
+      // POST /v1/images/edits with the real product image
+      // Grok sees the actual product and edits it into the scene context
+      response = await fetch("https://api.x.ai/v1/images/edits", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${env.XAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "grok-imagine-image",
+          prompt: editPrompt,
+          image: { url: sourceImageUrl },
+          n: 1,
+          aspect_ratio: "9:16",
+          response_format: "url",
+        }),
+      });
+    } else {
+      // ── FALLBACK: TEXT-TO-IMAGE — No source image available ──
+      const productDesc = visualPrompt.slice(0, 300);
+      const fallbackPrompt = `A cinematic 9:16 vertical film frame. The scene: ${sceneContext}. SUBLIMINAL PRODUCT PLACEMENT: ${productDesc}. The "${brandName}" logo appears on a billboard, wall poster, phone screen, or neon sign in the background. The SCENE is the focus — the product is just naturally part of the world. Cinematic lighting, shallow depth of field.`;
+
+      response = await fetch("https://api.x.ai/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${env.XAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "grok-imagine-image",
+          prompt: fallbackPrompt,
+          n: 1,
+          aspect_ratio: "9:16",
+          resolution: "2k",
+          response_format: "url",
+        }),
+      });
+    }
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`[grokify-sponsor] Grok image failed: ${response.status} ${errText.slice(0, 200)}`);
-      return NextResponse.json({ grokifiedUrl: null, error: `Grok image failed: ${response.status}` });
+      console.error(`[grokify-sponsor] Grok failed: ${response.status} ${errText.slice(0, 200)}`);
+      return NextResponse.json({ grokifiedUrl: null, error: `Grok failed: ${response.status}` });
     }
 
     const data = await response.json();
@@ -101,7 +133,7 @@ export async function POST(request: NextRequest) {
     const imgRes = await fetch(grokUrl);
     if (!imgRes.ok) {
       console.error(`[grokify-sponsor] Download failed: ${imgRes.status}`);
-      return NextResponse.json({ grokifiedUrl: null, error: "Failed to download generated image" });
+      return NextResponse.json({ grokifiedUrl: null, error: "Download failed" });
     }
 
     const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
@@ -111,12 +143,13 @@ export async function POST(request: NextRequest) {
       addRandomSuffix: false,
     });
 
-    console.log(`[grokify-sponsor] Saved to Blob: ${blob.url} (${(imgBuffer.length / 1024 / 1024).toFixed(2)}MB)`);
+    console.log(`[grokify-sponsor] Saved: ${blob.url} (${(imgBuffer.length / 1024 / 1024).toFixed(2)}MB) [${sourceImageUrl ? "edited" : "generated"}]`);
 
     return NextResponse.json({
       grokifiedUrl: blob.url,
       brandName,
       productName,
+      mode: sourceImageUrl ? "image-edit" : "text-to-image",
       sizeMb: (imgBuffer.length / 1024 / 1024).toFixed(2),
     });
   } catch (err) {

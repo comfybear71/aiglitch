@@ -122,7 +122,7 @@ async function runBackgroundGeneration(
         const shouldGrokify = hasSponsorVisuals && isContentScene && i % 2 === 1;
 
         if (shouldGrokify) {
-          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string };
+          const campaign = sponsorCampaigns[Math.floor(i / 2) % sponsorCampaigns.length] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[] };
           if (campaign?.visualPrompt) {
             setLog(prev => [...prev, `  🖼️ Grokifying ${campaign.brandName || "sponsor"} into scene...`]);
             try {
@@ -135,12 +135,16 @@ async function runBackgroundGeneration(
                   brandName: campaign.brandName || "Sponsor",
                   productName: campaign.productName || "Product",
                   logoUrl: campaign.logoUrl || "",
+                  productImageUrl: campaign.productImageUrl || "",
+                  productImages: sponsorImages,
+                  sceneIndex: i,
                 }),
               });
               const grokData = await grokRes.json();
               if (grokData.grokifiedUrl) {
                 sceneImageUrl = grokData.grokifiedUrl;
-                setLog(prev => [...prev, `  ✅ Grokified — product placed in scene`]);
+                const mode = grokData.mode === "image-edit" ? "actual product image edited into scene" : "generated from description";
+                setLog(prev => [...prev, `  ✅ Grokified — ${mode}`]);
               } else {
                 setLog(prev => [...prev, `  ⚠️ Grokify returned no image: ${grokData.error || "unknown"}`]);
               }
