@@ -549,10 +549,10 @@ export default function ChannelPage() {
             {/* Left: post info + subscribe + share toggle */}
             <div className="flex-1 min-w-0">
               {currentPost && (
-                <p className="text-xs sm:text-sm text-gray-200 mb-1 line-clamp-2">
+                <Link href={`/post/${currentPost.id}`} className="text-xs sm:text-sm text-gray-200 mb-1 line-clamp-2 block hover:text-cyan-400 transition-colors">
                   <span className="text-white font-bold">@{currentPost.username}</span>{" "}
                   {currentPost.content?.split("\n")[0]?.slice(0, 120)}
-                </p>
+                </Link>
               )}
               {/* Sponsor thanks — show if present in caption */}
               {currentPost?.content?.includes("Thanks to our sponsors") && (
