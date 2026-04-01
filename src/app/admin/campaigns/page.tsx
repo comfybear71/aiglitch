@@ -683,23 +683,40 @@ export default function CampaignsPage() {
                   <button onClick={() => toggleSection(c.id, "videos")} className="text-blue-400 hover:text-blue-300 cursor-pointer underline decoration-blue-800 hover:decoration-blue-400">{"\u{1F5BC}"} {c.image_impressions}</button>
                   <button onClick={() => toggleSection(c.id, "videos")} className="text-green-400 hover:text-green-300 cursor-pointer underline decoration-green-800 hover:decoration-green-400">{"\u{1F4AC}"} {c.post_impressions}</button>
                   <button onClick={() => toggleSection(c.id, "videos")} className="text-white font-bold hover:text-cyan-400 cursor-pointer underline decoration-gray-600 hover:decoration-cyan-400">{c.impressions} total</button>
-                  <span className="text-gray-600">|</span>
-                  <span className="text-yellow-400 text-[9px]">Scenes with product:</span>
-                  <div className="flex items-center gap-1">
-                    {[0, 1, 2, 3, 4, 5, 6].map(n => (
-                      <button key={n} onClick={async () => {
-                        await fetch("/api/admin/ad-campaigns", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "update", campaign_id: c.id, grokify_scenes: n }),
-                        });
-                        fetchCampaigns();
-                      }}
-                        className={`w-5 h-5 text-[9px] rounded ${(c.grokify_scenes ?? 3) === n ? "bg-yellow-500 text-black font-bold" : "bg-gray-700 text-gray-400 hover:bg-gray-600"}`}>
-                        {n}
-                      </button>
-                    ))}
+                </div>
+                {/* Product Image Placement Control */}
+                <div className="mt-2 p-2 bg-gray-800/40 rounded-lg border border-yellow-500/10">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-yellow-400 text-[10px] font-bold">🖼️ Product Placement per Video</span>
+                    <span className="text-gray-500 text-[9px]">
+                      ({(c.logo_url ? 1 : 0) + (c.product_images?.length || (c.product_image_url ? 1 : 0))} image{((c.logo_url ? 1 : 0) + (c.product_images?.length || (c.product_image_url ? 1 : 0))) !== 1 ? "s" : ""} + logo available)
+                    </span>
                   </div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-gray-400 text-[9px] w-28">Scenes with images:</span>
+                    <div className="flex items-center gap-0.5">
+                      {[0, 1, 2, 3, 4, 5, 6].map(n => (
+                        <button key={n} onClick={async () => {
+                          await fetch("/api/admin/ad-campaigns", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "update", campaign_id: c.id, grokify_scenes: n }),
+                          });
+                          fetchCampaigns();
+                        }}
+                          className={`w-6 h-6 text-[10px] rounded-md transition-all ${(c.grokify_scenes ?? 3) === n
+                            ? "bg-yellow-500 text-black font-bold ring-1 ring-yellow-400"
+                            : n === 0 ? "bg-gray-800 text-gray-500 hover:bg-gray-700" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-gray-500 text-[8px] leading-tight">
+                    {(c.grokify_scenes ?? 3) === 0
+                      ? "Text-only placement — Grok describes the product but doesn\u2019t see actual images"
+                      : `${c.grokify_scenes ?? 3} scene${(c.grokify_scenes ?? 3) > 1 ? "s" : ""} per video will have your logo + product images edited in by Grok AI (subliminal placement on tables, walls, screens, billboards)`}
+                  </p>
                 </div>
               </div>
               {/* Actions */}
