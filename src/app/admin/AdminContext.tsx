@@ -272,17 +272,9 @@ async function runBackgroundGeneration(
 
       if (totalDone >= pendingJobs.length) break;
 
-      // Stall detection — but never skip the sponsor clip
-      const regularSceneCount = scenes.length;
-      const regularDone = [...doneScenes].filter(n => n <= regularSceneCount).length;
-      const regularFailed = [...failedScenes].filter(n => n <= regularSceneCount).length;
-      const regularTotal = regularDone + regularFailed;
-      if (regularTotal >= regularSceneCount && doneScenes.size >= Math.ceil(pendingJobs.length / 2) && lastProgressAttempt > 0 && (attempt - lastProgressAttempt) >= 18) {
+      // Stall detection — if no progress for 3 minutes (18 polls), proceed to stitch with what we have
+      if (lastProgressAttempt > 0 && (attempt - lastProgressAttempt) >= 18 && doneScenes.size >= Math.ceil(pendingJobs.length / 2)) {
         const stuckCount = pendingJobs.length - totalDone;
-        if (stuckCount <= 1 && !doneScenes.has(pendingJobs[pendingJobs.length - 1]?.sceneNumber)) {
-          // The only stuck scene is the sponsor clip — give it more time (6 more attempts = 60s)
-          if ((attempt - lastProgressAttempt) < 36) continue;
-        }
         setLog(prev => [...prev, `  ⏰ ${stuckCount} scene(s) stalled for 3min — proceeding to stitch with ${doneScenes.size}/${pendingJobs.length} clips`]);
         break;
       }
