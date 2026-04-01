@@ -1187,10 +1187,12 @@ export async function runMigrations() {
     }
 
     const budjuLogo = newUrls[0];
-    const budjuProduct = newUrls[1];
+    const allProductImages = [newUrls[1], newUrls[2], newUrls[3]];
     const budjuVisualPrompt = "A shiny metallic purple and pink cryptocurrency coin with 'BUDJU' text embossed on it, glowing neon purple edges, holographic sheen. The BUDJU coin sits prominently on a desk, table, shelf, or held by a character. Also show a phone or screen displaying the BUDJU trading chart with purple/pink branding. The BUDJU logo is pink cursive text 'Budju' with a heart symbol and a blonde cartoon character mascot. Purple/pink neon coin aesthetic. Make the BUDJU branding clearly visible and recognizable in the scene.";
-    await sql`UPDATE ad_campaigns SET logo_url = ${budjuLogo}, product_image_url = ${budjuProduct}, visual_prompt = ${budjuVisualPrompt} WHERE LOWER(brand_name) = 'budju'`;
-    await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify([budjuProduct, newUrls[2], newUrls[3]])}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
+    // Add product_images JSONB column to ad_campaigns
+    try { await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`; } catch { /* exists */ }
+    await sql`UPDATE ad_campaigns SET logo_url = ${budjuLogo}, product_image_url = ${allProductImages[0]}, product_images = ${JSON.stringify(allProductImages)}::jsonb, visual_prompt = ${budjuVisualPrompt} WHERE LOWER(brand_name) = 'budju'`;
+    await sql`UPDATE sponsors SET logo_url = ${budjuLogo}, product_images = ${JSON.stringify(allProductImages)}::jsonb WHERE LOWER(company_name) = 'budju' OR (LOWER(company_name) = 'unknown' AND contact_email = 'sfrench71@me.com')`;
   });
 
   // ── Stamp the migration version so future cold starts skip all of the above ──

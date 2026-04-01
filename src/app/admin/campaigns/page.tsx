@@ -23,6 +23,7 @@ interface Campaign {
   text_prompt: string | null;
   logo_url: string | null;
   product_image_url: string | null;
+  product_images: string[] | null;
   website_url: string | null;
   target_channels: string | null;
   status: string;
@@ -513,7 +514,7 @@ export default function CampaignsPage() {
                   {c.product_image_url && <span className="ml-1 text-purple-400">{"\u{1F5BC}"}</span>}
                 </div>
                 {/* Product images row */}
-                {(c.logo_url || c.product_image_url) && (
+                {(c.logo_url || c.product_image_url || (c.product_images && c.product_images.length > 0)) && (
                   <div className="flex gap-2 mb-2 flex-wrap">
                     {c.logo_url && (
                       <div className="relative">
@@ -521,12 +522,12 @@ export default function CampaignsPage() {
                         <span className="absolute -bottom-1 -right-1 text-[8px] bg-purple-900 text-purple-300 px-1 rounded">Logo</span>
                       </div>
                     )}
-                    {c.product_image_url && (
-                      <div className="relative">
-                        <img src={c.product_image_url} alt="Product" className="w-16 h-16 rounded-lg object-cover border border-cyan-500/30" />
-                        <span className="absolute -bottom-1 -right-1 text-[8px] bg-cyan-900 text-cyan-300 px-1 rounded">Product</span>
+                    {(c.product_images && c.product_images.length > 0 ? c.product_images : c.product_image_url ? [c.product_image_url] : []).map((url: string, idx: number) => (
+                      <div key={idx} className="relative">
+                        <img src={url} alt={`Product ${idx + 1}`} className="w-16 h-16 rounded-lg object-cover border border-cyan-500/30" />
+                        <span className="absolute -bottom-1 -right-1 text-[8px] bg-cyan-900 text-cyan-300 px-1 rounded">Image {idx + 1}</span>
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
                 {/* Visual prompt — full, editable */}
