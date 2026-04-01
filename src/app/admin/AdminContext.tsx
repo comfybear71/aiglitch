@@ -91,6 +91,12 @@ async function runBackgroundGeneration(
     setProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
     const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
 
+    // Collect all sponsor product images for rotation across scenes
+    const sponsorImages: string[] = screenplay.sponsorImages || (screenplay.sponsorImageUrl ? [screenplay.sponsorImageUrl] : []);
+    if (sponsorImages.length > 0) {
+      setLog(prev => [...prev, `  🖼️ ${sponsorImages.length} sponsor product image(s) available for scene injection`]);
+    }
+
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
       if (abortRef.current) break;
@@ -105,12 +111,17 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
-        // Pass sponsor logo as reference image if sponsors were placed
-        const sponsorImageUrl = screenplay.sponsorImageUrl || undefined;
+        // Rotate sponsor product images across scenes (every 3rd scene gets one)
+        // This distributes product visibility without overwhelming every scene
+        let sceneImageUrl: string | undefined;
+        if (sponsorImages.length > 0 && i % 3 === 1) {
+          sceneImageUrl = sponsorImages[Math.floor(i / 3) % sponsorImages.length];
+          setLog(prev => [...prev, `  🖼️ Injecting sponsor product image into this scene`]);
+        }
         const submitRes = await fetch("/api/test-grok-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sponsorImageUrl }),
+          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sceneImageUrl }),
         });
         const submitData = await submitRes.json();
 
@@ -152,11 +163,11 @@ async function runBackgroundGeneration(
     if (sponsors.length > 0) {
       setLog(prev => [...prev, `  🎬 Generating sponsor thank-you clip for: ${sponsors.join(", ")}...`]);
       try {
-        // Generate PNG card, upload to Blob, submit as image-to-video
+        // Pass sponsor images so the clip can use them as visual references
         const sponsorRes = await fetch("/api/admin/sponsor-clip", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sponsorNames: sponsors }),
+          body: JSON.stringify({ sponsorNames: sponsors, sponsorImages }),
         });
         const sponsorData = await sponsorRes.json();
         if (sponsorData.requestId) {

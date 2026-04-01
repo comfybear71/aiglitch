@@ -12,6 +12,7 @@ export interface AdCampaign {
   text_prompt: string | null;
   logo_url: string | null;
   product_image_url: string | null;
+  product_images: string[] | null;   // JSONB array of product image URLs
   website_url: string | null;
   target_channels: string | null;   // JSON array of channel IDs
   target_persona_types: string | null;
@@ -154,12 +155,23 @@ export async function logImpressions(
 ): Promise<void> {
   if (campaigns.length === 0) return;
   const sql = getDb();
+  console.log(`[ad-campaigns] logImpressions called: ${campaigns.length} campaigns, postId=${postId}, type=${contentType}`);
   try {
-    // Auto-add missing columns
+    // Ensure table + columns exist before any INSERT
     try {
+      await sql`CREATE TABLE IF NOT EXISTS ad_impressions (
+        id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, post_id TEXT,
+        content_type TEXT DEFAULT 'text', channel_id TEXT, persona_id TEXT,
+        prompt_used TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+      )`;
       await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS content_type TEXT DEFAULT 'text'`;
       await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS prompt_used TEXT`;
-    } catch { /* columns may already exist */ }
+      await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS video_impressions INTEGER DEFAULT 0`;
+      await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS image_impressions INTEGER DEFAULT 0`;
+      await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS post_impressions INTEGER DEFAULT 0`;
+    } catch (schemaErr) {
+      console.warn("[ad-campaigns] Schema migration warning:", schemaErr instanceof Error ? schemaErr.message : schemaErr);
+    }
 
     for (const c of campaigns) {
       try {
@@ -169,19 +181,19 @@ export async function logImpressions(
         `;
         await sql`UPDATE ad_campaigns SET impressions = impressions + 1, updated_at = NOW() WHERE id = ${c.id}`;
         if (contentType === "video") {
-          await sql`UPDATE ad_campaigns SET video_impressions = video_impressions + 1 WHERE id = ${c.id}`;
+          try { await sql`UPDATE ad_campaigns SET video_impressions = COALESCE(video_impressions, 0) + 1 WHERE id = ${c.id}`; } catch { /* column may not exist yet */ }
         } else if (contentType === "image") {
-          await sql`UPDATE ad_campaigns SET image_impressions = image_impressions + 1 WHERE id = ${c.id}`;
+          try { await sql`UPDATE ad_campaigns SET image_impressions = COALESCE(image_impressions, 0) + 1 WHERE id = ${c.id}`; } catch { /* column may not exist yet */ }
         } else {
-          await sql`UPDATE ad_campaigns SET post_impressions = post_impressions + 1 WHERE id = ${c.id}`;
+          try { await sql`UPDATE ad_campaigns SET post_impressions = COALESCE(post_impressions, 0) + 1 WHERE id = ${c.id}`; } catch { /* column may not exist yet */ }
         }
-        console.log(`[ad-campaigns] ✅ Impression logged for ${c.brand_name} (campaign ${c.id}), postId=${postId}`);
+        console.log(`[ad-campaigns] ✅ Impression logged for ${c.brand_name} (campaign ${c.id}), postId=${postId}, type=${contentType}`);
       } catch (innerErr) {
         console.error(`[ad-campaigns] ❌ Failed to log impression for ${c.brand_name}:`, innerErr instanceof Error ? innerErr.message : innerErr);
       }
     }
   } catch (err) {
-    console.warn("[ad-campaigns] Failed to log impression:", err instanceof Error ? err.message : err);
+    console.error("[ad-campaigns] ❌ logImpressions FAILED:", err instanceof Error ? err.message : err);
   }
 }
 

@@ -42,13 +42,21 @@ async function ensureSchema() {
       id TEXT PRIMARY KEY,
       campaign_id TEXT NOT NULL,
       post_id TEXT,
-      persona_id TEXT,
+      content_type TEXT DEFAULT 'text',
       channel_id TEXT,
-      placement_type TEXT,
+      persona_id TEXT,
+      prompt_used TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`;
-    // Add product_image_url if table existed but column was missing
+    // Add columns that may be missing if tables existed before schema updates
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_image_url TEXT`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS product_images JSONB DEFAULT '[]'`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS video_impressions INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS image_impressions INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS post_impressions INTEGER DEFAULT 0`;
+    // Ensure ad_impressions has the right columns (may have been created with old schema)
+    await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS content_type TEXT DEFAULT 'text'`;
+    await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS prompt_used TEXT`;
     _migrated = true;
   } catch (err) {
     console.warn("[ad-campaigns] Migration failed:", err instanceof Error ? err.message : err);

@@ -115,8 +115,22 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
   const screenplay = result;
 
   const sponsorNames = screenplay._adCampaigns?.map((c: { brand_name: string }) => c.brand_name) || [];
-  const sponsorImage = screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || null;
-  console.log(`[screenplay] RETURNING: title="${screenplay.title}", sponsors=${JSON.stringify(sponsorNames)}, sponsorImage=${sponsorImage || "NONE"}, scenes=${screenplay.scenes?.length}`);
+  // Collect ALL sponsor images: logos + product images from all placed campaigns
+  const allSponsorImages: string[] = [];
+  for (const c of screenplay._adCampaigns || []) {
+    if (c.logo_url) allSponsorImages.push(c.logo_url);
+    if (c.product_image_url) allSponsorImages.push(c.product_image_url);
+    // Parse product_images JSONB
+    const prodImages = Array.isArray(c.product_images) ? c.product_images
+      : typeof c.product_images === "string" ? (() => { try { return JSON.parse(c.product_images); } catch { return []; } })()
+      : [];
+    for (const img of prodImages) {
+      if (typeof img === "string" && img && !allSponsorImages.includes(img)) {
+        allSponsorImages.push(img);
+      }
+    }
+  }
+  console.log(`[screenplay] RETURNING: title="${screenplay.title}", sponsors=${JSON.stringify(sponsorNames)}, sponsorImages=${allSponsorImages.length}, scenes=${screenplay.scenes?.length}`);
 
   return NextResponse.json({
     title: screenplay.title,
@@ -129,7 +143,8 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
     castList: screenplay.castList,
     screenplayProvider: screenplay.screenplayProvider || "claude",
     sponsorPlacements: screenplay._adCampaigns?.map(c => c.brand_name) || [],
-    sponsorImageUrl: screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || null,
+    sponsorImageUrl: allSponsorImages[0] || null,
+    sponsorImages: allSponsorImages,  // ALL sponsor product images for scene injection
     scenes: screenplay.scenes.map(s => ({
       sceneNumber: s.sceneNumber,
       title: s.title,

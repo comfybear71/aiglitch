@@ -1291,8 +1291,24 @@ export async function submitDirectorFilm(
 
     try {
       // Use shared submitVideoJob() for consistent auth, logging, and Kie.ai fallback
-      // Pass sponsor logo as reference image if this video has sponsor placements
-      const sponsorImageUrl = screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || undefined;
+      // Rotate sponsor product images across scenes (every 3rd scene gets one)
+      let sponsorImageUrl: string | undefined;
+      if (screenplay._adCampaigns && screenplay._adCampaigns.length > 0 && i % 3 === 1) {
+        const allImages: string[] = [];
+        for (const c of screenplay._adCampaigns) {
+          if (c.logo_url) allImages.push(c.logo_url);
+          if (c.product_image_url) allImages.push(c.product_image_url);
+          const prodImages = Array.isArray(c.product_images) ? c.product_images
+            : typeof c.product_images === "string" ? (() => { try { return JSON.parse(c.product_images as string); } catch { return []; } })()
+            : [];
+          for (const img of prodImages) {
+            if (typeof img === "string" && img && !allImages.includes(img)) allImages.push(img);
+          }
+        }
+        if (allImages.length > 0) {
+          sponsorImageUrl = allImages[Math.floor(i / 3) % allImages.length];
+        }
+      }
       const result = await submitVideoJob(enrichedPrompt, scene.duration, "16:9", sponsorImageUrl);
 
       if (result.fellBack) {
