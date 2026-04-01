@@ -393,12 +393,9 @@ export default function BudjuTradingView() {
             </div>
           </div>
           {/* Actions */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="grid grid-cols-4 gap-2 mb-4">
             <button onClick={generateWallets} disabled={loading} className="px-2 py-2 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
               {loading ? "..." : "Generate Wallets"}
-            </button>
-            <button onClick={distributeFunds} disabled={loading} className="px-2 py-2 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
-              {loading ? "..." : "Distribute Funds"}
             </button>
             <button onClick={syncBalances} disabled={loading} className="px-2 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50">
               {loading ? "..." : "Sync Balances"}
@@ -406,7 +403,7 @@ export default function BudjuTradingView() {
             <button onClick={drainWallets} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
               Drain Wallets
             </button>
-            <button onClick={exportKeys} disabled={loading} className="px-2 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50 col-span-2">
+            <button onClick={exportKeys} disabled={loading} className="px-2 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
               Export Keys
             </button>
           </div>
