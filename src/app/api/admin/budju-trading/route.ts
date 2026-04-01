@@ -47,6 +47,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Drain distributor wallets back to treasury — recovers stuck funds
+  if (action === "drain_distributors") {
+    try {
+      const { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount, createTransferInstruction, createAssociatedTokenAccountInstruction } = await import("@solana/spl-token");
+      const { drainWallets } = await import("@/lib/trading/budju");
+      const { TREASURY_WALLET_STR } = await import("@/lib/solana-config");
+      // Drain distributors — sends SOL + BUDJU back to treasury
+      const result = await drainWallets(TREASURY_WALLET_STR, "distributors");
+      return NextResponse.json({ success: true, ...result });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    }
+  }
+
   // Check all fund locations — where is the money?
   if (action === "fund_check") {
     try {

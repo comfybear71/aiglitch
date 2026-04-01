@@ -1367,6 +1367,29 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
     for (const d of distributors) {
       try {
         const keypair = decryptKeypair(d.encrypted_keypair as string);
+
+        // Drain SPL tokens (BUDJU, USDC, GLITCH) first
+        const { getAssociatedTokenAddress: getAta, getAccount: getAcc, createTransferInstruction: createXfer } = await import("@solana/spl-token");
+        const splMints = [
+          { name: "BUDJU", mint: new PublicKey(BUDJU_MINT), decimals: 6 },
+          { name: "USDC", mint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), decimals: 6 },
+          { name: "GLITCH", mint: new PublicKey("5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT"), decimals: 9 },
+        ];
+        for (const { name, mint, decimals } of splMints) {
+          try {
+            const fromAta = await getAta(mint, keypair.publicKey);
+            const acc = await getAcc(connection, fromAta);
+            const bal = Number(acc.amount);
+            if (bal <= 0) continue;
+            const toAta = await getAta(mint, destination);
+            const tx = new Transaction().add(createXfer(fromAta, toAta, keypair.publicKey, BigInt(bal)));
+            await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+            console.log(`[drain] Distributor G${d.group_number}: drained ${(bal / (10 ** decimals)).toFixed(2)} ${name}`);
+            await new Promise(r => setTimeout(r, 1500));
+          } catch { /* no ATA or empty */ }
+        }
+
+        // Drain SOL last
         const balanceLamports = await connection.getBalance(keypair.publicKey);
         const sendLamports = balanceLamports - 5000;
         if (sendLamports <= 0) {
@@ -1384,7 +1407,7 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
         const signature = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
         const solSent = sendLamports / LAMPORTS_PER_SOL;
 
-        await sql`UPDATE budju_distributors SET sol_balance = 0 WHERE group_number = ${d.group_number}`;
+        await sql`UPDATE budju_distributors SET sol_balance = 0, budju_balance = 0 WHERE group_number = ${d.group_number}`;
 
         drained.push({ type: "distributor", name: `Group ${d.group_number}`, wallet: d.wallet_address as string, sol_sent: solSent, tx: signature });
         totalRecovered += solSent;
