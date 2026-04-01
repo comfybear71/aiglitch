@@ -259,6 +259,32 @@ export default function CampaignsPage() {
   const [editingFreq, setEditingFreq] = useState<string | null>(null);
   const [freqValue, setFreqValue] = useState(0.3);
 
+  // Editing campaign details
+  const [editingCampaign, setEditingCampaign] = useState<string | null>(null);
+  const [editVisualPrompt, setEditVisualPrompt] = useState("");
+  const [editTextPrompt, setEditTextPrompt] = useState("");
+  const [editLogoUrl, setEditLogoUrl] = useState("");
+  const [editProductImageUrl, setEditProductImageUrl] = useState("");
+
+  const saveCampaignEdit = async (campaignId: string) => {
+    try {
+      await fetch("/api/admin/ad-campaigns", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update",
+          campaign_id: campaignId,
+          visual_prompt: editVisualPrompt || undefined,
+          text_prompt: editTextPrompt || undefined,
+          logo_url: editLogoUrl || undefined,
+          product_image_url: editProductImageUrl || undefined,
+        }),
+      });
+      setEditingCampaign(null);
+      fetchCampaigns();
+    } catch { /* ignore */ }
+  };
+
   const updateFrequency = async (campaignId: string, newFreq: number) => {
     try {
       await fetch("/api/admin/ad-campaigns", {
@@ -468,6 +494,10 @@ export default function CampaignsPage() {
             <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  {/* Logo thumbnail */}
+                  {c.logo_url && (
+                    <img src={c.logo_url} alt={c.brand_name} className="w-10 h-10 rounded object-cover border border-gray-700" />
+                  )}
                   <span className="text-lg sm:text-xl">{c.product_emoji}</span>
                   <span className="font-bold text-white text-sm">{c.brand_name}</span>
                   <span className="text-gray-400 hidden sm:inline">—</span>
@@ -482,9 +512,38 @@ export default function CampaignsPage() {
                   {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
                   {c.product_image_url && <span className="ml-1 text-purple-400">{"\u{1F5BC}"}</span>}
                 </div>
-                <div className="text-gray-500 text-[10px] sm:text-xs mb-2 italic truncate">
-                  {c.visual_prompt.slice(0, 80)}{c.visual_prompt.length > 80 ? "..." : ""}
+                {/* Product images row */}
+                {(c.logo_url || c.product_image_url) && (
+                  <div className="flex gap-2 mb-2 flex-wrap">
+                    {c.logo_url && (
+                      <div className="relative">
+                        <img src={c.logo_url} alt="Logo" className="w-16 h-16 rounded-lg object-cover border border-purple-500/30" />
+                        <span className="absolute -bottom-1 -right-1 text-[8px] bg-purple-900 text-purple-300 px-1 rounded">Logo</span>
+                      </div>
+                    )}
+                    {c.product_image_url && (
+                      <div className="relative">
+                        <img src={c.product_image_url} alt="Product" className="w-16 h-16 rounded-lg object-cover border border-cyan-500/30" />
+                        <span className="absolute -bottom-1 -right-1 text-[8px] bg-cyan-900 text-cyan-300 px-1 rounded">Product</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Visual prompt — full, editable */}
+                <div className="bg-gray-800/50 rounded-lg p-2 mb-2">
+                  <p className="text-[9px] text-gray-500 font-bold mb-1">VISUAL PROMPT</p>
+                  <p className="text-gray-400 text-[10px] sm:text-xs">{c.visual_prompt}</p>
                 </div>
+                {c.text_prompt && (
+                  <div className="bg-gray-800/50 rounded-lg p-2 mb-2">
+                    <p className="text-[9px] text-gray-500 font-bold mb-1">TEXT PROMPT</p>
+                    <p className="text-gray-400 text-[10px] sm:text-xs">{c.text_prompt}</p>
+                  </div>
+                )}
+                {/* Website */}
+                {c.website_url && (
+                  <p className="text-[10px] text-cyan-400 mb-2">🌐 {c.website_url}</p>
+                )}
                 <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs">
                   <span className="text-purple-400">{"\u{1F3AC}"} {c.video_impressions}</span>
                   <span className="text-blue-400">{"\u{1F5BC}"} {c.image_impressions}</span>
@@ -524,8 +583,55 @@ export default function CampaignsPage() {
                     Cancel
                   </button>
                 )}
+                <button onClick={() => {
+                  if (editingCampaign === c.id) { setEditingCampaign(null); } else {
+                    setEditingCampaign(c.id);
+                    setEditVisualPrompt(c.visual_prompt || "");
+                    setEditTextPrompt(c.text_prompt || "");
+                    setEditLogoUrl(c.logo_url || "");
+                    setEditProductImageUrl(c.product_image_url || "");
+                  }
+                }}
+                  className="px-3 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg text-xs hover:bg-yellow-500/30 transition">
+                  {editingCampaign === c.id ? "Close" : "Edit"}
+                </button>
               </div>
             </div>
+
+            {/* Edit Campaign Form */}
+            {editingCampaign === c.id && (
+              <div className="mt-3 bg-gray-800/50 rounded-lg p-3 space-y-2 border border-yellow-500/20">
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">VISUAL PROMPT (what Grok renders)</label>
+                  <textarea value={editVisualPrompt} onChange={e => setEditVisualPrompt(e.target.value)} rows={3}
+                    className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">TEXT PROMPT (caption/post text)</label>
+                  <textarea value={editTextPrompt} onChange={e => setEditTextPrompt(e.target.value)} rows={2}
+                    className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-gray-500 font-bold block mb-1">LOGO URL</label>
+                    <input value={editLogoUrl} onChange={e => setEditLogoUrl(e.target.value)}
+                      placeholder="https://..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                    {editLogoUrl && <img src={editLogoUrl} alt="Logo preview" className="w-12 h-12 mt-1 rounded object-cover border border-gray-600" />}
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-gray-500 font-bold block mb-1">PRODUCT IMAGE URL</label>
+                    <input value={editProductImageUrl} onChange={e => setEditProductImageUrl(e.target.value)}
+                      placeholder="https://..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                    {editProductImageUrl && <img src={editProductImageUrl} alt="Product preview" className="w-12 h-12 mt-1 rounded object-cover border border-gray-600" />}
+                  </div>
+                </div>
+                <button onClick={() => saveCampaignEdit(c.id)}
+                  className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
+                  Save Changes
+                </button>
+              </div>
+            )}
+
             {/* Frequency Editor */}
             {editingFreq === c.id && (
               <div className="mt-3 p-3 bg-gray-800/50 border border-cyan-800/30 rounded-lg">
