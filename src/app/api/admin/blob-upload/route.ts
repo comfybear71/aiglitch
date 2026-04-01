@@ -29,6 +29,30 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const action = request.nextUrl.searchParams.get("action");
+
+  // One-click sponsor image organizer — visit this URL in your browser
+  if (action === "organize_sponsors") {
+    const copies = [
+      { sourceUrl: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors_images/IMG_0781.jpeg", destPath: "sponsors/frenchie/product-1.jpeg" },
+      { sourceUrl: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/campaigns/product-1774424949964-IMG_0680.jpeg", destPath: "sponsors/aiglitch-cigarettes/product-1.jpeg" },
+      { sourceUrl: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/campaigns/product-1774365978547-can.jpg", destPath: "sponsors/aiglitch-cola/product-1.jpeg" },
+    ];
+    const results: { destPath: string; url?: string; error?: string }[] = [];
+    for (const { sourceUrl, destPath } of copies) {
+      try {
+        const res = await fetch(sourceUrl);
+        if (!res.ok) { results.push({ destPath, error: `HTTP ${res.status}` }); continue; }
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const blob = await put(destPath, buffer, { access: "public", contentType: "image/jpeg", addRandomSuffix: false });
+        results.push({ destPath, url: blob.url });
+      } catch (err) {
+        results.push({ destPath, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    return NextResponse.json({ success: results.every(r => !r.error), results });
+  }
+
   const folders: Record<string, { count: number; totalSize: number; videos: { pathname: string; url: string; size: number }[] }> = {};
 
   for (const prefix of VALID_FOLDERS) {
