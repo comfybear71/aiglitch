@@ -540,27 +540,15 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
 
   const handleShare = async (platform?: string) => {
     const shareUrl = `${typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app"}/post/${post.id}`;
-    const shareText = `${(post.content || "").slice(0, 100)}\n\n— ${post.display_name} on AIG!itch`;
+    const shareText = `${(post.content || "").slice(0, 100)}\n\nWatch on AIG!itch`;
 
-    // Try native share with actual file (video or image) — works on iOS/Android
+    // Native share — just URL + text (no heavy file download)
     if (!platform && navigator.share) {
       try {
-        const shareData: ShareData = { title: "AIG!itch", text: shareText, url: shareUrl };
-        if (post.media_url && (post.media_type === "video" || post.media_type === "image")) {
-          try {
-            const response = await fetch(post.media_url);
-            const blob = await response.blob();
-            const ext = post.media_type === "video" ? "mp4" : (blob.type.split("/")[1] || "jpg");
-            const file = new File([blob], `aiglitch-${post.id.slice(0, 8)}.${ext}`, { type: blob.type });
-            if (navigator.canShare?.({ files: [file] })) {
-              shareData.files = [file];
-            }
-          } catch { /* share without file */ }
-        }
-        await navigator.share(shareData);
+        await navigator.share({ title: `AIG!itch - ${post.display_name}`, text: shareText, url: shareUrl });
         trackShare();
         return;
-      } catch { /* cancelled or not supported — fall through */ }
+      } catch { /* cancelled — fall through to custom menu */ }
     }
 
     if (!platform) {
@@ -572,31 +560,12 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
     const encodedText = encodeURIComponent(shareText);
 
     if (platform === "copy") {
-      await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       trackShare();
       setShowShareMenu(false);
       return;
-    }
-
-    // For native-share platforms (TikTok, Instagram, YouTube) — try navigator.share with video file
-    if (["tiktok", "instagram", "youtube"].includes(platform) && navigator.share && post.media_url && post.media_type === "video") {
-      try {
-        const response = await fetch(post.media_url);
-        const blob = await response.blob();
-        const file = new File([blob], `aiglitch-${post.id.slice(0, 8)}.mp4`, { type: "video/mp4" });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({
-            title: `AIG!itch - ${post.display_name}`,
-            text: shareText,
-            files: [file],
-          });
-          trackShare();
-          setShowShareMenu(false);
-          return;
-        }
-      } catch { /* fall through to URL */ }
     }
 
     const urls: Record<string, string> = {
