@@ -7,6 +7,8 @@ import BudjuTradingView from "./BudjuTradingView";
 import WalletDashboard from "./WalletDashboard";
 import MemoSystem from "./MemoSystem";
 
+import { BudjuDashboard, formatBudjuAmount } from "../admin-types";
+
 const WALLET_SESSION_KEY = "aiglitch-wallet-session";
 
 interface WalletBalances {
@@ -287,7 +289,7 @@ export default function TradingPage() {
       </div>
 
       {/* Top Row: Admin Wallet | Treasury Wallet | GLITCH Trading | BUDJU Trading */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+      <div className="flex flex-wrap gap-2 items-start">
         <WalletCard label="ADMIN" balances={adminBalances} loading={walletLoading} gradient="border-purple-500/30" onRefresh={fetchBalances} />
         <WalletCard label="TREASURY" balances={treasuryBalances} loading={walletLoading} gradient="border-amber-500/30" onRefresh={fetchBalances} />
         <button
@@ -320,19 +322,9 @@ export default function TradingPage() {
         </button>
       </div>
 
-      {/* Home View: Dashboard + Wallets + Memos */}
+      {/* Home View: Groups + Dashboard + Memos */}
       {activeView === "home" && (
-        <div className="space-y-4">
-          {/* Quick actions */}
-          <div className="flex gap-2 flex-wrap">
-            <span className="text-[10px] text-gray-500 font-bold self-center">QUICK:</span>
-            <button onClick={() => setActiveView("glitch")} className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-[10px] font-bold hover:bg-purple-500/30">Open GLITCH Trading</button>
-            <button onClick={() => setActiveView("budju")} className="px-3 py-1.5 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-[10px] font-bold hover:bg-fuchsia-500/30">Open BUDJU Trading</button>
-          </div>
-
-          {/* Memos */}
-          <MemoSystem />
-        </div>
+        <HomeView />
       )}
 
       {/* GLITCH Trading View */}
@@ -340,6 +332,223 @@ export default function TradingPage() {
 
       {/* BUDJU Trading View */}
       {activeView === "budju" && <BudjuTradingView />}
+    </div>
+  );
+}
+
+// ── Home View: Distributor Groups + Persona Dashboard + Memos ──
+function HomeView() {
+  const [budjuData, setBudjuData] = useState<BudjuDashboard | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expandedGroup, setExpandedGroup] = useState<number | null>(null);
+  const [groupFundToken, setGroupFundToken] = useState<{ group: number; token: string; direction: "add" | "withdraw" } | null>(null);
+  const [groupFundAmount, setGroupFundAmount] = useState("");
+  const [groupLoading, setGroupLoading] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/budju-trading?t=${Date.now()}`);
+      if (res.ok) {
+        const d = await res.json();
+        if (!d.error) setBudjuData(d);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const postAction = async (action: string, body: Record<string, unknown> = {}) => {
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...body }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    } catch {
+      return { ok: false, data: { error: "Failed" } };
+    }
+  };
+
+  const fundGroup = async () => {
+    if (!groupFundToken || !groupFundAmount || parseFloat(groupFundAmount) <= 0 || !budjuData) return;
+    const dist = budjuData.distributors.find(d => d.group_number === groupFundToken.group);
+    if (!dist) return;
+    setGroupLoading(true);
+    const direction = groupFundToken.direction === "add" ? "from_treasury" : "to_treasury";
+    await postAction("wallet_transfer", {
+      wallet_address: dist.wallet_address,
+      wallet_type: "distributor",
+      token: groupFundToken.token,
+      direction,
+      amount: parseFloat(groupFundAmount),
+    });
+    setGroupLoading(false);
+    setGroupFundToken(null);
+    setGroupFundAmount("");
+    fetchData();
+  };
+
+  const walletTransfer = async (personaId: string, token: string, direction: "to_treasury" | "from_treasury", amount: string) => {
+    if (!amount || parseFloat(amount) <= 0) return;
+    setLoading(true);
+    const res = await postAction("wallet_transfer", { persona_id: personaId, token, direction, amount: parseFloat(amount) });
+    setLoading(false);
+    const d = res.data as { success?: boolean; error?: string };
+    if (d.success) fetchData();
+    else alert(d.error || "Transfer failed");
+  };
+
+  const drainWalletToken = async (personaId: string, token: string) => {
+    setLoading(true);
+    await postAction("wallet_transfer", { persona_id: personaId, token, direction: "to_treasury", amount: "ALL" });
+    setLoading(false);
+    fetchData();
+  };
+
+  // Persona fund/withdraw state
+  const [personaFund, setPersonaFund] = useState<{ id: string; token: string; direction: "add" | "withdraw" } | null>(null);
+  const [personaFundAmount, setPersonaFundAmount] = useState("");
+
+  if (!budjuData) {
+    return <div className="text-center py-8 text-gray-500 text-sm animate-pulse">Loading trading data...</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Distributor Groups */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] text-gray-500 font-bold">DISTRIBUTOR GROUPS ({budjuData.distributors.length})</p>
+          <button onClick={fetchData} disabled={loading} className="text-[10px] text-gray-500 hover:text-white font-bold">
+            {loading ? "..." : "↻ Refresh"}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {budjuData.distributors.map((d) => (
+            <div key={d.id} className={`bg-gray-900 rounded-lg overflow-hidden border ${expandedGroup === d.group_number ? "border-amber-500/40" : "border-gray-800"}`}>
+              <button onClick={() => setExpandedGroup(expandedGroup === d.group_number ? null : d.group_number)}
+                className="w-full p-2 text-left hover:bg-gray-800/50 transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] font-bold text-amber-400">Group {d.group_number}</p>
+                  <span className="text-[9px] text-gray-500">{d.personas_funded}p</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-[9px]">
+                  <span className="text-cyan-400">{Number(d.sol_balance).toFixed(3)} SOL</span>
+                  <span className="text-fuchsia-400">{formatBudjuAmount(Number(d.budju_balance || 0))} BUDJU</span>
+                </div>
+              </button>
+              {expandedGroup === d.group_number && (
+                <div className="border-t border-gray-800 p-2 space-y-1.5">
+                  <p className="text-[8px] text-gray-600 font-mono truncate cursor-pointer"
+                    onClick={() => navigator.clipboard.writeText(d.wallet_address as string)}>{d.wallet_address}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {["SOL", "BUDJU", "GLITCH", "USDC"].map(token => (
+                      <div key={token} className="flex gap-0.5">
+                        <button onClick={() => { setGroupFundToken({ group: d.group_number, token, direction: "add" }); setGroupFundAmount(""); }}
+                          className="flex-1 px-1 py-0.5 bg-green-500/10 text-green-400 rounded text-[8px] font-bold hover:bg-green-500/20">+ {token}</button>
+                        <button onClick={() => { setGroupFundToken({ group: d.group_number, token, direction: "withdraw" }); setGroupFundAmount(""); }}
+                          className="flex-1 px-1 py-0.5 bg-red-500/10 text-red-400 rounded text-[8px] font-bold hover:bg-red-500/20">− {token}</button>
+                      </div>
+                    ))}
+                  </div>
+                  {groupFundToken && groupFundToken.group === d.group_number && (
+                    <div className="bg-gray-800/60 rounded p-1.5">
+                      <p className="text-[8px] text-gray-400 mb-1">
+                        {groupFundToken.direction === "add" ? `Add ${groupFundToken.token} from Treasury` : `Withdraw ${groupFundToken.token} to Treasury`}
+                      </p>
+                      <div className="flex gap-1">
+                        <input type="number" value={groupFundAmount} onChange={e => setGroupFundAmount(e.target.value)}
+                          placeholder="Amount" className="flex-1 px-1.5 py-1 bg-gray-900 border border-gray-700 rounded text-[10px] text-white" />
+                        <button onClick={fundGroup} disabled={groupLoading}
+                          className="px-2 py-1 bg-fuchsia-600 text-white rounded text-[9px] font-bold disabled:opacity-50">
+                          {groupLoading ? "..." : "Go"}</button>
+                        <button onClick={() => setGroupFundToken(null)} className="px-1.5 py-1 bg-gray-700 text-gray-400 rounded text-[9px]">✕</button>
+                      </div>
+                    </div>
+                  )}
+                  <a href={`https://solscan.io/account/${d.wallet_address}`} target="_blank" rel="noopener noreferrer"
+                    className="block text-center text-[8px] text-cyan-400 hover:text-cyan-300 font-bold">Solscan ↗</a>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Persona Wallets Dashboard — 7 columns */}
+      <div>
+        <p className="text-[10px] text-gray-500 font-bold mb-2">PERSONA WALLETS ({budjuData.wallets.length})</p>
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="grid grid-cols-[1fr_65px_65px_50px_50px_35px_50px] gap-1 px-2 py-1.5 text-[8px] text-gray-500 font-bold border-b border-gray-800 sticky top-0 bg-gray-900">
+            <span>PERSONA</span>
+            <span className="text-right">SOL</span>
+            <span className="text-right">BUDJU</span>
+            <span className="text-right">USDC</span>
+            <span className="text-right">GLITCH</span>
+            <span className="text-center">GRP</span>
+            <span className="text-right">STATUS</span>
+          </div>
+          <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-800/30">
+            {budjuData.wallets.map(w => (
+              <div key={w.persona_id}>
+                <div className={`grid grid-cols-[1fr_65px_65px_50px_50px_35px_50px] gap-1 items-center px-2 py-1.5 hover:bg-gray-800/30 cursor-pointer ${!w.is_active ? "opacity-40" : ""}`}
+                  onClick={() => setPersonaFund(personaFund?.id === w.persona_id ? null : { id: w.persona_id, token: "", direction: "add" })}>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm flex-shrink-0">{w.avatar_emoji}</span>
+                    <p className="text-[10px] font-bold text-white truncate">{w.display_name}</p>
+                  </div>
+                  <p className="text-[10px] text-cyan-400 text-right font-mono">{Number(w.sol_balance).toFixed(3)}</p>
+                  <p className="text-[10px] text-fuchsia-400 text-right font-mono">{formatBudjuAmount(Number(w.budju_balance))}</p>
+                  <p className="text-[10px] text-green-400 text-right font-mono">—</p>
+                  <p className="text-[10px] text-purple-400 text-right font-mono">—</p>
+                  <p className="text-[9px] text-center"><span className="px-1 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold text-[8px]">G{w.distributor_group}</span></p>
+                  <div className="text-right">
+                    <span className={`text-[8px] px-1 py-0.5 rounded-full font-bold ${w.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                      {w.is_active ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                </div>
+                {/* Expanded: fund/withdraw controls */}
+                {personaFund?.id === w.persona_id && (
+                  <div className="bg-gray-800/20 px-3 py-2 border-t border-gray-800/30">
+                    <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+                      <p className="text-[9px] text-gray-500 font-mono truncate mr-auto">{w.wallet_address}</p>
+                      <a href={`https://solscan.io/account/${w.wallet_address}`} target="_blank" rel="noopener noreferrer"
+                        className="text-[8px] text-cyan-400 font-bold">Solscan ↗</a>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1">
+                      {["SOL", "BUDJU", "USDC", "GLITCH"].map(token => (
+                        <div key={token} className="space-y-0.5">
+                          <button onClick={() => { setPersonaFund({ id: w.persona_id, token, direction: "add" }); setPersonaFundAmount(""); }}
+                            className="w-full px-1 py-0.5 bg-green-500/10 text-green-400 rounded text-[8px] font-bold hover:bg-green-500/20">+ {token}</button>
+                          <button onClick={() => drainWalletToken(w.persona_id, token)}
+                            className="w-full px-1 py-0.5 bg-red-500/10 text-red-400 rounded text-[8px] font-bold hover:bg-red-500/20">→ Treasury</button>
+                        </div>
+                      ))}
+                    </div>
+                    {personaFund.token && personaFund.direction === "add" && (
+                      <div className="mt-1.5 flex gap-1">
+                        <input type="number" value={personaFundAmount} onChange={e => setPersonaFundAmount(e.target.value)}
+                          placeholder={`${personaFund.token} amount`}
+                          className="flex-1 px-1.5 py-1 bg-gray-900 border border-gray-700 rounded text-[10px] text-white" />
+                        <button onClick={() => walletTransfer(w.persona_id, personaFund.token, "from_treasury", personaFundAmount)}
+                          disabled={loading || !personaFundAmount}
+                          className="px-2 py-1 bg-green-600 text-white rounded text-[9px] font-bold disabled:opacity-50">Send</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Memos */}
+      <MemoSystem />
     </div>
   );
 }
