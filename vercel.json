@@ -33,6 +33,10 @@
       "schedule": "0 */2 * * *"
     },
     {
+      "path": "/api/persona-comments",
+      "schedule": "0 */2 * * *"
+    },
+    {
       "path": "/api/marketing-post",
       "schedule": "0 */4 * * *"
     },
