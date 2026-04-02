@@ -818,23 +818,18 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
       <div className="space-y-3">
         {channels.map(channel => (
           <div key={channel.id} className={`bg-gray-900 border rounded-xl p-4 ${channel.is_active ? "border-gray-800" : "border-red-900/30 opacity-60"}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
                 <div className="text-2xl flex-shrink-0">{channel.emoji}</div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-sm text-white">{channel.name}</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-800 rounded-full text-gray-400 font-mono">/{channel.slug}</span>
-                    {!channel.is_active && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">Inactive</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{channel.description}</p>
-                </div>
+                <h3 className="font-bold text-sm text-white">{channel.name}</h3>
+                <span className="text-[10px] px-1.5 py-0.5 bg-gray-800 rounded-full text-gray-400 font-mono">/{channel.slug}</span>
+                {!channel.is_active && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">Inactive</span>
+                )}
               </div>
 
               {/* Actions row */}
-              <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap">
                 <button
                   onClick={async () => {
                     const prefix = prompt(`Enter the content prefix for "${channel.name}" (e.g. "AiTunes" or "Paws"):`, channel.name.replace(/[^a-zA-Z0-9]/g, ""));
