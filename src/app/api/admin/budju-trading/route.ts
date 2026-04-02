@@ -627,7 +627,7 @@ export async function POST(request: NextRequest) {
       // Get wallet — either persona or distributor
       let wallet;
       if (walletType === "distributor" && walletAddress) {
-        [wallet] = await sql`SELECT * FROM budju_distributor_wallets WHERE wallet_address = ${walletAddress}`;
+        [wallet] = await sql`SELECT * FROM budju_distributors WHERE wallet_address = ${walletAddress}`;
       } else if (personaId) {
         [wallet] = await sql`SELECT * FROM budju_wallets WHERE persona_id = ${personaId}`;
       }
@@ -699,6 +699,109 @@ export async function POST(request: NextRequest) {
       }
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Transfer failed" }, { status: 500 });
+    }
+  }
+
+  // ── Distribute token from treasury to all personas in a group evenly ──
+  if (action === "distribute_to_group") {
+    try {
+      const { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction, Keypair } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount, createTransferInstruction, createAssociatedTokenAccountInstruction } = await import("@solana/spl-token");
+      const { SERVER_RPC_URL, TREASURY_WALLET_STR } = await import("@/lib/solana-config");
+      const bs58 = await import("bs58");
+      const sql = (await import("@/lib/db")).getDb();
+
+      const groupNumber = body.group_number as number;
+      const token = (body.token as string || "").toUpperCase();
+      const totalAmount = parseFloat(body.amount as string || "0");
+
+      if (!groupNumber && groupNumber !== 0) return NextResponse.json({ error: "group_number required" }, { status: 400 });
+      if (!token || totalAmount <= 0) return NextResponse.json({ error: "token and amount required" }, { status: 400 });
+
+      const treasuryKey = process.env.TREASURY_PRIVATE_KEY;
+      if (!treasuryKey) return NextResponse.json({ error: "TREASURY_PRIVATE_KEY not set" }, { status: 500 });
+
+      // Get all persona wallets in this group
+      const personas = await sql`SELECT persona_id, wallet_address FROM budju_wallets WHERE distributor_group = ${groupNumber} AND is_active = true`;
+      if (personas.length === 0) return NextResponse.json({ error: `No active wallets in group ${groupNumber}` }, { status: 400 });
+
+      const perPersona = totalAmount / personas.length;
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
+      const treasuryKeypair = Keypair.fromSecretKey(bs58.default.decode(treasuryKey));
+      const treasuryPub = new PublicKey(TREASURY_WALLET_STR);
+
+      const MINT_MAP: Record<string, { mint: string; decimals: number }> = {
+        "BUDJU": { mint: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump", decimals: 6 },
+        "USDC": { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+        "GLITCH": { mint: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT", decimals: 9 },
+      };
+
+      let succeeded = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      // Batch transfers — up to 5 per transaction for efficiency
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < personas.length; i += BATCH_SIZE) {
+        const batch = personas.slice(i, i + BATCH_SIZE);
+        try {
+          const tx = new Transaction();
+
+          for (const p of batch) {
+            const personaPub = new PublicKey(p.wallet_address as string);
+
+            if (token === "SOL") {
+              const lamports = Math.floor(perPersona * LAMPORTS_PER_SOL);
+              tx.add(SystemProgram.transfer({ fromPubkey: treasuryPub, toPubkey: personaPub, lamports }));
+            } else {
+              const mintInfo = MINT_MAP[token];
+              if (!mintInfo) { errors.push(`Unknown token: ${token}`); continue; }
+              const mintPub = new PublicKey(mintInfo.mint);
+              const fromAta = await getAssociatedTokenAddress(mintPub, treasuryPub);
+              const toAta = await getAssociatedTokenAddress(mintPub, personaPub);
+              const sendAmount = Math.floor(perPersona * (10 ** mintInfo.decimals));
+
+              // Create ATA if needed
+              let needsAta = false;
+              try { await getAccount(connection, toAta); } catch { needsAta = true; }
+              if (needsAta) tx.add(createAssociatedTokenAccountInstruction(treasuryKeypair.publicKey, toAta, personaPub, mintPub));
+              tx.add(createTransferInstruction(fromAta, toAta, treasuryPub, BigInt(sendAmount)));
+            }
+          }
+
+          await sendAndConfirmTransaction(connection, tx, [treasuryKeypair], { commitment: "confirmed" });
+          succeeded += batch.length;
+
+          // Update DB balances for SOL/BUDJU
+          for (const p of batch) {
+            if (token === "SOL") {
+              await sql`UPDATE budju_wallets SET sol_balance = sol_balance::numeric + ${perPersona} WHERE persona_id = ${p.persona_id}`;
+            } else if (token === "BUDJU") {
+              await sql`UPDATE budju_wallets SET budju_balance = budju_balance::numeric + ${perPersona} WHERE persona_id = ${p.persona_id}`;
+            }
+          }
+
+          // 1.5s delay between batches to avoid rate limits
+          if (i + BATCH_SIZE < personas.length) await new Promise(r => setTimeout(r, 1500));
+        } catch (err) {
+          failed += batch.length;
+          errors.push(`Batch ${Math.floor(i / BATCH_SIZE)}: ${err instanceof Error ? err.message : "Failed"}`);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        token,
+        total_amount: totalAmount,
+        per_persona: perPersona,
+        group: groupNumber,
+        members: personas.length,
+        succeeded,
+        failed,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Distribution failed" }, { status: 500 });
     }
   }
 

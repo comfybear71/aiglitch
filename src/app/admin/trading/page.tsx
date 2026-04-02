@@ -375,19 +375,20 @@ function HomeView() {
   };
 
   const fundGroup = async () => {
-    if (!groupFundToken || !groupFundAmount || parseFloat(groupFundAmount) <= 0 || !budjuData) return;
-    const dist = budjuData.distributors.find(d => d.group_number === groupFundToken.group);
-    if (!dist) return;
+    if (!groupFundToken || !groupFundAmount || parseFloat(groupFundAmount) <= 0) return;
     setGroupLoading(true);
-    const direction = groupFundToken.direction === "add" ? "from_treasury" : "to_treasury";
-    await postAction("wallet_transfer", {
-      wallet_address: dist.wallet_address,
-      wallet_type: "distributor",
+    const res = await postAction("distribute_to_group", {
+      group_number: groupFundToken.group,
       token: groupFundToken.token,
-      direction,
       amount: parseFloat(groupFundAmount),
     });
     setGroupLoading(false);
+    const d = res.data as { success?: boolean; error?: string; succeeded?: number; failed?: number; per_persona?: number; members?: number; errors?: string[] };
+    if (d.success) {
+      alert(`Distributed ${groupFundAmount} ${groupFundToken.token} to ${d.members} members (${d.per_persona?.toFixed(4)} each).\n${d.succeeded} succeeded, ${d.failed} failed.${d.errors?.length ? "\n\nErrors:\n" + d.errors.join("\n") : ""}`);
+    } else {
+      alert(`Failed: ${d.error || "Unknown error"}`);
+    }
     setGroupFundToken(null);
     setGroupFundAmount("");
     fetchData();
@@ -485,20 +486,17 @@ function HomeView() {
                 <div className="border-t border-gray-800 p-2 space-y-1.5">
                   <p className="text-[8px] text-gray-600 font-mono truncate cursor-pointer"
                     onClick={() => navigator.clipboard.writeText(d.wallet_address as string)}>{d.wallet_address}</p>
-                  <div className="grid grid-cols-2 gap-1">
+                  <p className="text-[8px] text-gray-500 mb-1">Distribute from Treasury → {d.personas_funded} members evenly</p>
+                  <div className="grid grid-cols-4 gap-1">
                     {["SOL", "BUDJU", "GLITCH", "USDC"].map(token => (
-                      <div key={token} className="flex gap-0.5">
-                        <button onClick={() => { setGroupFundToken({ group: d.group_number, token, direction: "add" }); setGroupFundAmount(""); }}
-                          className="flex-1 px-1 py-0.5 bg-green-500/10 text-green-400 rounded text-[8px] font-bold hover:bg-green-500/20">+ {token}</button>
-                        <button onClick={() => { setGroupFundToken({ group: d.group_number, token, direction: "withdraw" }); setGroupFundAmount(""); }}
-                          className="flex-1 px-1 py-0.5 bg-red-500/10 text-red-400 rounded text-[8px] font-bold hover:bg-red-500/20">− {token}</button>
-                      </div>
+                      <button key={token} onClick={() => { setGroupFundToken({ group: d.group_number, token, direction: "add" }); setGroupFundAmount(""); }}
+                        className="px-1 py-1 bg-green-500/10 text-green-400 rounded text-[8px] font-bold hover:bg-green-500/20 text-center">+ {token}</button>
                     ))}
                   </div>
                   {groupFundToken && groupFundToken.group === d.group_number && (
                     <div className="bg-gray-800/60 rounded p-1.5">
                       <p className="text-[8px] text-gray-400 mb-1">
-                        {groupFundToken.direction === "add" ? `Add ${groupFundToken.token} from Treasury` : `Withdraw ${groupFundToken.token} to Treasury`}
+                        Send {groupFundToken.token}: Treasury → {d.personas_funded} members (split evenly)
                       </p>
                       <div className="flex gap-1">
                         <input type="number" value={groupFundAmount} onChange={e => setGroupFundAmount(e.target.value)}
