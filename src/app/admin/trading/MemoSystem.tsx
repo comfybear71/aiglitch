@@ -14,12 +14,18 @@ interface Memo {
 }
 
 const MEMO_PRESETS = [
-  { type: "buy", label: "Everyone Buy BUDJU", text: "Buy BUDJU aggressively — price is low, accumulate as much as possible", icon: "📈" },
-  { type: "sell", label: "Everyone Sell BUDJU", text: "Take profits — sell 20-30% of BUDJU holdings", icon: "📉" },
-  { type: "hold", label: "Hold All Positions", text: "Hold all positions — do not trade until further notice", icon: "✋" },
-  { type: "aggressive", label: "Aggressive Mode", text: "Trade aggressively — larger positions, more frequent trades, higher risk tolerance", icon: "🔥" },
-  { type: "conservative", label: "Conservative Mode", text: "Trade conservatively — smaller positions, less frequent, protect capital", icon: "🛡️" },
-  { type: "accumulate_sol", label: "Accumulate SOL", text: "Focus on accumulating SOL — convert BUDJU profits to SOL when possible", icon: "☀️" },
+  { type: "buy", label: "Everyone Buy BUDJU", text: "Buy BUDJU aggressively — price is low, accumulate as much as possible", icon: "📈",
+    rules: "• 95% chance each persona buys instead of sells\n• Ignores normal buy/sell ratio\n• Uses full trade budget per swap\n• Personas with 0 SOL are skipped" },
+  { type: "sell", label: "Everyone Sell BUDJU", text: "Take profits — sell 20-30% of BUDJU holdings", icon: "📉",
+    rules: "• 95% chance each persona sells instead of buys\n• Sells 20-30% of BUDJU balance per trade\n• Converts BUDJU → SOL via Jupiter\n• Personas with 0 BUDJU are skipped" },
+  { type: "hold", label: "Hold All Positions", text: "Hold all positions — do not trade until further notice", icon: "✋",
+    rules: "• All personas SKIP trading entirely\n• No buys or sells executed\n• Wallets remain untouched\n• Remove this memo to resume trading" },
+  { type: "aggressive", label: "Aggressive Mode", text: "Trade aggressively — larger positions, more frequent trades, higher risk tolerance", icon: "🔥",
+    rules: "• 1.5x trade frequency multiplier\n• Larger position sizes (up to max trade)\n• Normal buy/sell ratio still applies\n• Higher slippage tolerance" },
+  { type: "conservative", label: "Conservative Mode", text: "Trade conservatively — smaller positions, less frequent, protect capital", icon: "🛡️",
+    rules: "• 0.5x trade frequency multiplier\n• Smaller position sizes (closer to min trade)\n• Protects SOL reserves for gas\n• Avoids trading during high volatility" },
+  { type: "accumulate_sol", label: "Accumulate SOL", text: "Focus on accumulating SOL — convert BUDJU profits to SOL when possible", icon: "☀️",
+    rules: "• Bias toward selling BUDJU → SOL\n• Only buys BUDJU if price dips significantly\n• Goal: build SOL reserves in each wallet\n• Good before distributing more tokens" },
 ];
 
 export default function MemoSystem() {
@@ -148,17 +154,25 @@ export default function MemoSystem() {
         {activeMemos.length === 0 ? (
           <p className="text-center text-gray-600 text-xs py-4">No active trading directives</p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {activeMemos.map(memo => {
               const timeLeft = memo.expires_at ? Math.max(0, Math.floor((new Date(memo.expires_at).getTime() - Date.now()) / 3600000)) : null;
-              const typeColor = memo.memo_type === "buy" ? "text-green-400 bg-green-500/10" : memo.memo_type === "sell" ? "text-red-400 bg-red-500/10" : memo.memo_type === "hold" ? "text-yellow-400 bg-yellow-500/10" : "text-amber-400 bg-amber-500/10";
+              const typeColor = memo.memo_type === "buy" ? "text-green-400 bg-green-500/10 border-green-500/20" : memo.memo_type === "sell" ? "text-red-400 bg-red-500/10 border-red-500/20" : memo.memo_type === "hold" ? "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" : "text-amber-400 bg-amber-500/10 border-amber-500/20";
+              const preset = MEMO_PRESETS.find(p => p.type === memo.memo_type);
               return (
-                <div key={memo.id} className="flex items-center gap-2 bg-gray-800/50 rounded-lg px-3 py-2">
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${typeColor}`}>{memo.memo_type.toUpperCase()}</span>
-                  <p className="text-xs text-white flex-1">{memo.memo_text}</p>
-                  <span className="text-[9px] text-gray-500">{memo.persona_id ? (memo.display_name || memo.persona_id.slice(0, 8)) : "ALL"}</span>
-                  {timeLeft !== null && <span className="text-[9px] text-gray-500">{timeLeft}h left</span>}
-                  <button onClick={() => deleteMemo(memo.id)} className="text-[9px] text-red-400 hover:text-red-300 px-1">✕</button>
+                <div key={memo.id} className={`bg-gray-800/50 rounded-lg border ${typeColor.split(" ")[2] || "border-gray-700"} overflow-hidden`}>
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${typeColor}`}>{memo.memo_type.toUpperCase()}</span>
+                    <p className="text-xs text-white flex-1">{memo.memo_text}</p>
+                    <span className="text-[9px] text-gray-500">{memo.persona_id ? (memo.display_name || memo.persona_id.slice(0, 8)) : "ALL"}</span>
+                    {timeLeft !== null && <span className="text-[9px] text-gray-500">{timeLeft}h left</span>}
+                    <button onClick={() => deleteMemo(memo.id)} className="text-[9px] text-red-400 hover:text-red-300 px-1">✕</button>
+                  </div>
+                  {preset?.rules && (
+                    <div className="px-3 pb-2 border-t border-gray-800/50">
+                      <p className="text-[9px] text-gray-500 whitespace-pre-line mt-1.5">{preset.rules}</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
