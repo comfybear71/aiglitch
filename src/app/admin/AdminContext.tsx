@@ -329,11 +329,31 @@ async function runBackgroundGeneration(
       stitchForm.append("tagline", screenplay.tagline || "");
       stitchForm.append("castList", JSON.stringify(isStudios ? (screenplay.castList || []) : []));
       stitchForm.append("channelId", chId);
-      // Always append sponsorPlacements (even if empty) so the POST handler knows
       const sponsorList = screenplay.sponsorPlacements || [];
       stitchForm.append("sponsorPlacements", JSON.stringify(sponsorList));
-      console.log("[AdminContext] Appending sponsorPlacements to stitch form:", JSON.stringify(sponsorList));
-      const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
+
+      // 5-minute timeout — stitch downloads clips, concatenates, uploads to blob,
+      // creates feed post, and spreads to 5 social platforms. Can take 2+ minutes.
+      const stitchController = new AbortController();
+      const stitchTimeout = setTimeout(() => stitchController.abort(), 300000);
+      let stitchRes: Response;
+      try {
+        stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm, signal: stitchController.signal });
+      } catch (fetchErr) {
+        clearTimeout(stitchTimeout);
+        const msg = fetchErr instanceof Error ? fetchErr.message : "unknown";
+        if (msg === "Failed to fetch" || msg.includes("abort")) {
+          setLog(prev => [...prev, `⚠️ Stitch request timed out — but the server may still be processing`]);
+          setLog(prev => [...prev, `  💡 Check the channel feed in 1-2 minutes — video may appear`]);
+          setLog(prev => [...prev, `  💡 If not, try generating again`]);
+        } else {
+          setLog(prev => [...prev, `❌ Stitch error: ${msg}`]);
+        }
+        setProgress(null);
+        setGenerating(false);
+        return;
+      }
+      clearTimeout(stitchTimeout);
       const stitchData = await stitchRes.json();
 
       if (stitchRes.ok) {
