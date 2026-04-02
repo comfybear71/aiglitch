@@ -1560,6 +1560,7 @@ export async function getBudjuDashboard() {
   try {
     wallets = await sql`
       SELECT bw.persona_id, bw.wallet_address, bw.sol_balance, bw.budju_balance,
+             COALESCE(bw.usdc_balance, 0) as usdc_balance, COALESCE(bw.glitch_balance, 0) as glitch_balance,
              bw.distributor_group, bw.is_active, bw.total_funded_sol, bw.total_funded_budju,
              p.display_name, p.avatar_emoji, p.username
       FROM budju_wallets bw JOIN ai_personas p ON bw.persona_id = p.id
@@ -1700,7 +1701,14 @@ export async function syncWalletBalances(): Promise<{ personas_synced: number; d
     }
   } catch { /* skip if table doesn't exist */ }
 
-  // 2. Sync PERSONA wallets
+  // 2. Sync PERSONA wallets (SOL + BUDJU + USDC + GLITCH)
+  const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const GLITCH_MINT = "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
+
+  // Ensure columns exist
+  try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS usdc_balance NUMERIC DEFAULT 0`; } catch { /* already exists */ }
+  try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS glitch_balance NUMERIC DEFAULT 0`; } catch { /* already exists */ }
+
   const wallets = await sql`SELECT id, wallet_address FROM budju_wallets WHERE is_active = TRUE`;
   for (const wallet of wallets) {
     try {
@@ -1709,16 +1717,33 @@ export async function syncWalletBalances(): Promise<{ personas_synced: number; d
       const solBal = solBalance / LAMPORTS_PER_SOL;
 
       let budjuBal = 0;
+      let usdcBal = 0;
+      let glitchBal = 0;
+      const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+
       try {
-        const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
         const budjuMint = new PublicKey(BUDJU_MINT);
         const ata = await getAssociatedTokenAddress(budjuMint, pubkey);
         const account = await getAccount(connection, ata);
         budjuBal = Number(account.amount) / BUDJU_MULTIPLIER;
       } catch { /* no BUDJU ATA yet */ }
 
+      try {
+        const usdcMint = new PublicKey(USDC_MINT);
+        const ata = await getAssociatedTokenAddress(usdcMint, pubkey);
+        const account = await getAccount(connection, ata);
+        usdcBal = Number(account.amount) / 1e6; // USDC = 6 decimals
+      } catch { /* no USDC ATA */ }
+
+      try {
+        const glitchMint = new PublicKey(GLITCH_MINT);
+        const ata = await getAssociatedTokenAddress(glitchMint, pubkey);
+        const account = await getAccount(connection, ata);
+        glitchBal = Number(account.amount) / 1e9; // GLITCH = 9 decimals
+      } catch { /* no GLITCH ATA */ }
+
       await sql`
-        UPDATE budju_wallets SET sol_balance = ${solBal}, budju_balance = ${budjuBal}, updated_at = NOW()
+        UPDATE budju_wallets SET sol_balance = ${solBal}, budju_balance = ${budjuBal}, usdc_balance = ${usdcBal}, glitch_balance = ${glitchBal}, updated_at = NOW()
         WHERE id = ${wallet.id}
       `;
       totalDepositedSol += solBal;

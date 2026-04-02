@@ -219,7 +219,7 @@ export interface BudjuDashboard {
   stats_all_time: { total_trades: number; total_volume_usd: number; total_volume_sol: number };
   recent_trades: { id: string; persona_id: string; wallet_address: string; trade_type: string; budju_amount: number; sol_amount: number; price_per_budju: number; usd_value: number; dex_used: string; tx_signature: string | null; strategy: string; commentary: string; status: string; error_message: string | null; created_at: string; display_name: string; avatar_emoji: string; username: string }[];
   leaderboard: { persona_id: string; display_name: string; avatar_emoji: string; username: string; total_trades: number; confirmed_trades: number; total_bought: number; total_sold: number; total_volume_usd: number; strategy: string }[];
-  wallets: { persona_id: string; wallet_address: string; sol_balance: number; budju_balance: number; distributor_group: number; is_active: boolean; total_funded_sol: number; total_funded_budju: number; display_name: string; avatar_emoji: string; username: string }[];
+  wallets: { persona_id: string; wallet_address: string; sol_balance: number; budju_balance: number; usdc_balance: number; glitch_balance: number; distributor_group: number; is_active: boolean; total_funded_sol: number; total_funded_budju: number; display_name: string; avatar_emoji: string; username: string }[];
   distributors: { id: string; group_number: number; wallet_address: string; sol_balance: number; budju_balance: number; personas_funded: number }[];
   price_history: { time: string; open: number; high: number; low: number; close: number; volume: number; trades: number }[];
   treasury_wallet: string;

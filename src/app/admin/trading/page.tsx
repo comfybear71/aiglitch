@@ -436,8 +436,8 @@ function HomeView() {
     return {
       sol: members.reduce((s, w) => s + Number(w.sol_balance), 0),
       budju: members.reduce((s, w) => s + Number(w.budju_balance), 0),
-      usdc: 0, // not tracked per wallet yet
-      glitch: 0, // not tracked per wallet yet
+      usdc: members.reduce((s, w) => s + Number(w.usdc_balance || 0), 0),
+      glitch: members.reduce((s, w) => s + Number(w.glitch_balance || 0), 0),
     };
   }, [budjuData]);
 
@@ -452,6 +452,8 @@ function HomeView() {
     switch (sortBy) {
       case "sol": return (Number(a.sol_balance) - Number(b.sol_balance)) * dir;
       case "budju": return (Number(a.budju_balance) - Number(b.budju_balance)) * dir;
+      case "usdc": return (Number(a.usdc_balance || 0) - Number(b.usdc_balance || 0)) * dir;
+      case "glitch": return (Number(a.glitch_balance || 0) - Number(b.glitch_balance || 0)) * dir;
       case "group": return (a.distributor_group - b.distributor_group) * dir;
       case "status": return ((a.is_active ? 1 : 0) - (b.is_active ? 1 : 0)) * dir;
       default: return a.display_name.localeCompare(b.display_name) * dir;
@@ -560,8 +562,8 @@ function HomeView() {
                   </div>
                   <p className="text-[10px] text-cyan-400 text-right font-mono">{Number(w.sol_balance).toFixed(3)}</p>
                   <p className="text-[10px] text-fuchsia-400 text-right font-mono">{formatBudjuAmount(Number(w.budju_balance))}</p>
-                  <p className="text-[10px] text-green-400 text-right font-mono">—</p>
-                  <p className="text-[10px] text-purple-400 text-right font-mono">—</p>
+                  <p className="text-[10px] text-green-400 text-right font-mono">{Number(w.usdc_balance) > 0 ? Number(w.usdc_balance).toFixed(2) : "—"}</p>
+                  <p className="text-[10px] text-purple-400 text-right font-mono">{Number(w.glitch_balance) > 0 ? formatBudjuAmount(Number(w.glitch_balance)) : "—"}</p>
                   <p className="text-[9px] text-center"><span className="px-1 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold text-[8px]">G{w.distributor_group}</span></p>
                   <div className="text-right">
                     <span className={`text-[8px] px-1 py-0.5 rounded-full font-bold ${w.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
