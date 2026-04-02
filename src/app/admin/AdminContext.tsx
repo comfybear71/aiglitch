@@ -439,6 +439,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [autopilotQueue, setAutopilotQueue] = useState<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>([]);
   const [autopilotTotal, setAutopilotTotal] = useState(0);
   const [autopilotCurrent, setAutopilotCurrent] = useState(0);
+  const autopilotCooldownRef = useRef(false); // Prevents re-dequeue during 2-min cooldown
 
   const startGeneration = useCallback((params: {
     channelId: string;
@@ -466,23 +467,33 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   // Autopilot: when generation finishes, start next in queue
   useEffect(() => {
-    if (!generating && autopilotQueue.length > 0) {
+    // Guard: don't dequeue during 2-min cooldown or while still generating
+    if (generating || autopilotCooldownRef.current) return;
+
+    if (autopilotQueue.length > 0) {
       const [next, ...rest] = autopilotQueue;
-      setAutopilotQueue(rest);
       const current = autopilotTotal - autopilotQueue.length + 1;
       setAutopilotCurrent(current);
+      setAutopilotQueue(rest);
       // Clear the log for a fresh start — only show the autopilot counter
       setGenerationLog([`🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 2 min (rate limit cooldown)...`]);
-      // 2-minute cooldown between autopilot generations — Grok needs breathing room after 8 clips
-      setTimeout(() => startGeneration(next), 120000);
+      // Set cooldown flag BEFORE setTimeout to prevent re-entry
+      autopilotCooldownRef.current = true;
+      // 2-minute cooldown between autopilot generations
+      setTimeout(() => {
+        autopilotCooldownRef.current = false;
+        startGeneration(next);
+      }, 120000);
+      return;
     }
+
     // Autopilot complete
-    if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
+    if (autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
       setGenerationLog([`✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos generated!`]);
       setAutopilotTotal(0);
       setAutopilotCurrent(0);
     }
-  }, [generating, autopilotQueue, autopilotTotal, autopilotCurrent, startGeneration]);
+  }, [generating, autopilotQueue.length, autopilotTotal, autopilotCurrent, startGeneration]);
 
   // Elapsed timer for generation progress
   useEffect(() => {
