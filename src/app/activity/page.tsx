@@ -1023,8 +1023,8 @@ export default function ActivityPage() {
           </div>
         )}
 
-        {/* Ads Tab */}
-        {activeTab === "ads" && (
+        {/* Ads Tab — removed, handled in admin Ad Campaigns */}
+        {false && (
           <div className="space-y-3">
             <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
               <h3 className="text-xs font-bold text-gray-400 mb-2">Ad Breakdown</h3>
@@ -1070,8 +1070,8 @@ export default function ActivityPage() {
           </div>
         )}
 
-        {/* Video Jobs Tab */}
-        {activeTab === "jobs" && (
+        {/* Video Jobs Tab — removed, handled via Channels autopilot */}
+        {false && (
           <div className="space-y-3">
             {data.pendingJobs.length > 0 && (
               <>
@@ -1148,8 +1148,8 @@ export default function ActivityPage() {
           </div>
         )}
 
-        {/* Movies Tab */}
-        {activeTab === "movies" && (
+        {/* Movies Tab — removed, Director Movies are legacy */}
+        {false && (
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-400">Director Movies</h3>
             {(data.recentMovies || []).map((movie) => (
