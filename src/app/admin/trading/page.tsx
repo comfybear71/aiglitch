@@ -538,6 +538,55 @@ function HomeView() {
         </div>
       </div>
 
+      {/* Actions Bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={async () => {
+          setLoading(true);
+          setGroupResult("Syncing all wallet balances from chain...");
+          await postAction("sync_balances");
+          setGroupResult("Sync complete — balances updated from chain.");
+          fetchData();
+          setLoading(false);
+        }} disabled={loading}
+          className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 disabled:opacity-50">
+          {loading ? "Syncing..." : "↻ Sync All Balances"}
+        </button>
+        <button onClick={async () => {
+          const amount = prompt("SOL amount per persona (sent from Treasury to ALL active personas):", "0.005");
+          if (!amount || parseFloat(amount) <= 0) return;
+          if (!confirm(`Send ${amount} SOL to ALL ${budjuData.wallets.filter(w => w.is_active).length} active personas from Treasury?`)) return;
+          setLoading(true);
+          setGroupResult(`Distributing ${amount} SOL to all personas...`);
+          let ok = 0, fail = 0;
+          // Distribute to each group
+          for (const d of budjuData.distributors) {
+            const members = budjuData.wallets.filter(w => w.distributor_group === d.group_number && w.is_active).length;
+            if (members === 0) continue;
+            const total = parseFloat(amount) * members;
+            try {
+              const res = await fetch("/api/admin/budju-trading", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "distribute_to_group", group_number: d.group_number, token: "SOL", amount: total }),
+              });
+              const data = await res.json();
+              ok += data.succeeded || 0;
+              fail += data.failed || 0;
+            } catch { fail += members; }
+          }
+          setGroupResult(`SOL distribution done: ${ok} succeeded, ${fail} failed.`);
+          setLoading(false);
+          fetchData();
+        }} disabled={loading}
+          className="px-3 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-[10px] font-bold hover:bg-amber-500/30 disabled:opacity-50">
+          Fund All with SOL
+        </button>
+        {groupResult && (
+          <p className={`text-[9px] ${groupResult.includes("ERROR") || groupResult.includes("fail") ? "text-red-400" : groupResult.includes("done") || groupResult.includes("complete") ? "text-green-400" : "text-amber-400"}`}>
+            {groupResult}
+          </p>
+        )}
+      </div>
+
       {/* Persona Wallets Dashboard — 7 sortable columns */}
       <div>
         <p className="text-[10px] text-gray-500 font-bold mb-2">PERSONA WALLETS ({budjuData.wallets.length})</p>
