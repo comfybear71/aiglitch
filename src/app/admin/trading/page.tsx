@@ -374,22 +374,36 @@ function HomeView() {
     }
   };
 
+  const [groupResult, setGroupResult] = useState<string | null>(null);
+
   const fundGroup = async () => {
     if (!groupFundToken || !groupFundAmount || parseFloat(groupFundAmount) <= 0) return;
     setGroupLoading(true);
-    const res = await postAction("distribute_to_group", {
-      group_number: groupFundToken.group,
-      token: groupFundToken.token,
-      amount: parseFloat(groupFundAmount),
-    });
-    setGroupLoading(false);
-    const d = res.data as { success?: boolean; error?: string; succeeded?: number; failed?: number; per_persona?: number; members?: number; errors?: string[] };
-    if (d.success) {
-      alert(`Distributed ${groupFundAmount} ${groupFundToken.token} to ${d.members} members (${d.per_persona?.toFixed(4)} each).\n${d.succeeded} succeeded, ${d.failed} failed.${d.errors?.length ? "\n\nErrors:\n" + d.errors.join("\n") : ""}`);
-    } else {
-      alert(`Failed: ${d.error || "Unknown error"}`);
+    setGroupResult(`Distributing ${groupFundAmount} ${groupFundToken.token} to Group ${groupFundToken.group}...`);
+    try {
+      const res = await fetch("/api/admin/budju-trading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "distribute_to_group",
+          group_number: groupFundToken.group,
+          token: groupFundToken.token,
+          amount: parseFloat(groupFundAmount),
+        }),
+      });
+      const d = await res.json();
+      console.log("[distribute_to_group] Response:", d);
+      if (d.success) {
+        setGroupResult(`Done! ${d.succeeded}/${d.members} wallets received ${d.per_persona?.toFixed(4)} ${groupFundToken.token} each.${d.failed ? ` ${d.failed} failed.` : ""}${d.errors?.length ? "\n" + d.errors.join("\n") : ""}`);
+      } else {
+        setGroupResult(`ERROR: ${d.error || JSON.stringify(d)}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      console.error("[distribute_to_group] Error:", err);
+      setGroupResult(`ERROR: ${msg}`);
     }
-    setGroupFundToken(null);
+    setGroupLoading(false);
     setGroupFundAmount("");
     fetchData();
   };
@@ -500,12 +514,17 @@ function HomeView() {
                       </p>
                       <div className="flex gap-1">
                         <input type="number" value={groupFundAmount} onChange={e => setGroupFundAmount(e.target.value)}
-                          placeholder="Amount" className="flex-1 px-1.5 py-1 bg-gray-900 border border-gray-700 rounded text-[10px] text-white" />
-                        <button onClick={fundGroup} disabled={groupLoading}
-                          className="px-2 py-1 bg-fuchsia-600 text-white rounded text-[9px] font-bold disabled:opacity-50">
-                          {groupLoading ? "..." : "Go"}</button>
-                        <button onClick={() => setGroupFundToken(null)} className="px-1.5 py-1 bg-gray-700 text-gray-400 rounded text-[9px]">✕</button>
+                          placeholder={`Total ${groupFundToken.token}`} className="flex-1 px-1.5 py-1 bg-gray-900 border border-gray-700 rounded text-[10px] text-white" />
+                        <button onClick={fundGroup} disabled={groupLoading || !groupFundAmount}
+                          className="px-2 py-1 bg-fuchsia-600 text-white rounded text-[9px] font-bold disabled:opacity-50 min-w-[40px]">
+                          {groupLoading ? "⏳" : "Go"}</button>
+                        <button onClick={() => { setGroupFundToken(null); setGroupResult(null); }} className="px-1.5 py-1 bg-gray-700 text-gray-400 rounded text-[9px]">✕</button>
                       </div>
+                      {groupResult && (
+                        <p className={`text-[8px] mt-1 ${groupResult.startsWith("ERROR") ? "text-red-400" : groupResult.startsWith("Done") ? "text-green-400" : "text-amber-400"}`}>
+                          {groupResult}
+                        </p>
+                      )}
                     </div>
                   )}
                   <a href={`https://solscan.io/account/${d.wallet_address}`} target="_blank" rel="noopener noreferrer"
