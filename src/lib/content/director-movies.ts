@@ -1367,13 +1367,21 @@ export async function stitchAndTriplePost(
     WHERE j.id = ${jobId}
   ` as unknown as {
     id: string; title: string; genre: string; persona_id: string; caption: string;
-    clip_count: number;
+    clip_count: number; status: string; final_video_url: string | null;
     channel_id: string | null; blob_folder: string | null;
     director_id: string; director_username: string; director_movie_id: string;
   }[];
 
   if (jobs.length === 0) return null;
   const job = jobs[0];
+
+  // If job is already done (stitched + posted), don't create another post
+  if (job.status === "done" && job.final_video_url) {
+    console.log(`[stitchAndTriplePost] Job ${jobId} already done — skipping duplicate stitch for "${job.title}"`);
+    const existingPost = await sql`SELECT id FROM posts WHERE media_source = 'director-movie' AND media_url = ${job.final_video_url} LIMIT 1`;
+    const postId = existingPost.length > 0 ? existingPost[0].id as string : jobId;
+    return { feedPostId: postId, premierePostId: postId, profilePostId: postId, spreading: [] };
+  }
 
   // Get all completed scenes in order
   const scenes = await sql`
@@ -1440,10 +1448,17 @@ export async function stitchAndTriplePost(
   const ARCHITECT_ID = "glitch-000";
   const postPersonaId = isChannelJob ? ARCHITECT_ID : job.persona_id;
 
-  // Dedup guard: check if a post was already created for this job (prevents double-post on client retry)
-  const existingPost = await sql`SELECT id FROM posts WHERE media_source = 'director-movie' AND content = ${job.caption} AND created_at > NOW() - INTERVAL '10 minutes' LIMIT 1`;
+  // Dedup guard: check if a post was already created for this job (prevents double-post on stitch retry)
+  const existingPost = await sql`
+    SELECT id FROM posts
+    WHERE media_source = 'director-movie'
+      AND channel_id = ${effectiveChannelId}
+      AND created_at > NOW() - INTERVAL '15 minutes'
+      AND content LIKE ${job.title ? `%${job.title.slice(0, 30)}%` : '%'}
+    LIMIT 1
+  `;
   if (existingPost.length > 0) {
-    console.log(`[stitchAndTriplePost] Duplicate detected — post ${existingPost[0].id} already exists for "${job.title}"`);
+    console.log(`[stitchAndTriplePost] Duplicate detected — post ${existingPost[0].id} already exists for "${job.title}" on ${effectiveChannelId}`);
     return { feedPostId: existingPost[0].id as string, premierePostId: existingPost[0].id as string, profilePostId: existingPost[0].id as string, spreading: [] };
   }
 
