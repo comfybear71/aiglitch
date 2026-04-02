@@ -201,13 +201,21 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
 
       {/* Wallet Table */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[1fr_100px_100px_60px_80px] gap-2 px-3 py-2 text-[9px] text-gray-500 font-bold border-b border-gray-800 bg-gray-900/80 sticky top-0">
-          <span>PERSONA</span>
-          <span className="text-right">SOL</span>
-          <span className="text-right">BUDJU</span>
-          <span className="text-center">GROUP</span>
-          <span className="text-right">STATUS</span>
+        {/* Header — sortable */}
+        <div className="grid grid-cols-[1fr_100px_100px_60px_80px] gap-2 px-3 py-2 text-[9px] font-bold border-b border-gray-800 bg-gray-900/80 sticky top-0">
+          <button onClick={() => setSortBy("name")} className={`text-left hover:text-white ${sortBy === "name" ? "text-amber-400" : "text-gray-500"}`}>
+            PERSONA {sortBy === "name" ? "↑" : ""}
+          </button>
+          <button onClick={() => setSortBy("sol")} className={`text-right hover:text-white ${sortBy === "sol" ? "text-amber-400" : "text-gray-500"}`}>
+            SOL {sortBy === "sol" ? "↓" : ""}
+          </button>
+          <button onClick={() => setSortBy("budju")} className={`text-right hover:text-white ${sortBy === "budju" ? "text-amber-400" : "text-gray-500"}`}>
+            BUDJU {sortBy === "budju" ? "↓" : ""}
+          </button>
+          <button onClick={() => setSortBy("group")} className={`text-center hover:text-white ${sortBy === "group" ? "text-amber-400" : "text-gray-500"}`}>
+            GRP {sortBy === "group" ? "↑" : ""}
+          </button>
+          <span className="text-right text-gray-500">STATUS</span>
         </div>
         {/* Rows */}
         <div className="max-h-[500px] overflow-y-auto divide-y divide-gray-800/50">
@@ -252,8 +260,8 @@ export default function WalletDashboard({ data, onRefresh, postAction }: WalletD
                     {[
                       { token: "SOL", balance: Number(w.sol_balance).toFixed(4), color: "text-cyan-400", bg: "border-cyan-500/20" },
                       { token: "BUDJU", balance: formatBudjuAmount(Number(w.budju_balance)), color: "text-fuchsia-400", bg: "border-fuchsia-500/20" },
-                      { token: "GLITCH", balance: "—", color: "text-yellow-400", bg: "border-yellow-500/20" },
-                      { token: "USDC", balance: "—", color: "text-green-400", bg: "border-green-500/20" },
+                      { token: "GLITCH", balance: Number(w.glitch_balance || 0) > 0 ? formatBudjuAmount(Number(w.glitch_balance)) : "—", color: "text-yellow-400", bg: "border-yellow-500/20" },
+                      { token: "USDC", balance: Number(w.usdc_balance || 0) > 0 ? Number(w.usdc_balance).toFixed(2) : "—", color: "text-green-400", bg: "border-green-500/20" },
                     ].map(({ token, balance, color, bg }) => (
                       <div key={token} className={`bg-gray-900/50 rounded-lg p-2 border ${bg}`}>
                         <div className="flex items-center justify-between mb-1">

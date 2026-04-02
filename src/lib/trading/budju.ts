@@ -384,7 +384,7 @@ async function executeJupiterSwap(
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
         dynamicSlippage: true,
-        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 1000000, priorityLevel: "medium" } },
+        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 100000, priorityLevel: "low" } },
       }),
       signal: AbortSignal.timeout(15000),
     });
