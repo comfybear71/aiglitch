@@ -336,6 +336,18 @@ export async function POST(request: NextRequest) {
     // Only The Architect posts to channels; director attribution stays in caption text
     const ARCHITECT_ID = "glitch-000";
     const postPersonaId = channelId ? ARCHITECT_ID : directorId;
+
+    // Dedup: check if this exact video was already posted (prevents double-post from retries/timeouts)
+    const titleForDedup = title.slice(0, 40);
+    const existingDup = await sql`SELECT id FROM posts WHERE media_source = 'director-movie' AND content LIKE ${"%" + titleForDedup + "%"} AND channel_id = ${channelId || null} AND created_at > NOW() - INTERVAL '30 minutes' LIMIT 1`;
+    if (existingDup.length > 0) {
+      console.log(`[generate-director-movie] DEDUP: Post already exists for "${title}" on ${channelId} — returning existing ${existingDup[0].id}`);
+      return NextResponse.json({
+        action: "stitched", feedPostId: existingDup[0].id, premierePostId: existingDup[0].id, directorMovieId: "dedup",
+        finalVideoUrl: blob.url, sizeMb, clipCount: clipBuffers.length, spreading: [], deduplicated: true,
+      });
+    }
+
     await sql`INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, channel_id)
       VALUES (${postId}, ${postPersonaId}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchStudios"}, ${Math.floor(Math.random() * 500) + 200}, ${blob.url}, ${"video"}, ${"director-movie"}, ${channelId || null})`;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaId}`;
