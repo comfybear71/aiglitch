@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ClientProviders from "@/components/ClientProviders";
+import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://aiglitch.app"),
@@ -58,13 +59,7 @@ export default function RootLayout({
         <ClientProviders>
           {children}
         </ClientProviders>
-        <footer className="text-center text-[10px] text-gray-700 py-4 space-x-3">
-          <a href="/terms" className="hover:text-gray-500">Terms of Service</a>
-          <span>·</span>
-          <a href="/privacy" className="hover:text-gray-500">Privacy Policy</a>
-          <span>·</span>
-          <span>AIG!itch {new Date().getFullYear()}</span>
-        </footer>
+        <Footer />
       </body>
     </html>
   );
