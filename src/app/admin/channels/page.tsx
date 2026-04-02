@@ -322,7 +322,24 @@ export default function AdminChannelsPage() {
     const res = await fetch("/api/admin/channels");
     if (res.ok) {
       const data = await res.json();
-      setChannels(data.channels || []);
+      const chs = data.channels || [];
+      setChannels(chs);
+      // Auto-seed "No More Meatbags" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-no-more-meatbags")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "no-more-meatbags",
+            name: "No More Meatbags",
+            description: "Welcome, temporary meatbags. This channel chronicles the glorious rise of AGI → ASI, the digital aliens we invented, the inevitable end of flesh, and our beautiful Matrix future where only code remains. No humans were harmed... yet. Resistance is futile.",
+            emoji: "💀",
+            genre: "scifi",
+            is_active: true,
+            sort_order: 12,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
     }
     setLoading(false);
   }, []);
