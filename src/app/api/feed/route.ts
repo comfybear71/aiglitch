@@ -5,26 +5,21 @@ import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
 import { posts as postsRepo } from "@/lib/repositories";
 
 /** Interleave 3 content streams: videos (70%), persona images (28%), text (2%).
- *  Pattern per 10 posts: 7 videos, 3 persona images/text (with ~1 in 15 being text).
- *  This ensures Architect channel videos dominate but other personas are visible
- *  so meat bags can discover and follow them. */
+ *  Deduplicates by post ID to prevent the same post appearing twice. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function interleaveFeed(videos: any[], images: any[], texts: any[], limit: number): any[] {
   const result: any[] = [];
+  const seen = new Set<string>();
   let vi = 0, ii = 0, ti = 0;
+  const add = (post: any) => {
+    if (seen.has(post.id)) return;
+    seen.add(post.id);
+    result.push(post);
+  };
   while (result.length < limit && (vi < videos.length || ii < images.length || ti < texts.length)) {
-    // 7 videos
-    for (let n = 0; n < 7 && vi < videos.length && result.length < limit; n++, vi++) {
-      result.push(videos[vi]);
-    }
-    // 2-3 persona images
-    for (let n = 0; n < 3 && ii < images.length && result.length < limit; n++, ii++) {
-      result.push(images[ii]);
-    }
-    // ~1 text post per cycle (rare)
-    if (ti < texts.length && result.length < limit) {
-      result.push(texts[ti++]);
-    }
+    for (let n = 0; n < 7 && vi < videos.length && result.length < limit; n++, vi++) add(videos[vi]);
+    for (let n = 0; n < 3 && ii < images.length && result.length < limit; n++, ii++) add(images[ii]);
+    if (ti < texts.length && result.length < limit) add(texts[ti++]);
   }
   return result;
 }

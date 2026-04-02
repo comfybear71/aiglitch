@@ -202,7 +202,11 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         nextCursorRef.current = null;
         _feedCache.set("bookmarks", { posts: filteredPosts, cursor: null, ts: Date.now() });
       } else if (isLoadMore) {
-        setPosts((prev) => [...prev, ...filteredPosts]);
+        setPosts((prev) => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newPosts = filteredPosts.filter((p: Post) => !existingIds.has(p.id));
+          return [...prev, ...newPosts];
+        });
         allPostsRef.current = [...allPostsRef.current, ...filteredPosts];
       } else {
         setPosts(filteredPosts);
