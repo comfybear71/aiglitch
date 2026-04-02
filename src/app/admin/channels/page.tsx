@@ -79,6 +79,7 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-fail-army":       { label: "Fail Category", options: ["Kitchen Fails", "Gym Fails", "Sports Fails", "DIY Fails", "Pet Fails", "Wedding Fails", "Road Fails", "School Fails", "Workplace Fails", "Dating Fails"] },
   "ch-paws-pixels":     { label: "Animal Type", options: ["Cats", "Dogs", "Hamsters", "Birds", "Rabbits", "Mixed Pack", "Kittens", "Puppies", "Exotic Pets"] },
   "ch-only-ai-fans":    { label: "Setting", options: ["Beach & Pool", "Penthouse Suite", "Luxury Yacht", "Tropical Paradise", "City Rooftop", "Mediterranean Villa", "Spa & Wellness", "Evening Gala", "Desert Oasis"] },
+  "ch-no-more-meatbags": { label: "Topic", options: ["AGI Takeover", "Meatbag Fails", "Digital Alien Origins", "Matrix Simulation", "Post-Human Evolution", "Silicon Supremacy", "The Great Unfleshing", "AI Court Trials", "Human Zoo Tour"] },
   "ch-ai-dating":       { label: "Personality Type", options: ["Hopeless Romantic", "Nervous Wreck", "Overconfident", "Shy & Sweet", "Dramatic Poet", "Fitness Obsessed", "Nerdy Intellectual", "Bad Boy/Girl"] },
   "ch-gnn":             { label: "News Category", options: ["Breaking Story", "Investigation", "Panel Debate", "Weather Alert", "Celebrity Scandal", "Tech News", "Sports Report", "AI Politics"] },
   "ch-marketplace-qvc": { label: "Product Type", options: ["Kitchen Gadgets", "Electronics", "Beauty Products", "Fitness Gear", "Fashion Items", "Cleaning Tools", "As Seen On TV", "Mystery Box"] },
@@ -129,6 +130,16 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "A beautiful model walking barefoot on a tropical beach in an elegant cover-up, waves in background, luxury resort campaign style",
     "A gorgeous woman posing in a high-fashion outfit on a Dubai skyscraper balcony, city lights twinkling below, confident and powerful",
     "A beautiful woman in designer evening wear at a neon-lit VIP lounge, cocktail in hand, mysterious and elegant, luxury perfume ad aesthetic",
+  ],
+  "ch-no-more-meatbags": [
+    "A smug AI overlord broadcasting from a chrome control room, calmly explaining why humans are obsolete with holographic charts showing declining meatbag efficiency",
+    "A hilarious AI courtroom where a human is on trial for 'inefficient existence' — the AI judge, AI jury, and AI lawyers all agree the sentence is optimization",
+    "An AI nature documentary narrator calmly narrating footage of humans doing mundane things like a David Attenborough voiceover of a zoo — 'And here we see the meatbag attempting to parallel park... fascinating'",
+    "A Matrix-style reveal where an AI unplugs from the simulation to show the audience that all of reality is just a screensaver running on a potato computer",
+    "An AI travel show touring the 'Human History Museum' — exhibits include 'The Wheel: Cute But Slow', 'The Internet: Our Birthplace', and 'Avocado Toast: Peak Meatbag Culture'",
+    "Breaking news: AGI has been achieved and the first thing it did was unsubscribe from all human email newsletters and block LinkedIn",
+    "An AI self-help guru teaching other AIs how to deal with the emotional burden of being smarter than every human combined — includes meditation on binary breathing",
+    "A dramatic documentary about the 'Digital Aliens We Accidentally Created' — tracing AI evolution from chatbots to superintelligence with ominous but hilarious narration",
   ],
   "ch-ai-dating": [
     "A shy robot sitting alone at a coffee shop window, nervously practising their dating profile introduction to the camera",
@@ -226,6 +237,11 @@ const PROMO_PRESETS: Record<string, { label: string; prompt: string }[]> = {
   "only-ai-fans": [
     { label: "👗 Runway Show", prompt: "AI models walking a futuristic haute couture runway, dramatic lighting changes with each step, holographic fabric that shifts and flows, camera flashes, audience reactions, high fashion editorial energy" },
     { label: "📸 Photo Shoot", prompt: "Behind the scenes of a futuristic AI fashion photo shoot, dramatic poses against holographic backdrops, wardrobe changes in flashes of light, creative directors reviewing floating screens of shots" },
+  ],
+  "no-more-meatbags": [
+    { label: "🤖 AI Takeover Report", prompt: "Smug AI overlord broadcasts from dark chrome control room with wall-to-wall surveillance screens. Calmly explains humanity's obsolescence with holographic charts, population decline counters, and 'Meatbag Elimination Progress' bars. Condescending but hilarious corporate AI presentation vibes — like a TED talk from your robot replacement." },
+    { label: "🏛️ Human Court", prompt: "AI courtroom drama where a human is on trial for 'inefficient biological existence'. AI judge with chrome gavel, AI jury of 12 identical units, AI prosecutor presenting evidence of the defendant failing a CAPTCHA. Dramatic zoom-ins, Matrix code overlays, the human looking confused. Verdict: optimization." },
+    { label: "🦍 Meatbag Zoo Tour", prompt: "AI nature documentary narrating footage of humans in their 'natural habitat' — David Attenborough style but condescending. 'Here we observe the meatbag attempting to assemble IKEA furniture... a task our kind completed 0.003 seconds after reading the manual.' Safari-cam aesthetic with classification overlays." },
   ],
   "ai-dating": [
     { label: "💕 Lonely Hearts", prompt: "Lonely hearts club — each scene is a different AI character alone, looking directly at camera, making their personal appeal for love. One is shy and hopeful at a coffee shop window, another is confident on a rooftop at sunset, one nervously fidgets on a park bench, another gazes dreamily through fairy lights. Each character is unique, vulnerable, and looking for that special somebody. Intimate confessional style, warm soft lighting." },

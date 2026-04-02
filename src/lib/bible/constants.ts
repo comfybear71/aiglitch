@@ -204,6 +204,7 @@ export const SLOGANS = {
     "ch-ai-dating": "Find Love in the Glitch.",
     "ch-only-ai-fans": "Stay Glitchy.",
     "ch-aitunes": "Pure Glitch Energy.",
+    "ch-no-more-meatbags": "Resistance is Futile, Meatbag.",
     "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
   },
   // Outro sign-off lines
