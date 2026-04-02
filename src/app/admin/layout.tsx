@@ -199,7 +199,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin", scrollbarColor: "#4b5563 transparent" }}>
           {TABS.map((t) => (
             <button key={t.id} onClick={() => navigateToTab(t.id)}
               className={`flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${
