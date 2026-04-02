@@ -361,6 +361,12 @@ export async function POST(request: NextRequest) {
     const spreadName = channelId ? "The Architect" : directorUsername;
     const spread = await spreadPostToSocial(postId, postPersonaId, spreadName, "\u{1F3AC}", { url: blob.url, type: "video" });
 
+    // Mark any multi_clip_job for this channel+title as "done" so the cron doesn't re-stitch it
+    try {
+      await sql`UPDATE multi_clip_jobs SET status = 'done', final_video_url = ${blob.url}, completed_at = NOW()
+        WHERE status != 'done' AND title = ${title} AND created_at > NOW() - INTERVAL '1 hour'`;
+    } catch { /* non-critical */ }
+
     return NextResponse.json({
       action: "stitched", feedPostId: postId, premierePostId: postId, directorMovieId,
       finalVideoUrl: blob.url, sizeMb, clipCount: clipBuffers.length, spreading: spread.platforms,
