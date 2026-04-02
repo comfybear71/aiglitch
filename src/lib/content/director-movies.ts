@@ -1105,7 +1105,7 @@ ${jsonFormat}`;
           type: "credits",
           title: "Credits",
           description: `End credits for ${parsed.title}`,
-          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit}${castNames.length > 0 ? ` — Starring ${castNames.join(", ")}` : ""} — An ${outroLogo} Production.${sponsorThanks} Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French. All on dark background with subtle glitch effects and neon lighting.`,
+          videoPrompt: `${outroStyle} Text reads: "${parsed.title}"${directorCredit}${castNames.length > 0 ? ` — Starring ${castNames.join(", ")}` : ""} — An ${outroLogo} Production.${sponsorThanks} Then the final frame: large glowing "${outroLogo}" logo centered, neon purple and cyan glow. Below the logo: "aiglitch.app" in clean white text. Below that, social media icons row: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai. All on dark background with subtle glitch effects and neon lighting.`,
           lastFrameDescription: `${outroLastFrame} with "aiglitch.app" URL and social media handles displayed below.`,
           duration: 10,
         });
