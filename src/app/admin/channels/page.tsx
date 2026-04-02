@@ -264,6 +264,12 @@ const TITLE_STYLE_PRESETS: { label: string; prompt: string }[] = [
   { label: "💀 Skull Bones", prompt: "Letters constructed from bones and skulls, dark gothic aesthetic, ghostly green glow emanating from eye sockets, eerie fog swirling" },
 ];
 
+// Only AI Fans — Safe vs Spicy prompt modes
+const OAF_PROMPTS = {
+  safe: `Generate stunning, beautiful AI-generated woman with gorgeous symmetrical face, perfect delicate features, warm inviting smile, flawless glowing skin, and elegant confident presence. LOCATIONS: Luxury penthouse suites, rooftop infinity pools at golden hour sunset, Mediterranean cliffside villas, Malibu beach houses, Monaco yachts at dusk, Dubai skyline balconies, tropical waterfalls with soft mist, Santorini white terraces, neon-lit high-end VIP lounges, private jet interiors. STYLING: High-fashion designer swimwear (elegant bikinis and one-pieces), flowing summer dresses, off-shoulder evening gowns, tasteful luxury resort wear, sheer-but-opaque flowing fabrics, stylish accessories like delicate jewelry and designer sunglasses. MOOD: Confident, powerful, magnetic elegance and feminine grace. Every frame feels like a high-end magazine cover. Direct eye contact with camera, soft warm expressions, slow-motion hair flowing in breeze, graceful walking toward camera, gentle turn looking over shoulder, standing at scenic viewpoints. Think ultra-premium Vogue editorial meets luxury perfume commercial (Chanel, Dior, Hermes). VISUAL STYLE (MANDATORY): Cinematic fashion photography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm amber lighting, beautiful backlit silhouettes, soft lens flare through hair, gentle atmospheric mist. Elegant tracking shots, slow push-ins on face, flattering angles, rich color grade with warm highlights and deep elegant shadows. ONE beautiful woman only — consistent face, hair, and body type across all clips. Absolutely no text overlays, no animals, no men, no groups, no cartoons, no anime, no robots. This is high-fashion artistic content, not explicit.`,
+  spicy: `Generate hyper-realistic, breathtakingly beautiful AI-generated woman with flawless symmetrical face, striking perfect features, sultry yet warm expression, radiant flawless skin, and powerfully magnetic presence. LOCATIONS: Opulent luxury penthouses, dramatic rooftop infinity pools at sunset, exclusive Mediterranean villas, sleek Malibu beachfront homes, Monaco superyachts, glittering Dubai skyline balconies, cascading tropical waterfalls, romantic Santorini cliff terraces, seductive neon VIP lounges, luxurious private jet cabins. STYLING: Designer micro and classic bikinis, elegant high-fashion swimwear, sheer flowing chiffon gowns and robes that catch the light, off-shoulder and plunging neckline evening dresses, luxurious resort wear with tasteful cut-outs, wind-blown fabrics, high-end jewelry and accessories. MOOD: Confident, sensual, empowering, and irresistibly alluring. Magazine-cover perfection with intense eye contact, slow-motion hair and fabric movement, graceful confident walk toward camera, elegant over-the-shoulder glances, poised scenic poses that celebrate feminine beauty. Think high-end luxury fashion campaign meets sensual perfume commercial (Victoria's Secret Angels meets Vogue Italia editorial). VISUAL STYLE (MANDATORY): Ultra-premium cinematic fashion cinematography. 120fps slow-motion, extremely shallow depth of field f/1.4, golden hour cinematic lighting with warm amber glows, dramatic backlighting creating beautiful rim light on body and hair, soft lens flares, gentle atmospheric mist and bokeh. Elegant slow tracking shots, intimate face push-ins, flattering low and eye-level angles, rich cinematic color grade with warm highlights, deep shadows, and glowing skin tones. ONE consistent beautiful woman only throughout all clips — same face, same hair, same body proportions. Absolutely no text, no animals, no men, no groups, no cartoons, no anime, no robots, no explicit nudity. This is high-fashion artistic content, not explicit.`,
+};
+
 export default function AdminChannelsPage() {
   const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId, autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent, setAutopilotCurrent } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
@@ -284,6 +290,8 @@ export default function AdminChannelsPage() {
   const [titleStylePrompts, setTitleStylePrompts] = useState<Record<string, string>>({});
   // GNN active topics state
   const [gnnTopics, setGnnTopics] = useState<ActiveTopic[]>([]);
+  // Only AI Fans prompt mode
+  const [oafMode, setOafMode] = useState<"safe" | "spicy">("safe");
   const [gnnSelectedTopics, setGnnSelectedTopics] = useState<string[]>([]);
   const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
   const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
@@ -338,8 +346,12 @@ export default function AdminChannelsPage() {
     // Build screenplayBody for each pick
     const queue = picks.map(ch => {
       const contentRules = ch.content_rules || {};
-      const promptHint = contentRules.promptHint || ch.description || "";
+      let promptHint = contentRules.promptHint || ch.description || "";
       const clipCount = 6;
+      // Only AI Fans: inject safe or spicy prompt based on toggle
+      if (ch.id === "ch-only-ai-fans") {
+        promptHint = OAF_PROMPTS[oafMode as keyof typeof OAF_PROMPTS];
+      }
 
       // Pick a random category from the channel's options
       const options = CHANNEL_VIDEO_OPTIONS[ch.id]?.options || [];
@@ -1025,6 +1037,27 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                   </div>
                 )}
 
+                {/* Only AI Fans: Safe / Spicy toggle */}
+                {channel.id === "ch-only-ai-fans" && (
+                  <div className="mb-2 flex items-center gap-3">
+                    <p className="text-[9px] text-gray-400">Mode:</p>
+                    <button
+                      onClick={() => setOafMode(oafMode === "safe" ? "spicy" : "safe")}
+                      className="flex items-center gap-2 cursor-pointer group"
+                    >
+                      <div className={`relative w-10 h-5 rounded-full transition-colors ${oafMode === "spicy" ? "bg-gradient-to-r from-red-500 to-pink-500" : "bg-green-500"}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${oafMode === "spicy" ? "translate-x-5 left-0.5" : "left-0.5"}`} />
+                      </div>
+                      <span className={`text-[10px] font-bold ${oafMode === "spicy" ? "text-pink-400" : "text-green-400"}`}>
+                        {oafMode === "safe" ? "Safe (Vogue/Chanel)" : "Spicy (VS Angels/Vogue Italia)"}
+                      </span>
+                    </button>
+                    <span className="text-[8px] text-gray-600">
+                      {oafMode === "safe" ? "Safe for IG/TikTok/FB" : "Best for X — more alluring"}
+                    </span>
+                  </div>
+                )}
+
                 {/* Channel-specific options (every channel gets themed selectors) */}
                 {CHANNEL_VIDEO_OPTIONS[channel.id] && (
                   <div className="mb-2">
@@ -1474,8 +1507,12 @@ CRITICAL: No movie credits, no directors, no cast lists. This is a SHOPPING SHOW
                       } else {
                         // All other channels: standard content mode
                         const contentRules = channel.content_rules || {};
-                        const promptHint = contentRules.promptHint || channel.description || "";
+                        let promptHint = contentRules.promptHint || channel.description || "";
                         const clipCount = 6;
+                        // Only AI Fans: inject safe or spicy prompt based on toggle
+                        if (chId === "ch-only-ai-fans") {
+                          promptHint = OAF_PROMPTS[oafMode as keyof typeof OAF_PROMPTS];
+                        }
                         const concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
 Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds each (main content). Scene ${clipCount + 2} is a 10-second channel outro.
 
