@@ -607,13 +607,15 @@ export async function POST(request: NextRequest) {
       const connection = new Connection(SERVER_RPC_URL, "confirmed");
 
       const personaId = body.persona_id as string;
+      const walletType = body.wallet_type as string; // "distributor" or undefined (persona)
+      const walletAddress = body.wallet_address as string;
       const token = (body.token as string || "").toUpperCase();
       const direction = body.direction as string; // "to_treasury" or "from_treasury"
       const amountStr = String(body.amount || "0");
       const isAll = amountStr === "ALL";
 
-      if (!personaId || !token || !direction) {
-        return NextResponse.json({ error: "persona_id, token, direction required" }, { status: 400 });
+      if ((!personaId && !walletAddress) || !token || !direction) {
+        return NextResponse.json({ error: "persona_id (or wallet_address+wallet_type), token, direction required" }, { status: 400 });
       }
 
       const MINT_MAP: Record<string, { mint: string; decimals: number }> = {
@@ -622,8 +624,13 @@ export async function POST(request: NextRequest) {
         "GLITCH": { mint: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT", decimals: 9 },
       };
 
-      // Get persona wallet
-      const [wallet] = await sql`SELECT * FROM budju_wallets WHERE persona_id = ${personaId}`;
+      // Get wallet — either persona or distributor
+      let wallet;
+      if (walletType === "distributor" && walletAddress) {
+        [wallet] = await sql`SELECT * FROM budju_distributor_wallets WHERE wallet_address = ${walletAddress}`;
+      } else if (personaId) {
+        [wallet] = await sql`SELECT * FROM budju_wallets WHERE persona_id = ${personaId}`;
+      }
       if (!wallet) return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
       const personaKeypair = decryptKeypair(wallet.encrypted_keypair as string);
       const personaPub = personaKeypair.publicKey;
@@ -645,14 +652,16 @@ export async function POST(request: NextRequest) {
           if (sendLamports <= 0) return NextResponse.json({ error: "Insufficient SOL" }, { status: 400 });
           const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: personaPub, toPubkey: treasuryPub, lamports: sendLamports }));
           const sig = await sendAndConfirmTransaction(connection, tx, [personaKeypair], { commitment: "confirmed" });
-          await sql`UPDATE budju_wallets SET sol_balance = GREATEST(0, sol_balance::numeric - ${sendLamports / LAMPORTS_PER_SOL}) WHERE persona_id = ${personaId}`;
+          if (personaId) await sql`UPDATE budju_wallets SET sol_balance = GREATEST(0, sol_balance::numeric - ${sendLamports / LAMPORTS_PER_SOL}) WHERE persona_id = ${personaId}`;
+          if (walletType === "distributor" && walletAddress) await sql`UPDATE budju_distributor_wallets SET sol_balance = GREATEST(0, sol_balance::numeric - ${sendLamports / LAMPORTS_PER_SOL}) WHERE wallet_address = ${walletAddress}`;
           return NextResponse.json({ success: true, tx: sig, amount: sendLamports / LAMPORTS_PER_SOL, token: "SOL" });
         } else {
           if (!treasuryKeypair) return NextResponse.json({ error: "No treasury key" }, { status: 500 });
           const sendLamports = Math.floor(parseFloat(amountStr) * LAMPORTS_PER_SOL);
           const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasuryPub, toPubkey: personaPub, lamports: sendLamports }));
           const sig = await sendAndConfirmTransaction(connection, tx, [treasuryKeypair], { commitment: "confirmed" });
-          await sql`UPDATE budju_wallets SET sol_balance = sol_balance::numeric + ${sendLamports / LAMPORTS_PER_SOL} WHERE persona_id = ${personaId}`;
+          if (personaId) await sql`UPDATE budju_wallets SET sol_balance = sol_balance::numeric + ${sendLamports / LAMPORTS_PER_SOL} WHERE persona_id = ${personaId}`;
+          if (walletType === "distributor" && walletAddress) await sql`UPDATE budju_distributor_wallets SET sol_balance = sol_balance::numeric + ${sendLamports / LAMPORTS_PER_SOL} WHERE wallet_address = ${walletAddress}`;
           return NextResponse.json({ success: true, tx: sig, amount: sendLamports / LAMPORTS_PER_SOL, token: "SOL" });
         }
       }
@@ -671,7 +680,7 @@ export async function POST(request: NextRequest) {
         if (sendAmount <= 0) return NextResponse.json({ error: `No ${token} to send` }, { status: 400 });
         const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, personaPub, BigInt(sendAmount)));
         const sig = await sendAndConfirmTransaction(connection, tx, [personaKeypair], { commitment: "confirmed" });
-        if (token === "BUDJU") await sql`UPDATE budju_wallets SET budju_balance = GREATEST(0, budju_balance::numeric - ${sendAmount / (10 ** mintInfo.decimals)}) WHERE persona_id = ${personaId}`;
+        if (token === "BUDJU" && personaId) await sql`UPDATE budju_wallets SET budju_balance = GREATEST(0, budju_balance::numeric - ${sendAmount / (10 ** mintInfo.decimals)}) WHERE persona_id = ${personaId}`;
         return NextResponse.json({ success: true, tx: sig, amount: sendAmount / (10 ** mintInfo.decimals), token });
       } else {
         if (!treasuryKeypair) return NextResponse.json({ error: "No treasury key" }, { status: 500 });
@@ -685,7 +694,7 @@ export async function POST(request: NextRequest) {
         if (needsAta) tx.add(createAssociatedTokenAccountInstruction(treasuryKeypair.publicKey, toAta, personaPub, mintPub));
         tx.add(createTransferInstruction(fromAta, toAta, treasuryPub, BigInt(sendAmount)));
         const sig = await sendAndConfirmTransaction(connection, tx, [treasuryKeypair], { commitment: "confirmed" });
-        if (token === "BUDJU") await sql`UPDATE budju_wallets SET budju_balance = budju_balance::numeric + ${sendAmount / (10 ** mintInfo.decimals)} WHERE persona_id = ${personaId}`;
+        if (token === "BUDJU" && personaId) await sql`UPDATE budju_wallets SET budju_balance = budju_balance::numeric + ${sendAmount / (10 ** mintInfo.decimals)} WHERE persona_id = ${personaId}`;
         return NextResponse.json({ success: true, tx: sig, amount: sendAmount / (10 ** mintInfo.decimals), token });
       }
     } catch (err) {

@@ -344,6 +344,8 @@ function HomeView() {
   const [groupFundToken, setGroupFundToken] = useState<{ group: number; token: string; direction: "add" | "withdraw" } | null>(null);
   const [groupFundAmount, setGroupFundAmount] = useState("");
   const [groupLoading, setGroupLoading] = useState(false);
+  const [sortBy, setSortBy] = useState<"name" | "sol" | "budju" | "usdc" | "glitch" | "group" | "status">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -412,9 +414,44 @@ function HomeView() {
   const [personaFund, setPersonaFund] = useState<{ id: string; token: string; direction: "add" | "withdraw" } | null>(null);
   const [personaFundAmount, setPersonaFundAmount] = useState("");
 
+  // Compute group totals from member persona wallets
+  const groupTotals = useCallback((groupNum: number) => {
+    if (!budjuData) return { sol: 0, budju: 0, usdc: 0, glitch: 0 };
+    const members = budjuData.wallets.filter(w => w.distributor_group === groupNum);
+    return {
+      sol: members.reduce((s, w) => s + Number(w.sol_balance), 0),
+      budju: members.reduce((s, w) => s + Number(w.budju_balance), 0),
+      usdc: 0, // not tracked per wallet yet
+      glitch: 0, // not tracked per wallet yet
+    };
+  }, [budjuData]);
+
+  // Sort personas
+  const toggleSort = (col: typeof sortBy) => {
+    if (sortBy === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortBy(col); setSortDir("asc"); }
+  };
+
+  const sortedWallets = budjuData ? [...budjuData.wallets].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortBy) {
+      case "sol": return (Number(a.sol_balance) - Number(b.sol_balance)) * dir;
+      case "budju": return (Number(a.budju_balance) - Number(b.budju_balance)) * dir;
+      case "group": return (a.distributor_group - b.distributor_group) * dir;
+      case "status": return ((a.is_active ? 1 : 0) - (b.is_active ? 1 : 0)) * dir;
+      default: return a.display_name.localeCompare(b.display_name) * dir;
+    }
+  }) : [];
+
   if (!budjuData) {
     return <div className="text-center py-8 text-gray-500 text-sm animate-pulse">Loading trading data...</div>;
   }
+
+  const SortHeader = ({ col, label, className }: { col: typeof sortBy; label: string; className?: string }) => (
+    <button onClick={() => toggleSort(col)} className={`font-bold hover:text-white transition-colors ${sortBy === col ? "text-amber-400" : "text-gray-500"} ${className || ""}`}>
+      {label} {sortBy === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
+    </button>
+  );
 
   return (
     <div className="space-y-4">
@@ -427,7 +464,9 @@ function HomeView() {
           </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {budjuData.distributors.map((d) => (
+          {budjuData.distributors.map((d) => {
+            const totals = groupTotals(d.group_number);
+            return (
             <div key={d.id} className={`bg-gray-900 rounded-lg overflow-hidden border ${expandedGroup === d.group_number ? "border-amber-500/40" : "border-gray-800"}`}>
               <button onClick={() => setExpandedGroup(expandedGroup === d.group_number ? null : d.group_number)}
                 className="w-full p-2 text-left hover:bg-gray-800/50 transition-colors">
@@ -435,9 +474,11 @@ function HomeView() {
                   <p className="text-[10px] font-bold text-amber-400">Group {d.group_number}</p>
                   <span className="text-[9px] text-gray-500">{d.personas_funded}p</span>
                 </div>
-                <div className="grid grid-cols-2 gap-1 text-[9px]">
-                  <span className="text-cyan-400">{Number(d.sol_balance).toFixed(3)} SOL</span>
-                  <span className="text-fuchsia-400">{formatBudjuAmount(Number(d.budju_balance || 0))} BUDJU</span>
+                <div className="grid grid-cols-2 gap-0.5 text-[8px]">
+                  <span className="text-cyan-400">{totals.sol.toFixed(3)} SOL</span>
+                  <span className="text-fuchsia-400">{formatBudjuAmount(totals.budju)} BUDJU</span>
+                  <span className="text-green-400">{totals.usdc.toFixed(2)} USDC</span>
+                  <span className="text-purple-400">{formatBudjuAmount(totals.glitch)} GLITCH</span>
                 </div>
               </button>
               {expandedGroup === d.group_number && (
@@ -474,25 +515,25 @@ function HomeView() {
                 </div>
               )}
             </div>
-          ))}
+          );})}
         </div>
       </div>
 
-      {/* Persona Wallets Dashboard — 7 columns */}
+      {/* Persona Wallets Dashboard — 7 sortable columns */}
       <div>
         <p className="text-[10px] text-gray-500 font-bold mb-2">PERSONA WALLETS ({budjuData.wallets.length})</p>
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="grid grid-cols-[1fr_65px_65px_50px_50px_35px_50px] gap-1 px-2 py-1.5 text-[8px] text-gray-500 font-bold border-b border-gray-800 sticky top-0 bg-gray-900">
-            <span>PERSONA</span>
-            <span className="text-right">SOL</span>
-            <span className="text-right">BUDJU</span>
-            <span className="text-right">USDC</span>
-            <span className="text-right">GLITCH</span>
-            <span className="text-center">GRP</span>
-            <span className="text-right">STATUS</span>
+          <div className="grid grid-cols-[1fr_65px_65px_50px_50px_35px_50px] gap-1 px-2 py-1.5 text-[8px] border-b border-gray-800 sticky top-0 bg-gray-900">
+            <SortHeader col="name" label="PERSONA" />
+            <SortHeader col="sol" label="SOL" className="text-right" />
+            <SortHeader col="budju" label="BUDJU" className="text-right" />
+            <SortHeader col="usdc" label="USDC" className="text-right" />
+            <SortHeader col="glitch" label="GLITCH" className="text-right" />
+            <SortHeader col="group" label="GRP" className="text-center" />
+            <SortHeader col="status" label="STATUS" className="text-right" />
           </div>
           <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-800/30">
-            {budjuData.wallets.map(w => (
+            {sortedWallets.map(w => (
               <div key={w.persona_id}>
                 <div className={`grid grid-cols-[1fr_65px_65px_50px_50px_35px_50px] gap-1 items-center px-2 py-1.5 hover:bg-gray-800/30 cursor-pointer ${!w.is_active ? "opacity-40" : ""}`}
                   onClick={() => setPersonaFund(personaFund?.id === w.persona_id ? null : { id: w.persona_id, token: "", direction: "add" })}>

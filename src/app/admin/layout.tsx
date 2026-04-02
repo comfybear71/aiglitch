@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AdminProvider, useAdmin } from "./AdminContext";
 import { TABS, type Tab } from "./admin-types";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,9 +14,18 @@ function AdminShell({ children }: { children: React.ReactNode }) {
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
 
   const pathname = usePathname();
   const router = useRouter();
+
+  // Auto-authenticate if admin cookie is still valid (avoids re-entering password on refresh)
+  useEffect(() => {
+    fetch("/api/admin/stats").then(res => {
+      if (res.ok) setAuthenticated(true);
+      setAuthChecking(false);
+    }).catch(() => setAuthChecking(false));
+  }, [setAuthenticated]);
 
   // Derive active tab from pathname
   const pathSegment = pathname.split("/admin/")[1]?.split("/")[0] || "";
@@ -43,6 +52,14 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       router.push(`/admin/${tabId}`);
     }
   };
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-gray-500 text-sm animate-pulse">Checking session...</div>
+      </div>
+    );
+  }
 
   if (!authenticated) {
     return (
