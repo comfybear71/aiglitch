@@ -289,7 +289,7 @@ export default function TradingPage() {
       </div>
 
       {/* Top Row: Admin Wallet | Treasury Wallet | GLITCH Trading | BUDJU Trading */}
-      <div className="flex flex-wrap gap-2 items-start">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-stretch">
         <WalletCard label="ADMIN" balances={adminBalances} loading={walletLoading} gradient="border-purple-500/30" onRefresh={fetchBalances} />
         <WalletCard label="TREASURY" balances={treasuryBalances} loading={walletLoading} gradient="border-amber-500/30" onRefresh={fetchBalances} />
         <button

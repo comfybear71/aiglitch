@@ -135,6 +135,10 @@ async function ensureBudjuTables(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    // Add USDC + GLITCH columns if missing
+    try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS usdc_balance REAL NOT NULL DEFAULT 0`; } catch { /* already exists */ }
+    try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS glitch_balance REAL NOT NULL DEFAULT 0`; } catch { /* already exists */ }
+
     _budjuTablesReady = true;
   } catch (e) {
     console.error("[BUDJU] Table creation failed:", e);
@@ -1704,10 +1708,6 @@ export async function syncWalletBalances(): Promise<{ personas_synced: number; d
   // 2. Sync PERSONA wallets (SOL + BUDJU + USDC + GLITCH)
   const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const GLITCH_MINT = "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
-
-  // Ensure columns exist
-  try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS usdc_balance NUMERIC DEFAULT 0`; } catch { /* already exists */ }
-  try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS glitch_balance NUMERIC DEFAULT 0`; } catch { /* already exists */ }
 
   const wallets = await sql`SELECT id, wallet_address FROM budju_wallets WHERE is_active = TRUE`;
   for (const wallet of wallets) {
