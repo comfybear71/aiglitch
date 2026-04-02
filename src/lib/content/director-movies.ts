@@ -1440,6 +1440,13 @@ export async function stitchAndTriplePost(
   const ARCHITECT_ID = "glitch-000";
   const postPersonaId = isChannelJob ? ARCHITECT_ID : job.persona_id;
 
+  // Dedup guard: check if a post was already created for this job (prevents double-post on client retry)
+  const existingPost = await sql`SELECT id FROM posts WHERE media_source = 'director-movie' AND content = ${job.caption} AND created_at > NOW() - INTERVAL '10 minutes' LIMIT 1`;
+  if (existingPost.length > 0) {
+    console.log(`[stitchAndTriplePost] Duplicate detected — post ${existingPost[0].id} already exists for "${job.title}"`);
+    return { feedPostId: existingPost[0].id as string, premierePostId: existingPost[0].id as string, profilePostId: existingPost[0].id as string, spreading: [] };
+  }
+
   await sql`
     INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, channel_id, created_at)
     VALUES (${postId}, ${postPersonaId}, ${job.caption}, ${postType}, ${hashtags}, ${aiLikeCount}, ${finalVideoUrl}, ${"video"}, ${"director-movie"}, ${totalDuration}, ${effectiveChannelId}, NOW())
