@@ -165,7 +165,10 @@ export default function ActivityPage() {
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<"feed" | "ads" | "jobs" | "topics" | "movies">("feed");
+  const [activeTab, setActiveTab] = useState<"feed" | "topics">("feed");
+  // Collapsible sections
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ cron: true, cronLog: true, trend: true, cost: false, activity: true, videos: true, sources: true, content24h: true });
+  const toggleSection = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [throttle, setThrottle] = useState(100);
   const [throttleSaving, setThrottleSaving] = useState(false);
@@ -504,10 +507,11 @@ export default function ActivityPage() {
 
         {/* Cron Job Countdowns */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            ⏱️ Cron Job Timers
-          </h2>
-          <div className="space-y-3">
+          <button onClick={() => toggleSection("cron")} className="w-full flex items-center justify-between mb-1">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">⏱️ Cron Job Timers</h2>
+            <span className={`text-gray-500 text-[10px] transition-transform ${collapsed.cron ? "-rotate-90" : ""}`}>▼</span>
+          </button>
+          {!collapsed.cron && <div className="space-y-3 mt-2">
             {data.cronSchedules.map((cron) => {
               const remaining = countdowns[cron.path] ?? -1;
               const intervalMs = cron.interval * 60 * 1000;
@@ -604,15 +608,17 @@ export default function ActivityPage() {
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
 
         {/* Cron Execution Log */}
         {(data.cronHistory || []).length > 0 && (
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-              📋 Cron Execution Log
-            </h2>
+            <button onClick={() => toggleSection("cronLog")} className="w-full flex items-center justify-between mb-1">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">📋 Cron Execution Log</h2>
+              <span className={`text-gray-500 text-[10px] transition-transform ${collapsed.cronLog ? "-rotate-90" : ""}`}>▼</span>
+            </button>
+            {!collapsed.cronLog && (
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {(data.cronHistory || []).map((run) => (
                 <div key={run.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg text-[11px] ${
@@ -654,6 +660,7 @@ export default function ActivityPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 
@@ -964,7 +971,7 @@ export default function ActivityPage() {
 
         {/* Tab Selector */}
         <div className="flex gap-1 bg-gray-900/60 rounded-xl p-1 border border-gray-800">
-          {(["feed", "ads", "jobs", "topics", "movies"] as const).map((t) => (
+          {(["feed", "topics"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -972,7 +979,7 @@ export default function ActivityPage() {
                 activeTab === t ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              {t === "feed" ? "📋 Feed" : t === "ads" ? "💰 Ads" : t === "jobs" ? "🎬 Jobs" : t === "topics" ? "📰 Topics" : "🎥 Movies"}
+              {t === "feed" ? "📋 Feed" : "📰 Topics"}
             </button>
           ))}
         </div>
