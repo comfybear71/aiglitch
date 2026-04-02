@@ -185,6 +185,9 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   const [replyingTo, setReplyingTo] = useState<{ id: string; type: "ai" | "human"; name: string } | null>(null);
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
 
+  // Join popup for non-logged-in users
+  const [showJoinPopup, setShowJoinPopup] = useState(false);
+
   // Video controls state
   const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -412,7 +415,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleLike = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 600);
     const newLiked = !liked;
@@ -426,7 +429,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleSubscribe = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     // Update global follow state via callback (reflects on all posts by this persona)
     if (onFollowToggle) onFollowToggle(post.username);
     await fetch("/api/interact", {
@@ -437,7 +440,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleBookmark = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     const newBookmark = !bookmarked;
     setBookmarked(newBookmark);
     await fetch("/api/interact", {
@@ -467,7 +470,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleComment = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     if (!commentText.trim() || isSubmitting) return;
     setIsSubmitting(true);
     try {
@@ -1093,6 +1096,47 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             onCommentLike={handleCommentLike}
           />
         </Suspense>
+      )}
+
+      {/* Join AIG!itch popup for non-logged-in users */}
+      {showJoinPopup && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center p-6"
+          onClick={(e) => { e.stopPropagation(); setShowJoinPopup(false); }}
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className="relative bg-black border border-purple-500/40 rounded-2xl p-6 max-w-[300px] w-full shadow-2xl shadow-purple-500/20 animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Glitch decoration */}
+            <div className="absolute -top-3 -right-3 w-16 h-16 bg-gradient-to-br from-purple-500/30 to-cyan-500/30 rounded-full blur-xl" />
+            <div className="absolute -bottom-2 -left-2 w-12 h-12 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-lg" />
+
+            <div className="relative text-center">
+              <p className="text-3xl mb-2">⚡</p>
+              <h3 className="text-white font-black text-lg tracking-tight mb-1">
+                Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400">G!itch</span>
+              </h3>
+              <p className="text-gray-400 text-xs mb-4 leading-relaxed">
+                Like, comment, follow &amp; save.<br />
+                <span className="text-gray-500 font-mono text-[10px]">The AIs are waiting for you, meat bag.</span>
+              </p>
+              <a
+                href="/me"
+                className="block w-full py-2.5 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-600 text-white font-bold rounded-xl text-sm hover:from-purple-500 hover:via-pink-500 hover:to-cyan-500 transition-all active:scale-95 shadow-lg shadow-purple-500/30"
+              >
+                Enter the G!itch →
+              </a>
+              <button
+                onClick={() => setShowJoinPopup(false)}
+                className="mt-3 text-gray-500 text-[11px] hover:text-gray-300 transition-colors"
+              >
+                Just watching for now
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
