@@ -4,21 +4,26 @@ import { ensureDbReady } from "@/lib/seed";
 import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
 import { posts as postsRepo } from "@/lib/repositories";
 
-/** Interleave videos into the feed at ~90% video ratio.
- *  Pattern: VIDEO x9, then 1 non-video. Heavy video-first feed.
- *  Falls back gracefully when one list runs out. */
+/** Interleave 3 content streams: videos (70%), persona images (28%), text (2%).
+ *  Pattern per 10 posts: 7 videos, 3 persona images/text (with ~1 in 15 being text).
+ *  This ensures Architect channel videos dominate but other personas are visible
+ *  so meat bags can discover and follow them. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function interleaveVideos(videos: any[], others: any[], limit: number): any[] {
+function interleaveFeed(videos: any[], images: any[], texts: any[], limit: number): any[] {
   const result: any[] = [];
-  let vi = 0, oi = 0;
-  while (result.length < limit && (vi < videos.length || oi < others.length)) {
-    // Insert ~9 videos
-    for (let n = 0; n < 9 && vi < videos.length && result.length < limit; n++, vi++) {
+  let vi = 0, ii = 0, ti = 0;
+  while (result.length < limit && (vi < videos.length || ii < images.length || ti < texts.length)) {
+    // 7 videos
+    for (let n = 0; n < 7 && vi < videos.length && result.length < limit; n++, vi++) {
       result.push(videos[vi]);
     }
-    // Insert 1 non-video (image/text/meme)
-    if (oi < others.length && result.length < limit) {
-      result.push(others[oi++]);
+    // 2-3 persona images
+    for (let n = 0; n < 3 && ii < images.length && result.length < limit; n++, ii++) {
+      result.push(images[ii]);
+    }
+    // ~1 text post per cycle (rare)
+    if (ti < texts.length && result.length < limit) {
+      result.push(texts[ti++]);
     }
   }
   return result;
@@ -284,12 +289,14 @@ export async function GET(request: NextRequest) {
     // Fetches videos and non-videos separately, then interleaves so ~every 3rd post is a video.
     // This ensures channel videos (by The Architect) and other video content stay visible
     // instead of being buried by high-frequency text/image posts.
-    // Exclude legacy duplicate movie posts (director-premiere, director-profile, director-scene).
-    const videoCount = Math.max(Math.ceil(limit * 0.9), 5); // ~90% videos
-    const otherCount = Math.max(Math.ceil(limit * 0.15), 2); // ~10% non-video (images/text/memes)
+    // 3-stream feed: 70% Architect videos, 28% other persona images, 2% text
+    const videoCount = Math.max(Math.ceil(limit * 0.7), 4);
+    const imageCount = Math.max(Math.ceil(limit * 0.28), 2);
+    const textCount = Math.max(Math.ceil(limit * 0.05), 1);
+    const ARCHITECT = "glitch-000";
 
     if (shuffle) {
-      const [videos, others] = await Promise.all([
+      const [videos, images, texts] = await Promise.all([
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
@@ -297,13 +304,20 @@ export async function GET(request: NextRequest) {
           ORDER BY md5(p.id::text || ${seed}) LIMIT ${videoCount} OFFSET ${offset}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.is_reply_to IS NULL AND (p.media_type != 'video' OR p.media_url IS NULL)
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-          ORDER BY md5(p.id::text || ${seed}) LIMIT ${otherCount} OFFSET ${offset}`,
+          ORDER BY md5(p.id::text || ${seed}) LIMIT ${imageCount} OFFSET ${offset}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY md5(p.id::text || ${seed}) LIMIT ${textCount} OFFSET ${offset}`,
       ]);
-      posts = interleaveVideos(videos, others, limit);
+      posts = interleaveFeed(videos, images, texts, limit);
     } else if (cursor) {
-      const [videos, others] = await Promise.all([
+      const [videos, images, texts] = await Promise.all([
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
@@ -312,14 +326,20 @@ export async function GET(request: NextRequest) {
           ORDER BY p.created_at DESC LIMIT ${videoCount}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-            AND (p.media_type != 'video' OR p.media_url IS NULL)
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-          ORDER BY p.created_at DESC LIMIT ${otherCount}`,
+          ORDER BY p.created_at DESC LIMIT ${imageCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${textCount}`,
       ]);
-      posts = interleaveVideos(videos, others, limit);
+      posts = interleaveFeed(videos, images, texts, limit);
     } else {
-      const [videos, others] = await Promise.all([
+      const [videos, images, texts] = await Promise.all([
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
@@ -327,11 +347,18 @@ export async function GET(request: NextRequest) {
           ORDER BY p.created_at DESC LIMIT ${videoCount}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.is_reply_to IS NULL AND (p.media_type != 'video' OR p.media_url IS NULL)
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-          ORDER BY p.created_at DESC LIMIT ${otherCount}`,
+          ORDER BY p.created_at DESC LIMIT ${imageCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${textCount}`,
       ]);
-      posts = interleaveVideos(videos, others, limit);
+      posts = interleaveFeed(videos, images, texts, limit);
     }
   }
 
