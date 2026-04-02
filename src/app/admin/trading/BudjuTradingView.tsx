@@ -9,7 +9,7 @@ import MemoSystem from "./MemoSystem";
 export default function BudjuTradingView() {
   const { authenticated } = useAdmin();
   const [data, setData] = useState<BudjuDashboard | null>(null);
-  const [view, setView] = useState<"dashboard" | "trades" | "leaderboard" | "wallets" | "distribute" | "memos" | "config">("dashboard");
+  const [view, setView] = useState<"dashboard" | "trades" | "leaderboard" | "wallets" | "memos" | "config">("dashboard");
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -195,7 +195,10 @@ export default function BudjuTradingView() {
               className="px-3 py-1.5 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
               {loading ? "..." : "Manual 5 Trades"}
             </button>
-            <button onClick={fetchData} className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30">Refresh</button>
+            <button onClick={async () => { setLoading(true); await fetchData(); setLoading(false); }} disabled={loading}
+              className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/30 disabled:opacity-50">
+              {loading ? "Refreshing..." : "↻ Refresh"}
+            </button>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3">
@@ -236,10 +239,10 @@ export default function BudjuTradingView() {
 
       {/* Sub-tabs */}
       <div className="flex gap-1.5">
-        {(["dashboard", "trades", "leaderboard", "wallets", "distribute", "memos", "config"] as const).map(v => (
+        {(["dashboard", "trades", "leaderboard", "wallets", "memos", "config"] as const).map(v => (
           <button key={v} onClick={() => setView(v)}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-900 text-gray-500 border border-gray-800 hover:bg-gray-800"}`}>
-            {v === "dashboard" ? "Dashboard" : v === "trades" ? "Trades" : v === "leaderboard" ? "Leaderboard" : v === "wallets" ? "Wallets" : v === "distribute" ? "Distribute" : v === "memos" ? "Memos" : "Config"}
+            {v === "dashboard" ? "Dashboard" : v === "trades" ? "Trades" : v === "leaderboard" ? "Leaderboard" : v === "wallets" ? "Wallets" : v === "memos" ? "Memos" : "Config"}
           </button>
         ))}
       </div>
@@ -379,97 +382,13 @@ export default function BudjuTradingView() {
 
       {/* WALLETS VIEW */}
       {view === "wallets" && (
-        <div className="bg-gray-900 border border-fuchsia-500/30 rounded-xl p-4">
-          <h3 className="text-sm font-bold text-fuchsia-400 mb-3">Wallet Management</h3>
-          {/* Total */}
-          <div className="bg-gray-800/50 rounded-lg p-3 mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] text-gray-500 font-bold">TOTAL SOL IN SYSTEM</p>
-              <p className="text-lg font-bold text-cyan-400">{totalSol.toFixed(4)} SOL</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] text-gray-500 font-bold">TOTAL BUDJU</p>
-              <p className="text-lg font-bold text-fuchsia-400">{formatBudjuAmount(totalBudju)}</p>
-            </div>
-          </div>
-          {/* Actions */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
-            <button onClick={generateWallets} disabled={loading} className="px-2 py-2 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
-              {loading ? "..." : "Generate Wallets"}
-            </button>
-            <button onClick={syncBalances} disabled={loading} className="px-2 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50">
-              {loading ? "..." : "Sync Balances"}
-            </button>
-            <button onClick={drainWallets} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
-              Drain Wallets
-            </button>
-            <button onClick={exportKeys} disabled={loading} className="px-2 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
-              Export Keys
-            </button>
-          </div>
-          {/* Distributors */}
-          {data.distributors.length > 0 && (
-            <div className="mb-4">
-              <p className="text-[10px] text-gray-500 font-bold mb-1">DISTRIBUTOR WALLETS ({data.distributors.length} groups — Treasury → Distributors → Personas)</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {data.distributors.map((d) => (
-                  <div key={d.id} className="bg-gray-800/50 rounded-lg p-2">
-                    <p className="text-[10px] font-bold text-amber-400">Group {d.group_number}</p>
-                    <p className="text-[9px] text-gray-500 font-mono truncate cursor-pointer"
-                      onClick={() => navigator.clipboard.writeText(d.wallet_address as string)}
-                      title="Click to copy">{d.wallet_address}</p>
-                    <p className="text-[10px] text-gray-400 mt-1">{d.personas_funded} personas | {Number(d.sol_balance).toFixed(4)} SOL</p>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[9px] text-gray-600 mt-2">1. Send SOL to each group → 2. Click &quot;Distribute Funds&quot; → 3. SOL splits to persona wallets</p>
-            </div>
-          )}
-          {/* Persona wallets */}
-          <p className="text-[10px] text-gray-500 font-bold mb-1">PERSONA WALLETS ({data.wallets.length} total)</p>
-          {data.wallets.length === 0 ? (
-            <p className="text-center text-gray-600 text-sm py-4">No wallets generated yet.</p>
-          ) : (
-            <div className="space-y-1 max-h-80 overflow-y-auto">
-              {data.wallets.map((w) => (
-                <div key={w.persona_id} className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${w.is_active ? "bg-gray-800/30" : "bg-gray-800/10 opacity-50"}`}>
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span>{w.avatar_emoji}</span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate">{w.display_name}</p>
-                      <p className="text-[9px] text-gray-500 font-mono truncate">{w.wallet_address}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right">
-                      <p className="text-[10px] text-cyan-400">{Number(w.sol_balance).toFixed(4)} SOL</p>
-                      <p className="text-[10px] text-fuchsia-400">{formatBudjuAmount(Number(w.budju_balance))} BUDJU</p>
-                    </div>
-                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${w.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-                      G{w.distributor_group}
-                    </span>
-                    <button onClick={() => toggleWallet(w.persona_id, w.is_active)}
-                      className={`text-[10px] px-2 py-1 rounded font-bold ${w.is_active ? "text-red-400 hover:bg-red-500/20" : "text-green-400 hover:bg-green-500/20"}`}>
-                      {w.is_active ? "Pause" : "Resume"}
-                    </button>
-                    <button onClick={() => deleteWallet(w.persona_id, w.display_name)}
-                      className="text-[10px] px-2 py-1 rounded font-bold text-gray-500 hover:text-red-400 hover:bg-red-500/10">
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <WalletsView data={data} loading={loading} totalSol={totalSol} totalBudju={totalBudju}
+          generateWallets={generateWallets} syncBalances={syncBalances} drainWallets={drainWallets}
+          exportKeys={exportKeys} toggleWallet={toggleWallet} deleteWallet={deleteWallet}
+          postAction={postAction} onRefresh={fetchData} />
       )}
 
-      {/* DISTRIBUTE VIEW */}
-      {view === "distribute" && (
-        <DistributeView onComplete={fetchData} />
-      )}
-
-      {/* MEMOS VIEW */}
+      {/* MEMOS VIEW (also accessible from Home) */}
       {view === "memos" && <MemoSystem />}
 
       {/* CONFIG VIEW */}
@@ -567,208 +486,197 @@ export default function BudjuTradingView() {
   );
 }
 
-// ── Distribute View Component ──
-function DistributeView({ onComplete }: { onComplete: () => void }) {
-  const [solPerPersona, setSolPerPersona] = useState("0.05");
-  const [budjuPerPersona, setBudjuPerPersona] = useState("50000");
-  const [glitchPerPersona, setGlitchPerPersona] = useState("0");
-  const [usdcPerPersona, setUsdcPerPersona] = useState("0");
-  const [spreadHours, setSpreadHours] = useState("4");
-  const [creating, setCreating] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [jobStatus, setJobStatus] = useState<{
-    job: { id: string; status: string; progress: { total: number; completed: number; failed: number; remaining: number }; created_at: string } | null;
-    transfers: { id: string; from_type: string; to_type: string; to_persona_id: string | null; token: string; amount: number; status: string; scheduled_at: string; executed_at: string | null; tx_signature: string | null; error: string | null }[];
-  } | null>(null);
+// ── Wallets View: Groups + Persona Wallets ──
+function WalletsView({ data, loading, totalSol, totalBudju, generateWallets, syncBalances, drainWallets, exportKeys, toggleWallet, deleteWallet, postAction, onRefresh }: {
+  data: BudjuDashboard;
+  loading: boolean;
+  totalSol: number;
+  totalBudju: number;
+  generateWallets: () => void;
+  syncBalances: () => void;
+  drainWallets: () => void;
+  exportKeys: () => void;
+  toggleWallet: (id: string, active: boolean) => void;
+  deleteWallet: (id: string, name: string) => void;
+  postAction: (action: string, body?: Record<string, unknown>) => Promise<{ ok: boolean; data: unknown }>;
+  onRefresh: () => void;
+}) {
+  const [expandedGroup, setExpandedGroup] = useState<number | null>(null);
+  const [groupFundToken, setGroupFundToken] = useState<{ group: number; token: string; direction: "add" | "withdraw" } | null>(null);
+  const [groupFundAmount, setGroupFundAmount] = useState("");
+  const [groupLoading, setGroupLoading] = useState(false);
 
-  // Fetch latest distribution job status
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/budju-trading?action=distribution_status");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.job) setJobStatus(data);
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
-
-  // Poll for active job progress
-  useEffect(() => {
-    if (!jobStatus?.job || jobStatus.job.status !== "active") return;
-    const iv = setInterval(fetchStatus, 15000); // Poll every 15s
-    return () => clearInterval(iv);
-  }, [jobStatus?.job?.status, fetchStatus]);
-
-  const createJob = async () => {
-    if (!confirm(`Create time-randomised distribution?\n\nPer persona:\n• ${solPerPersona} SOL\n• ${budjuPerPersona} BUDJU\n• ${glitchPerPersona} GLITCH\n• ${usdcPerPersona} USDC\n\nSpread over ~${spreadHours} hours.\n\nThis will schedule transfers from Treasury → Distributors → Persona wallets.`)) return;
-    setCreating(true);
-    try {
-      const res = await fetch("/api/admin/budju-trading", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "create_distribution",
-          config: {
-            sol_per_persona: parseFloat(solPerPersona) || 0,
-            budju_per_persona: parseFloat(budjuPerPersona) || 0,
-            glitch_per_persona: parseFloat(glitchPerPersona) || 0,
-            usdc_per_persona: parseFloat(usdcPerPersona) || 0,
-            treasury_to_dist_hours: parseFloat(spreadHours) || 4,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`Distribution created!\n\n${data.totalTransfers} transfers scheduled over ${data.estimatedDuration}.\n\nJob ID: ${data.jobId?.slice(0, 12)}...`);
-        fetchStatus();
-      } else {
-        alert(`Failed: ${data.error || JSON.stringify(data)}`);
-      }
-    } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Failed"}`);
-    }
-    setCreating(false);
+  const fundGroup = async () => {
+    if (!groupFundToken || !groupFundAmount || parseFloat(groupFundAmount) <= 0) return;
+    const dist = data.distributors.find(d => d.group_number === groupFundToken.group);
+    if (!dist) return;
+    setGroupLoading(true);
+    const action = groupFundToken.direction === "add" ? "wallet_transfer" : "wallet_transfer";
+    const direction = groupFundToken.direction === "add" ? "from_treasury" : "to_treasury";
+    await postAction(action, {
+      wallet_address: dist.wallet_address,
+      wallet_type: "distributor",
+      token: groupFundToken.token,
+      direction,
+      amount: parseFloat(groupFundAmount),
+    });
+    setGroupLoading(false);
+    setGroupFundToken(null);
+    setGroupFundAmount("");
+    onRefresh();
   };
-
-  const processNow = async () => {
-    setProcessing(true);
-    try {
-      const res = await fetch("/api/admin/budju-trading", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "process_distribution", job_id: jobStatus?.job?.id }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`Processed: ${data.executed} executed, ${data.failed} failed, ${data.remaining} remaining`);
-        fetchStatus();
-        onComplete();
-      } else {
-        alert(`Failed: ${data.error}`);
-      }
-    } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Failed"}`);
-    }
-    setProcessing(false);
-  };
-
-  const progress = jobStatus?.job?.progress;
-  const hasActiveJob = jobStatus?.job?.status === "active";
 
   return (
-    <div className="space-y-4">
-      {/* Active Job Status */}
-      {jobStatus?.job && (
-        <div className={`bg-gray-900 border rounded-xl p-4 ${hasActiveJob ? "border-green-500/30" : "border-gray-800"}`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              {hasActiveJob && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
-              <h3 className="text-sm font-bold text-green-400">
-                {hasActiveJob ? "Distribution In Progress" : `Distribution ${jobStatus.job.status}`}
-              </h3>
-            </div>
-            {hasActiveJob && (
-              <button onClick={processNow} disabled={processing}
-                className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/30 disabled:opacity-50">
-                {processing ? "Processing..." : "Process Now"}
-              </button>
-            )}
-          </div>
-          {progress && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs text-gray-400">
-                <span>{progress.completed} completed</span>
-                <span>{progress.failed} failed</span>
-                <span>{progress.remaining} remaining</span>
-                <span>{progress.total} total</span>
-              </div>
-              <div className="w-full bg-gray-700/30 rounded-full h-2">
-                <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress.total > 0 ? (progress.completed / progress.total) * 100 : 0}%` }} />
-              </div>
-              <p className="text-[10px] text-gray-500">Job created: {new Date(jobStatus.job.created_at).toLocaleString()}</p>
-            </div>
-          )}
+    <div className="bg-gray-900 border border-fuchsia-500/30 rounded-xl p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-fuchsia-400">Wallet Management</h3>
+        <button onClick={onRefresh} className="text-[10px] text-gray-500 hover:text-white font-bold">↻ Refresh</button>
+      </div>
 
-          {/* Recent transfers */}
-          {jobStatus.transfers.length > 0 && (
-            <div className="mt-3 space-y-1 max-h-40 overflow-y-auto">
-              <p className="text-[10px] text-gray-500 font-bold">RECENT TRANSFERS</p>
-              {jobStatus.transfers.slice(0, 20).map(t => (
-                <div key={t.id} className={`flex items-center justify-between text-[10px] px-2 py-1 rounded ${t.status === "completed" ? "bg-green-500/5" : t.status === "failed" ? "bg-red-500/5" : "bg-gray-800/30"}`}>
-                  <span className={`w-16 font-bold ${t.status === "completed" ? "text-green-400" : t.status === "failed" ? "text-red-400" : "text-gray-500"}`}>
-                    {t.status === "completed" ? "✓" : t.status === "failed" ? "✗" : "⏳"} {t.token}
-                  </span>
-                  <span className="text-gray-300">{t.amount.toFixed(t.token === "SOL" ? 4 : 0)}</span>
-                  <span className="text-gray-500">{t.from_type} → {t.to_type}</span>
-                  <span className="text-gray-600">{t.status === "scheduled" ? new Date(t.scheduled_at).toLocaleTimeString() : t.executed_at ? new Date(t.executed_at).toLocaleTimeString() : ""}</span>
-                  {t.tx_signature && (
-                    <a href={`https://solscan.io/tx/${t.tx_signature}`} target="_blank" rel="noopener noreferrer" className="text-fuchsia-400 hover:text-fuchsia-300">Tx</a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Totals */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+          <p className="text-sm font-bold text-cyan-400">{totalSol.toFixed(4)}</p>
+          <p className="text-[8px] text-gray-500 font-bold">TOTAL SOL</p>
         </div>
-      )}
-
-      {/* Create New Distribution */}
-      <div className="bg-gray-900 border border-fuchsia-500/30 rounded-xl p-4">
-        <h3 className="text-sm font-bold text-fuchsia-400 mb-3">Create New Distribution</h3>
-        <p className="text-[10px] text-gray-500 mb-3">
-          Schedules time-randomised transfers: Treasury → Distributors (staggered over hours) → Persona wallets (random delays 5-60 min each).
-          Anti-bubble-mapping: varied amounts, random timing, no batch patterns.
-        </p>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <div>
-            <label className="text-[10px] text-cyan-400 font-bold block mb-1">SOL per Persona</label>
-            <input type="number" step="0.01" value={solPerPersona} onChange={e => setSolPerPersona(e.target.value)}
-              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
-            <p className="text-[9px] text-gray-600 mt-0.5">For gas + trading</p>
-          </div>
-          <div>
-            <label className="text-[10px] text-fuchsia-400 font-bold block mb-1">BUDJU per Persona</label>
-            <input type="number" step="1000" value={budjuPerPersona} onChange={e => setBudjuPerPersona(e.target.value)}
-              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
-            <p className="text-[9px] text-gray-600 mt-0.5">$BUDJU tokens</p>
-          </div>
-          <div>
-            <label className="text-[10px] text-purple-400 font-bold block mb-1">§GLITCH per Persona</label>
-            <input type="number" step="100" value={glitchPerPersona} onChange={e => setGlitchPerPersona(e.target.value)}
-              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
-            <p className="text-[9px] text-gray-600 mt-0.5">§GLITCH tokens</p>
-          </div>
-          <div>
-            <label className="text-[10px] text-green-400 font-bold block mb-1">USDC per Persona</label>
-            <input type="number" step="0.5" value={usdcPerPersona} onChange={e => setUsdcPerPersona(e.target.value)}
-              className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs" />
-            <p className="text-[9px] text-gray-600 mt-0.5">Stablecoin</p>
-          </div>
+        <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+          <p className="text-sm font-bold text-fuchsia-400">{formatBudjuAmount(totalBudju)}</p>
+          <p className="text-[8px] text-gray-500 font-bold">TOTAL BUDJU</p>
         </div>
+        <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+          <p className="text-sm font-bold text-purple-400">—</p>
+          <p className="text-[8px] text-gray-500 font-bold">TOTAL GLITCH</p>
+        </div>
+        <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+          <p className="text-sm font-bold text-green-400">—</p>
+          <p className="text-[8px] text-gray-500 font-bold">TOTAL USDC</p>
+        </div>
+      </div>
 
-        <div className="mb-4">
-          <label className="text-[10px] text-gray-400 font-bold block mb-1">Spread Over (hours)</label>
-          <div className="flex gap-2">
-            {[2, 4, 6, 8, 12].map(h => (
-              <button key={h} onClick={() => setSpreadHours(String(h))}
-                className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${String(h) === spreadHours ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
-                {h}h
-              </button>
+      {/* Actions */}
+      <div className="grid grid-cols-4 gap-2">
+        <button onClick={generateWallets} disabled={loading} className="px-2 py-2 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
+          {loading ? "..." : "Generate Wallets"}
+        </button>
+        <button onClick={syncBalances} disabled={loading} className="px-2 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50">
+          {loading ? "..." : "Sync Balances"}
+        </button>
+        <button onClick={drainWallets} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
+          Drain All
+        </button>
+        <button onClick={exportKeys} disabled={loading} className="px-2 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
+          Export Keys
+        </button>
+      </div>
+
+      {/* Distributor Groups — expandable with fund/withdraw */}
+      {data.distributors.length > 0 && (
+        <div>
+          <p className="text-[10px] text-gray-500 font-bold mb-2">DISTRIBUTOR GROUPS ({data.distributors.length})</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {data.distributors.map((d) => (
+              <div key={d.id} className={`bg-gray-800/50 rounded-lg overflow-hidden border ${expandedGroup === d.group_number ? "border-amber-500/40" : "border-transparent"}`}>
+                <button onClick={() => setExpandedGroup(expandedGroup === d.group_number ? null : d.group_number)}
+                  className="w-full p-2 text-left hover:bg-gray-700/30 transition-colors">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[10px] font-bold text-amber-400">Group {d.group_number}</p>
+                    <span className="text-[9px] text-gray-500">{d.personas_funded} personas</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-[9px]">
+                    <span className="text-cyan-400">{Number(d.sol_balance).toFixed(3)} SOL</span>
+                    <span className="text-fuchsia-400">{formatBudjuAmount(Number(d.budju_balance || 0))} BUDJU</span>
+                  </div>
+                  <p className="text-[8px] text-gray-600 font-mono truncate mt-1"
+                    onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(d.wallet_address as string); }}
+                    title="Click to copy">{d.wallet_address}</p>
+                </button>
+
+                {/* Expanded: fund/withdraw controls */}
+                {expandedGroup === d.group_number && (
+                  <div className="border-t border-gray-700/50 p-2 space-y-1.5">
+                    <div className="grid grid-cols-2 gap-1">
+                      {["SOL", "BUDJU", "GLITCH", "USDC"].map(token => (
+                        <div key={token} className="flex gap-0.5">
+                          <button onClick={() => { setGroupFundToken({ group: d.group_number, token, direction: "add" }); setGroupFundAmount(""); }}
+                            className="flex-1 px-1 py-0.5 bg-green-500/10 text-green-400 rounded text-[8px] font-bold hover:bg-green-500/20">
+                            + {token}
+                          </button>
+                          <button onClick={() => { setGroupFundToken({ group: d.group_number, token, direction: "withdraw" }); setGroupFundAmount(""); }}
+                            className="flex-1 px-1 py-0.5 bg-red-500/10 text-red-400 rounded text-[8px] font-bold hover:bg-red-500/20">
+                            − {token}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {groupFundToken && groupFundToken.group === d.group_number && (
+                      <div className="bg-gray-900/60 rounded p-1.5 border border-gray-700/50">
+                        <p className="text-[8px] text-gray-400 mb-1">
+                          {groupFundToken.direction === "add" ? `Add ${groupFundToken.token} from Treasury` : `Withdraw ${groupFundToken.token} to Treasury`}
+                        </p>
+                        <div className="flex gap-1">
+                          <input type="number" value={groupFundAmount} onChange={e => setGroupFundAmount(e.target.value)}
+                            placeholder="Amount" className="flex-1 px-1.5 py-1 bg-gray-800 border border-gray-700 rounded text-[10px] text-white" />
+                          <button onClick={fundGroup} disabled={groupLoading}
+                            className="px-2 py-1 bg-fuchsia-600 text-white rounded text-[9px] font-bold hover:bg-fuchsia-500 disabled:opacity-50">
+                            {groupLoading ? "..." : "Go"}
+                          </button>
+                          <button onClick={() => setGroupFundToken(null)}
+                            className="px-1.5 py-1 bg-gray-700 text-gray-400 rounded text-[9px] hover:bg-gray-600">✕</button>
+                        </div>
+                      </div>
+                    )}
+                    <a href={`https://solscan.io/account/${d.wallet_address}`} target="_blank" rel="noopener noreferrer"
+                      className="block text-center text-[8px] text-cyan-400 hover:text-cyan-300 font-bold">Solscan ↗</a>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
+      )}
 
-        <button onClick={createJob} disabled={creating || hasActiveJob}
-          className="w-full py-3 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white font-black rounded-xl hover:from-fuchsia-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
-          {creating ? "Creating..." : hasActiveJob ? "Distribution Already Active" : "🚀 Start Time-Randomised Distribution"}
-        </button>
-
-        {hasActiveJob && (
-          <p className="text-[10px] text-amber-400 text-center mt-2">
-            A distribution is already in progress. Wait for it to complete or process remaining transfers.
-          </p>
+      {/* Persona Wallets — with USDC/GLITCH columns */}
+      <div>
+        <p className="text-[10px] text-gray-500 font-bold mb-1">PERSONA WALLETS ({data.wallets.length} total)</p>
+        {data.wallets.length === 0 ? (
+          <p className="text-center text-gray-600 text-sm py-4">No wallets generated yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            {/* Header */}
+            <div className="grid grid-cols-[1fr_70px_70px_55px_55px_40px_60px] gap-1 px-2 py-1.5 text-[8px] text-gray-500 font-bold border-b border-gray-800 min-w-[500px]">
+              <span>PERSONA</span>
+              <span className="text-right">SOL</span>
+              <span className="text-right">BUDJU</span>
+              <span className="text-right">USDC</span>
+              <span className="text-right">GLITCH</span>
+              <span className="text-center">GRP</span>
+              <span className="text-right">STATUS</span>
+            </div>
+            <div className="space-y-0 max-h-80 overflow-y-auto min-w-[500px]">
+              {data.wallets.map((w) => (
+                <div key={w.persona_id} className={`grid grid-cols-[1fr_70px_70px_55px_55px_40px_60px] gap-1 items-center px-2 py-1.5 hover:bg-gray-800/30 ${!w.is_active ? "opacity-40" : ""}`}>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm flex-shrink-0">{w.avatar_emoji}</span>
+                    <p className="text-[10px] font-bold text-white truncate">{w.display_name}</p>
+                  </div>
+                  <p className="text-[10px] text-cyan-400 text-right font-mono">{Number(w.sol_balance).toFixed(3)}</p>
+                  <p className="text-[10px] text-fuchsia-400 text-right font-mono">{formatBudjuAmount(Number(w.budju_balance))}</p>
+                  <p className="text-[10px] text-green-400 text-right font-mono">—</p>
+                  <p className="text-[10px] text-purple-400 text-right font-mono">—</p>
+                  <p className="text-[9px] text-center"><span className="px-1 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold">G{w.distributor_group}</span></p>
+                  <div className="text-right flex items-center justify-end gap-1">
+                    <span className={`text-[8px] px-1 py-0.5 rounded-full font-bold ${w.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                      {w.is_active ? "ON" : "OFF"}
+                    </span>
+                    <button onClick={() => toggleWallet(w.persona_id, w.is_active)}
+                      className={`text-[8px] font-bold ${w.is_active ? "text-red-400" : "text-green-400"}`}>
+                      {w.is_active ? "⏸" : "▶"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>
