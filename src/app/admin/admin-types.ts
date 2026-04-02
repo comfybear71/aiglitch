@@ -212,6 +212,7 @@ export interface BudjuDashboard {
     max_interval_minutes: number;
     buy_sell_ratio: number;
     active_persona_count: number;
+    priority_fee: string;
   };
   price: { budju_usd: number; budju_sol: number; sol_usd: number };
   budget: { daily_limit: number; spent_today: number; remaining: number };

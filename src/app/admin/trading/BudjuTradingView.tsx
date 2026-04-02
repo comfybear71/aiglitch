@@ -399,7 +399,7 @@ export default function BudjuTradingView() {
             <div>
               <label className="text-[10px] text-gray-500 font-bold block mb-1">Daily Budget (USD)</label>
               <div className="flex gap-2">
-                {[100, 250, 500, 1000].map(v => (
+                {[50, 100, 250, 500].map(v => (
                   <button key={v} onClick={() => updateConfig({ daily_budget_usd: v })}
                     className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${data.config.daily_budget_usd === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
                     ${v}
@@ -421,7 +421,7 @@ export default function BudjuTradingView() {
             <div>
               <label className="text-[10px] text-gray-500 font-bold block mb-1">Min Trade Size (USD)</label>
               <div className="flex gap-2">
-                {[0.25, 0.5, 1, 2].map(v => (
+                {[1, 2, 3, 5].map(v => (
                   <button key={v} onClick={() => updateConfig({ min_trade_usd: v })}
                     className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${data.config.min_trade_usd === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
                     ${v}
@@ -441,12 +441,45 @@ export default function BudjuTradingView() {
               </div>
             </div>
             <div>
-              <label className="text-[10px] text-gray-500 font-bold block mb-1">Active Personas</label>
+              <label className="text-[10px] text-gray-500 font-bold block mb-1">Active Personas (per batch)</label>
               <div className="flex gap-2">
-                {[5, 10, 15, 20].map(v => (
+                {[5, 10, 15, 25].map(v => (
                   <button key={v} onClick={() => updateConfig({ active_persona_count: v })}
                     className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${data.config.active_persona_count === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
                     {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-bold block mb-1">Min Interval (minutes)</label>
+              <div className="flex gap-2">
+                {[15, 30, 60, 120].map(v => (
+                  <button key={v} onClick={() => updateConfig({ min_interval_minutes: v })}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${data.config.min_interval_minutes === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
+                    {v >= 60 ? `${v / 60}h` : `${v}m`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-bold block mb-1">Max Interval (minutes)</label>
+              <div className="flex gap-2">
+                {[60, 120, 180, 240].map(v => (
+                  <button key={v} onClick={() => updateConfig({ max_interval_minutes: v })}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${data.config.max_interval_minutes === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
+                    {v / 60}h
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-bold block mb-1">Priority Fee (gas cost)</label>
+              <div className="flex gap-2">
+                {(["low", "medium", "high"] as const).map(v => (
+                  <button key={v} onClick={() => updateConfig({ priority_fee: v })}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${(data.config.priority_fee || "low") === v ? "bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30" : "bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700"}`}>
+                    {v === "low" ? "Low ~$0.02" : v === "medium" ? "Med ~$0.08" : "High ~$0.16"}
                   </button>
                 ))}
               </div>
@@ -661,8 +694,8 @@ function WalletsView({ data, loading, totalSol, totalBudju, generateWallets, syn
                   </div>
                   <p className="text-[10px] text-cyan-400 text-right font-mono">{Number(w.sol_balance).toFixed(3)}</p>
                   <p className="text-[10px] text-fuchsia-400 text-right font-mono">{formatBudjuAmount(Number(w.budju_balance))}</p>
-                  <p className="text-[10px] text-green-400 text-right font-mono">—</p>
-                  <p className="text-[10px] text-purple-400 text-right font-mono">—</p>
+                  <p className="text-[10px] text-green-400 text-right font-mono">{Number(w.usdc_balance || 0) > 0 ? Number(w.usdc_balance).toFixed(2) : "—"}</p>
+                  <p className="text-[10px] text-purple-400 text-right font-mono">{Number(w.glitch_balance || 0) > 0 ? formatBudjuAmount(Number(w.glitch_balance)) : "—"}</p>
                   <p className="text-[9px] text-center"><span className="px-1 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold">G{w.distributor_group}</span></p>
                   <div className="text-right flex items-center justify-end gap-1">
                     <span className={`text-[8px] px-1 py-0.5 rounded-full font-bold ${w.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>

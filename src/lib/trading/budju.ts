@@ -96,8 +96,9 @@ async function ensureBudjuTables(): Promise<void> {
     // Seed default config
     const defaults: [string, string][] = [
       ["enabled", "false"], ["daily_budget_usd", "100"], ["max_trade_usd", "10"],
-      ["min_trade_usd", "0.50"], ["min_interval_minutes", "2"], ["max_interval_minutes", "30"],
-      ["buy_sell_ratio", "0.6"], ["active_persona_count", "15"],
+      ["min_trade_usd", "3"], ["min_interval_minutes", "60"], ["max_interval_minutes", "180"],
+      ["buy_sell_ratio", "0.6"], ["active_persona_count", "10"],
+      ["priority_fee", "low"], // low | medium | high
       ["spent_today_usd", "0"], ["spent_reset_date", ""],
     ];
     for (const [k, v] of defaults) {
@@ -345,6 +346,7 @@ async function executeJupiterSwap(
   inputMint: string,
   outputMint: string,
   amountLamports: number,
+  priorityFee: string = "low",
   slippageBps: number = 300,
 ): Promise<{ signature: string; inputAmount: number; outputAmount: number; error?: undefined } | { signature?: undefined; inputAmount?: undefined; outputAmount?: undefined; error: string }> {
   if (!JUPITER_API_KEY) {
@@ -384,7 +386,7 @@ async function executeJupiterSwap(
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
         dynamicSlippage: true,
-        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 100000, priorityLevel: "low" } },
+        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: priorityFee === "high" ? 1000000 : priorityFee === "medium" ? 500000 : 100000, priorityLevel: priorityFee as "low" | "medium" | "high" } },
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -470,9 +472,10 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
   }
 
   const maxTradeUsd = parseFloat(config.max_trade_usd || "10");
-  const minTradeUsd = parseFloat(config.min_trade_usd || "0.50");
+  const minTradeUsd = parseFloat(config.min_trade_usd || "3");
   const dailyBudget = parseFloat(config.daily_budget_usd || "100");
   const buySellRatio = parseFloat(config.buy_sell_ratio || "0.6");
+  const priorityFee = config.priority_fee || "low";
 
   // Reset daily spend counter if new day
   const today = new Date().toISOString().split("T")[0];
@@ -593,7 +596,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
           errorMsg = `Insufficient SOL: has ${(walletBalance / 1e9).toFixed(4)}, needs ${(minRequired / 1e9).toFixed(4)}`;
           console.log(`[BUDJU] Skipping buy for ${wallet.username}: ${errorMsg}`);
         } else {
-          const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports);
+          const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports, priorityFee);
           if (result.signature) {
             txSignature = result.signature;
             status = "confirmed";
@@ -613,7 +616,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
           errorMsg = `No SOL for tx fees: has ${(walletBalance / 1e9).toFixed(4)} SOL, needs ~0.005`;
           console.log(`[BUDJU] Skipping sell for ${wallet.username}: ${errorMsg}`);
         } else {
-          const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);
+          const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports, priorityFee);
           if (result.signature) {
             txSignature = result.signature;
             status = "confirmed";
