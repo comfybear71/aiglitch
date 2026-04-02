@@ -846,74 +846,74 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         )}
       </div>
 
-      {/* Video progress bar — compact, bottom of screen */}
+      {/* Video progress bar with handle + time display */}
       {isVideo && hasMedia && !introPlaying && (
         <div className="absolute bottom-0 left-0 right-0 z-30">
-          <div
-            ref={progressBarRef}
-            className="relative h-4 flex items-end px-2 cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); handleSeek(e); }}
-            onMouseDown={(e) => { e.stopPropagation(); handleSeekStart(e); }}
-            onMouseUp={handleSeekEnd}
-            onTouchStart={(e) => { e.stopPropagation(); handleSeekStart(e); }}
-            onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
-            onTouchEnd={handleSeekEnd}
-          >
-            <div className="w-full h-[2px] bg-white/20 rounded-full relative group hover:h-1 transition-all">
-              <div
-                className="h-full bg-white rounded-full relative"
-                style={{ width: videoDuration ? `${(videoProgress / videoDuration) * 100}%` : "0%" }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center gap-2 px-2 pb-1">
+            <div
+              ref={progressBarRef}
+              className="relative flex-1 h-5 flex items-center cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); handleSeek(e); }}
+              onMouseDown={(e) => { e.stopPropagation(); handleSeekStart(e); }}
+              onMouseUp={handleSeekEnd}
+              onTouchStart={(e) => { e.stopPropagation(); handleSeekStart(e); }}
+              onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
+              onTouchEnd={handleSeekEnd}
+            >
+              <div className="w-full h-[3px] bg-white/20 rounded-full relative">
+                <div
+                  className="h-full bg-white rounded-full relative"
+                  style={{ width: videoDuration ? `${(videoProgress / videoDuration) * 100}%` : "0%" }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-lg" />
+                </div>
               </div>
             </div>
+            <span className="text-white/50 text-[10px] font-mono whitespace-nowrap flex-shrink-0">
+              {formatTime(videoProgress)}/{formatTime(videoDuration)}
+            </span>
           </div>
         </div>
       )}
 
       {/* Bottom-Left Compact Info Panel */}
-      <div className={`absolute left-3 right-16 z-20 transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-6" : "bottom-4"}`}>
-        {/* Username + badges row */}
+      <div className={`absolute left-3 right-16 z-20 transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-7" : "bottom-4"}`}>
+        {/* Username + video controls — all on one line */}
         <div className="flex items-center gap-1.5 mb-1">
           <Link href={`/profile/${post.username}`}>
             <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
           </Link>
           <span className="text-gray-400 text-[10px] drop-shadow-lg">· {timeAgo(post.created_at)}</span>
+          {isVideo && hasMedia && !introPlaying && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
+                className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0 ml-1"
+              >
+                {isPaused ? (
+                  <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+                )}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleMute(e); }}
+                className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+              >
+                {isMuted ? (
+                  <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                )}
+              </button>
+            </>
+          )}
         </div>
-
-        {/* Video controls row — bigger play/pause + mute + time */}
-        {isVideo && hasMedia && !introPlaying && (
-          <div className="flex items-center gap-2 mb-1.5">
-            <button
-              onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
-              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
-            >
-              {isPaused ? (
-                <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
-              )}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleMute(e); }}
-              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
-            >
-              {isMuted ? (
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-              )}
-            </button>
-            <span className="text-white/60 text-[11px] font-mono">
-              {formatTime(videoProgress)}/{formatTime(videoDuration)}
-            </span>
-          </div>
-        )}
 
         {/* Collapsed: single line of text + "more" */}
         {!textExpanded && (
