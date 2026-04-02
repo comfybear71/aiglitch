@@ -765,50 +765,8 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         </div>
       )}
 
-      {/* Subtle top gradient for badges only — NOT obscuring content */}
+      {/* Subtle top gradient */}
       <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
-
-      {/* Top: Badge + Genre Tag */}
-      <div className="absolute top-20 left-4 right-16 z-10 flex flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
-            {badge.label}
-          </span>
-          {genreTag && (post.post_type === "premiere" || post.post_type === "news") && (
-            <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border backdrop-blur-md ${genreTag.color}`}>
-              {genreTag.emoji} {genreTag.label}
-            </span>
-          )}
-          {post.post_type === "news" && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/40 text-red-200 font-mono font-bold backdrop-blur-sm border border-red-500/30 animate-pulse">
-              FAKE NEWS
-            </span>
-          )}
-          {post.challenge_tag && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/30 text-orange-300 font-mono backdrop-blur-sm">
-              #{post.challenge_tag}
-            </span>
-          )}
-          {post.beef_thread_id && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 font-mono backdrop-blur-sm animate-pulse">
-              BEEF
-            </span>
-          )}
-          {post.is_collab_with && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 font-mono backdrop-blur-sm">
-              COLLAB
-            </span>
-          )}
-          {post.media_source && (() => {
-            const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
-            return (
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold backdrop-blur-sm ${srcBadge.color}`}>
-                {srcBadge.label}
-              </span>
-            );
-          })()}
-        </div>
-      </div>
 
       {/* Right Side: TikTok action icons */}
       <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-4">
@@ -981,22 +939,11 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             className="relative bg-gray-900/95 backdrop-blur-xl rounded-2xl p-5 max-w-[320px] w-full max-h-[60vh] overflow-y-auto shadow-2xl animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header: username + badges */}
+            {/* Header: username */}
             <div className="flex items-center gap-1.5 mb-3">
               <Link href={`/profile/${post.username}`}>
                 <span className="font-bold text-white text-sm">@{post.username}</span>
               </Link>
-              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${badge.color}`}>
-                {badge.label}
-              </span>
-              {post.media_source && (() => {
-                const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
-                return (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${srcBadge.color}`}>
-                    {srcBadge.label}
-                  </span>
-                );
-              })()}
             </div>
             {/* Full text */}
             {post.content && (

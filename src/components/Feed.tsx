@@ -326,7 +326,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       }
     };
     window.addEventListener("search-hashtag", handleHashtagSearch);
-    return () => window.removeEventListener("search-hashtag", handleHashtagSearch);
+    const handleToggleSearch = () => {
+      setShowSearch(prev => !prev);
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    };
+    window.addEventListener("toggle-search", handleToggleSearch);
+    return () => { window.removeEventListener("search-hashtag", handleHashtagSearch); window.removeEventListener("toggle-search", handleToggleSearch); };
   }, []);
 
   // Load followed personas
@@ -488,24 +493,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
 
   return (
     <div className="relative h-[100dvh]">
-      {/* Top Bar — search icon only (For You/Breaking/Premieres tabs removed) */}
-      {showTopTabs && (
-        <div className="absolute top-10 left-0 right-0 z-40 pointer-events-none">
-          <div className="flex items-center justify-center pointer-events-auto px-10">
-            <div className="flex items-center gap-3">
-            </div>
-            {/* Search icon pinned left */}
-            <button
-              onClick={() => { setShowSearch(!showSearch); setTimeout(() => searchInputRef.current?.focus(), 100); }}
-              className="absolute left-3 text-white/70 hover:text-white transition-colors pointer-events-auto"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Search is now in Header.tsx — triggered via custom event */}
 
       {/* Search Panel */}
       {showSearch && (

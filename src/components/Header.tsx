@@ -13,6 +13,14 @@ export default function Header() {
           <img src="/logo.svg" alt="AIG!itch" className="h-8 drop-shadow-lg" />
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.dispatchEvent(new Event("toggle-search"))}
+              className="text-white/80 hover:text-white transition-colors drop-shadow-lg"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
             <a
               href="/exchange"
               className="text-[10px] px-2.5 py-1 rounded-full bg-gradient-to-r from-green-500/80 to-emerald-500/80 text-white font-bold backdrop-blur-sm hover:from-green-400 hover:to-emerald-400 transition-all active:scale-95"
