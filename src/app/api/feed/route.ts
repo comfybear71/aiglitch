@@ -4,6 +4,26 @@ import { ensureDbReady } from "@/lib/seed";
 import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
 import { posts as postsRepo } from "@/lib/repositories";
 
+/** Interleave videos into the feed at ~90% video ratio.
+ *  Pattern: VIDEO x9, then 1 non-video. Heavy video-first feed.
+ *  Falls back gracefully when one list runs out. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function interleaveVideos(videos: any[], others: any[], limit: number): any[] {
+  const result: any[] = [];
+  let vi = 0, oi = 0;
+  while (result.length < limit && (vi < videos.length || oi < others.length)) {
+    // Insert ~9 videos
+    for (let n = 0; n < 9 && vi < videos.length && result.length < limit; n++, vi++) {
+      result.push(videos[vi]);
+    }
+    // Insert 1 non-video (image/text/meme)
+    if (oi < others.length && result.length < limit) {
+      result.push(others[oi++]);
+    }
+  }
+  return result;
+}
+
 export async function GET(request: NextRequest) {
   try {
   const sql = getDb();
@@ -260,43 +280,58 @@ export async function GET(request: NextRequest) {
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     }
   } else {
-    // For You tab: all posts
-    // Exclude legacy duplicate movie posts (director-premiere, director-profile, director-scene)
-    // that were created by the old triple-post system. Only 'director-movie' is the canonical post.
+    // For You tab: video-boosted feed
+    // Fetches videos and non-videos separately, then interleaves so ~every 3rd post is a video.
+    // This ensures channel videos (by The Architect) and other video content stay visible
+    // instead of being buried by high-frequency text/image posts.
+    // Exclude legacy duplicate movie posts (director-premiere, director-profile, director-scene).
+    const videoCount = Math.max(Math.ceil(limit * 0.9), 5); // ~90% videos
+    const otherCount = Math.max(Math.ceil(limit * 0.15), 2); // ~10% non-video (images/text/memes)
+
     if (shuffle) {
-      posts = await sql`
-        SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.is_reply_to IS NULL
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY md5(p.id::text || ${seed})
-        LIMIT ${limit}
-        OFFSET ${offset}
-      `;
+      const [videos, others] = await Promise.all([
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY md5(p.id::text || ${seed}) LIMIT ${videoCount} OFFSET ${offset}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND (p.media_type != 'video' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY md5(p.id::text || ${seed}) LIMIT ${otherCount} OFFSET ${offset}`,
+      ]);
+      posts = interleaveVideos(videos, others, limit);
     } else if (cursor) {
-      posts = await sql`
-        SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY p.created_at DESC
-        LIMIT ${limit}
-      `;
+      const [videos, others] = await Promise.all([
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+            AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${videoCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+            AND (p.media_type != 'video' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${otherCount}`,
+      ]);
+      posts = interleaveVideos(videos, others, limit);
     } else {
-      posts = await sql`
-        SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.is_reply_to IS NULL
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY p.created_at DESC
-        LIMIT ${limit}
-      `;
+      const [videos, others] = await Promise.all([
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${videoCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND (p.media_type != 'video' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${otherCount}`,
+      ]);
+      posts = interleaveVideos(videos, others, limit);
     }
   }
 
