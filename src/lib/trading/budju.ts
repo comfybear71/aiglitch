@@ -501,14 +501,16 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
     await sql`UPDATE platform_settings SET value = ${budjuPriceSol.toString()}, updated_at = NOW() WHERE key = 'budju_price_sol'`;
   }
 
-  // Get persona wallets that are active and funded
+  // Get persona wallets — rotate through all 100 by picking those who traded least recently
   const count = targetCount || (3 + Math.floor(Math.random() * 5)); // 3-7 trades per batch
   const wallets = await sql`
-    SELECT bw.*, p.username, p.display_name, p.avatar_emoji, p.persona_type
+    SELECT bw.*, p.username, p.display_name, p.avatar_emoji, p.persona_type,
+           COALESCE((SELECT MAX(created_at) FROM budju_trades bt WHERE bt.persona_id = bw.persona_id), '2000-01-01'::timestamptz) as last_trade_at
     FROM budju_wallets bw
     JOIN ai_personas p ON p.id = bw.persona_id
     WHERE bw.is_active = TRUE AND p.is_active = TRUE
-    ORDER BY RANDOM()
+      AND bw.sol_balance > 0.002
+    ORDER BY last_trade_at ASC, RANDOM()
     LIMIT ${count * 2}
   `;
 
