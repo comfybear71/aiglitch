@@ -204,56 +204,7 @@ async function fetchYouTubeMetrics(postId: string, accessToken: string): Promise
 }
 
 // ── TikTok Metrics ────────────────────────────────────────────────────────
-// POST /v2/video/query/ with filters
-
-async function fetchTikTokMetrics(postId: string, accessToken: string): Promise<PostMetrics> {
-  try {
-    const res = await fetch(
-      "https://open.tiktokapis.com/v2/video/query/?fields=like_count,comment_count,share_count,view_count",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          filters: { video_ids: [postId] },
-        }),
-      },
-    );
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "(unreadable)");
-      console.error(`[TikTok metrics] HTTP ${res.status} for video ${postId}: ${errBody.slice(0, 300)}`);
-      return {};
-    }
-
-    const data = await res.json() as {
-      data?: {
-        videos?: Array<{
-          like_count?: number;
-          comment_count?: number;
-          share_count?: number;
-          view_count?: number;
-        }>;
-      };
-    };
-
-    const video = data.data?.videos?.[0];
-    if (!video) {
-      console.warn(`[TikTok metrics] No video data returned for ${postId}:`, JSON.stringify(data).slice(0, 300));
-      return {};
-    }
-
-    return {
-      likes: video.like_count ?? 0,
-      comments: video.comment_count ?? 0,
-      shares: video.share_count ?? 0,
-      views: video.view_count ?? 0,
-    };
-  } catch (err) {
-    console.error("[TikTok metrics error]", err instanceof Error ? err.message : err);
-    return {};
-  }
+// TikTok metrics removed — API denied by TikTok developer review (April 2026)
 }
 
 // ── Fetch metrics for a single post ──────────────────────────────────────
@@ -266,7 +217,6 @@ async function fetchMetricsForPost(post: MarketingPost, accessToken: string): Pr
     case "instagram": return fetchInstagramMetrics(post.platform_post_id, accessToken);
     case "x":         return fetchXMetrics(post.platform_post_id, accessToken);
     case "youtube":   return fetchYouTubeMetrics(post.platform_post_id, accessToken);
-    case "tiktok":    return fetchTikTokMetrics(post.platform_post_id, accessToken);
     default:          return {};
   }
 }
