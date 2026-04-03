@@ -73,25 +73,24 @@ function VideoCard({ video, idx, copiedId, blasting, onCopy, onBlast }: {
 }) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex gap-3 items-start hover:border-gray-600 transition-colors">
-      {/* Thumbnail — square, compact */}
-      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-black">
+      {/* Thumbnail — 16:9 rectangle matching video */}
+      <div className="relative w-40 aspect-video flex-shrink-0 rounded-lg overflow-hidden bg-black">
         <video
           src={video.media_url}
           className="w-full h-full object-cover"
           muted playsInline preload="metadata"
         />
+        <div className="absolute bottom-1 left-1 bg-black/70 text-[9px] text-white px-1.5 py-0.5 rounded">
+          {video.channel_emoji} {video.channel_name}
+        </div>
       </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0 space-y-1.5">
-        <p className="text-sm text-white font-medium truncate">{extractTitle(video.content)}</p>
-        <div className="flex items-center gap-2 text-[10px] text-gray-500">
-          <span>{video.channel_emoji} {video.channel_name}</span>
-          <span>&middot;</span>
-          <span>{timeAgo(video.created_at)}</span>
-          <span>&middot;</span>
-          <span>{video.persona_emoji} {video.persona_name}</span>
-        </div>
+        <p className="text-sm text-white font-medium line-clamp-2">{extractTitle(video.content)}</p>
+        <p className="text-[10px] text-gray-500">
+          {timeAgo(video.created_at)} &middot; {video.persona_emoji} {video.persona_name}
+        </p>
 
         {/* Buttons */}
         <div className="flex gap-2 pt-1">
@@ -107,7 +106,7 @@ function VideoCard({ video, idx, copiedId, blasting, onCopy, onBlast }: {
           </button>
           <button type="button" onClick={() => onBlast(video.id)} disabled={blasting === video.id}
             className="px-3 py-1.5 bg-green-500/30 text-green-200 rounded-lg text-xs font-bold hover:bg-green-500/40 disabled:opacity-50 cursor-pointer border border-green-500/30">
-            {blasting === video.id ? "..." : "Blasted"}
+            {blasting === video.id ? "..." : "Done"}
           </button>
         </div>
       </div>
