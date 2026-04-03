@@ -72,40 +72,40 @@ function VideoCard({ video, idx, copiedId, blasting, onCopy, onBlast }: {
   onCopy: (v: BlasterVideo, i: number) => void; onBlast: (id: string) => void;
 }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex gap-3 items-start hover:border-gray-600 transition-colors">
-      {/* Thumbnail — 16:9 rectangle matching video */}
-      <div className="relative w-40 aspect-video flex-shrink-0 rounded-lg overflow-hidden bg-black">
+    <div className="bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-600 transition-colors">
+      {/* 16:9 Video thumbnail */}
+      <div className="relative aspect-video bg-black">
         <video
           src={video.media_url}
           className="w-full h-full object-cover"
           muted playsInline preload="metadata"
+          onMouseEnter={(e: React.MouseEvent<HTMLVideoElement>) => (e.target as HTMLVideoElement).play().catch(() => {})}
+          onMouseLeave={(e: React.MouseEvent<HTMLVideoElement>) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
         />
-        <div className="absolute bottom-1 left-1 bg-black/70 text-[9px] text-white px-1.5 py-0.5 rounded">
+        <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm text-[9px] text-white px-2 py-0.5 rounded-full">
           {video.channel_emoji} {video.channel_name}
+        </div>
+        <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-[9px] text-gray-300 px-2 py-0.5 rounded-full">
+          {timeAgo(video.created_at)}
         </div>
       </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0 space-y-1.5">
-        <p className="text-sm text-white font-medium line-clamp-2">{extractTitle(video.content)}</p>
-        <p className="text-[10px] text-gray-500">
-          {timeAgo(video.created_at)} &middot; {video.persona_emoji} {video.persona_name}
-        </p>
-
-        {/* Buttons */}
-        <div className="flex gap-2 pt-1">
+      {/* Info + buttons */}
+      <div className="p-2.5 space-y-2">
+        <p className="text-xs text-white font-medium line-clamp-1">{extractTitle(video.content)}</p>
+        <div className="flex gap-1.5">
           <a href={video.media_url} download target="_blank" rel="noopener noreferrer"
-            className="px-3 py-1.5 bg-purple-500/30 text-purple-200 rounded-lg text-xs font-bold hover:bg-purple-500/40 cursor-pointer border border-purple-500/30">
+            className="flex-1 py-1.5 bg-purple-500/20 text-purple-300 rounded text-[11px] font-bold text-center hover:bg-purple-500/30 cursor-pointer">
             Download
           </a>
           <button type="button" onClick={() => onCopy(video, idx)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
-              copiedId === video.id ? "bg-green-500/30 text-green-200 border-green-500/30" : "bg-cyan-500/30 text-cyan-200 hover:bg-cyan-500/40 border-cyan-500/30"
+            className={`flex-1 py-1.5 rounded text-[11px] font-bold text-center cursor-pointer ${
+              copiedId === video.id ? "bg-green-500/20 text-green-300" : "bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"
             }`}>
             {copiedId === video.id ? "Copied!" : "Caption"}
           </button>
           <button type="button" onClick={() => onBlast(video.id)} disabled={blasting === video.id}
-            className="px-3 py-1.5 bg-green-500/30 text-green-200 rounded-lg text-xs font-bold hover:bg-green-500/40 disabled:opacity-50 cursor-pointer border border-green-500/30">
+            className="flex-1 py-1.5 bg-green-500/20 text-green-300 rounded text-[11px] font-bold text-center hover:bg-green-500/30 disabled:opacity-50 cursor-pointer">
             {blasting === video.id ? "..." : "Done"}
           </button>
         </div>
@@ -296,7 +296,7 @@ export default function TikTokBlasterPage() {
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {pagedVideos.map((video: BlasterVideo, idx: number) => (
               <VideoCard key={video.id} video={video} idx={page * PAGE_SIZE + idx}
                 copiedId={copiedId} blasting={blasting}
