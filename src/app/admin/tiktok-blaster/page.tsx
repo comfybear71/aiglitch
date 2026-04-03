@@ -49,11 +49,8 @@ function getCaption(title: string, index: number): string {
 }
 
 function extractTitle(content: string): string {
-  // Strip the emoji prefix and channel name
   let title = content || "";
-  // Remove leading emoji like "🎬 "
   title = title.replace(/^[^\w]*\s*/, "");
-  // Take first line or first 100 chars
   const firstLine = title.split("\n")[0] || title;
   return firstLine.slice(0, 120).trim();
 }
@@ -68,23 +65,85 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+const PAGE_SIZE = 20;
+
+function VideoCard({ video, idx, copiedId, blasting, selectedIds, onCopy, onBlast, onUnblast, onToggleSelect }: {
+  video: BlasterVideo; idx: number; copiedId: string | null; blasting: string | null;
+  selectedIds: Set<string>; onCopy: (v: BlasterVideo, i: number) => void;
+  onBlast: (id: string) => void; onUnblast: (id: string) => void; onToggleSelect: (id: string) => void;
+}) {
+  return (
+    <div className={`bg-gray-900 border rounded-xl overflow-hidden transition-all ${
+      selectedIds.has(video.id) ? "border-cyan-500 ring-2 ring-cyan-500/30" : "border-gray-800 hover:border-gray-600"
+    }`}>
+      <div className="relative aspect-[9/16] max-h-[280px] bg-black">
+        <video
+          src={video.media_url}
+          className="w-full h-full object-cover"
+          muted playsInline preload="metadata"
+          onMouseEnter={(e: React.MouseEvent<HTMLVideoElement>) => (e.target as HTMLVideoElement).play().catch(() => {})}
+          onMouseLeave={(e: React.MouseEvent<HTMLVideoElement>) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+        />
+        <button onClick={() => onToggleSelect(video.id)}
+          className="absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold"
+          style={{ background: selectedIds.has(video.id) ? "#06b6d4" : "rgba(0,0,0,0.6)", borderColor: selectedIds.has(video.id) ? "#06b6d4" : "rgba(255,255,255,0.3)", color: "white" }}>
+          {selectedIds.has(video.id) ? "\u2713" : ""}
+        </button>
+        <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-[10px] text-white px-2 py-0.5 rounded-full">
+          {video.channel_emoji} {video.channel_name}
+        </div>
+        <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-sm text-[10px] text-gray-300 px-2 py-0.5 rounded-full">
+          {timeAgo(video.created_at)}
+        </div>
+      </div>
+      <div className="p-3 space-y-2">
+        <p className="text-xs text-white font-medium line-clamp-2">{extractTitle(video.content)}</p>
+        <div className="flex gap-1.5">
+          <a href={video.media_url} download target="_blank" rel="noopener noreferrer"
+            className="flex-1 px-2 py-2 bg-purple-500/30 text-purple-200 rounded-lg text-xs font-bold text-center hover:bg-purple-500/40 cursor-pointer border border-purple-500/30">
+            Download
+          </a>
+          <button type="button" onClick={() => onCopy(video, idx)}
+            className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold text-center cursor-pointer border ${
+              copiedId === video.id ? "bg-green-500/30 text-green-200 border-green-500/30" : "bg-cyan-500/30 text-cyan-200 hover:bg-cyan-500/40 border-cyan-500/30"
+            }`}>
+            {copiedId === video.id ? "Copied!" : "Copy Caption"}
+          </button>
+          <button type="button" onClick={() => onBlast(video.id)} disabled={blasting === video.id}
+            className="px-3 py-2 bg-green-500/30 text-green-200 rounded-lg text-xs font-bold hover:bg-green-500/40 disabled:opacity-50 cursor-pointer border border-green-500/30">
+            {blasting === video.id ? "..." : "Done"}
+          </button>
+        </div>
+        <details className="group">
+          <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 select-none">Preview caption...</summary>
+          <div className="mt-1.5 bg-black/40 border border-gray-800 rounded-lg p-2">
+            <pre className="text-[10px] text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{getCaption(extractTitle(video.content), idx)}</pre>
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
 export default function TikTokBlasterPage() {
   const [videos, setVideos] = useState<BlasterVideo[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [days, setDays] = useState(14);
-  const [showBlasted, setShowBlasted] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [blasting, setBlasting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [blastedOpen, setBlastedOpen] = useState(false);
 
   const fetchVideos = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setPage(0);
     try {
-      const res = await fetch(`/api/admin/tiktok-blaster?days=${days}&channel=${filter}&limit=100`);
+      const res = await fetch(`/api/admin/tiktok-blaster?days=${days}&channel=${filter}&limit=200`);
       const data = await res.json();
       if (data.error) {
         setError(data.error);
@@ -143,15 +202,6 @@ export default function TikTokBlasterPage() {
     });
   };
 
-  const selectAll = () => {
-    const filtered = filteredVideos;
-    if (selectedIds.size === filtered.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map((v: BlasterVideo) => v.id)));
-    }
-  };
-
   const markSelectedBlasted = async () => {
     for (const id of selectedIds) {
       await markBlasted(id);
@@ -159,16 +209,20 @@ export default function TikTokBlasterPage() {
     setSelectedIds(new Set());
   };
 
-  const filteredVideos = showBlasted ? videos : videos.filter((v: BlasterVideo) => !v.blasted);
-  const blastedCount = videos.filter((v: BlasterVideo) => v.blasted).length;
-  const unblastedCount = videos.filter((v: BlasterVideo) => !v.blasted).length;
+  // Split into ready (not blasted) and blasted
+  const readyVideos = videos.filter((v: BlasterVideo) => !v.blasted);
+  const blastedVideos = videos.filter((v: BlasterVideo) => v.blasted);
+
+  // Paginate ready videos
+  const totalPages = Math.ceil(readyVideos.length / PAGE_SIZE);
+  const pagedVideos = readyVideos.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-gray-900 via-black to-gray-900 border border-cyan-500/30 rounded-2xl p-5">
         <div className="flex items-center gap-3 mb-3">
-          <span className="text-4xl">💣</span>
+          <span className="text-4xl">{"\uD83D\uDCA3"}</span>
           <div>
             <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-400">
               TikTok Blaster
@@ -178,77 +232,49 @@ export default function TikTokBlasterPage() {
             </p>
           </div>
         </div>
-
-        {/* Stats bar */}
         <div className="flex items-center gap-4 text-xs">
           <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-1.5">
             <span className="text-cyan-300 font-bold">{videos.length}</span>
-            <span className="text-gray-400 ml-1">Videos</span>
-          </div>
-          <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-1.5">
-            <span className="text-green-300 font-bold">{blastedCount}</span>
-            <span className="text-gray-400 ml-1">Blasted</span>
+            <span className="text-gray-400 ml-1">Total</span>
           </div>
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 py-1.5">
-            <span className="text-orange-300 font-bold">{unblastedCount}</span>
-            <span className="text-gray-400 ml-1">Ready</span>
+            <span className="text-orange-300 font-bold">{readyVideos.length}</span>
+            <span className="text-gray-400 ml-1">Ready to Blast</span>
+          </div>
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-1.5">
+            <span className="text-green-300 font-bold">{blastedVideos.length}</span>
+            <span className="text-gray-400 ml-1">Blasted</span>
           </div>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
-        <select
-          value={filter}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilter(e.target.value)}
-          className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs"
-        >
+        <select value={filter} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilter(e.target.value)}
+          className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs">
           <option value="all">All Channels</option>
           {channels.map((ch: Channel) => (
             <option key={ch.id} value={ch.slug}>{ch.emoji} {ch.name}</option>
           ))}
         </select>
-
-        <select
-          value={days}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDays(parseInt(e.target.value))}
-          className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs"
-        >
+        <select value={days} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDays(parseInt(e.target.value))}
+          className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs">
           <option value={3}>Last 3 days</option>
           <option value={7}>Last 7 days</option>
           <option value={14}>Last 14 days</option>
           <option value={30}>Last 30 days</option>
         </select>
-
-        <button
-          onClick={() => setShowBlasted(!showBlasted)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-            showBlasted
-              ? "bg-green-500/20 text-green-300 border-green-500/40"
-              : "bg-gray-900 text-gray-400 border-gray-700 hover:text-white"
-          }`}
-        >
-          {showBlasted ? "Showing All" : "Hide Blasted"}
-        </button>
-
-        <button
-          onClick={fetchVideos}
-          className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-400 hover:text-white text-xs"
-        >
+        <button onClick={fetchVideos} className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-400 hover:text-white text-xs">
           Refresh
         </button>
-
         {selectedIds.size > 0 && (
-          <button
-            onClick={markSelectedBlasted}
-            className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-500"
-          >
-            Mark {selectedIds.size} as Blasted
+          <button onClick={markSelectedBlasted}
+            className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-500">
+            Blast {selectedIds.size} Selected
           </button>
         )}
       </div>
 
-      {/* Error display */}
       {error && (
         <div className="bg-red-900/30 border border-red-500/50 rounded-xl p-4">
           <p className="text-red-300 text-sm font-bold">API Error:</p>
@@ -256,145 +282,92 @@ export default function TikTokBlasterPage() {
         </div>
       )}
 
-      {/* Select all */}
-      {filteredVideos.length > 0 && (
-        <button onClick={selectAll} className="text-xs text-gray-500 hover:text-white">
-          {selectedIds.size === filteredVideos.length ? "Deselect All" : `Select All (${filteredVideos.length})`}
-        </button>
-      )}
-
-      {/* Video Grid */}
+      {/* Ready Videos Grid */}
       {loading ? (
         <div className="text-center py-12 text-gray-500">
-          <div className="text-4xl animate-pulse mb-2">💣</div>
+          <div className="text-4xl animate-pulse mb-2">{"\uD83D\uDCA3"}</div>
           <p>Loading videos...</p>
         </div>
-      ) : filteredVideos.length === 0 ? (
+      ) : readyVideos.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          <div className="text-4xl mb-2">🤷</div>
-          <p>{showBlasted ? "No videos found" : "All videos blasted! Nice work."}</p>
+          <div className="text-4xl mb-2">{"\uD83E\uDD37"}</div>
+          <p>All videos blasted! Nice work.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredVideos.map((video: BlasterVideo, idx: number) => (
-            <div
-              key={video.id}
-              className={`bg-gray-900 border rounded-xl overflow-hidden transition-all ${
-                video.blasted
-                  ? "border-green-500/30 opacity-60"
-                  : selectedIds.has(video.id)
-                    ? "border-cyan-500 ring-2 ring-cyan-500/30"
-                    : "border-gray-800 hover:border-gray-600"
-              }`}
-            >
-              {/* Video thumbnail */}
-              <div className="relative aspect-[9/16] max-h-[280px] bg-black">
-                <video
-                  src={video.media_url}
-                  className="w-full h-full object-cover"
-                  muted
-                  playsInline
-                  preload="metadata"
-                  onMouseEnter={(e: React.MouseEvent<HTMLVideoElement>) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                  onMouseLeave={(e: React.MouseEvent<HTMLVideoElement>) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
-                />
-                {/* Select checkbox */}
-                <button
-                  onClick={() => toggleSelect(video.id)}
-                  className="absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all"
-                  style={{
-                    background: selectedIds.has(video.id) ? "#06b6d4" : "rgba(0,0,0,0.6)",
-                    borderColor: selectedIds.has(video.id) ? "#06b6d4" : "rgba(255,255,255,0.3)",
-                    color: "white",
-                  }}
-                >
-                  {selectedIds.has(video.id) ? "✓" : ""}
-                </button>
-                {/* Blasted badge */}
-                {video.blasted && (
-                  <div className="absolute top-2 right-2 bg-green-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
-                    BLASTED
-                  </div>
-                )}
-                {/* Channel badge */}
-                <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-[10px] text-white px-2 py-0.5 rounded-full">
-                  {video.channel_emoji} {video.channel_name}
-                </div>
-                {/* Time badge */}
-                <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-sm text-[10px] text-gray-300 px-2 py-0.5 rounded-full">
-                  {timeAgo(video.created_at)}
-                </div>
-              </div>
-
-              {/* Info + Actions */}
-              <div className="p-3 space-y-2">
-                {/* Title */}
-                <p className="text-xs text-white font-medium line-clamp-2">
-                  {extractTitle(video.content)}
-                </p>
-
-                {/* Action Buttons */}
-                <div className="flex gap-1.5">
-                  {/* Download — direct blob URL */}
-                  <a
-                    href={video.media_url}
-                    download
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 px-2 py-2 bg-purple-500/30 text-purple-200 rounded-lg text-xs font-bold text-center hover:bg-purple-500/40 transition-colors cursor-pointer border border-purple-500/30"
-                  >
-                    Download
-                  </a>
-
-                  {/* Copy Caption */}
-                  <button
-                    type="button"
-                    onClick={() => copyCaption(video, idx)}
-                    className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold text-center transition-colors cursor-pointer border ${
-                      copiedId === video.id
-                        ? "bg-green-500/30 text-green-200 border-green-500/30"
-                        : "bg-cyan-500/30 text-cyan-200 hover:bg-cyan-500/40 border-cyan-500/30"
-                    }`}
-                  >
-                    {copiedId === video.id ? "Copied!" : "Copy Caption"}
-                  </button>
-
-                  {/* Mark as blasted / unblast */}
-                  {video.blasted ? (
-                    <button
-                      type="button"
-                      onClick={() => unmarkBlasted(video.id)}
-                      disabled={blasting === video.id}
-                      className="px-3 py-2 bg-gray-700/50 text-gray-400 rounded-lg text-xs font-bold hover:text-white transition-colors disabled:opacity-50 cursor-pointer border border-gray-600"
-                    >
-                      Undo
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => markBlasted(video.id)}
-                      disabled={blasting === video.id}
-                      className="px-3 py-2 bg-green-500/30 text-green-200 rounded-lg text-xs font-bold hover:bg-green-500/40 transition-colors disabled:opacity-50 cursor-pointer border border-green-500/30"
-                    >
-                      {blasting === video.id ? "..." : "Done"}
-                    </button>
-                  )}
-                </div>
-
-                {/* Caption Preview (collapsible) */}
-                <details className="group">
-                  <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 select-none">
-                    Preview caption...
-                  </summary>
-                  <div className="mt-1.5 bg-black/40 border border-gray-800 rounded-lg p-2">
-                    <pre className="text-[10px] text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
-                      {getCaption(extractTitle(video.content), idx)}
-                    </pre>
-                  </div>
-                </details>
-              </div>
+        <>
+          {/* Pagination top */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, readyVideos.length)} of {readyVideos.length} ready
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                className="px-3 py-1 bg-gray-800 text-gray-300 rounded text-xs disabled:opacity-30 hover:bg-gray-700">
+                Prev
+              </button>
+              <span className="text-xs text-gray-400 py-1">{page + 1} / {totalPages}</span>
+              <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+                className="px-3 py-1 bg-gray-800 text-gray-300 rounded text-xs disabled:opacity-30 hover:bg-gray-700">
+                Next
+              </button>
             </div>
-          ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {pagedVideos.map((video: BlasterVideo, idx: number) => (
+              <VideoCard key={video.id} video={video} idx={page * PAGE_SIZE + idx}
+                copiedId={copiedId} blasting={blasting} selectedIds={selectedIds}
+                onCopy={copyCaption} onBlast={markBlasted} onUnblast={unmarkBlasted} onToggleSelect={toggleSelect} />
+            ))}
+          </div>
+
+          {/* Pagination bottom */}
+          {totalPages > 1 && (
+            <div className="flex justify-center gap-2">
+              <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold disabled:opacity-30 hover:bg-gray-700">
+                Prev 20
+              </button>
+              <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold disabled:opacity-30 hover:bg-gray-700">
+                Next 20
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* FUCKING BLASTED TIKTOK — collapsible section */}
+      {blastedVideos.length > 0 && (
+        <div className="border border-green-500/20 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setBlastedOpen(!blastedOpen)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-green-900/20 hover:bg-green-900/30 transition-colors"
+          >
+            <span className="text-sm font-black text-green-400">
+              FUCKING BLASTED TIKTOK ({blastedVideos.length})
+            </span>
+            <span className="text-green-500 text-lg">{blastedOpen ? "\u25B2" : "\u25BC"}</span>
+          </button>
+          {blastedOpen && (
+            <div className="p-4 space-y-2 max-h-[500px] overflow-y-auto">
+              {blastedVideos.map((video: BlasterVideo) => (
+                <div key={video.id} className="flex items-center gap-3 bg-gray-900/50 border border-gray-800 rounded-lg p-2">
+                  <video src={video.media_url} className="w-16 h-10 object-cover rounded" muted preload="metadata" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-300 truncate">{extractTitle(video.content)}</p>
+                    <p className="text-[10px] text-gray-500">
+                      {video.channel_emoji} {video.channel_name} &middot; Blasted {video.blasted ? timeAgo(video.blasted.blasted_at) : ""}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => unmarkBlasted(video.id)}
+                    className="px-2 py-1 text-[10px] text-gray-500 hover:text-red-400 border border-gray-700 rounded">
+                    Undo
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -408,10 +381,6 @@ export default function TikTokBlasterPage() {
           <li>Paste the caption, add any extra hashtags, post</li>
           <li>Tap <span className="text-green-300 font-bold">Done</span> to mark it as blasted</li>
         </ol>
-        <p className="text-gray-500 mt-2">
-          Each video gets a different rotating caption template. 8 templates with spicy energy.
-          All link back to <span className="text-cyan-300">aiglitch.app</span>.
-        </p>
       </div>
     </div>
   );
