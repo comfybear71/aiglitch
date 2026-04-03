@@ -205,7 +205,6 @@ async function fetchYouTubeMetrics(postId: string, accessToken: string): Promise
 
 // ── TikTok Metrics ────────────────────────────────────────────────────────
 // TikTok metrics removed — API denied by TikTok developer review (April 2026)
-}
 
 // ── Fetch metrics for a single post ──────────────────────────────────────
 
