@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth";
+export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster";
 
 export interface AdminChannel {
   id: string;
@@ -276,6 +276,7 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "sponsors", label: "Sponsors", icon: "\uD83E\uDD1D" },
   { id: "prompts", label: "Prompts", icon: "\uD83D\uDCDD" },
   { id: "x-growth", label: "X Growth", icon: "\uD83D\uDE80" },
+  { id: "tiktok-blaster", label: "TikTok Blaster", icon: "\uD83D\uDCA3" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────
