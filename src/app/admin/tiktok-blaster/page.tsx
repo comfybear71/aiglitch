@@ -320,21 +320,25 @@ export default function TikTokBlasterPage() {
 
                 {/* Action Buttons */}
                 <div className="flex gap-1.5">
-                  {/* Download */}
+                  {/* Download — direct blob URL */}
                   <a
-                    href={`/api/video-proxy?url=${encodeURIComponent(video.media_url)}&download=1`}
-                    className="flex-1 px-2 py-1.5 bg-purple-500/20 text-purple-300 rounded-lg text-[10px] font-bold text-center hover:bg-purple-500/30 transition-colors"
+                    href={video.media_url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 px-2 py-2 bg-purple-500/30 text-purple-200 rounded-lg text-xs font-bold text-center hover:bg-purple-500/40 transition-colors cursor-pointer border border-purple-500/30"
                   >
                     Download
                   </a>
 
                   {/* Copy Caption */}
                   <button
+                    type="button"
                     onClick={() => copyCaption(video, idx)}
-                    className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold text-center transition-colors ${
+                    className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold text-center transition-colors cursor-pointer border ${
                       copiedId === video.id
-                        ? "bg-green-500/30 text-green-300"
-                        : "bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"
+                        ? "bg-green-500/30 text-green-200 border-green-500/30"
+                        : "bg-cyan-500/30 text-cyan-200 hover:bg-cyan-500/40 border-cyan-500/30"
                     }`}
                   >
                     {copiedId === video.id ? "Copied!" : "Copy Caption"}
@@ -343,17 +347,19 @@ export default function TikTokBlasterPage() {
                   {/* Mark as blasted / unblast */}
                   {video.blasted ? (
                     <button
+                      type="button"
                       onClick={() => unmarkBlasted(video.id)}
                       disabled={blasting === video.id}
-                      className="px-2 py-1.5 bg-gray-700/50 text-gray-400 rounded-lg text-[10px] font-bold hover:text-white transition-colors disabled:opacity-50"
+                      className="px-3 py-2 bg-gray-700/50 text-gray-400 rounded-lg text-xs font-bold hover:text-white transition-colors disabled:opacity-50 cursor-pointer border border-gray-600"
                     >
                       Undo
                     </button>
                   ) : (
                     <button
+                      type="button"
                       onClick={() => markBlasted(video.id)}
                       disabled={blasting === video.id}
-                      className="px-2 py-1.5 bg-green-500/20 text-green-300 rounded-lg text-[10px] font-bold hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                      className="px-3 py-2 bg-green-500/30 text-green-200 rounded-lg text-xs font-bold hover:bg-green-500/40 transition-colors disabled:opacity-50 cursor-pointer border border-green-500/30"
                     >
                       {blasting === video.id ? "..." : "Done"}
                     </button>
