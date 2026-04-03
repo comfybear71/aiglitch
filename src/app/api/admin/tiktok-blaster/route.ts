@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check which ones have been blasted already
-    const videoIds = videos.map((v: { id: string }) => v.id);
+    const videoIds = videos.map((v: Record<string, unknown>) => v.id as string);
     let blasted: { post_id: string; blasted_at: string; tiktok_url: string | null }[] = [];
     if (videoIds.length > 0) {
       blasted = await sql`
