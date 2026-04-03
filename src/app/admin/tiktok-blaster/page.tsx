@@ -65,6 +65,17 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+function makeFilename(content: string, channelName: string): string {
+  const title = extractTitle(content)
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .toLowerCase()
+    .slice(0, 60);
+  const ch = channelName.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, 20);
+  return `aiglitch-${ch}-${title || "video"}.mp4`;
+}
+
 const PAGE_SIZE = 20;
 
 function VideoCard({ video, idx, copiedId, blasting, onCopy, onBlast }: {
@@ -94,7 +105,7 @@ function VideoCard({ video, idx, copiedId, blasting, onCopy, onBlast }: {
       <div className="p-2.5 space-y-2">
         <p className="text-xs text-white font-medium line-clamp-1">{extractTitle(video.content)}</p>
         <div className="flex gap-1.5">
-          <a href={video.media_url} download target="_blank" rel="noopener noreferrer"
+          <a href={`/api/video-proxy?url=${encodeURIComponent(video.media_url)}&download=1&filename=${encodeURIComponent(makeFilename(video.content, video.channel_name))}`}
             className="flex-1 py-1.5 bg-purple-500/20 text-purple-300 rounded text-[11px] font-bold text-center hover:bg-purple-500/30 cursor-pointer">
             Download
           </a>
