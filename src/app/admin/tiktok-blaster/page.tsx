@@ -78,16 +78,23 @@ export default function TikTokBlasterPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [blasting, setBlasting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchVideos = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/admin/tiktok-blaster?days=${days}&channel=${filter}&limit=100`);
       const data = await res.json();
-      setVideos(data.videos || []);
-      setChannels(data.channels || []);
+      if (data.error) {
+        setError(data.error);
+        setVideos([]);
+      } else {
+        setVideos(data.videos || []);
+        setChannels(data.channels || []);
+      }
     } catch (err) {
-      console.error("Failed to fetch videos:", err);
+      setError(String(err));
     }
     setLoading(false);
   }, [days, filter]);
@@ -240,6 +247,14 @@ export default function TikTokBlasterPage() {
           </button>
         )}
       </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="bg-red-900/30 border border-red-500/50 rounded-xl p-4">
+          <p className="text-red-300 text-sm font-bold">API Error:</p>
+          <pre className="text-red-400 text-xs mt-1 whitespace-pre-wrap">{error}</pre>
+        </div>
+      )}
 
       {/* Select all */}
       {filteredVideos.length > 0 && (
