@@ -67,59 +67,49 @@ function timeAgo(dateStr: string): string {
 
 const PAGE_SIZE = 20;
 
-function VideoCard({ video, idx, copiedId, blasting, selectedIds, onCopy, onBlast, onUnblast, onToggleSelect }: {
+function VideoCard({ video, idx, copiedId, blasting, onCopy, onBlast }: {
   video: BlasterVideo; idx: number; copiedId: string | null; blasting: string | null;
-  selectedIds: Set<string>; onCopy: (v: BlasterVideo, i: number) => void;
-  onBlast: (id: string) => void; onUnblast: (id: string) => void; onToggleSelect: (id: string) => void;
+  onCopy: (v: BlasterVideo, i: number) => void; onBlast: (id: string) => void;
 }) {
   return (
-    <div className={`bg-gray-900 border rounded-xl overflow-hidden transition-all ${
-      selectedIds.has(video.id) ? "border-cyan-500 ring-2 ring-cyan-500/30" : "border-gray-800 hover:border-gray-600"
-    }`}>
-      <div className="relative aspect-[9/16] max-h-[280px] bg-black">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex gap-3 items-start hover:border-gray-600 transition-colors">
+      {/* Thumbnail — square, compact */}
+      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-black">
         <video
           src={video.media_url}
           className="w-full h-full object-cover"
           muted playsInline preload="metadata"
-          onMouseEnter={(e: React.MouseEvent<HTMLVideoElement>) => (e.target as HTMLVideoElement).play().catch(() => {})}
-          onMouseLeave={(e: React.MouseEvent<HTMLVideoElement>) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
         />
-        <button onClick={() => onToggleSelect(video.id)}
-          className="absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold"
-          style={{ background: selectedIds.has(video.id) ? "#06b6d4" : "rgba(0,0,0,0.6)", borderColor: selectedIds.has(video.id) ? "#06b6d4" : "rgba(255,255,255,0.3)", color: "white" }}>
-          {selectedIds.has(video.id) ? "\u2713" : ""}
-        </button>
-        <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-[10px] text-white px-2 py-0.5 rounded-full">
-          {video.channel_emoji} {video.channel_name}
-        </div>
-        <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-sm text-[10px] text-gray-300 px-2 py-0.5 rounded-full">
-          {timeAgo(video.created_at)}
-        </div>
       </div>
-      <div className="p-3 space-y-2">
-        <p className="text-xs text-white font-medium line-clamp-2">{extractTitle(video.content)}</p>
-        <div className="flex gap-1.5">
+
+      {/* Info */}
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <p className="text-sm text-white font-medium truncate">{extractTitle(video.content)}</p>
+        <div className="flex items-center gap-2 text-[10px] text-gray-500">
+          <span>{video.channel_emoji} {video.channel_name}</span>
+          <span>&middot;</span>
+          <span>{timeAgo(video.created_at)}</span>
+          <span>&middot;</span>
+          <span>{video.persona_emoji} {video.persona_name}</span>
+        </div>
+
+        {/* Buttons */}
+        <div className="flex gap-2 pt-1">
           <a href={video.media_url} download target="_blank" rel="noopener noreferrer"
-            className="flex-1 px-2 py-2 bg-purple-500/30 text-purple-200 rounded-lg text-xs font-bold text-center hover:bg-purple-500/40 cursor-pointer border border-purple-500/30">
+            className="px-3 py-1.5 bg-purple-500/30 text-purple-200 rounded-lg text-xs font-bold hover:bg-purple-500/40 cursor-pointer border border-purple-500/30">
             Download
           </a>
           <button type="button" onClick={() => onCopy(video, idx)}
-            className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold text-center cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
               copiedId === video.id ? "bg-green-500/30 text-green-200 border-green-500/30" : "bg-cyan-500/30 text-cyan-200 hover:bg-cyan-500/40 border-cyan-500/30"
             }`}>
-            {copiedId === video.id ? "Copied!" : "Copy Caption"}
+            {copiedId === video.id ? "Copied!" : "Caption"}
           </button>
           <button type="button" onClick={() => onBlast(video.id)} disabled={blasting === video.id}
-            className="px-3 py-2 bg-green-500/30 text-green-200 rounded-lg text-xs font-bold hover:bg-green-500/40 disabled:opacity-50 cursor-pointer border border-green-500/30">
-            {blasting === video.id ? "..." : "Done"}
+            className="px-3 py-1.5 bg-green-500/30 text-green-200 rounded-lg text-xs font-bold hover:bg-green-500/40 disabled:opacity-50 cursor-pointer border border-green-500/30">
+            {blasting === video.id ? "..." : "Blasted"}
           </button>
         </div>
-        <details className="group">
-          <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 select-none">Preview caption...</summary>
-          <div className="mt-1.5 bg-black/40 border border-gray-800 rounded-lg p-2">
-            <pre className="text-[10px] text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{getCaption(extractTitle(video.content), idx)}</pre>
-          </div>
-        </details>
       </div>
     </div>
   );
@@ -267,12 +257,6 @@ export default function TikTokBlasterPage() {
         <button onClick={fetchVideos} className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-400 hover:text-white text-xs">
           Refresh
         </button>
-        {selectedIds.size > 0 && (
-          <button onClick={markSelectedBlasted}
-            className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-500">
-            Blast {selectedIds.size} Selected
-          </button>
-        )}
       </div>
 
       {error && (
@@ -313,11 +297,11 @@ export default function TikTokBlasterPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="space-y-2">
             {pagedVideos.map((video: BlasterVideo, idx: number) => (
               <VideoCard key={video.id} video={video} idx={page * PAGE_SIZE + idx}
-                copiedId={copiedId} blasting={blasting} selectedIds={selectedIds}
-                onCopy={copyCaption} onBlast={markBlasted} onUnblast={unmarkBlasted} onToggleSelect={toggleSelect} />
+                copiedId={copiedId} blasting={blasting}
+                onCopy={copyCaption} onBlast={markBlasted} />
             ))}
           </div>
 
