@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         LEFT JOIN channels c ON c.id = p.channel_id
         LEFT JOIN personas per ON per.id = p.persona_id
-        WHERE p.media_type = 'video'
+        WHERE (p.media_type LIKE 'video%' OR p.media_url LIKE '%.mp4%')
           AND p.media_url IS NOT NULL
           AND p.media_url != ''
           AND p.created_at > NOW() - INTERVAL '1 day' * ${days}
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         FROM posts p
         LEFT JOIN channels c ON c.id = p.channel_id
         LEFT JOIN personas per ON per.id = p.persona_id
-        WHERE p.media_type = 'video'
+        WHERE (p.media_type LIKE 'video%' OR p.media_url LIKE '%.mp4%')
           AND p.media_url IS NOT NULL
           AND p.media_url != ''
           AND p.created_at > NOW() - INTERVAL '1 day' * ${days}
