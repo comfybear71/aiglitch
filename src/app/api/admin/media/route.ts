@@ -241,8 +241,8 @@ async function spreadArchitectContent(
   for (const account of accounts) {
     const platform = account.platform as MarketingPlatform;
 
-    // Respect platform compatibility: YouTube/TikTok = video only
-    if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+    // Respect platform compatibility: YouTube = video only
+    if (platform === "youtube" && !isVideo) {
       continue;
     }
 

@@ -102,7 +102,7 @@ async function spreadToSocials(
   for (const account of accounts) {
     const platform = account.platform as MarketingPlatform;
     // Video-only platforms skip images; image-only platforms skip videos
-    if ((platform === "youtube" || platform === "tiktok") && mediaType === "image") continue;
+    if (platform === "youtube" && mediaType === "image") continue;
 
     try {
       const adapted = await adaptContentForPlatform(

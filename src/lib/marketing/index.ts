@@ -100,10 +100,10 @@ export async function runMarketingCycle(): Promise<{
       const platform = account.platform as MarketingPlatform;
 
       // Platform compatibility rules:
-      // - YouTube & TikTok: video-only — skip images and text posts
+      // - YouTube: video-only — skip images and text posts
       // - All platforms: accept videos
       // - X, Facebook, Instagram: accept images
-      if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+      if (platform === "youtube" && !isVideo) {
         skipped++;
         details.push({ platform, status: "skipped", error: `${platform} requires video, post is ${post.media_type || "text"}` });
         continue;

@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       const platform = account.platform as MarketingPlatform;
 
       // Skip video-only platforms for non-video posts
-      if ((platform === "youtube" || platform === "tiktok") && !isVideo) continue;
+      if (platform === "youtube" && !isVideo) continue;
 
       try {
         const adapted = await adaptContentForPlatform(

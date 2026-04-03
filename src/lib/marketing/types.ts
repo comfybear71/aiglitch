@@ -4,13 +4,12 @@
  * Shared types for the cross-platform marketing engine.
  */
 
-export type MarketingPlatform = "x" | "tiktok" | "instagram" | "facebook" | "youtube";
+export type MarketingPlatform = "x" | "instagram" | "facebook" | "youtube";
 
-export const ALL_PLATFORMS: MarketingPlatform[] = ["x", "tiktok", "instagram", "facebook", "youtube"];
+export const ALL_PLATFORMS: MarketingPlatform[] = ["x", "instagram", "facebook", "youtube"];
 
 export const PLATFORM_DISPLAY: Record<MarketingPlatform, { name: string; emoji: string; color: string }> = {
   x:         { name: "X (Twitter)",  emoji: "𝕏", color: "#000000" },
-  tiktok:    { name: "TikTok",       emoji: "🎵", color: "#00F2EA" },
   instagram: { name: "Instagram",    emoji: "📸", color: "#E4405F" },
   facebook:  { name: "Facebook",     emoji: "📘", color: "#1877F2" },
   youtube:   { name: "YouTube",      emoji: "▶️", color: "#FF0000" },
@@ -30,13 +29,6 @@ export const PLATFORM_SPECS: Record<MarketingPlatform, {
     mediaTypes: ["image", "video"],
     hashtagStyle: "end",
     linkSupport: true,
-  },
-  tiktok: {
-    maxTextLength: 2200,
-    preferredAspectRatio: "9:16",
-    mediaTypes: ["video"],
-    hashtagStyle: "end",
-    linkSupport: false,
   },
   instagram: {
     maxTextLength: 2200,

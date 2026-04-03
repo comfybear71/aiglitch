@@ -516,7 +516,7 @@ export async function runMigrations() {
     { key: "seed_mktg_facebook", platform: "facebook", envCheck: "FACEBOOK_ACCESS_TOKEN", extraConfig: JSON.stringify({ page_id: process.env.FACEBOOK_PAGE_ID || "" }) },
     { key: "seed_mktg_youtube", platform: "youtube", envCheck: "YOUTUBE_CLIENT_ID", extraConfig: JSON.stringify({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN || "" }) },
     { key: "seed_mktg_instagram", platform: "instagram", envCheck: "INSTAGRAM_ACCESS_TOKEN", extraConfig: JSON.stringify({ instagram_user_id: process.env.INSTAGRAM_USER_ID || "" }) },
-    { key: "seed_mktg_tiktok", platform: "tiktok", envCheck: "TIKTOK_ACCESS_TOKEN" },
+    // TikTok removed — API denied by TikTok developer review
   ];
 
   await Promise.allSettled(

@@ -18,9 +18,8 @@ export default function MarketingPage() {
   const [mktCollecting, setMktCollecting] = useState(false);
   const [campaignEditing, setCampaignEditing] = useState<MarketingCampaign | null>(null);
   const [campaignFormOpen, setCampaignFormOpen] = useState(false);
-  const [campaignForm, setCampaignForm] = useState({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" });
+  const [campaignForm, setCampaignForm] = useState({ name: "", description: "", target_platforms: "x,instagram,facebook,youtube", posts_per_day: 4, status: "active" });
   const [campaignSaving, setCampaignSaving] = useState(false);
-  const [tiktokSandbox, setTiktokSandbox] = useState(false);
 
   // On mount: fetch marketing data if authenticated
   useEffect(() => {
@@ -41,14 +40,6 @@ export default function MarketingPage() {
       if (accountsRes.ok) {
         const data = await accountsRes.json();
         setMktAccounts(data.accounts || []);
-        // Detect TikTok sandbox mode from DB account extra_config
-        const ttAccount = (data.accounts || []).find((a: MktPlatformAccount) => a.platform === "tiktok");
-        if (ttAccount?.extra_config) {
-          try {
-            const config = JSON.parse(ttAccount.extra_config);
-            setTiktokSandbox(config.sandbox === true);
-          } catch { /* default to live */ }
-        }
       }
     } catch (err) {
       console.error("[marketing] fetch error:", err);
@@ -160,7 +151,7 @@ export default function MarketingPage() {
       if (data.ok || data.id) {
         setCampaignEditing(null);
         setCampaignFormOpen(false);
-        setCampaignForm({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" });
+        setCampaignForm({ name: "", description: "", target_platforms: "x,instagram,facebook,youtube", posts_per_day: 4, status: "active" });
         fetchMarketingData();
       } else {
         alert(`Failed: ${data.error || "Unknown error"}`);
@@ -214,27 +205,6 @@ export default function MarketingPage() {
     setMktSaving(false);
   };
 
-  const toggleTiktokSandbox = async () => {
-    const newSandbox = !tiktokSandbox;
-    setTiktokSandbox(newSandbox);
-    // Persist to DB via extra_config
-    try {
-      const form = new FormData();
-      form.append("action", "save_account");
-      form.append("platform", "tiktok");
-      // Preserve existing account data
-      const ttAccount = mktAccounts.find(a => a.platform === "tiktok");
-      form.append("account_name", ttAccount?.account_name || "");
-      form.append("account_id", ttAccount?.account_id || "");
-      form.append("account_url", ttAccount?.account_url || "");
-      form.append("is_active", ttAccount?.is_active ? "1" : "0");
-      form.append("extra_config", JSON.stringify({ sandbox: newSandbox }));
-      await fetch("/api/admin/mktg", { method: "POST", body: form });
-    } catch {
-      // Revert on failure
-      setTiktokSandbox(!newSandbox);
-    }
-  };
 
   const testPlatformToken = async () => {
     setMktTestingToken(true);
@@ -308,10 +278,9 @@ export default function MarketingPage() {
           {/* Platform Cards */}
           <div>
             <h3 className="text-sm font-bold text-gray-300 mb-2">📱 Platform Status</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { id: "x", name: "X (Twitter)", emoji: "𝕏", bg: "border-gray-600" },
-                { id: "tiktok", name: "TikTok", emoji: "🎵", bg: "border-cyan-500" },
                 { id: "instagram", name: "Instagram", emoji: "📸", bg: "border-pink-500" },
                 { id: "facebook", name: "Facebook", emoji: "📘", bg: "border-blue-500" },
                 { id: "youtube", name: "YouTube", emoji: "▶️", bg: "border-red-500" },
@@ -373,65 +342,21 @@ export default function MarketingPage() {
                         <span className="text-pink-400">{(pStats?.likes || 0).toLocaleString()}</span>
                       </div>
                       <div className="space-y-1 mt-2">
-                        {p.id !== "tiktok" && (
-                          <>
-                            <button onClick={(e) => { e.stopPropagation(); testPlatformPost(p.id); }}
-                              className="w-full px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs hover:bg-yellow-500/30 font-bold">
-                              🧪 Test Post
-                            </button>
-                            <div className="flex gap-1">
-                              <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "image"); }}
-                                className="flex-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs hover:bg-green-500/30 font-bold">
-                                🖼 Image
-                              </button>
-                              <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "video"); }}
-                                className="flex-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
-                                🎬 Video
-                              </button>
-                            </div>
-                          </>
-                        )}
-                        {p.id === "tiktok" && (
-                          <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "video"); }}
-                            className="w-full px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
-                            🎬 Test Video
+                        <button onClick={(e) => { e.stopPropagation(); testPlatformPost(p.id); }}
+                          className="w-full px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs hover:bg-yellow-500/30 font-bold">
+                          🧪 Test Post
+                        </button>
+                        <div className="flex gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "image"); }}
+                            className="flex-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs hover:bg-green-500/30 font-bold">
+                            🖼 Image
                           </button>
-                        )}
-                      </div>
-                      {p.id === "tiktok" && (
-                        <div className="mt-2 space-y-1.5">
-                          {/* SANDBOX / LIVE badge */}
-                          {account?.is_active && (
-                            <div className="flex items-center justify-center">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wide ${tiktokSandbox ? "bg-orange-500/30 text-orange-300 border border-orange-500/40" : "bg-green-500/30 text-green-300 border border-green-500/40"}`}>
-                                {tiktokSandbox ? "SANDBOX" : "LIVE"}
-                              </span>
-                            </div>
-                          )}
-                          {/* Toggle switch */}
-                          <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => toggleTiktokSandbox()}
-                              className="flex items-center gap-2 cursor-pointer group"
-                            >
-                              <div className={`relative w-9 h-5 rounded-full transition-colors ${tiktokSandbox ? "bg-orange-500" : "bg-green-500"}`}>
-                                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${tiktokSandbox ? "left-0.5" : "translate-x-4 left-0.5"}`} />
-                              </div>
-                              <span className={`text-[10px] font-medium ${tiktokSandbox ? "text-orange-400" : "text-green-400"} group-hover:underline`}>
-                                {tiktokSandbox ? "Switch to LIVE" : "Switch to SANDBOX"}
-                              </span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.location.href = tiktokSandbox ? "/api/auth/tiktok?sandbox=true" : "/api/auth/tiktok";
-                              }}
-                              className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-bold">
-                              Re-authorize
-                            </button>
-                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); testMediaPost(p.id, "video"); }}
+                            className="flex-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs hover:bg-purple-500/30 font-bold">
+                            🎬 Video
+                          </button>
                         </div>
-                      )}
+                      </div>
                       {p.id === "youtube" && (
                         <button onClick={(e) => { e.stopPropagation(); window.location.href = "/api/auth/youtube"; }}
                           className="w-full mt-2 px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 font-bold text-center">
@@ -455,7 +380,6 @@ export default function MarketingPage() {
                 <select value={mktAccountForm.platform} onChange={e => setMktAccountForm({...mktAccountForm, platform: e.target.value})}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
                   <option value="x">X (Twitter)</option>
-                  <option value="tiktok">TikTok</option>
                   <option value="instagram">Instagram</option>
                   <option value="facebook">Facebook</option>
                   <option value="youtube">YouTube</option>
@@ -498,20 +422,6 @@ export default function MarketingPage() {
                 </button>
               </div>
             </div>
-            {mktAccountForm.platform === "tiktok" && (
-              <div className="mt-3 p-3 bg-cyan-900/20 border border-cyan-800/40 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <p className="text-xs text-cyan-300 font-bold">🎵 Quick Connect TikTok {tiktokSandbox ? <span className="text-orange-400">(Sandbox)</span> : <span className="text-green-400">(Live)</span>}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Log in with TikTok to automatically get your access token. {tiktokSandbox ? "Using SANDBOX credentials." : "Using LIVE credentials."}</p>
-                  </div>
-                  <a href={tiktokSandbox ? "/api/auth/tiktok?sandbox=true" : "/api/auth/tiktok"}
-                    className={`px-4 py-2 ${tiktokSandbox ? "bg-orange-600 hover:bg-orange-500" : "bg-cyan-600 hover:bg-cyan-500"} text-white font-bold rounded-lg text-xs whitespace-nowrap shrink-0`}>
-                    Connect TikTok
-                  </a>
-                </div>
-              </div>
-            )}
             <p className="text-[10px] text-gray-600 mt-2">
               All platforms use free tier APIs. Posting activates automatically when credentials are added and account is set to Active.
             </p>
@@ -521,7 +431,7 @@ export default function MarketingPage() {
           <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold text-gray-300">📅 Schedule & Campaigns</h3>
-              <button onClick={() => { setCampaignEditing(null); setCampaignFormOpen(true); setCampaignForm({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" }); }}
+              <button onClick={() => { setCampaignEditing(null); setCampaignFormOpen(true); setCampaignForm({ name: "", description: "", target_platforms: "x,instagram,facebook,youtube", posts_per_day: 4, status: "active" }); }}
                 className="px-3 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30 font-bold">
                 + New Campaign
               </button>
@@ -621,7 +531,7 @@ export default function MarketingPage() {
                     <div className="flex flex-wrap gap-2 mt-1">
                       {[
                         { id: "x", label: "𝕏 X" },
-                        { id: "tiktok", label: "🎵 TikTok" },
+                        { id: "instagram", label: "📸 Instagram" },
                         { id: "facebook", label: "📘 Facebook" },
                         { id: "youtube", label: "▶️ YouTube" },
                       ].map(p => {
@@ -653,7 +563,7 @@ export default function MarketingPage() {
                       className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50">
                       {campaignSaving ? "Saving..." : campaignEditing ? "💾 Update" : "💾 Create"}
                     </button>
-                    <button onClick={() => { setCampaignEditing(null); setCampaignFormOpen(false); setCampaignForm({ name: "", description: "", target_platforms: "x,tiktok,facebook,youtube", posts_per_day: 4, status: "active" }); }}
+                    <button onClick={() => { setCampaignEditing(null); setCampaignFormOpen(false); setCampaignForm({ name: "", description: "", target_platforms: "x,instagram,facebook,youtube", posts_per_day: 4, status: "active" }); }}
                       className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg text-xs hover:bg-gray-600">
                       Cancel
                     </button>

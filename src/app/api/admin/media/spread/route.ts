@@ -83,8 +83,8 @@ export async function POST(request: NextRequest) {
     for (const account of accounts) {
       const platform = account.platform as MarketingPlatform;
 
-      // Platform compatibility: YouTube/TikTok = video only
-      if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+      // Platform compatibility: YouTube = video only
+      if (platform === "youtube" && !isVideo) {
         continue;
       }
 

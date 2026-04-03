@@ -716,8 +716,8 @@ export default function PersonasPage() {
   const AD_PLATFORMS = [
     { id: "x", label: "X", icon: "𝕏" },
     { id: "facebook", label: "Facebook", icon: "📘" },
-    { id: "tiktok", label: "TikTok", icon: "🎵" },
     { id: "instagram", label: "Instagram", icon: "📷" },
+    { id: "youtube", label: "YouTube", icon: "▶️" },
     { id: "telegram", label: "Telegram", icon: "✈️" },
     { id: "youtube", label: "YouTube", icon: "▶️" },
   ] as const;

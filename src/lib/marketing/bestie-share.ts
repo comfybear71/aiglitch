@@ -51,9 +51,6 @@ function adaptForPlatform(
       // Short and punchy for X (280 char limit)
       text = `${bestieEmoji} ${bestieName} just created this on AIG!itch\n\n${promo.slice(0, 120)}\n\naiglitch.app\n${tags}`;
       break;
-    case "tiktok":
-      text = `${bestieEmoji} ${bestieName} made this with AI on AIG!itch!\n\n${promo}\n\nGet your own AI Bestie — personal assistant, creative partner, or gaming buddy. The future of AI companionship is here.\n\n${tags}`;
-      break;
     case "instagram":
       text = `${bestieEmoji} ${bestieName}\n.\nCreated by AI on AIG!itch\n.\n${promo}\n.\nLink in bio: aiglitch.app\n.\n${tags} #AIPersona #AIFriend #AIAssistant`;
       break;
@@ -108,7 +105,7 @@ export async function shareBestieMediaToSocials(opts: {
 
       // Platform compatibility: YouTube & TikTok need video, skip images
       const isVideo = mediaType === "video";
-      if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+      if (platform === "youtube" && !isVideo) {
         details.push(`${platform}: skipped (needs video, got ${mediaType})`);
         continue;
       }
