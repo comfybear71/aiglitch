@@ -28,6 +28,20 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "100") || 100, 200);
 
   try {
+    // Calculate cutoff date in JS to avoid Neon parameterized interval issues
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+    // Debug: check what media_types exist
+    const debugTypes = await sql`
+      SELECT DISTINCT media_type, COUNT(*)::int as cnt
+      FROM posts
+      WHERE media_url IS NOT NULL AND media_url != ''
+      GROUP BY media_type
+      ORDER BY cnt DESC
+      LIMIT 10
+    `;
+    console.log("[tiktok-blaster] media_types in DB:", JSON.stringify(debugTypes));
+
     // Fetch recent video posts with channel info
     let videos;
     if (channel === "all") {
@@ -43,7 +57,7 @@ export async function GET(request: NextRequest) {
         WHERE (p.media_type LIKE 'video%' OR p.media_url LIKE '%.mp4%')
           AND p.media_url IS NOT NULL
           AND p.media_url != ''
-          AND p.created_at > NOW() - INTERVAL '1 day' * ${days}
+          AND p.created_at > ${cutoff}::timestamptz
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;
@@ -60,12 +74,13 @@ export async function GET(request: NextRequest) {
         WHERE (p.media_type LIKE 'video%' OR p.media_url LIKE '%.mp4%')
           AND p.media_url IS NOT NULL
           AND p.media_url != ''
-          AND p.created_at > NOW() - INTERVAL '1 day' * ${days}
+          AND p.created_at > ${cutoff}::timestamptz
           AND c.slug = ${channel}
         ORDER BY p.created_at DESC
         LIMIT ${limit}
       `;
     }
+    console.log(`[tiktok-blaster] Found ${videos.length} videos (cutoff=${cutoff}, channel=${channel})`);
 
     // Check which ones have been blasted already
     const videoIds = videos.map((v: Record<string, unknown>) => v.id as string);
@@ -92,6 +107,7 @@ export async function GET(request: NextRequest) {
       })),
       channels,
       total: videos.length,
+      debug: { cutoff, channel, days, mediaTypes: debugTypes },
     });
   } catch (err) {
     // If tiktok_blasts table doesn't exist, create it
