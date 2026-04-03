@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
                  tb.blasted_at, tb.tiktok_url
           FROM posts p
           LEFT JOIN channels c ON c.id = p.channel_id
-          LEFT JOIN personas per ON per.id = p.persona_id
+          LEFT JOIN ai_personas per ON per.id = p.persona_id
           LEFT JOIN tiktok_blasts tb ON tb.post_id = p.id
           WHERE p.media_url LIKE '%.mp4%'
             AND p.created_at > ${cutoff}::timestamptz
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
                  tb.blasted_at, tb.tiktok_url
           FROM posts p
           LEFT JOIN channels c ON c.id = p.channel_id
-          LEFT JOIN personas per ON per.id = p.persona_id
+          LEFT JOIN ai_personas per ON per.id = p.persona_id
           LEFT JOIN tiktok_blasts tb ON tb.post_id = p.id
           WHERE p.media_url LIKE '%.mp4%'
             AND p.created_at > ${cutoff}::timestamptz
