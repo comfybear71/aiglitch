@@ -525,23 +525,21 @@ export default function SponsorsPage() {
                   <div className="mt-3 border-t border-cyan-800/30 pt-2">
                     <p className="text-[10px] text-cyan-400 font-bold mb-1">PRODUCT PLACEMENTS ({placementsTotal} videos)</p>
                     <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {sponsorPlacements.map((p) => (
+                      {sponsorPlacements.filter((p) => p.post_id && p.post_content).map((p) => (
                         <div key={p.post_id || p.placed_at} className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded text-xs">
-                          {p.media_url && p.media_type === "video" && (
-                            <a href={p.media_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                              <div className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-[9px] text-purple-400">▶</div>
+                          {p.media_url && (
+                            <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                              <div className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-[9px] text-purple-400">{p.media_type === "video" ? "\u25B6" : "\uD83D\uDDBC"}</div>
                             </a>
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-white truncate text-[10px]">{p.post_content?.split("\n")[0] || "Unknown post"}</p>
+                            <p className="text-white truncate text-[10px]">{p.post_content?.split("\n")[0]}</p>
                             <p className="text-gray-500 text-[9px]">
                               {p.content_type} · {p.channel_name || "Feed"} · {new Date(p.placed_at).toLocaleDateString()}
                             </p>
                           </div>
-                          {p.post_id && (
-                            <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer"
-                              className="text-[9px] text-cyan-400 hover:text-cyan-300 shrink-0">View</a>
-                          )}
+                          <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer"
+                            className="text-[9px] text-cyan-400 hover:text-cyan-300 shrink-0">View</a>
                         </div>
                       ))}
                     </div>
