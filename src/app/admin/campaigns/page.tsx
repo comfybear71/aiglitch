@@ -544,9 +544,9 @@ export default function CampaignsPage() {
             Seed In-House Products
           </button>
         </div>
-        {campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed").length === 0 ? (
+        {campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed" && !(c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).length === 0 ? (
           <div className="text-center py-4 text-gray-500 text-xs">No active campaigns.</div>
-        ) : campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed").map((c: Campaign) => (
+        ) : campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed" && !(c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).map((c: Campaign) => (
           <div key={c.id} className={`bg-gray-900 border rounded-xl overflow-hidden ${c.is_inhouse ? "border-purple-500/30" : "border-gray-700"}`}>
             <details className="group">
               <summary className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between p-3 sm:p-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
@@ -575,22 +575,10 @@ export default function CampaignsPage() {
                   {c.status === "paused" && (
                     <button onClick={() => campaignAction(c.id, "resume")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Resume</button>
                   )}
-                  {c.status === "paused" && (
-                    <button onClick={() => campaignAction(c.id, "complete")} className="px-2 py-1 bg-gray-500/20 text-gray-400 rounded text-[10px] hover:bg-gray-500/30">Expire</button>
-                  )}
                   {c.status === "pending_payment" && (
                     <button onClick={() => campaignAction(c.id, "activate")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Activate</button>
                   )}
-                  <button onClick={() => {
-                    if (editingCampaign === c.id) { setEditingCampaign(null); } else {
-                      setEditingCampaign(c.id);
-                      setEditVisualPrompt(c.visual_prompt || "");
-                      setEditTextPrompt(c.text_prompt || "");
-                      setEditLogoUrl(c.logo_url || "");
-                      setEditProductImageUrl(c.product_image_url || "");
-                      setEditWebsiteUrl(c.website_url || "");
-                    }
-                  }} className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-[10px] hover:bg-yellow-500/30">Edit</button>
+                  <button onClick={() => campaignAction(c.id, "complete")} className="px-2 py-1 bg-gray-500/20 text-gray-400 rounded text-[10px] hover:bg-gray-500/30">Expire</button>
                   <button onClick={() => { if (confirm(`Delete "${c.brand_name}" campaign?`)) campaignAction(c.id, "cancel"); }}
                     className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] hover:bg-red-500/30">Del</button>
                 </div>
@@ -904,13 +892,13 @@ export default function CampaignsPage() {
       </div>
 
       {/* Expired / Completed Campaigns */}
-      {campaigns.filter((c: Campaign) => c.status === "completed").length > 0 && (
+      {campaigns.filter((c: Campaign) => c.status === "completed" || (c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).length > 0 && (
         <details className="mt-6">
           <summary className="cursor-pointer text-sm font-bold text-gray-400 hover:text-white py-2">
-            {"\u23F0"} Expired Campaigns ({campaigns.filter((c: Campaign) => c.status === "completed").length})
+            {"\u23F0"} Expired Campaigns ({campaigns.filter((c: Campaign) => c.status === "completed" || (c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).length})
           </summary>
           <div className="space-y-2 mt-2">
-            {campaigns.filter((c: Campaign) => c.status === "completed").map((c: Campaign) => (
+            {campaigns.filter((c: Campaign) => c.status === "completed" || (c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).map((c: Campaign) => (
               <div key={c.id} className="bg-gray-900/40 border border-gray-800 rounded-xl p-3 opacity-70">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
                   <div className="flex items-center gap-2 flex-wrap">
