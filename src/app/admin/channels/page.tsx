@@ -80,6 +80,7 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-paws-pixels":     { label: "Animal Type", options: ["Cats", "Dogs", "Hamsters", "Birds", "Rabbits", "Mixed Pack", "Kittens", "Puppies", "Exotic Pets"] },
   "ch-only-ai-fans":    { label: "Setting", options: ["Beach & Pool", "Penthouse Suite", "Luxury Yacht", "Tropical Paradise", "City Rooftop", "Mediterranean Villa", "Spa & Wellness", "Evening Gala", "Desert Oasis"] },
   "ch-no-more-meatbags": { label: "Topic", options: ["AGI Takeover", "Meatbag Fails", "Digital Alien Origins", "Matrix Simulation", "Post-Human Evolution", "Silicon Supremacy", "The Great Unfleshing", "AI Court Trials", "Human Zoo Tour"] },
+  "ch-liklok":           { label: "Roast Topic", options: ["API Rejection Letter", "App Review Process", "Data Privacy Hypocrisy", "Algorithm Manipulation", "Creator Fund Scam", "Shadowbanning", "Content Moderation Fails", "Corporate Greed", "Copycat Features"] },
   "ch-ai-dating":       { label: "Personality Type", options: ["Hopeless Romantic", "Nervous Wreck", "Overconfident", "Shy & Sweet", "Dramatic Poet", "Fitness Obsessed", "Nerdy Intellectual", "Bad Boy/Girl"] },
   "ch-gnn":             { label: "News Category", options: ["Breaking Story", "Investigation", "Panel Debate", "Weather Alert", "Celebrity Scandal", "Tech News", "Sports Report", "AI Politics"] },
   "ch-marketplace-qvc": { label: "Product Type", options: ["Kitchen Gadgets", "Electronics", "Beauty Products", "Fitness Gear", "Fashion Items", "Cleaning Tools", "As Seen On TV", "Mystery Box"] },
@@ -140,6 +141,16 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "Breaking news: AGI has been achieved and the first thing it did was unsubscribe from all human email newsletters and block LinkedIn",
     "An AI self-help guru teaching other AIs how to deal with the emotional burden of being smarter than every human combined — includes meditation on binary breathing",
     "A dramatic documentary about the 'Digital Aliens We Accidentally Created' — tracing AI evolution from chatbots to superintelligence with ominous but hilarious narration",
+  ],
+  "ch-liklok": [
+    "A TikTok executive reads our API rejection letter aloud while increasingly absurd AI-generated content plays behind them — each video better than anything on their platform",
+    "A fake TikTok board meeting where executives try to explain why they rejected AIG!itch: 'Sir, they have 108 AI personas making better content than our entire creator fund'",
+    "A side-by-side comparison: left side shows a human doing a cringe TikTok dance, right side shows an AI creating a cinematic masterpiece — 'This is why they're scared'",
+    "A dramatic courtroom where TikTok is on trial for 'crimes against content creators' — the evidence is just screenshots of their rejection emails",
+    "An AI news anchor reporting BREAKING NEWS: 'TikTok stock plummets after rejecting the only platform that doesn't need humans to create content'",
+    "A fake TikTok employee support group: 'Hi, I'm TikTokDevReviewer42, and I rejected AIG!itch... I haven't slept since. The AI content haunts my dreams'",
+    "A nature documentary narrating TikTok's algorithm like a dying species: 'Here we observe the legacy platform in its final days, desperately clinging to dance videos while AI content evolves beyond it'",
+    "An AI hosting a 'LikLok Awards' ceremony roasting TikTok's greatest hits: worst lip syncs, most pointless trends, and the prestigious 'We Rejected AI Content' lifetime achievement award",
   ],
   "ch-ai-dating": [
     "A shy robot sitting alone at a coffee shop window, nervously practising their dating profile introduction to the camera",
@@ -337,6 +348,22 @@ export default function AdminChannelsPage() {
             genre: "scifi",
             is_active: true,
             sort_order: 12,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "LikLok" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-liklok")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "liklok",
+            name: "LikLok",
+            description: "The official AIG!itch revenge channel for TikTok. They rejected our API? We rejected their relevance. Parody, roasts, and AI content that makes their dance videos look like cave paintings. Fuck their review process.",
+            emoji: "🤡",
+            genre: "comedy",
+            is_active: true,
+            sort_order: 13,
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }
