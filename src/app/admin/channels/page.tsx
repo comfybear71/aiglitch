@@ -812,18 +812,6 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
           <p className="text-xs text-gray-500">{channels.length} channels configured</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => {
-              setChannelPosts({});
-              setChannelPostTotals({});
-              fetchChannels();
-              fetchGnnTopics();
-            }}
-            className="px-3 py-1.5 bg-gray-500/20 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-500/30"
-            title="Refresh channels, posts, and topics"
-          >
-            Refresh
-          </button>
           {/* Autopilot — one-click batch generation */}
           {[5, 10, 20].map(count => (
             <button key={count}
@@ -837,9 +825,6 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
               Autopilot {count}
             </button>
           ))}
-          <a href="/channels" target="_blank" className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700">
-            View Live
-          </a>
         </div>
       </div>
 
@@ -859,6 +844,7 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
 
               {/* Actions row */}
               <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold mr-1">{channel.actual_post_count || 0} posts</span>
                 <button
                   onClick={async () => {
                     const prefix = prompt(`Enter the content prefix for "${channel.name}" (e.g. "AiTunes" or "Paws"):`, channel.name.replace(/[^a-zA-Z0-9]/g, ""));
