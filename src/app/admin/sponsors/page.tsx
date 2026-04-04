@@ -477,10 +477,17 @@ export default function SponsorsPage() {
                       <span className="text-gray-400 text-xs ml-2">{s.contact_email}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 text-xs">
+                  <div className="flex items-center gap-4 text-xs flex-wrap">
                     {s.industry && <span className="text-gray-500">{s.industry}</span>}
-                    <span className="text-green-400">{s.glitch_balance} GLITCH</span>
-                    <span className="text-gray-500">Spent: {s.total_spent}</span>
+                    <span className={`font-bold ${s.glitch_balance > 500 ? "text-green-400" : s.glitch_balance > 0 ? "text-orange-400" : "text-red-400"}`}>
+                      {"\u00A7"}{s.glitch_balance.toLocaleString()} GLITCH
+                    </span>
+                    {s.glitch_balance > 0 && (
+                      <span className="text-cyan-400">{"\u00A7"}{Math.round(s.glitch_balance / 7)}/day &middot; {Math.ceil(s.glitch_balance / (s.glitch_balance / 7))}d left</span>
+                    )}
+                    <span className="text-gray-500">Spent: {"\u00A7"}{s.total_spent.toLocaleString()}</span>
+                    {s.glitch_balance <= 500 && s.glitch_balance > 0 && <span className="text-red-400 font-bold text-[10px] animate-pulse">LOW</span>}
+                    {s.glitch_balance <= 0 && <span className="text-red-500 font-bold text-[10px]">EMPTY</span>}
                     <button onClick={(e) => { e.stopPropagation(); refreshSponsorFromMasterHQ(s); }}
                       className="px-2 py-1 bg-fuchsia-500/20 text-fuchsia-400 rounded hover:bg-fuchsia-500/30">Sync</button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingSponsor(s); setForm({ company_name: s.company_name, contact_email: s.contact_email, contact_name: s.contact_name || "", industry: s.industry || "", website: s.website || "", notes: s.notes || "", status: s.status, glitch_balance: s.glitch_balance }); setShowForm(true); }}

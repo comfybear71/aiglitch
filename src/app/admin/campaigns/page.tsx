@@ -555,6 +555,26 @@ export default function CampaignsPage() {
                   {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
                   {c.product_image_url && <span className="ml-1 text-purple-400">{"\u{1F5BC}"}</span>}
                 </div>
+                {/* Daily burn stats */}
+                {c.starts_at && c.status === "active" && (() => {
+                  const dailyRate = c.price_glitch / (c.duration_days || 7);
+                  const elapsed = Math.min(
+                    Math.floor((Date.now() - new Date(c.starts_at!).getTime()) / 86400000),
+                    c.duration_days || 7
+                  );
+                  const burned = Math.round(elapsed * dailyRate);
+                  const remaining = Math.max(0, c.price_glitch - burned);
+                  const daysLeft = Math.max(0, (c.duration_days || 7) - elapsed);
+                  return (
+                    <div className="flex items-center gap-3 mb-2 text-[10px]">
+                      <span className="text-green-400 font-bold">{"\u00A7"}{remaining.toLocaleString()} left</span>
+                      <span className="text-orange-400">{"\u00A7"}{Math.round(dailyRate)}/day</span>
+                      <span className="text-cyan-400">{daysLeft}d remaining</span>
+                      <span className="text-gray-500">{"\u00A7"}{burned.toLocaleString()} burned</span>
+                      {daysLeft <= 1 && <span className="text-red-400 font-bold animate-pulse">LOW BALANCE</span>}
+                    </div>
+                  );
+                })()}
                 {/* Collapsible: Images */}
                 {(c.logo_url || c.product_image_url || (c.product_images && c.product_images.length > 0)) && (
                   <div className="mb-1">
