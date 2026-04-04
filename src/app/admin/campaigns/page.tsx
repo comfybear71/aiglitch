@@ -547,15 +547,12 @@ export default function CampaignsPage() {
         {campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed").length === 0 ? (
           <div className="text-center py-4 text-gray-500 text-xs">No active campaigns.</div>
         ) : campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed").map((c: Campaign) => (
-          <div key={c.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${c.is_inhouse ? "border-purple-500/30" : "border-gray-700"}`}>
-            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  {/* Logo thumbnail */}
-                  {c.logo_url && (
-                    <img src={c.logo_url} alt={c.brand_name} className="w-10 h-10 rounded object-cover border border-gray-700" />
-                  )}
-                  <span className="text-lg sm:text-xl">{c.product_emoji}</span>
+          <div key={c.id} className={`bg-gray-900 border rounded-xl overflow-hidden ${c.is_inhouse ? "border-purple-500/30" : "border-gray-700"}`}>
+            <details className="group">
+              <summary className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between p-3 sm:p-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                  {c.logo_url && <img src={c.logo_url} alt={c.brand_name} className="w-8 h-8 rounded object-cover border border-gray-700" />}
+                  <span className="text-lg">{c.product_emoji}</span>
                   <span className="font-bold text-white text-sm">{c.brand_name}</span>
                   <span className="text-gray-400 hidden sm:inline">—</span>
                   <span className="text-gray-300 text-sm">{c.product_name}</span>
@@ -563,13 +560,43 @@ export default function CampaignsPage() {
                     {c.status.replace("_", " ")}
                   </span>
                   {c.is_inhouse && <span className="text-purple-400 text-[10px] border border-purple-500/30 px-1.5 py-0.5 rounded-full">IN-HOUSE</span>}
+                  <span className="text-gray-500 text-[10px]">
+                    {c.is_inhouse ? "" : `${c.duration_days}d | `}{"\u00A7"}{c.price_glitch.toLocaleString()} | {Math.round(c.frequency * 100)}%
+                    {c.starts_at && ` | ${new Date(c.starts_at).toLocaleDateString()}`}
+                    {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
+                  </span>
+                  {c.product_image_url && <span className="text-purple-400 text-[10px]">{"\u{1F5BC}"}</span>}
                 </div>
-                <div className="text-gray-400 text-[10px] sm:text-xs mb-2">
-                  {c.duration_days}d | {"\u00A7"}{c.price_glitch.toLocaleString()} | {Math.round(c.frequency * 100)}%
-                  {c.starts_at && ` | ${new Date(c.starts_at).toLocaleDateString()}`}
-                  {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
-                  {c.product_image_url && <span className="ml-1 text-purple-400">{"\u{1F5BC}"}</span>}
+                {/* Action buttons in header */}
+                <div className="flex gap-1 flex-wrap flex-shrink-0" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                  {c.status === "active" && (
+                    <button onClick={() => campaignAction(c.id, "pause")} className="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-[10px] hover:bg-orange-500/30">Pause</button>
+                  )}
+                  {c.status === "paused" && (
+                    <button onClick={() => campaignAction(c.id, "resume")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Resume</button>
+                  )}
+                  {c.status === "pending_payment" && (
+                    <button onClick={() => campaignAction(c.id, "activate")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Activate</button>
+                  )}
+                  <button onClick={() => {
+                    if (editingCampaign === c.id) { setEditingCampaign(null); } else {
+                      setEditingCampaign(c.id);
+                      setEditVisualPrompt(c.visual_prompt || "");
+                      setEditTextPrompt(c.text_prompt || "");
+                      setEditLogoUrl(c.logo_url || "");
+                      setEditProductImageUrl(c.product_image_url || "");
+                      setEditWebsiteUrl(c.website_url || "");
+                    }
+                  }} className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-[10px] hover:bg-yellow-500/30">Edit</button>
+                  <button onClick={() => { if (confirm(`Delete "${c.brand_name}" campaign?`)) campaignAction(c.id, "cancel"); }}
+                    className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] hover:bg-red-500/30">Del</button>
                 </div>
+              </summary>
+
+              {/* Collapsible body */}
+              <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
+              <div className="flex-1 min-w-0">
                 {/* Daily burn stats */}
                 {c.starts_at && (() => {
                   const dailyRate = c.price_glitch / (c.duration_days || 7);
@@ -790,7 +817,7 @@ export default function CampaignsPage() {
                   </p>
                 </div>
               </div>
-              {/* Actions */}
+              {/* Actions moved to header — this space intentionally left for freq/edit forms */}
               <div className="flex flex-row sm:flex-col gap-1 sm:ml-2 flex-wrap">
                 {c.status === "active" && (
                   <button onClick={() => { setEditingFreq(editingFreq === c.id ? null : c.id); setFreqValue(c.frequency); }}
@@ -798,49 +825,6 @@ export default function CampaignsPage() {
                     {Math.round(c.frequency * 100)}% Freq
                   </button>
                 )}
-                {c.status === "pending_payment" && (
-                  <button onClick={() => campaignAction(c.id, "activate")}
-                    className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
-                    Activate
-                  </button>
-                )}
-                {c.status === "active" && (
-                  <button onClick={() => campaignAction(c.id, "pause")}
-                    className="px-3 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-lg text-xs hover:bg-orange-500/30 transition">
-                    Pause
-                  </button>
-                )}
-                {c.status === "paused" && (
-                  <button onClick={() => campaignAction(c.id, "resume")}
-                    className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
-                    Resume
-                  </button>
-                )}
-                {(c.status === "pending_payment" || c.status === "paused") && (
-                  <button onClick={() => campaignAction(c.id, "cancel")}
-                    className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition">
-                    Cancel
-                  </button>
-                )}
-                {(c.status === "completed" || c.status === "cancelled") && (
-                  <button onClick={() => campaignAction(c.id, "reactivate")}
-                    className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
-                    Re-activate 7d
-                  </button>
-                )}
-                <button onClick={() => {
-                  if (editingCampaign === c.id) { setEditingCampaign(null); } else {
-                    setEditingCampaign(c.id);
-                    setEditVisualPrompt(c.visual_prompt || "");
-                    setEditTextPrompt(c.text_prompt || "");
-                    setEditLogoUrl(c.logo_url || "");
-                    setEditProductImageUrl(c.product_image_url || "");
-                    setEditWebsiteUrl(c.website_url || "");
-                  }
-                }}
-                  className="px-3 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg text-xs hover:bg-yellow-500/30 transition">
-                  {editingCampaign === c.id ? "Close" : "Edit"}
-                </button>
               </div>
             </div>
 
@@ -911,6 +895,8 @@ export default function CampaignsPage() {
               </div>
             )}
           </div>
+          </details>
+          </div>
         ))}
       </div>
 
@@ -939,6 +925,10 @@ export default function CampaignsPage() {
                     <button onClick={() => campaignAction(c.id, "activate")}
                       className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30 font-bold">
                       Re-activate
+                    </button>
+                    <button onClick={() => { if (confirm(`Permanently delete "${c.brand_name}"?`)) campaignAction(c.id, "cancel"); }}
+                      className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] hover:bg-red-500/30">
+                      Delete
                     </button>
                   </div>
                 </div>
