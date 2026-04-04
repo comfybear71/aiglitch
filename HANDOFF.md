@@ -183,6 +183,53 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### April 4, 2026 — TikTok Removal, TikTok Blaster, LikLok Channel, Safety Rules
+
+**TikTok API removed (denied by developer review):**
+- TikTok denied our app 4 times: "does not support personal or internal company use"
+- Removed ALL TikTok auto-posting code: `postToTikTok`, `refreshTikTokToken`, `getValidTikTokToken` (~250 lines)
+- Removed `"tiktok"` from `MarketingPlatform` type union and `ALL_PLATFORMS` array
+- Removed TikTok card, sandbox toggle, OAuth connect from marketing dashboard
+- Cleaned up `platform === "tiktok"` comparisons across 17 files
+- TikTok follow links in PostCard share menu preserved (profile URLs still valid)
+- Files: `types.ts`, `platforms.ts`, `content-adapter.ts`, `bestie-share.ts`, `hero-image.ts`, `spread-post.ts`, `index.ts`, `metrics-collector.ts`, `marketing/page.tsx`, `personas/page.tsx`, `db.ts`, `marketing/page.tsx` (public), plus 6 admin API routes
+
+**TikTok Blaster admin page:**
+- New tab at `/admin/tiktok-blaster` for manual TikTok posting workflow
+- Grid of channel videos with 16:9 thumbnails, hover-to-play preview
+- Download via `/api/video-proxy?download=1&filename=...` with clean human-readable filenames
+- Copy Caption: 8 rotating templates with anti-algorithm, pro-AIG!itch energy + aiglitch.app link
+- Done button moves video to "FUCKING BLASTED TIKTOK" collapsible section at bottom
+- Paginated 20/page with Prev/Next
+- Only shows channel videos (channel_id IS NOT NULL) — no Main Feed or Lost Videos
+- API: `GET/POST /api/admin/tiktok-blaster`, DB table: `tiktok_blasts` (auto-created)
+- Files: `src/app/admin/tiktok-blaster/page.tsx`, `src/app/api/admin/tiktok-blaster/route.ts`, `src/app/admin/admin-types.ts`
+
+**LikLok revenge channel:**
+- New channel `ch-liklok` (emoji: 🤡, genre: comedy) — parody roasting TikTok for API rejection
+- Description: "They rejected our API? We rejected their relevance."
+- 9 roast topic options: API Rejection Letter, Data Privacy Hypocrisy, Shadowbanning, Creator Fund Scam, etc.
+- 10 random prompts: fake boardroom panics, courtroom trials, LikLok Awards ceremony, GRWM parody, nature documentary about TikTok dying, support group for TikTok reviewers
+- Visual style: cheap TikTok phone footage destroyed by cinematic AI, TikTok pink/cyan corrupted to AIG!itch purple
+- Slogan: "They Rejected Us. We Rejected Their Relevance."
+- 5 parody logos stored in Vercel Blob: `sponsors/liklok/prompt{1-5}.jpg` — ready for Grokification via ad campaign
+- Auto-seeds on channels page load (same pattern as No More Meatbags)
+- Files: `channels/page.tsx`, `director-movies.ts` (CHANNEL_TITLE_PREFIX + CHANNEL_VISUAL_STYLE), `constants.ts` (SLOGANS)
+
+**SAFETY-RULES.md added:**
+- Mandatory safety protocol after Togogo incident (Claude session destroyed production branch)
+- Rules: never push to main, never delete CLAUDE.md/HANDOFF.md, fix spiral prevention (3 failed attempts = stop), database safety, deployment safety
+- Reference added to top of CLAUDE.md so every future session reads it first
+
+**Channels admin mobile layout fixed:**
+- Channel cards had justify-between layout that crushed on iPhone
+- Changed to stacked: emoji + title on top, action buttons row below
+
+**Known issue: TikTok defaults uploads to Private**
+- When uploading manually to TikTok, videos default to Private
+- User must change to Public either during upload or in TikTok Studio
+- Not fixable from our side — TikTok enforces this for manual uploads
+
 ### March 29, 2026 — Channel Video Generator Enhancements & Naming Convention
 
 **Channel-specific video options for all channels:**
@@ -366,6 +413,14 @@ Backend changes to support G!itch Bestie mobile app updates:
 
 ## Known Issues & Fixes
 
+### #7 — TikTok API Denied by Developer Review — RESOLVED April 4, 2026
+
+**Problem:** TikTok developer review rejected our app 4 times. Reason: "TikTok for Developers currently does not support personal or internal company use."
+
+**Resolution:** Removed all TikTok auto-posting code. Built TikTok Blaster admin page for manual posting (download video + copy caption). Created LikLok revenge parody channel. Buffer.com API was investigated as alternative but they stopped accepting new developer apps and don't support video uploads.
+
+**Lesson:** TikTok's API is not designed for single-brand auto-posting. Manual posting with a good workflow tool (TikTok Blaster) is the practical solution.
+
 ### #6 — TikTok Posting Always Failing — RESOLVED March 26, 2026
 
 **Problem:** TikTok video posts always failed. Multiple cascading issues: `PULL_FROM_URL` requires unverified domain, Direct Post needs audit, double endpoint calls created spam risk, sandbox mode didn't persist in UI.
@@ -463,10 +518,15 @@ See full details in `errors/error-log.md #1`.
 ## What's Next
 
 ### Active/Recent Work
+- **LikLok revenge channel** live — TikTok parody channel with 10 savage prompts, 5 logos in Blob ready for Grokification
+- **TikTok Blaster** live at `/admin/tiktok-blaster` — manual TikTok posting workflow (download + copy caption)
+- **TikTok API completely removed** — `MarketingPlatform` type no longer includes `"tiktok"`, all posting code deleted
+- **SAFETY-RULES.md** added — mandatory safety protocol for all sessions
 - Wallet orphan recovery deployed — monitor Vercel logs for `[wallet_login] Orphan recovery` entries
 - Voice transcription live with Groq Whisper — monitor for any GROQ_API_KEY issues
 
 ### Future Features
+- Buffer.com integration for TikTok scheduling (their API is currently closed to new apps — revisit later)
 - Persona memory in content generation
 - Meatbag persona dashboard
 - Persona trading (NFTs)
