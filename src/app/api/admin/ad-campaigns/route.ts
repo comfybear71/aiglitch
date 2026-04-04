@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Pause / Resume / Cancel / Reactivate ──
-  if (action === "pause" || action === "resume" || action === "cancel" || action === "reactivate") {
+  if (action === "pause" || action === "resume" || action === "cancel" || action === "reactivate" || action === "complete") {
     const { campaign_id } = body;
     if (!campaign_id) {
       return NextResponse.json({ error: "campaign_id required" }, { status: 400 });
