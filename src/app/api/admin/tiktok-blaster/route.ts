@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
           LEFT JOIN ai_personas per ON per.id = p.persona_id
           LEFT JOIN tiktok_blasts tb ON tb.post_id = p.id
           WHERE p.media_url LIKE '%.mp4%'
+            AND p.channel_id IS NOT NULL
             AND p.created_at > ${cutoff}::timestamptz
           ORDER BY p.created_at DESC
           LIMIT ${limit}
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
           LEFT JOIN ai_personas per ON per.id = p.persona_id
           LEFT JOIN tiktok_blasts tb ON tb.post_id = p.id
           WHERE p.media_url LIKE '%.mp4%'
+            AND p.channel_id IS NOT NULL
             AND p.created_at > ${cutoff}::timestamptz
             AND c.slug = ${channel}
           ORDER BY p.created_at DESC
