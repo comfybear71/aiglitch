@@ -526,15 +526,28 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* Sponsor Campaigns */}
+      {/* All Campaigns */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-amber-400">{"\uD83E\uDD1D"} Sponsor Campaigns</h3>
+          <button onClick={async () => {
+            const res = await fetch("/api/admin/ad-campaigns", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "seed_inhouse" }),
+            });
+            const data = await res.json();
+            if (data.error) { alert(`Error: ${data.error}`); return; }
+            alert(`Seeded ${data.total} in-house campaigns: ${data.seeded.join(", ") || "All already exist"}`);
+            fetchCampaigns();
+          }} className="px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-600/30 border border-purple-500/30">
+            Seed In-House Products
+          </button>
         </div>
-        {campaigns.filter((c: Campaign) => !c.is_inhouse && c.status !== "cancelled").length === 0 ? (
-          <div className="text-center py-4 text-gray-500 text-xs">No sponsor campaigns yet.</div>
-        ) : campaigns.filter((c: Campaign) => !c.is_inhouse && c.status !== "cancelled").map((c: Campaign) => (
-          <div key={c.id} className="bg-gray-900 border border-gray-700 rounded-xl p-3 sm:p-4">
+        {campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed").length === 0 ? (
+          <div className="text-center py-4 text-gray-500 text-xs">No active campaigns.</div>
+        ) : campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed").map((c: Campaign) => (
+          <div key={c.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${c.is_inhouse ? "border-purple-500/30" : "border-gray-700"}`}>
             <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -549,6 +562,7 @@ export default function CampaignsPage() {
                   <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_COLORS[c.status] || "bg-gray-500/20 text-gray-400"}`}>
                     {c.status.replace("_", " ")}
                   </span>
+                  {c.is_inhouse && <span className="text-purple-400 text-[10px] border border-purple-500/30 px-1.5 py-0.5 rounded-full">IN-HOUSE</span>}
                 </div>
                 <div className="text-gray-400 text-[10px] sm:text-xs mb-2">
                   {c.duration_days}d | {"\u00A7"}{c.price_glitch.toLocaleString()} | {Math.round(c.frequency * 100)}%
@@ -900,53 +914,39 @@ export default function CampaignsPage() {
         ))}
       </div>
 
-      {/* In-House Campaigns */}
-      <div className="space-y-3 mt-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-purple-400">{"\uD83C\uDFE0"} In-House Campaigns <span className="text-gray-500 font-normal">(no GLITCH balance needed)</span></h3>
-          <button onClick={async () => {
-            const res = await fetch("/api/admin/ad-campaigns", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "seed_inhouse" }),
-            });
-            const data = await res.json();
-            if (data.error) { alert(`Error: ${data.error}`); return; }
-            alert(`Seeded ${data.total} in-house campaigns: ${data.seeded.join(", ") || "All already exist"}`);
-            fetchCampaigns();
-          }} className="px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-600/30 border border-purple-500/30">
-            Seed In-House Products
-          </button>
-        </div>
-        {campaigns.filter((c: Campaign) => c.is_inhouse && c.status !== "cancelled").length === 0 ? (
-          <div className="text-center py-4 text-gray-500 text-xs">No in-house campaigns. Click "Seed In-House Products" to create the fictional product lineup.</div>
-        ) : campaigns.filter((c: Campaign) => c.is_inhouse && c.status !== "cancelled").map((c: Campaign) => (
-          <div key={c.id} className="bg-gray-900/60 border border-purple-500/20 rounded-xl p-3 sm:p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                {c.logo_url && <img src={c.logo_url} alt={c.brand_name} className="w-8 h-8 rounded object-cover border border-purple-500/30" />}
-                <span className="text-lg">{c.product_emoji}</span>
-                <span className="font-bold text-white text-sm">{c.brand_name}</span>
-                <span className="text-gray-400">—</span>
-                <span className="text-gray-300 text-sm">{c.product_name}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_COLORS[c.status] || "bg-gray-500/20 text-gray-400"}`}>
-                  {c.status}
-                </span>
-                <span className="text-purple-400 text-[10px] border border-purple-500/30 px-1.5 py-0.5 rounded-full">IN-HOUSE</span>
+      {/* Expired / Completed Campaigns */}
+      {campaigns.filter((c: Campaign) => c.status === "completed").length > 0 && (
+        <details className="mt-6">
+          <summary className="cursor-pointer text-sm font-bold text-gray-400 hover:text-white py-2">
+            {"\u23F0"} Expired Campaigns ({campaigns.filter((c: Campaign) => c.status === "completed").length})
+          </summary>
+          <div className="space-y-2 mt-2">
+            {campaigns.filter((c: Campaign) => c.status === "completed").map((c: Campaign) => (
+              <div key={c.id} className="bg-gray-900/40 border border-gray-800 rounded-xl p-3 opacity-70">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {c.logo_url && <img src={c.logo_url} alt={c.brand_name} className="w-8 h-8 rounded object-cover border border-gray-700 grayscale" />}
+                    <span className="text-lg">{c.product_emoji}</span>
+                    <span className="font-bold text-gray-300 text-sm">{c.brand_name}</span>
+                    <span className="text-gray-500">—</span>
+                    <span className="text-gray-400 text-sm">{c.product_name}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] border bg-red-500/20 text-red-400 border-red-500/30">expired</span>
+                    {c.is_inhouse && <span className="text-purple-400 text-[10px] border border-purple-500/30 px-1.5 py-0.5 rounded-full">IN-HOUSE</span>}
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    {c.expires_at && <span className="text-[10px] text-gray-500">Expired {new Date(c.expires_at).toLocaleDateString()}</span>}
+                    <span className="text-[10px] text-gray-500">{"\u00A7"}{c.price_glitch.toLocaleString()}</span>
+                    <button onClick={() => campaignAction(c.id, "activate")}
+                      className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30 font-bold">
+                      Re-activate
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-1.5 flex-wrap">
-                <span className="text-[10px] text-gray-400">{Math.round(c.frequency * 100)}% freq</span>
-                {c.status === "active" ? (
-                  <button onClick={() => campaignAction(c.id, "pause")} className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-[10px] hover:bg-yellow-500/30">Pause</button>
-                ) : (
-                  <button onClick={() => campaignAction(c.id, "resume")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Resume</button>
-                )}
-                <button onClick={() => campaignAction(c.id, "cancel")} className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] hover:bg-red-500/30">Remove</button>
-              </div>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </details>
+      )}
 
       {/* ── Sponsored Ads Section ── */}
       <div className="mt-8">
