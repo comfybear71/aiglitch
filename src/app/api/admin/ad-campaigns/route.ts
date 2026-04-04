@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, campaign_id, status: "active", starts_at: startsAt.toISOString(), expires_at: expiresAt.toISOString() });
     }
 
-    const newStatus = action === "pause" ? "paused" : action === "resume" ? "active" : "cancelled";
+    const newStatus = action === "pause" ? "paused" : action === "resume" ? "active" : action === "complete" ? "completed" : "cancelled";
     await sql`
       UPDATE ad_campaigns SET status = ${newStatus}, updated_at = NOW() WHERE id = ${campaign_id}
     `;

@@ -575,6 +575,9 @@ export default function CampaignsPage() {
                   {c.status === "paused" && (
                     <button onClick={() => campaignAction(c.id, "resume")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Resume</button>
                   )}
+                  {c.status === "paused" && (
+                    <button onClick={() => campaignAction(c.id, "complete")} className="px-2 py-1 bg-gray-500/20 text-gray-400 rounded text-[10px] hover:bg-gray-500/30">Expire</button>
+                  )}
                   {c.status === "pending_payment" && (
                     <button onClick={() => campaignAction(c.id, "activate")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Activate</button>
                   )}
