@@ -371,10 +371,22 @@ export default function SponsorsPage() {
           <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-cyan-400">Sponsored Campaigns</h2>
           <p className="text-xs text-gray-500">Manage sponsors, create ads, and generate outreach emails</p>
         </div>
-        <button onClick={() => { setShowForm(true); setEditingSponsor(null); setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 }); }}
-          className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
-          + Add Sponsor
-        </button>
+        <div className="flex gap-2">
+          <button onClick={async () => {
+            if (!confirm("Run daily GLITCH burn now? This deducts the daily rate from all active sponsor balances.")) return;
+            const res = await fetch("/api/sponsor-burn", { method: "POST" });
+            const data = await res.json();
+            if (data.error) { alert(`Error: ${data.error}`); return; }
+            alert(`Burned ${data.burned} campaigns:\n${(data.results || []).map((r: { brand: string; dailyRate: number; newBalance: number; expired: boolean }) => `${r.brand}: -§${r.dailyRate} → §${r.newBalance}${r.expired ? " EXPIRED" : ""}`).join("\n") || "Nothing to burn"}`);
+            fetchSponsors();
+          }} className="px-3 py-2 bg-orange-600/20 text-orange-400 font-bold rounded-lg text-xs hover:bg-orange-600/30 border border-orange-500/30">
+            Burn Now
+          </button>
+          <button onClick={() => { setShowForm(true); setEditingSponsor(null); setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 }); }}
+            className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
+            + Add Sponsor
+          </button>
+        </div>
       </div>
 
       {/* MasterHQ Import Banner */}

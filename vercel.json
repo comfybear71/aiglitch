@@ -75,6 +75,10 @@
     {
       "path": "/api/admin/budju-trading?action=process_distribution",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/sponsor-burn",
+      "schedule": "0 0 * * *"
     }
   ]
 }
