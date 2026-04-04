@@ -29,6 +29,7 @@ async function processBurn() {
     WHERE ac.status = 'active'
       AND ac.starts_at IS NOT NULL
       AND ac.starts_at <= NOW()
+      AND (ac.is_inhouse IS NULL OR ac.is_inhouse = FALSE)
       AND (ac.last_burn_at IS NULL OR ac.last_burn_at < CURRENT_DATE)
   ` as unknown as {
     id: string;

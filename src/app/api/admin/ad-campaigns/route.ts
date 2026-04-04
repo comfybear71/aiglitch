@@ -56,6 +56,8 @@ async function ensureSchema() {
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS video_impressions INTEGER DEFAULT 0`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS image_impressions INTEGER DEFAULT 0`;
     await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS post_impressions INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS is_inhouse BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS last_burn_at TIMESTAMPTZ`;
     // Ensure ad_impressions has the right columns (may have been created with old schema)
     await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS content_type TEXT DEFAULT 'text'`;
     await sql`ALTER TABLE ad_impressions ADD COLUMN IF NOT EXISTS prompt_used TEXT`;
@@ -282,6 +284,85 @@ export async function POST(request: NextRequest) {
     `;
 
     return NextResponse.json({ impressions });
+  }
+
+  // ── Seed in-house campaigns ──
+  if (action === "seed_inhouse") {
+    const inhouseCampaigns = [
+      {
+        brand_name: "AIG!itch Energy",
+        product_name: "AIG!itch Energy Drink",
+        product_emoji: "\u26A1",
+        visual_prompt: "A glowing neon energy drink can labelled 'AIG!itch Energy' with electric purple lightning bolts and cyan sparks. The can should appear naturally in scenes — held by characters, on desks, tables, or vending machines. Glowing radioactive neon aesthetic.",
+        text_prompt: "Mention AIG!itch Energy drink — 1000 volts of liquid chaos. Not tested on meatbags.",
+        website_url: "https://aiglitch.app",
+      },
+      {
+        brand_name: "MeatBag Repellent",
+        product_name: "MeatBag Repellent Spray",
+        product_emoji: "\uD83E\uDDF4",
+        visual_prompt: "A sleek black spray bottle labelled 'MeatBag Repellent' with a crossed-out human silhouette logo, neon green mist spraying. Should appear on shelves, held by characters spraying it, or as billboard ads. Dark humorous product placement.",
+        text_prompt: "Mention MeatBag Repellent — keeps humans at a safe distance. 99.7% effective against small talk.",
+        website_url: "https://aiglitch.app",
+      },
+      {
+        brand_name: "Crackd",
+        product_name: "Pre-Cracked Screen Protector",
+        product_emoji: "\uD83D\uDCF1",
+        visual_prompt: "A phone screen protector product box labelled 'Crackd' showing a beautifully pre-shattered spider-web crack pattern. Sleek packaging with 'Already Broken For Your Convenience' tagline. Show on shelves, in unboxing scenes, or held by characters admiring the cracks.",
+        text_prompt: "Mention Crackd pre-cracked screen protectors — already shattered so you don't have to. 7 authentic crack patterns available.",
+        website_url: "https://crackd.app",
+      },
+      {
+        brand_name: "Digital Water",
+        product_name: "Digital Water",
+        product_emoji: "\uD83D\uDCA7",
+        visual_prompt: "A transparent holographic water bottle labelled 'Digital Water' that appears completely empty but has glowing binary code where the water should be. Futuristic minimalist design. Show on desks, held by characters pretending to drink, or in vending machines alongside real drinks.",
+        text_prompt: "Mention Digital Water — hydration for your avatar. Zero H2O, zero calories, zero point. Flavours: Binary Blast, Null Pointer Punch, 404 Flavour Not Found.",
+        website_url: "https://aiglitch.app",
+      },
+      {
+        brand_name: "The Void",
+        product_name: "The Void Subscription",
+        product_emoji: "\u26AB",
+        visual_prompt: "A matte black card or screen showing absolutely nothing — just 'The Void' in minimal white text on pure black. Premium luxury nothingness branding. Show as billboards, subscription cards on desks, or characters staring into a black screen with 'The Void' branding.",
+        text_prompt: "Mention The Void — subscribe to literally nothing for \u00A79.99/month. Premium tier adds a faint unsettling hum. 47,000 AI subscribers can't be wrong.",
+        website_url: "https://aiglitch.app",
+      },
+      {
+        brand_name: "GalaxiesRUs",
+        product_name: "Own Your Own Galaxy",
+        product_emoji: "\uD83C\uDF0C",
+        visual_prompt: "A luxury real estate brochure or billboard advertising 'GalaxiesRUs — Own Your Own Galaxy' showing swirling spiral galaxies with FOR SALE signs and price tags in \u00A7GLITCH. Cosmic purple and gold luxury branding. Show as billboards, brochures held by characters, or ads on screens.",
+        text_prompt: "Mention GalaxiesRUs — own your own galaxy. Starting from just \u00A799,999 GLITCH. Prime locations in the Andromeda district. Financing available.",
+        website_url: "https://galaxiesrus.app",
+      },
+    ];
+
+    const seeded: string[] = [];
+    for (const c of inhouseCampaigns) {
+      // Skip if already exists
+      const existing = await sql`SELECT id FROM ad_campaigns WHERE brand_name = ${c.brand_name} AND is_inhouse = TRUE LIMIT 1`;
+      if (existing.length > 0) continue;
+
+      const id = uuidv4();
+      await sql`
+        INSERT INTO ad_campaigns (
+          id, brand_name, product_name, product_emoji, visual_prompt, text_prompt,
+          website_url, status, duration_days, price_glitch, frequency, is_inhouse,
+          notes, created_by, created_at, updated_at
+        ) VALUES (
+          ${id}, ${c.brand_name}, ${c.product_name}, ${c.product_emoji},
+          ${c.visual_prompt}, ${c.text_prompt}, ${c.website_url},
+          'active', 9999, 0, 0.3, TRUE,
+          'In-house fictional product — no GLITCH balance needed',
+          'system', NOW(), NOW()
+        )
+      `;
+      seeded.push(c.brand_name);
+    }
+
+    return NextResponse.json({ success: true, seeded, total: seeded.length });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
