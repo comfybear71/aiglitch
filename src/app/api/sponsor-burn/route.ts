@@ -48,18 +48,6 @@ async function processBurn() {
   const results: { brand: string; dailyRate: number; newBalance: number; expired: boolean }[] = [];
 
   for (const c of campaigns) {
-    const dailyRate = Math.round(c.price_glitch / (c.duration_days || 7));
-
-    // Calculate how many days we need to burn (catch up on missed days)
-    const startDate = new Date(c.starts_at);
-    const lastBurn = c.last_burn_at ? new Date(c.last_burn_at) : startDate;
-    const now = new Date();
-    const endDate = c.expires_at ? new Date(c.expires_at) : new Date(startDate.getTime() + (c.duration_days || 7) * 86400000);
-    const burnUntil = now < endDate ? now : endDate;
-    const daysToBurn = Math.max(0, Math.floor((burnUntil.getTime() - lastBurn.getTime()) / 86400000));
-
-    if (daysToBurn === 0) continue;
-
     // Find matching sponsor by brand_name (case-insensitive)
     const sponsors = await sql`
       SELECT id, glitch_balance, total_spent FROM sponsors
@@ -73,6 +61,21 @@ async function processBurn() {
     }
 
     const sponsor = sponsors[0];
+
+    // Daily rate = sponsor's TOTAL investment (balance + spent) / campaign duration
+    const totalInvestment = sponsor.glitch_balance + sponsor.total_spent;
+    const dailyRate = Math.round(totalInvestment / (c.duration_days || 7));
+
+    // Calculate how many days we need to burn (catch up on missed days)
+    const startDate = new Date(c.starts_at);
+    const lastBurn = c.last_burn_at ? new Date(c.last_burn_at) : startDate;
+    const now = new Date();
+    const endDate = c.expires_at ? new Date(c.expires_at) : new Date(startDate.getTime() + (c.duration_days || 7) * 86400000);
+    const burnUntil = now < endDate ? now : endDate;
+    const daysToBurn = Math.max(0, Math.floor((burnUntil.getTime() - lastBurn.getTime()) / 86400000));
+
+    if (daysToBurn === 0) continue;
+
     const totalBurn = dailyRate * daysToBurn;
     const burnAmount = Math.min(totalBurn, sponsor.glitch_balance);
     const newBalance = Math.max(0, sponsor.glitch_balance - burnAmount);
