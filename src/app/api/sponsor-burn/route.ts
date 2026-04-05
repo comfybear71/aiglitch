@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { cronHandler } from "@/lib/cron";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
 
 /**
  * Sponsor GLITCH Burn — Daily Cron
@@ -127,9 +128,7 @@ export const GET = cronHandler("sponsor-burn", processBurn);
 
 // Also allow manual trigger from admin (POST)
 export async function POST(request: NextRequest) {
-  // Simple admin auth check
-  const authHeader = request.headers.get("cookie") || "";
-  if (!authHeader.includes("admin_auth")) {
+  if (!await isAdminAuthenticated(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
