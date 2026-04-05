@@ -749,7 +749,8 @@ export default function CampaignsPage() {
                   <button onClick={() => toggleSection(c.id, "videos")} className="text-green-400 hover:text-green-300 cursor-pointer underline decoration-green-800 hover:decoration-green-400">{"\u{1F4AC}"} {c.post_impressions}</button>
                   <button onClick={() => toggleSection(c.id, "videos")} className="text-white font-bold hover:text-cyan-400 cursor-pointer underline decoration-gray-600 hover:decoration-cyan-400">{c.impressions} total</button>
                 </div>
-                {/* Product Image Placement Control */}
+                {/* Product Image Placement Control — sponsors only */}
+                {!c.is_inhouse && (
                 <div className="mt-2 p-2 bg-gray-800/40 rounded-lg border border-yellow-500/10">
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-yellow-400 text-[10px] font-bold">🖼️ Product Placement per Video</span>
@@ -807,6 +808,7 @@ export default function CampaignsPage() {
                       : `${c.grokify_scenes ?? 3} scene${(c.grokify_scenes ?? 3) > 1 ? "s" : ""} per video will have your ${(c.grokify_mode || "all") === "logo_only" ? "logo" : (c.grokify_mode || "all") === "images_only" ? "product images" : "logo + product images"} edited in by Grok AI`}
                   </p>
                 </div>
+                )}
               </div>
               {/* Actions moved to header — this space intentionally left for freq/edit forms */}
               <div className="flex flex-row sm:flex-col gap-1 sm:ml-2 flex-wrap">
