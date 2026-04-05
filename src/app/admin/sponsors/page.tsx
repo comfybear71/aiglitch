@@ -537,11 +537,13 @@ export default function SponsorsPage() {
                     ))}
                   </div>
                 )}
-                {/* Product Placements — videos where this sponsor's product appeared */}
+                {/* Product Placements — collapsible */}
                 {sponsorPlacements.length > 0 && (
-                  <div className="mt-3 border-t border-cyan-800/30 pt-2">
-                    <p className="text-[10px] text-cyan-400 font-bold mb-1">PRODUCT PLACEMENTS ({placementsTotal} videos)</p>
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                  <details className="mt-3 border-t border-cyan-800/30 pt-2">
+                    <summary className="text-[10px] text-cyan-400 font-bold cursor-pointer hover:text-cyan-300 select-none">
+                      PRODUCT PLACEMENTS ({placementsTotal} videos)
+                    </summary>
+                    <div className="space-y-1 max-h-48 overflow-y-auto mt-1">
                       {sponsorPlacements.filter((p) => p.post_id && p.post_content).map((p) => (
                         <div key={p.post_id || p.placed_at} className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded text-xs">
                           {p.media_url && (
@@ -560,7 +562,7 @@ export default function SponsorsPage() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 )}
               </div>
             ))}
