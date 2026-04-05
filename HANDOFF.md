@@ -183,6 +183,56 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### April 5, 2026 — In-House Sponsors, GLITCH Burn System, Campaign UI Overhaul
+
+**In-house fictional sponsor campaigns:**
+- 6 in-house products created: AIG!itch Energy, MeatBag Repellent, Crackd, Digital Water, The Void, GalaxiesRUs
+- Each has visual/text prompts for product placement + logo in Vercel Blob (`sponsors/{slug}/logo.jpg`)
+- `is_inhouse` flag on `ad_campaigns` table separates from real sponsors
+- Purple border + IN-HOUSE badge in UI, Product Placement controls hidden for in-house
+- "Seed In-House Products" button creates/updates all 6 campaigns with logos
+- In-house campaigns never burn GLITCH — run forever at configurable frequency
+
+**Sponsor GLITCH burn system:**
+- New cron: `/api/sponsor-burn` runs daily at midnight
+- Daily rate = total investment (balance + spent) / campaign duration
+- Catches up on missed days (backfill burn for campaigns that started before cron existed)
+- Processes active + completed + paused campaigns (catches expired ones that weren't burned)
+- Auto-marks campaigns as 'completed' when balance hits 0 or past expiry
+- "Burn Now" button on sponsors page for manual trigger
+- Skips in-house campaigns
+- DB: `last_burn_at` column on `ad_campaigns`, `is_inhouse` boolean
+
+**Campaign UI overhaul:**
+- All campaign cards collapsible (`<details>`) — closed by default
+- Header shows: logo, brand, product, status, IN-HOUSE badge, duration/price, action buttons
+- Click to expand: images, prompts, grokify controls, placements, frequency slider
+- Removed Edit button (card collapse already shows everything)
+- Added "Expire" button — moves any campaign to Expired section (status = 'completed')
+- Added "Del" button on all cards
+- Expired campaigns in collapsible section at bottom with Re-activate + Delete
+- Campaigns past `expires_at` auto-show in Expired section
+
+**Sponsor page improvements:**
+- Balance color-coded: green (>500), orange (>0), red (0)
+- Shows §balance, §spent, §total lifetime
+- LOW badge (≤500 GLITCH), EXPIRED badge (0 GLITCH)
+- Product Placements section collapsible
+- Hidden "Unknown post" entries (no content/post_id) from placements list
+- "Burn Now" button in header
+
+**Channel admin improvements:**
+- Post count badge (purple "X posts") on each channel card
+- Removed Refresh and View Live buttons from header
+
+**Files changed:**
+- `src/app/api/sponsor-burn/route.ts` (NEW — daily burn cron + manual trigger)
+- `src/app/api/admin/ad-campaigns/route.ts` (is_inhouse, last_burn_at, complete action, seed_inhouse)
+- `src/app/admin/campaigns/page.tsx` (collapsible cards, in-house section, expired section, Expire/Del buttons)
+- `src/app/admin/sponsors/page.tsx` (burn display, Burn Now, collapsible placements, cleanup)
+- `src/app/admin/channels/page.tsx` (post count badge)
+- `vercel.json` (sponsor-burn cron at midnight)
+
 ### April 4, 2026 — TikTok Removal, TikTok Blaster, LikLok Channel, Safety Rules
 
 **TikTok API removed (denied by developer review):**
@@ -518,12 +568,12 @@ See full details in `errors/error-log.md #1`.
 ## What's Next
 
 ### Active/Recent Work
+- **6 in-house sponsor products** live — AIG!itch Energy, MeatBag Repellent, Crackd, Digital Water, The Void, GalaxiesRUs. All with logos in Blob, ready for Grokification into video scenes.
+- **Sponsor GLITCH burn cron** running daily at midnight — auto-deducts from sponsor balances. "Burn Now" for manual catch-up.
 - **LikLok revenge channel** live — TikTok parody channel with 10 savage prompts, 5 logos in Blob ready for Grokification
 - **TikTok Blaster** live at `/admin/tiktok-blaster` — manual TikTok posting workflow (download + copy caption)
 - **TikTok API completely removed** — `MarketingPlatform` type no longer includes `"tiktok"`, all posting code deleted
 - **SAFETY-RULES.md** added — mandatory safety protocol for all sessions
-- Wallet orphan recovery deployed — monitor Vercel logs for `[wallet_login] Orphan recovery` entries
-- Voice transcription live with Groq Whisper — monitor for any GROQ_API_KEY issues
 
 ### Future Features
 - Buffer.com integration for TikTok scheduling (their API is currently closed to new apps — revisit later)
