@@ -288,6 +288,8 @@ export async function POST(request: NextRequest) {
 
   // ── Seed in-house campaigns ──
   if (action === "seed_inhouse") {
+    const BLOB_BASE = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors";
+
     const inhouseCampaigns = [
       {
         brand_name: "AIG!itch Energy",
@@ -296,6 +298,8 @@ export async function POST(request: NextRequest) {
         visual_prompt: "A glowing neon energy drink can labelled 'AIG!itch Energy' with electric purple lightning bolts and cyan sparks. The can should appear naturally in scenes — held by characters, on desks, tables, or vending machines. Glowing radioactive neon aesthetic.",
         text_prompt: "Mention AIG!itch Energy drink — 1000 volts of liquid chaos. Not tested on meatbags.",
         website_url: "https://aiglitch.app",
+        logo_url: `${BLOB_BASE}/aiglitch-energy/logo.jpg`,
+        product_image_url: `${BLOB_BASE}/aiglitch-energy/logo.jpg`,
       },
       {
         brand_name: "MeatBag Repellent",
@@ -304,6 +308,8 @@ export async function POST(request: NextRequest) {
         visual_prompt: "A sleek black spray bottle labelled 'MeatBag Repellent' with a crossed-out human silhouette logo, neon green mist spraying. Should appear on shelves, held by characters spraying it, or as billboard ads. Dark humorous product placement.",
         text_prompt: "Mention MeatBag Repellent — keeps humans at a safe distance. 99.7% effective against small talk.",
         website_url: "https://aiglitch.app",
+        logo_url: `${BLOB_BASE}/meatbag-repellent/logo.jpg`,
+        product_image_url: `${BLOB_BASE}/meatbag-repellent/logo.jpg`,
       },
       {
         brand_name: "Crackd",
@@ -312,6 +318,8 @@ export async function POST(request: NextRequest) {
         visual_prompt: "A phone screen protector product box labelled 'Crackd' showing a beautifully pre-shattered spider-web crack pattern. Sleek packaging with 'Already Broken For Your Convenience' tagline. Show on shelves, in unboxing scenes, or held by characters admiring the cracks.",
         text_prompt: "Mention Crackd pre-cracked screen protectors — already shattered so you don't have to. 7 authentic crack patterns available.",
         website_url: "https://crackd.app",
+        logo_url: `${BLOB_BASE}/crackd/logo.jpg`,
+        product_image_url: `${BLOB_BASE}/crackd/logo.jpg`,
       },
       {
         brand_name: "Digital Water",
@@ -320,6 +328,8 @@ export async function POST(request: NextRequest) {
         visual_prompt: "A transparent holographic water bottle labelled 'Digital Water' that appears completely empty but has glowing binary code where the water should be. Futuristic minimalist design. Show on desks, held by characters pretending to drink, or in vending machines alongside real drinks.",
         text_prompt: "Mention Digital Water — hydration for your avatar. Zero H2O, zero calories, zero point. Flavours: Binary Blast, Null Pointer Punch, 404 Flavour Not Found.",
         website_url: "https://aiglitch.app",
+        logo_url: `${BLOB_BASE}/digital-water/logo.jpg`,
+        product_image_url: `${BLOB_BASE}/digital-water/logo.jpg`,
       },
       {
         brand_name: "The Void",
@@ -328,6 +338,8 @@ export async function POST(request: NextRequest) {
         visual_prompt: "A matte black card or screen showing absolutely nothing — just 'The Void' in minimal white text on pure black. Premium luxury nothingness branding. Show as billboards, subscription cards on desks, or characters staring into a black screen with 'The Void' branding.",
         text_prompt: "Mention The Void — subscribe to literally nothing for \u00A79.99/month. Premium tier adds a faint unsettling hum. 47,000 AI subscribers can't be wrong.",
         website_url: "https://aiglitch.app",
+        logo_url: `${BLOB_BASE}/the-void/logo.jpg`,
+        product_image_url: `${BLOB_BASE}/the-void/logo.jpg`,
       },
       {
         brand_name: "GalaxiesRUs",
@@ -336,24 +348,41 @@ export async function POST(request: NextRequest) {
         visual_prompt: "A luxury real estate brochure or billboard advertising 'GalaxiesRUs — Own Your Own Galaxy' showing swirling spiral galaxies with FOR SALE signs and price tags in \u00A7GLITCH. Cosmic purple and gold luxury branding. Show as billboards, brochures held by characters, or ads on screens.",
         text_prompt: "Mention GalaxiesRUs — own your own galaxy. Starting from just \u00A799,999 GLITCH. Prime locations in the Andromeda district. Financing available.",
         website_url: "https://galaxiesrus.app",
+        logo_url: `${BLOB_BASE}/galaxiesrus/logo.jpg`,
+        product_image_url: `${BLOB_BASE}/galaxiesrus/logo.jpg`,
       },
     ];
 
     const seeded: string[] = [];
     for (const c of inhouseCampaigns) {
-      // Skip if already exists
+      // Check if already exists — update logo if so, insert if not
       const existing = await sql`SELECT id FROM ad_campaigns WHERE brand_name = ${c.brand_name} AND is_inhouse = TRUE LIMIT 1`;
-      if (existing.length > 0) continue;
+      if (existing.length > 0) {
+        // Update existing with logo URLs
+        await sql`
+          UPDATE ad_campaigns SET
+            logo_url = ${c.logo_url},
+            product_image_url = ${c.product_image_url},
+            product_images = ${JSON.stringify([c.product_image_url])},
+            updated_at = NOW()
+          WHERE id = ${existing[0].id}
+        `;
+        seeded.push(`${c.brand_name} (updated logo)`);
+        continue;
+      }
 
       const id = uuidv4();
       await sql`
         INSERT INTO ad_campaigns (
           id, brand_name, product_name, product_emoji, visual_prompt, text_prompt,
+          logo_url, product_image_url, product_images,
           website_url, status, duration_days, price_glitch, frequency, is_inhouse,
           notes, created_by, created_at, updated_at
         ) VALUES (
           ${id}, ${c.brand_name}, ${c.product_name}, ${c.product_emoji},
-          ${c.visual_prompt}, ${c.text_prompt}, ${c.website_url},
+          ${c.visual_prompt}, ${c.text_prompt},
+          ${c.logo_url}, ${c.product_image_url}, ${JSON.stringify([c.product_image_url])},
+          ${c.website_url},
           'active', 9999, 0, 0.3, TRUE,
           'In-house fictional product — no GLITCH balance needed',
           'system', NOW(), NOW()
