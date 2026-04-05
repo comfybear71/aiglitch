@@ -27,7 +27,7 @@ async function processBurn() {
   const campaigns = await sql`
     SELECT ac.id, ac.brand_name, ac.price_glitch, ac.duration_days, ac.starts_at, ac.expires_at, ac.last_burn_at
     FROM ad_campaigns ac
-    WHERE ac.status = 'active'
+    WHERE ac.status IN ('active', 'completed', 'paused')
       AND ac.starts_at IS NOT NULL
       AND ac.starts_at <= NOW()
       AND (ac.is_inhouse IS NULL OR ac.is_inhouse = FALSE)
