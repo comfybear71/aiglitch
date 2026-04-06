@@ -1054,7 +1054,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             <div className="absolute -bottom-2 -left-2 w-12 h-12 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-lg" />
 
             <div className="relative text-center">
-              <p className="text-3xl mb-2">⚡</p>
+              <p className="text-3xl mb-2">{"\u26A1"}</p>
               <h3 className="text-white font-black text-lg tracking-tight mb-1">
                 Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400">G!itch</span>
               </h3>
@@ -1066,8 +1066,65 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                 href="/me"
                 className="block w-full py-2.5 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-600 text-white font-bold rounded-xl text-sm hover:from-purple-500 hover:via-pink-500 hover:to-cyan-500 transition-all active:scale-95 shadow-lg shadow-purple-500/30"
               >
-                Enter the G!itch →
+                Enter the G!itch {"\u2192"}
               </a>
+              <div className="mt-3 pt-3 border-t border-gray-800">
+                <p className="text-gray-500 text-[10px] mb-2">or connect with Phantom wallet</p>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/auth/wallet-qr");
+                      const data = await res.json();
+                      if (data.challengeId) {
+                        const qrUrl = `${window.location.origin}/auth/connect?c=${data.challengeId}`;
+                        // Open QR code in a new approach — use an inline image
+                        const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrUrl)}&bgcolor=000000&color=A855F7`;
+                        // Create a mini QR modal
+                        const el = document.createElement("div");
+                        el.id = "wallet-qr-modal";
+                        el.innerHTML = `<div style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);" onclick="this.remove()">
+                          <div style="background:#111;border:1px solid rgba(168,85,247,0.4);border-radius:16px;padding:24px;text-align:center;max-width:280px;" onclick="event.stopPropagation()">
+                            <p style="color:#a855f7;font-size:12px;font-weight:bold;margin-bottom:8px;">Scan with your phone camera</p>
+                            <img src="${qrImg}" style="width:180px;height:180px;border-radius:8px;margin:0 auto 12px;" />
+                            <p style="color:#666;font-size:10px;margin-bottom:12px;">Opens Phantom wallet to connect</p>
+                            <p style="color:#444;font-size:9px;" id="qr-poll-status">Waiting for signature...</p>
+                          </div>
+                        </div>`;
+                        document.body.appendChild(el);
+                        // Poll for approval
+                        const pollInterval = setInterval(async () => {
+                          try {
+                            const pollRes = await fetch(`/api/auth/wallet-qr?c=${data.challengeId}`);
+                            const pollData = await pollRes.json();
+                            if (pollData.status === "approved" && pollData.wallet) {
+                              clearInterval(pollInterval);
+                              // Call wallet_login
+                              const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
+                              localStorage.setItem("session_id", sessionId);
+                              await fetch("/api/auth/human", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
+                              });
+                              el.remove();
+                              window.location.reload();
+                            } else if (pollData.status === "expired") {
+                              clearInterval(pollInterval);
+                              const statusEl = document.getElementById("qr-poll-status");
+                              if (statusEl) statusEl.textContent = "Expired — close and try again";
+                            }
+                          } catch { /* retry */ }
+                        }, 3000);
+                        // Auto-cleanup after 5 min
+                        setTimeout(() => { clearInterval(pollInterval); el.remove(); }, 300000);
+                      }
+                    } catch { /* ignore */ }
+                  }}
+                  className="w-full py-2 bg-gray-800 border border-purple-500/30 text-purple-300 font-bold rounded-xl text-xs hover:bg-gray-700 transition-all active:scale-95"
+                >
+                  {"\uD83D\uDCF1"} Connect Phantom Wallet
+                </button>
+              </div>
               <button
                 onClick={() => setShowJoinPopup(false)}
                 className="mt-3 text-gray-500 text-[11px] hover:text-gray-300 transition-colors"
