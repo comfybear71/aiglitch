@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 interface SpecClip {
   channel_id: string;
@@ -28,9 +28,12 @@ export default function SpecAdsPage() {
   const [brandName, setBrandName] = useState("");
   const [productName, setProductName] = useState("");
   const [description, setDescription] = useState("");
-  const [activePolling, setActivePolling] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number; startTime: number } | null>(null);
+  const [clipStatus, setClipStatus] = useState<{ channel: string; status: string; url?: string }[]>([]);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchAds = useCallback(async () => {
     try {
@@ -48,12 +51,31 @@ export default function SpecAdsPage() {
 
   useEffect(() => { fetchAds(); }, [fetchAds]);
 
+  // Timer for elapsed display
+  useEffect(() => {
+    if (generating && !timerRef.current) {
+      timerRef.current = setInterval(() => setElapsed((e: number) => e + 1), 1000);
+    }
+    if (!generating && timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [generating]);
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+
   const generate = async () => {
     if (!brandName || !productName) return;
     setGenerating(true);
-    setLog(["Submitting 3 video clips to Grok..."]);
+    setElapsed(0);
+    setLog([`\uD83C\uDFAC Generating spec ads for ${brandName} — ${productName}`]);
+    setProgress({ current: 0, total: 3, startTime: Date.now() });
+    setClipStatus([]);
 
     try {
+      setLog((prev: string[]) => [...prev, `\uD83D\uDCE1 Submitting 3 clips to Grok...`]);
+
       const res = await fetch("/api/admin/spec-ads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -62,36 +84,48 @@ export default function SpecAdsPage() {
       const data = await res.json();
 
       if (data.error) {
-        setLog((prev: string[]) => [...prev, `Error: ${data.error}`]);
+        setLog((prev: string[]) => [...prev, `\u274C Error: ${data.error}`]);
         setGenerating(false);
+        setProgress(null);
         return;
       }
 
-      setLog((prev: string[]) => [
-        ...prev,
-        ...data.clips.map((c: { channel: string; request_id: string | null }) =>
-          `${c.channel}: ${c.request_id ? `submitted (${c.request_id.slice(0, 12)}...)` : "FAILED"}`
-        ),
-      ]);
+      const statuses = data.clips.map((c: { channel: string; request_id: string | null }) => ({
+        channel: c.channel,
+        status: c.request_id ? "submitted" : "failed",
+      }));
+      setClipStatus(statuses);
 
-      // Start polling
-      setActivePolling(data.id);
-      pollClips(data.id, data.clips, data.folder);
+      data.clips.forEach((c: { channel: string; request_id: string | null }) => {
+        setLog((prev: string[]) => [...prev, `  \uD83D\uDCE1 ${c.channel}: ${c.request_id ? "submitted" : "FAILED"}`]);
+      });
+
+      // Poll clips
+      await pollClips(data.id, data.clips, data.folder, statuses);
     } catch (err) {
-      setLog((prev: string[]) => [...prev, `Error: ${String(err)}`]);
+      setLog((prev: string[]) => [...prev, `\u274C Error: ${String(err)}`]);
       setGenerating(false);
+      setProgress(null);
     }
   };
 
-  const pollClips = async (specId: string, clips: { channel: string; channel_id: string; request_id: string | null }[], folder: string) => {
+  const pollClips = async (
+    specId: string,
+    clips: { channel: string; channel_id: string; request_id: string | null }[],
+    folder: string,
+    statuses: { channel: string; status: string; url?: string }[],
+  ) => {
     const done = new Set<number>();
-    const maxAttempts = 60; // 5 minutes max
+    const maxAttempts = 60;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await new Promise((r) => setTimeout(r, 10000)); // 10s between polls
+      await new Promise((r) => setTimeout(r, 10000));
 
       for (let i = 0; i < clips.length; i++) {
-        if (done.has(i) || !clips[i].request_id) continue;
+        if (done.has(i) || !clips[i].request_id) {
+          if (!clips[i].request_id) done.add(i);
+          continue;
+        }
 
         try {
           const res = await fetch("/api/admin/spec-ads", {
@@ -110,21 +144,28 @@ export default function SpecAdsPage() {
 
           if (data.status === "done") {
             done.add(i);
-            setLog((prev: string[]) => [...prev, `${clips[i].channel}: DONE - ${data.videoUrl}`]);
+            statuses[i] = { channel: clips[i].channel, status: "done", url: data.videoUrl };
+            setClipStatus([...statuses]);
+            setProgress((prev) => prev ? { ...prev, current: done.size } : null);
+            setLog((prev: string[]) => [...prev, `  \u2705 ${clips[i].channel}: DONE`]);
           } else if (data.status === "failed") {
             done.add(i);
-            setLog((prev: string[]) => [...prev, `${clips[i].channel}: FAILED - ${data.error}`]);
+            statuses[i] = { channel: clips[i].channel, status: "failed" };
+            setClipStatus([...statuses]);
+            setProgress((prev) => prev ? { ...prev, current: done.size } : null);
+            setLog((prev: string[]) => [...prev, `  \u274C ${clips[i].channel}: FAILED`]);
           }
         } catch {
-          // retry on next poll
+          // retry next poll
         }
       }
 
       if (done.size >= clips.length) break;
     }
 
+    setLog((prev: string[]) => [...prev, `\u2705 Spec ads complete for ${brandName}`]);
     setGenerating(false);
-    setActivePolling(null);
+    setProgress(null);
     fetchAds();
   };
 
@@ -146,6 +187,58 @@ export default function SpecAdsPage() {
 
   return (
     <div className="space-y-4">
+      {/* Progress Bar — same style as channels */}
+      {(generating || log.length > 0) && (
+        <div className={`border rounded-xl p-4 ${generating ? "bg-green-950/30 border-green-800/50" : "bg-gray-900 border-gray-800"}`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              {generating && <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
+              <h3 className="text-sm font-bold text-green-400">
+                {generating ? "Generation in progress..." : "Generation complete"}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">{formatTime(elapsed)} elapsed</span>
+              {!generating && <button onClick={() => { setLog([]); setClipStatus([]); }} className="text-xs text-gray-500 hover:text-gray-300">Clear</button>}
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          {progress && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-[10px] text-gray-400 mb-1">
+                <span>{"\uD83C\uDFAC"} Spec Ads {progress.current}/{progress.total}</span>
+                <span>~{Math.max(0, (progress.total - progress.current) * 60)}s remaining (est.)</span>
+              </div>
+              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-green-500 to-cyan-400 rounded-full transition-all duration-500"
+                  style={{ width: `${(progress.current / progress.total) * 100}%` }} />
+              </div>
+            </div>
+          )}
+
+          {/* Per-clip status */}
+          {clipStatus.length > 0 && (
+            <div className="flex gap-3 mb-2">
+              {clipStatus.map((cs: { channel: string; status: string; url?: string }, i: number) => (
+                <div key={i} className={`flex items-center gap-1.5 text-[10px] ${cs.status === "done" ? "text-green-400" : cs.status === "failed" ? "text-red-400" : "text-yellow-400"}`}>
+                  <span>{cs.status === "done" ? "\u2705" : cs.status === "failed" ? "\u274C" : "\u23F3"}</span>
+                  <span>{cs.channel}</span>
+                  {cs.url && <span className="text-gray-500">({(cs.url.length / 1024).toFixed(0)}kb)</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Log */}
+          <div className="space-y-0.5 max-h-32 overflow-y-auto">
+            {log.map((line: string, i: number) => (
+              <p key={i} className="text-[10px] text-gray-400 font-mono">{line}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-gray-900 via-black to-gray-900 border border-amber-500/30 rounded-2xl p-5">
         <div className="flex items-center gap-3 mb-1">
@@ -184,30 +277,14 @@ export default function SpecAdsPage() {
         </div>
         <button onClick={generate} disabled={generating || !brandName || !productName}
           className="px-6 py-2 bg-gradient-to-r from-amber-500 to-cyan-500 text-black font-bold rounded-lg text-sm hover:opacity-90 disabled:opacity-40">
-          {generating ? "Generating..." : "Generate 3 Spec Clips"}
+          {generating ? "Generating..." : "\uD83C\uDFAC Generate 3 Spec Clips"}
         </button>
       </div>
 
-      {/* Generation Log */}
-      {log.length > 0 && (
-        <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-bold text-amber-400">{activePolling ? "Generating..." : "Generation Log"}</h3>
-            {!generating && <button onClick={() => setLog([])} className="text-[10px] text-gray-500 hover:text-gray-300">Clear</button>}
-          </div>
-          <div className="space-y-0.5 max-h-40 overflow-y-auto">
-            {log.map((line: string, i: number) => (
-              <p key={i} className="text-[10px] text-gray-400 font-mono">{line}</p>
-            ))}
-            {generating && <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse inline-block" />}
-          </div>
-        </div>
-      )}
-
-      {/* Spec Ads List */}
+      {/* Spec Ads History */}
       {loading ? (
         <div className="text-center py-8 text-gray-500 text-sm">Loading...</div>
-      ) : ads.length === 0 ? (
+      ) : ads.length === 0 && !generating ? (
         <div className="text-center py-8 text-gray-500">
           <p className="text-4xl mb-2">{"\uD83C\uDFAC"}</p>
           <p className="text-sm">No spec ads yet. Generate your first one above.</p>
@@ -215,21 +292,24 @@ export default function SpecAdsPage() {
       ) : (
         <div className="space-y-4">
           {ads.map((ad: SpecAd) => (
-            <div key={ad.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
+            <div key={ad.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between p-3 border-b border-gray-800">
                 <div>
                   <h3 className="font-bold text-white text-sm">{ad.brand_name} — {ad.product_name}</h3>
-                  {ad.description && <p className="text-gray-500 text-[10px]">{ad.description}</p>}
-                  <p className="text-gray-600 text-[10px]">{new Date(ad.created_at).toLocaleDateString()} &middot; {ad.status}</p>
+                  <p className="text-gray-600 text-[10px]">
+                    {ad.description && `${ad.description} · `}
+                    {new Date(ad.created_at).toLocaleDateString()} &middot;
+                    {ad.clips.filter((c: SpecClip) => c.url).length}/{ad.clips.length} clips
+                  </p>
                 </div>
                 <button onClick={() => deleteAd(ad.id)} className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] hover:bg-red-500/30">Delete</button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 divide-x divide-gray-800">
                 {ad.clips.map((clip: SpecClip, idx: number) => (
-                  <div key={idx} className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
+                  <div key={idx} className="p-3">
                     {clip.url ? (
-                      <div className="relative aspect-[9/16] max-h-[200px] bg-black">
+                      <div className="relative aspect-[9/16] max-h-[250px] bg-black rounded-lg overflow-hidden mb-2">
                         <video src={clip.url} className="w-full h-full object-cover" muted playsInline preload="metadata"
                           onMouseEnter={(e: React.MouseEvent<HTMLVideoElement>) => (e.target as HTMLVideoElement).play().catch(() => {})}
                           onMouseLeave={(e: React.MouseEvent<HTMLVideoElement>) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
@@ -237,25 +317,23 @@ export default function SpecAdsPage() {
                         <div className="absolute top-1 left-1 bg-black/70 text-[9px] text-white px-1.5 py-0.5 rounded">{clip.channel_name}</div>
                       </div>
                     ) : (
-                      <div className="aspect-[9/16] max-h-[200px] bg-gray-900 flex items-center justify-center">
-                        <span className="text-gray-600 text-xs">{clip.status === "failed" ? "Failed" : "Generating..."}</span>
+                      <div className="aspect-[9/16] max-h-[250px] bg-gray-800/50 rounded-lg flex items-center justify-center mb-2">
+                        <span className="text-gray-600 text-xs">{clip.status === "failed" ? "\u274C Failed" : "\u23F3 Generating..."}</span>
                       </div>
                     )}
-                    <div className="p-2 space-y-1">
-                      <p className="text-[10px] text-gray-300 font-medium">{clip.channel_name}</p>
-                      {clip.url && (
-                        <div className="flex gap-1">
-                          <a href={clip.url} download target="_blank" rel="noopener noreferrer"
-                            className="flex-1 py-1 bg-purple-500/20 text-purple-300 rounded text-[10px] font-bold text-center hover:bg-purple-500/30">
-                            Download
-                          </a>
-                          <button onClick={() => copyUrl(clip.url!)}
-                            className={`flex-1 py-1 rounded text-[10px] font-bold text-center ${copiedUrl === clip.url ? "bg-green-500/20 text-green-300" : "bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"}`}>
-                            {copiedUrl === clip.url ? "Copied!" : "Copy URL"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <p className="text-[10px] text-gray-300 font-medium mb-1">{clip.channel_name}</p>
+                    {clip.url && (
+                      <div className="flex gap-1">
+                        <a href={clip.url} download target="_blank" rel="noopener noreferrer"
+                          className="flex-1 py-1.5 bg-purple-500/20 text-purple-300 rounded text-[10px] font-bold text-center hover:bg-purple-500/30">
+                          Download
+                        </a>
+                        <button onClick={() => copyUrl(clip.url!)}
+                          className={`flex-1 py-1.5 rounded text-[10px] font-bold text-center ${copiedUrl === clip.url ? "bg-green-500/20 text-green-300" : "bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"}`}>
+                          {copiedUrl === clip.url ? "Copied!" : "Copy URL"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
