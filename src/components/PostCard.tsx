@@ -187,6 +187,9 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
 
   // Join popup for non-logged-in users
   const [showJoinPopup, setShowJoinPopup] = useState(false);
+  const [walletQR, setWalletQR] = useState<{ challengeId: string; qrUrl: string } | null>(null);
+  const [walletQRStatus, setWalletQRStatus] = useState<string>("waiting");
+  const walletQRPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Video controls state
   const [isPaused, setIsPaused] = useState(false);
@@ -1076,53 +1079,36 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                       const res = await fetch("/api/auth/wallet-qr");
                       const data = await res.json();
                       if (data.challengeId) {
-                        const qrUrl = `${window.location.origin}/auth/connect?c=${data.challengeId}`;
-                        // Open QR code in a new approach — use an inline image
-                        const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrUrl)}&bgcolor=000000&color=A855F7`;
-                        // Create a mini QR modal
-                        const el = document.createElement("div");
-                        el.id = "wallet-qr-modal";
-                        el.innerHTML = `<div style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);" onclick="this.remove()">
-                          <div style="background:#111;border:1px solid rgba(168,85,247,0.4);border-radius:16px;padding:24px;text-align:center;max-width:280px;" onclick="event.stopPropagation()">
-                            <p style="color:#a855f7;font-size:12px;font-weight:bold;margin-bottom:8px;">Scan with your phone camera</p>
-                            <img src="${qrImg}" style="width:180px;height:180px;border-radius:8px;margin:0 auto 12px;" />
-                            <p style="color:#666;font-size:10px;margin-bottom:12px;">Opens Phantom wallet to connect</p>
-                            <p style="color:#444;font-size:9px;" id="qr-poll-status">Waiting for signature...</p>
-                          </div>
-                        </div>`;
-                        document.body.appendChild(el);
-                        // Poll for approval
-                        const pollInterval = setInterval(async () => {
+                        const connectUrl = `${window.location.origin}/auth/connect?c=${data.challengeId}`;
+                        const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(connectUrl)}&bgcolor=000000&color=A855F7`;
+                        setWalletQR({ challengeId: data.challengeId, qrUrl: qrImg });
+                        setWalletQRStatus("waiting");
+                        // Start polling
+                        if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                        walletQRPollRef.current = setInterval(async () => {
                           try {
                             const pollRes = await fetch(`/api/auth/wallet-qr?c=${data.challengeId}`);
                             const pollData = await pollRes.json();
                             if (pollData.status === "approved" && pollData.wallet) {
-                              clearInterval(pollInterval);
-                              const statusEl = document.getElementById("qr-poll-status");
-                              if (statusEl) { statusEl.style.color = "#22c55e"; statusEl.textContent = "Wallet connected! Logging in..."; }
-                              // Call wallet_login
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("connecting");
                               const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
                               localStorage.setItem("session_id", sessionId);
-                              const loginRes = await fetch("/api/auth/human", {
+                              await fetch("/api/auth/human", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
                               });
-                              const loginData = await loginRes.json();
-                              console.log("[wallet-qr] Login result:", loginData);
-                              // Short delay so user sees the success message
-                              await new Promise(r => setTimeout(r, 1000));
-                              el.remove();
-                              window.location.href = "/me";
+                              setWalletQRStatus("success");
+                              setTimeout(() => { window.location.href = "/me"; }, 1000);
                             } else if (pollData.status === "expired") {
-                              clearInterval(pollInterval);
-                              const statusEl = document.getElementById("qr-poll-status");
-                              if (statusEl) statusEl.textContent = "Expired — close and try again";
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("expired");
                             }
                           } catch { /* retry */ }
                         }, 3000);
                         // Auto-cleanup after 5 min
-                        setTimeout(() => { clearInterval(pollInterval); el.remove(); }, 300000);
+                        setTimeout(() => { if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }, 300000);
                       }
                     } catch { /* ignore */ }
                   }}
@@ -1138,6 +1124,36 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                 Just watching for now
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wallet QR Code Modal — proper React, not innerHTML */}
+      {walletQR && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+        >
+          <div className="bg-gray-900 border border-purple-500/40 rounded-2xl p-6 max-w-[300px] w-full text-center shadow-2xl" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <p className="text-purple-400 text-sm font-bold mb-3">Scan with your phone camera</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={walletQR.qrUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg mx-auto mb-3" />
+            <p className="text-gray-500 text-[10px] mb-2">Opens Phantom wallet to connect</p>
+            <p className={`text-[11px] font-bold ${
+              walletQRStatus === "success" ? "text-green-400" :
+              walletQRStatus === "connecting" ? "text-cyan-400" :
+              walletQRStatus === "expired" ? "text-red-400" :
+              "text-gray-500"
+            }`}>
+              {walletQRStatus === "waiting" && "Waiting for signature..."}
+              {walletQRStatus === "connecting" && "Wallet connected! Logging in..."}
+              {walletQRStatus === "success" && "\u2705 Connected! Redirecting..."}
+              {walletQRStatus === "expired" && "Expired — tap to try again"}
+            </p>
+            {walletQRStatus === "expired" && (
+              <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+                className="mt-2 text-cyan-400 text-xs underline">Close</button>
+            )}
           </div>
         </div>
       )}
