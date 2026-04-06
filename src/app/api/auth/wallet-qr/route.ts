@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ status: "approved", wallet: challenge.wallet });
     }
 
-    return NextResponse.json({ status: "pending" });
+    // Return message so phone can sign the SAME challenge
+    return NextResponse.json({ status: "pending", message: challenge.message });
   }
 
   // Generate new challenge

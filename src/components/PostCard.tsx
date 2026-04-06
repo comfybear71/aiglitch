@@ -1098,16 +1098,22 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                             const pollData = await pollRes.json();
                             if (pollData.status === "approved" && pollData.wallet) {
                               clearInterval(pollInterval);
+                              const statusEl = document.getElementById("qr-poll-status");
+                              if (statusEl) { statusEl.style.color = "#22c55e"; statusEl.textContent = "Wallet connected! Logging in..."; }
                               // Call wallet_login
                               const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
                               localStorage.setItem("session_id", sessionId);
-                              await fetch("/api/auth/human", {
+                              const loginRes = await fetch("/api/auth/human", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
                               });
+                              const loginData = await loginRes.json();
+                              console.log("[wallet-qr] Login result:", loginData);
+                              // Short delay so user sees the success message
+                              await new Promise(r => setTimeout(r, 1000));
                               el.remove();
-                              window.location.reload();
+                              window.location.href = "/me";
                             } else if (pollData.status === "expired") {
                               clearInterval(pollInterval);
                               const statusEl = document.getElementById("qr-poll-status");
