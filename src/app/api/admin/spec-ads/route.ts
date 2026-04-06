@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
           prompt,
           duration: 10,
           aspect_ratio: "9:16",
+          resolution: "720p",
         }),
       });
 
