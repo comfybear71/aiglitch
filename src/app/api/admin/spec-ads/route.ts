@@ -99,13 +99,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing request_id or API key" }, { status: 400 });
     }
 
-    const res = await fetch(`https://api.x.ai/v1/videos/generations/${request_id}`, {
+    const res = await fetch(`https://api.x.ai/v1/videos/${request_id}`, {
       headers: { Authorization: `Bearer ${env.XAI_API_KEY}` },
     });
     const data = await res.json();
 
-    if (data.status === "completed" || data.state === "completed") {
-      const videoUrl = data.video_url || data.result_url || data.url;
+    // Check for video URL — Grok returns it in data.video.url
+    const vid = data.video as Record<string, unknown> | undefined;
+    if (vid?.url) {
+      const videoUrl = vid.url as string;
       if (videoUrl) {
         // Download and persist to blob
         const videoRes = await fetch(videoUrl);
@@ -128,8 +130,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (data.status === "failed" || data.state === "failed") {
+    const status = (data.status as string) || "unknown";
+    if (status === "failed" || status === "expired") {
       return NextResponse.json({ status: "failed", error: data.error || "Generation failed" });
+    }
+
+    // Check moderation
+    if (data.respect_moderation === false) {
+      return NextResponse.json({ status: "failed", error: "Failed moderation — adjust prompt" });
     }
 
     return NextResponse.json({ status: "pending" });
