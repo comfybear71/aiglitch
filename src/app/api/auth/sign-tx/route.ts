@@ -73,10 +73,12 @@ export async function POST(request: NextRequest) {
 
     const data = await cache.get(`${CACHE_PREFIX}${txId}`) as Record<string, unknown> | null;
     if (!data) return NextResponse.json({ error: "Intent expired" }, { status: 404 });
-    if (data.status !== "pending") return NextResponse.json({ error: "Already processed" }, { status: 400 });
+    if (data.status !== "pending" && data.status !== "failed") return NextResponse.json({ error: "Already processed" }, { status: 400 });
 
     // Create fresh swap transaction via OTC endpoint
-    const swapRes = await fetch(`${request.nextUrl.origin}/api/otc-swap`, {
+    const host = request.headers.get("host") || "aiglitch.app";
+    const protocol = host.includes("localhost") ? "http" : "https";
+    const swapRes = await fetch(`${protocol}://${host}/api/otc-swap`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -123,7 +125,9 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const submitRes = await fetch(`${request.nextUrl.origin}/api/otc-swap`, {
+      const submitHost = request.headers.get("host") || "aiglitch.app";
+      const submitProtocol = submitHost.includes("localhost") ? "http" : "https";
+      const submitRes = await fetch(`${submitProtocol}://${submitHost}/api/otc-swap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
