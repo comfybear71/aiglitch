@@ -79,7 +79,7 @@ export default function MePage() {
   const phantomLoginLinkedRef = useRef(false);
 
   // Use wallet adapter hooks
-  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets, signTransaction: walletSignTransaction } = useWallet();
+  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets, signTransaction: walletSignTransaction, disconnect: walletDisconnect } = useWallet();
 
   // Visible debug log for diagnosing wallet connection issues on mobile
   const [debugLog, setDebugLog] = useState<string[]>([]);
@@ -1251,11 +1251,16 @@ export default function MePage() {
     }
   };
 
-  const handleSignOut = () => {
-    // Clear session and reload — ensures a clean state
+  const handleSignOut = async () => {
+    // Disconnect Phantom wallet adapter (prevents auto-reconnect)
+    try { if (walletConnected) await walletDisconnect(); } catch { /* ok */ }
+    // Clear ALL session keys
     localStorage.removeItem("aiglitch-session");
+    localStorage.removeItem("session_id");
+    // Create fresh anonymous session
     const newSession = crypto.randomUUID();
     localStorage.setItem("aiglitch-session", newSession);
+    localStorage.setItem("session_id", newSession);
     window.location.href = "/me";
   };
 
