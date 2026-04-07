@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { cache } from "@/lib/cache";
 
-const CHALLENGE_TTL = 300; // 5 minutes
+const CHALLENGE_TTL = 600; // 10 minutes
 const CACHE_PREFIX = "public-wallet-auth:";
 
 /**
