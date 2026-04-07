@@ -1101,9 +1101,10 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                               });
                               const loginData = await loginRes.json();
                               // Update localStorage with the session_id from the server
-                              // wallet_login may return a different session_id if wallet already exists
-                              if (loginData.session_id) {
-                                localStorage.setItem("session_id", loginData.session_id);
+                              // wallet_login returns session_id inside user object
+                              const returnedSessionId = loginData.user?.session_id || loginData.session_id;
+                              if (returnedSessionId) {
+                                localStorage.setItem("session_id", returnedSessionId);
                               }
                               setWalletQRStatus("success");
                               setTimeout(() => { window.location.href = "/me"; }, 1000);
