@@ -588,12 +588,27 @@ export default function ExchangePage() {
               {otcConfig.enabled ? (
                 <div className="space-y-2">
                   <button
-                    onClick={executeSwap}
+                    onClick={() => {
+                      if (connected && publicKey && signTransaction) {
+                        executeSwap();
+                      } else if (dbWallet && glitchOutput >= 100) {
+                        // QR signing flow
+                        setBuying(true);
+                        fetch("/api/auth/sign-tx", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "create_intent", wallet: dbWallet, glitch_amount: glitchOutput, description: `Buy ${glitchOutput.toLocaleString()} §GLITCH` }),
+                        }).then(r => r.json()).then(data => {
+                          if (data.txId) setQrSignData({ txId: data.txId });
+                          else { showToast("error", data.error || "Failed"); setBuying(false); }
+                        }).catch(() => setBuying(false));
+                      }
+                    }}
                     disabled={buying || glitchOutput < 100}
                     className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
                   >
                     {buying
-                      ? "Confirm in Phantom..."
+                      ? "Preparing..."
                       : glitchOutput > 0
                         ? `Buy ${glitchOutput.toLocaleString()} §GLITCH`
                         : "Enter SOL amount"
