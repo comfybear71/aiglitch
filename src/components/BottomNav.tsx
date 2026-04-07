@@ -12,8 +12,25 @@ export default function BottomNav() {
   const { sessionId } = useSession();
   const { unreadCount, markAllRead } = useNotifications(sessionId);
   const { connected: walletConnected } = useWallet();
-  // Only show trading/exchange when wallet is actively connected right now
-  const hasWallet = walletConnected;
+  const [dbWalletLinked, setDbWalletLinked] = useState(false);
+
+  // Check if user has a wallet linked in the database (for QR wallet login on iPad)
+  useEffect(() => {
+    if (!sessionId || sessionId === "anon") return;
+    fetch("/api/auth/human", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "profile", session_id: sessionId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.user?.phantom_wallet_address) setDbWalletLinked(true);
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  // Show trading/exchange when wallet is connected OR linked via QR
+  const hasWallet = walletConnected || dbWalletLinked;
 
   // Mark all read when visiting inbox
   useEffect(() => {
