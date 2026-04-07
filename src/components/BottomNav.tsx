@@ -126,12 +126,9 @@ export default function BottomNav() {
       href: "/me",
       paths: ["/me"],
       icon: (active: boolean) => (
-        <div className="relative">
-          <svg className="w-6 h-6" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full animate-pulse ${hasWallet ? "bg-green-500 shadow-green-500/50 shadow-lg" : "bg-red-500 shadow-red-500/50 shadow-lg"}`} />
-        </div>
+        <svg className={`w-6 h-6 animate-pulse ${hasWallet ? "text-green-400" : "text-red-400"}`} fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
       ),
     },
   ];
