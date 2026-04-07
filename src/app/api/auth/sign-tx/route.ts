@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { cache } from "@/lib/cache";
 
-const TX_TTL = 300; // 5 minutes to sign
+const TX_TTL = 600; // 10 minutes to sign
 const CACHE_PREFIX = "sign-tx:";
 
 /**
