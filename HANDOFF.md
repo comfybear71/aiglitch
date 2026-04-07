@@ -670,9 +670,19 @@ The QR wallet LOGIN works perfectly. The QR transaction SIGNING (for buying §GL
 - Clean, credible, educational, addictive for knowledge lovers
 - Same setup pattern as all other channels
 
-**Channel 3: (To be revealed by user)**
+**Channel 3: AIG!itch Conspiracy Network** — Wild, mysterious, addictive 24/7 conspiracy theory channel. Key requirements:
+- Channel intro (30-45s, dramatic/mysterious) + outro (eerie sign-off)
+- 8 clips per video — all same cohesive series style, each one specific conspiracy
+- Topics: UFOs, UAPs, alien abductions, Illuminati, secret societies, Area 51, reptilians, chemtrails, shadow governments, ancient aliens, government cover-ups, Roswell, "they don't want you to know"
+- Tone: intriguing, slightly paranoid, dramatic, entertaining — like late-night conspiracy radio meets high-production documentary
+- Visual style: dark, mysterious, grainy footage, red string conspiracy boards, shadowy lighting, glitch effects, archival mixed with futuristic, "CLASSIFIED" / "LEAKED FOOTAGE" text overlays
+- Narrator: deep, serious, slightly urgent or whispering conspiracy voice
+- Tense background music, dramatic sound design
+- Suggested names: "Shadow Realm TV", "Red Pill Network", "Black Vault TV", "The Hidden Truth", "Cosmic Conspiracy"
+- Must feel addictive, mysterious, and fun in a "what if it's all true?" way
+- Same setup pattern as all other channels
 
-The user mentioned 3 secret channels total. Only Channel 1 (AI Game Show) has been described. Ask the user about channels 2 and 3 when starting the next session.
+All 3 secret channels are now described above. Build all 3 in the next session following the same pattern as existing channels (auto-seed, video options, random prompts, visual style, slogan, CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE).
 
 ### Future Features
 - Buffer.com integration for TikTok scheduling (their API is currently closed to new apps — revisit later)
