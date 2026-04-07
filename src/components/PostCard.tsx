@@ -1091,24 +1091,40 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                             const pollData = await pollRes.json();
                             if (pollData.status === "approved" && pollData.wallet) {
                               if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
-                              setWalletQRStatus("connecting");
+                              const debugLines: string[] = [];
+                              debugLines.push(`POLL: approved, wallet=${pollData.wallet}`);
+
                               const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
+                              debugLines.push(`LOCAL session_id BEFORE: ${sessionId}`);
                               localStorage.setItem("session_id", sessionId);
+
+                              debugLines.push(`CALLING wallet_login...`);
                               const loginRes = await fetch("/api/auth/human", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
                               });
                               const loginData = await loginRes.json();
-                              // Update localStorage with the session_id from the server
+                              debugLines.push(`RESPONSE STATUS: ${loginRes.status}`);
+                              debugLines.push(`RESPONSE BODY: ${JSON.stringify(loginData).slice(0, 500)}`);
+                              debugLines.push(`loginData.success: ${loginData.success}`);
+                              debugLines.push(`loginData.found_existing: ${loginData.found_existing}`);
+                              debugLines.push(`loginData.session_id: ${loginData.session_id}`);
+                              debugLines.push(`loginData.user?.session_id: ${loginData.user?.session_id}`);
+                              debugLines.push(`loginData.user?.username: ${loginData.user?.username}`);
+                              debugLines.push(`loginData.user?.phantom_wallet_address: ${loginData.user?.phantom_wallet_address}`);
+
                               const returnedSessionId = loginData.user?.session_id || loginData.session_id;
+                              debugLines.push(`RESOLVED session_id: ${returnedSessionId}`);
+
                               if (returnedSessionId) {
                                 localStorage.setItem("session_id", returnedSessionId);
+                                debugLines.push(`LOCAL session_id AFTER: ${localStorage.getItem("session_id")}`);
+                              } else {
+                                debugLines.push(`WARNING: No session_id returned!`);
                               }
-                              // Show wallet address for debug, stay on feed
-                              setWalletQRStatus(`done:${pollData.wallet}:${returnedSessionId || "no-session"}`);
-                              // Close QR after 5 seconds and reload to pick up the session
-                              setTimeout(() => { setWalletQR(null); setShowJoinPopup(false); window.location.reload(); }, 5000);
+
+                              setWalletQRStatus(`debug:${debugLines.join("\n")}`);
                             } else if (pollData.status === "expired") {
                               if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
                               setWalletQRStatus("expired");
@@ -1147,12 +1163,12 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={walletQR.qrUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg mx-auto mb-3" />
             <p className="text-gray-500 text-[10px] mb-2">Opens Phantom wallet to connect</p>
-            {walletQRStatus.startsWith("done:") ? (
-              <div className="space-y-2">
-                <p className="text-green-400 text-sm font-bold">{"\u2705"} Wallet Connected!</p>
-                <p className="text-gray-300 text-[10px] font-mono break-all bg-gray-800 rounded-lg p-2">{walletQRStatus.split(":")[1]}</p>
-                <p className="text-gray-500 text-[9px]">Session: {walletQRStatus.split(":")[2]}</p>
-                <p className="text-cyan-400 text-[10px]">Reloading in 5s...</p>
+            {walletQRStatus.startsWith("debug:") ? (
+              <div className="space-y-2 text-left max-h-[400px] overflow-y-auto">
+                <p className="text-green-400 text-sm font-bold text-center">{"\u2705"} Debug Log</p>
+                <pre className="text-[9px] text-green-300 font-mono bg-gray-800 rounded-lg p-3 whitespace-pre-wrap break-all leading-relaxed">{walletQRStatus.slice(6)}</pre>
+                <button onClick={() => { setWalletQR(null); setShowJoinPopup(false); window.location.reload(); }}
+                  className="w-full py-2 bg-cyan-600 text-white rounded-lg text-xs font-bold">Reload Page</button>
               </div>
             ) : (
               <>
