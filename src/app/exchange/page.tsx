@@ -140,12 +140,13 @@ export default function ExchangePage() {
 
   // Fetch wallet balances
   const fetchBalances = useCallback(async () => {
-    if (!publicKey || !sessionId) return;
+    const walletAddr = publicKey?.toBase58() || dbWallet;
+    if (!walletAddr || !sessionId) return;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(
-        `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`,
+        `/api/solana?action=balance&wallet_address=${walletAddr}&session_id=${encodeURIComponent(sessionId)}`,
         { signal: controller.signal }
       );
       clearTimeout(timeoutId);
@@ -155,7 +156,7 @@ export default function ExchangePage() {
     } catch {
       // Keep existing values on error
     }
-  }, [publicKey, sessionId]);
+  }, [publicKey, sessionId, dbWallet]);
 
   // Fetch swap history
   const fetchHistory = useCallback(async () => {
@@ -206,11 +207,11 @@ export default function ExchangePage() {
   }, [fetchOtcConfig, fetchAiTrades, fetchDashboard]);
 
   useEffect(() => {
-    if (connected && publicKey) {
+    if ((connected && publicKey) || dbWallet) {
       fetchBalances();
       fetchHistory();
     }
-  }, [connected, publicKey, fetchBalances, fetchHistory]);
+  }, [connected, publicKey, dbWallet, fetchBalances, fetchHistory]);
 
   // Computed values
   const glitchOutput = otcConfig && solAmount && parseFloat(solAmount) > 0
