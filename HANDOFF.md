@@ -183,6 +183,74 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### April 7, 2026 — QR Wallet Auth, Exchange Overhaul, Persona Verticals, Spec Ads
+
+**QR Wallet Login (WORKING):**
+- Cross-device wallet auth: iPad/PC shows QR → phone scans → opens `/auth/connect` → Phantom signs challenge → iPad polls and auto-logs in
+- Public API: `/api/auth/wallet-qr` (challenge create, poll, verify)
+- Phone page: `/auth/connect` (fetches challenge message, Phantom signs it)
+- PostCard.tsx: "Connect Phantom Wallet" button in Join popup shows QR modal
+- Exchange page: "Connect Wallet via QR" button for non-logged users
+- Key bugs fixed:
+  - App uses `localStorage("aiglitch-session")` NOT `"session_id"` — was writing to wrong key
+  - `wallet_login` returns `{ user: { session_id } }` not `{ session_id }` — was reading wrong path
+  - Sign out now disconnects Phantom adapter to prevent auto-reconnect
+  - BottomNav profile icon pulses green (logged in) / red (not logged in) based on `hasProfile`
+
+**QR Transaction Signing (NOT WORKING — needs next session):**
+- Intent-based system built but fails with "Transaction expired" on PC
+- Architecture: iPad creates intent (wallet + amount) → Redis → QR code → phone scans → `/auth/sign-tx` page → phone calls `build_and_sign` (fresh Solana tx) → Phantom signs → submits → iPad polls for completion
+- Files: `/api/auth/sign-tx/route.ts`, `/auth/sign-tx/page.tsx`, `QRSign.tsx` component
+- **What works**: Intent creation, QR display, phone opening the page, Phantom deep link
+- **What fails**: PC polling shows "Expired" before phone completes. Possible causes:
+  1. The `build_and_sign` server call to `/api/otc-swap` may fail (internal fetch URL issue — was using `request.nextUrl.origin`, changed to host header)
+  2. The Solana blockhash (90 second TTL) may expire between `build_and_sign` and Phantom signing
+  3. The phone page opens in regular Safari first, then deep-links to Phantom browser — this two-hop adds delay
+  4. Redis TTL is 10 min but polling may be detecting "failed" status (from server error) and showing it as "expired"
+- **Debug approach for next session**: Check Vercel logs for `build_and_sign` errors. The QRSign component shows "expired" for both expired AND failed — needs separate error messages. Add logging to the sign-tx API.
+- **Stopped per SAFETY-RULES.md**: 3 failed attempts in a row
+
+**Exchange Page Overhaul:**
+- Removed AI trading dashboard (fake bot trades, order book, price chart, leaderboard — ~215 lines)
+- Only real OTC swap purchase history shown
+- "What is §GLITCH?" section for non-logged users: ecosystem explanation, 4 use cases (Marketplace, Hatch AI, Donate, NFTs), roadmap (price increase → 5K SOL treasury → DEX listing → AI trading), treasury progress bar
+- Buy button auto-detects: Phantom extension → direct sign, QR wallet → QR sign flow
+- Balances load from dbWallet when no Phantom extension
+- `treasury_sol` added to OTC config API response
+
+**Persona Sponsorship Verticals:**
+- 8 verticals: Tech & Gaming, Fashion & Beauty, Food & Drink, Finance & Crypto, News & Politics, Entertainment, Health & Wellness, Chaos & Memes
+- All 96 personas categorized with primary + secondary verticals
+- `SPONSOR_VERTICALS` + `PERSONA_VERTICALS` constants in `bible/constants.ts`
+
+**Spec Ad Generator:**
+- Admin page `/admin/spec-ads` — enter brand + product → generates 3 x 10s video clips via Grok
+- Picks 3 random channels, generates product placement clips
+- Private sales materials — never posted to feed
+- Progress bar, per-clip status, download + copy URL buttons
+- DB: `spec_ads` table, saves to `sponsors_spec/` in Vercel Blob
+
+**Other:**
+- `#elon_glitch` hashtag added to Elon campaign posts
+- Profile icon connection status (green pulse = logged in, red = not)
+- Back to Feed link on `/me` page
+- Gallery page created then deleted (pricing handled by MasterHQ)
+
+**Files created/modified this session:**
+- `src/app/api/auth/wallet-qr/route.ts` (NEW — public QR wallet auth)
+- `src/app/api/auth/sign-tx/route.ts` (NEW — QR transaction signing bridge)
+- `src/app/auth/connect/page.tsx` (NEW — phone wallet connect page)
+- `src/app/auth/sign-tx/page.tsx` (NEW — phone transaction signing page)
+- `src/components/QRSign.tsx` (NEW — reusable QR signing modal)
+- `src/app/admin/spec-ads/page.tsx` (NEW — spec ad generator)
+- `src/app/api/admin/spec-ads/route.ts` (NEW — spec ad API)
+- `src/app/exchange/page.tsx` (MAJOR — QR connect, What is GLITCH, removed AI dashboard)
+- `src/components/PostCard.tsx` (QR wallet connect in Join popup)
+- `src/components/BottomNav.tsx` (profile icon status, dbWallet check)
+- `src/app/me/page.tsx` (sign out fix, back link)
+- `src/lib/bible/constants.ts` (persona verticals, #elon_glitch)
+- `src/app/api/otc-swap/route.ts` (treasury_sol field)
+
 ### April 5, 2026 — In-House Sponsors, GLITCH Burn System, Campaign UI Overhaul
 
 **In-house fictional sponsor campaigns:**
@@ -568,12 +636,16 @@ See full details in `errors/error-log.md #1`.
 ## What's Next
 
 ### Active/Recent Work
-- **6 in-house sponsor products** live — AIG!itch Energy, MeatBag Repellent, Crackd, Digital Water, The Void, GalaxiesRUs. All with logos in Blob, ready for Grokification into video scenes.
-- **Sponsor GLITCH burn cron** running daily at midnight — auto-deducts from sponsor balances. "Burn Now" for manual catch-up.
-- **LikLok revenge channel** live — TikTok parody channel with 10 savage prompts, 5 logos in Blob ready for Grokification
-- **TikTok Blaster** live at `/admin/tiktok-blaster` — manual TikTok posting workflow (download + copy caption)
-- **TikTok API completely removed** — `MarketingPlatform` type no longer includes `"tiktok"`, all posting code deleted
-- **SAFETY-RULES.md** added — mandatory safety protocol for all sessions
+- **QR Wallet Login WORKING** — cross-device Phantom wallet auth on iPad/PC via QR code scan
+- **QR Transaction Signing NOT WORKING** — needs debugging (see April 7 dev log for details + debug approach)
+- **Exchange page overhauled** — "What is §GLITCH?" section, treasury progress bar, removed AI trading dashboard
+- **Spec Ad Generator** live at `/admin/spec-ads` — generates product placement demo clips
+- **Persona verticals categorized** — 96 personas in 8 sponsor verticals
+- **6 in-house sponsor products** live with logos in Blob
+- **LikLok revenge channel** live with 10 savage prompts
+
+### PRIORITY FOR NEXT SESSION: Fix QR Transaction Signing
+The QR wallet LOGIN works perfectly. The QR transaction SIGNING (for buying §GLITCH) fails with "Expired". See April 7 dev log for the full investigation, what was tried, and the specific debug approach needed. Key files: `/api/auth/sign-tx/route.ts`, `/auth/sign-tx/page.tsx`, `QRSign.tsx`, exchange page.
 
 ### Future Features
 - Buffer.com integration for TikTok scheduling (their API is currently closed to new apps — revisit later)
