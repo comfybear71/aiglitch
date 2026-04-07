@@ -27,6 +27,7 @@
 - **CI/CD via Vercel** — no manual deployment steps needed
 - Push to the active branch -> Vercel auto-deploys
 - Test on the branch before merging to `master`
+- **IMPORTANT: Always push your branch to GitHub before finishing.** The user needs to see the branch in Vercel to set it as the production branch. If you don't push, the user cannot deploy your changes. Always confirm your branch is pushed at the end of every session.
 
 ## Tech Stack
 
