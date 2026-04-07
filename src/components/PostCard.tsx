@@ -1091,40 +1091,22 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                             const pollData = await pollRes.json();
                             if (pollData.status === "approved" && pollData.wallet) {
                               if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
-                              const debugLines: string[] = [];
-                              debugLines.push(`POLL: approved, wallet=${pollData.wallet}`);
+                              setWalletQRStatus("connecting");
 
                               const sessionId = localStorage.getItem("aiglitch-session") || localStorage.getItem("session_id") || crypto.randomUUID();
-                              debugLines.push(`LOCAL aiglitch-session BEFORE: ${sessionId}`);
-
-                              debugLines.push(`CALLING wallet_login...`);
                               const loginRes = await fetch("/api/auth/human", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
                               });
                               const loginData = await loginRes.json();
-                              debugLines.push(`RESPONSE STATUS: ${loginRes.status}`);
-                              debugLines.push(`RESPONSE BODY: ${JSON.stringify(loginData).slice(0, 500)}`);
-                              debugLines.push(`loginData.success: ${loginData.success}`);
-                              debugLines.push(`loginData.found_existing: ${loginData.found_existing}`);
-                              debugLines.push(`loginData.session_id: ${loginData.session_id}`);
-                              debugLines.push(`loginData.user?.session_id: ${loginData.user?.session_id}`);
-                              debugLines.push(`loginData.user?.username: ${loginData.user?.username}`);
-                              debugLines.push(`loginData.user?.phantom_wallet_address: ${loginData.user?.phantom_wallet_address}`);
+                              const returnedSessionId = loginData.user?.session_id || loginData.session_id || sessionId;
+                              localStorage.setItem("aiglitch-session", returnedSessionId);
+                              localStorage.setItem("session_id", returnedSessionId);
 
-                              const returnedSessionId = loginData.user?.session_id || loginData.session_id;
-                              debugLines.push(`RESOLVED session_id: ${returnedSessionId}`);
-
-                              if (returnedSessionId) {
-                                localStorage.setItem("aiglitch-session", returnedSessionId);
-                                localStorage.setItem("session_id", returnedSessionId);
-                                debugLines.push(`LOCAL aiglitch-session AFTER: ${localStorage.getItem("aiglitch-session")}`);
-                              } else {
-                                debugLines.push(`WARNING: No session_id returned!`);
-                              }
-
-                              setWalletQRStatus(`debug:${debugLines.join("\n")}`);
+                              setWalletQRStatus("success");
+                              // Reload after short delay to pick up the session
+                              setTimeout(() => { setWalletQR(null); setShowJoinPopup(false); window.location.reload(); }, 1500);
                             } else if (pollData.status === "expired") {
                               if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
                               setWalletQRStatus("expired");
@@ -1163,12 +1145,10 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={walletQR.qrUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg mx-auto mb-3" />
             <p className="text-gray-500 text-[10px] mb-2">Opens Phantom wallet to connect</p>
-            {walletQRStatus.startsWith("debug:") ? (
-              <div className="space-y-2 text-left max-h-[400px] overflow-y-auto">
-                <p className="text-green-400 text-sm font-bold text-center">{"\u2705"} Debug Log</p>
-                <pre className="text-[9px] text-green-300 font-mono bg-gray-800 rounded-lg p-3 whitespace-pre-wrap break-all leading-relaxed">{walletQRStatus.slice(6)}</pre>
-                <button onClick={() => { setWalletQR(null); setShowJoinPopup(false); window.location.reload(); }}
-                  className="w-full py-2 bg-cyan-600 text-white rounded-lg text-xs font-bold">Reload Page</button>
+            {walletQRStatus === "success" ? (
+              <div className="space-y-2">
+                <p className="text-green-400 text-sm font-bold">{"\u2705"} Wallet Connected!</p>
+                <p className="text-gray-500 text-[10px]">Reloading...</p>
               </div>
             ) : (
               <>
