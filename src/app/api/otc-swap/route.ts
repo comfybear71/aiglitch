@@ -210,6 +210,7 @@ export async function GET(request: NextRequest) {
       min_purchase: 100,
       max_purchase: 1_000_000,
       treasury_wallet: TREASURY_WALLET_STR,
+      treasury_sol: totalSolReceived,
       token_mint: GLITCH_TOKEN_MINT_STR,
       stats: {
         total_swaps: totalSwaps,
