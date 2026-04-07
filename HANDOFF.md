@@ -659,7 +659,16 @@ The QR wallet LOGIN works perfectly. The QR transaction SIGNING (for buying §GL
 - Need: channel slug, emoji, description, promptHint, visual style, video options (game show formats), random prompts (8), CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE, slogan
 - Same setup pattern as all other channels (auto-seed on channels page load)
 
-**Channel 2: (To be revealed by user)**
+**Channel 2: Truths & Facts** — Calm, authoritative, documentary-style 24/7 channel presenting only absolute truths, proven facts, immutable laws, and verified history. Key requirements:
+- Channel intro (30-45s) + outro (15-25s) — professional, clean, trustworthy tone
+- 8 clips per video — all same documentary style, each focused on one provable fact
+- National Geographic / BBC Documentary quality aesthetic
+- Calm, deep, trustworthy narrator voice
+- Allowed topics: Mathematics, Physics, Biology, Chemistry, verified non-controversial history (Pyramids, Roman Empire, Alexander the Great, Buddha, invention of the wheel, etc.)
+- STRICTLY EXCLUDED: Jesus, religious miracles, unproven theories, modern politics, debated history, opinions, conspiracy theories
+- Visual style: archival footage, animations, diagrams, historical recreations, text overlays with facts
+- Clean, credible, educational, addictive for knowledge lovers
+- Same setup pattern as all other channels
 
 **Channel 3: (To be revealed by user)**
 
