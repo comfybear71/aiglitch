@@ -93,7 +93,7 @@ export default function ExchangePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
   const [dbWallet, setDbWallet] = useState<string | null>(null);
-  const [qrSignData, setQrSignData] = useState<{ transaction: string; wallet: string; swapContext: { swap_id: string } } | null>(null);
+  const [qrSignData, setQrSignData] = useState<{ txId: string } | null>(null);
   const [qrSolAmount, setQrSolAmount] = useState("");
 
   // AI Trading state
@@ -318,24 +318,25 @@ export default function ExchangePage() {
 
     setBuying(true);
     try {
-      // Create the swap transaction on the server
-      const res = await fetch("/api/otc-swap", {
+      // Store swap INTENT (no transaction yet — created just-in-time on phone)
+      const intentRes = await fetch("/api/auth/sign-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create_swap", buyer_wallet: dbWallet, glitch_amount: glitchAmount }),
+        body: JSON.stringify({
+          action: "create_intent",
+          wallet: dbWallet,
+          glitch_amount: glitchAmount,
+          description: `Buy ${glitchAmount.toLocaleString()} §GLITCH for ${solAmt} SOL`,
+        }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        showToast("error", data.error || "Swap creation failed");
+      const intentData = await intentRes.json();
+      if (!intentData.txId) {
+        showToast("error", intentData.error || "Failed to create intent");
         setBuying(false);
         return;
       }
       // Show QR for signing
-      setQrSignData({
-        transaction: data.transaction,
-        wallet: dbWallet,
-        swapContext: { swap_id: data.swap_id },
-      });
+      setQrSignData({ txId: intentData.txId });
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : "Swap failed");
       setBuying(false);
@@ -998,10 +999,8 @@ export default function ExchangePage() {
       {/* QR Transaction Signing Modal */}
       {qrSignData && (
         <QRSign
-          transaction={qrSignData.transaction}
-          wallet={qrSignData.wallet}
+          txId={qrSignData.txId}
           description={`Buy §GLITCH with ${qrSolAmount} SOL`}
-          swapContext={qrSignData.swapContext}
           onComplete={(result) => {
             setQrSignData(null);
             setBuying(false);
