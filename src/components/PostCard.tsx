@@ -1099,6 +1099,12 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
                               });
+                              const loginData = await loginRes.json();
+                              // Update localStorage with the session_id from the server
+                              // wallet_login may return a different session_id if wallet already exists
+                              if (loginData.session_id) {
+                                localStorage.setItem("session_id", loginData.session_id);
+                              }
                               setWalletQRStatus("success");
                               setTimeout(() => { window.location.href = "/me"; }, 1000);
                             } else if (pollData.status === "expired") {
