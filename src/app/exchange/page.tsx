@@ -734,6 +734,7 @@ export default function ExchangePage() {
                       }
                     } catch { /* ignore */ }
                   }}
+                  data-qr-connect="true"
                   className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
                 >
                   {"\uD83D\uDCF1"} Connect Wallet via QR
@@ -1187,8 +1188,18 @@ export default function ExchangePage() {
               <div className="space-y-2">
                 <div className="text-4xl">{"\u274C"}</div>
                 <p className="text-red-400 text-sm">Expired</p>
+                <button onClick={() => {
+                  setWalletQR(null);
+                  setWalletQRStatus("waiting");
+                  if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                  // Auto-retry: trigger the QR button click again
+                  setTimeout(() => {
+                    const btn = document.querySelector("[data-qr-connect]") as HTMLButtonElement;
+                    if (btn) btn.click();
+                  }, 100);
+                }} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-500">Try Again</button>
                 <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
-                  className="text-cyan-400 text-xs underline">Close</button>
+                  className="block mx-auto text-gray-500 text-[10px] hover:text-gray-300 mt-1">Close</button>
               </div>
             ) : (
               <>
