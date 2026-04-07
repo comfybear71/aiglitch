@@ -798,8 +798,8 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── Trading Dashboard ── */}
-      {dashboard && (
+      {/* ── Trading Dashboard — only when logged in ── */}
+      {dashboard && ((connected && publicKey) || dbWallet) && (
         <div className="px-4 pb-4 space-y-3">
           {/* Price header + 24h stats */}
           <div className="rounded-2xl bg-gray-900/80 border border-purple-500/20 p-4">
