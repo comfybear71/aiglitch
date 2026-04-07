@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
@@ -95,6 +95,9 @@ export default function ExchangePage() {
   const [dbWallet, setDbWallet] = useState<string | null>(null);
   const [qrSignData, setQrSignData] = useState<{ txId: string } | null>(null);
   const [qrSolAmount, setQrSolAmount] = useState("");
+  const [walletQR, setWalletQR] = useState<{ challengeId: string; qrUrl: string } | null>(null);
+  const [walletQRStatus, setWalletQRStatus] = useState<string>("waiting");
+  const walletQRPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // AI Trading state
   const [aiTrades, setAiTrades] = useState<AITrade[]>([]);
@@ -370,7 +373,7 @@ export default function ExchangePage() {
           </div>
           {connected ? (
             <div className="text-right">
-              <p className="text-xs text-green-400 font-bold">{glitchBalance.toLocaleString()} $G</p>
+              <p className="text-xs text-green-400 font-bold">{"\u00A7"}{glitchBalance.toLocaleString()}</p>
               <p className="text-[9px] text-gray-500">{solBalance.toFixed(4)} SOL</p>
             </div>
           ) : (
@@ -431,7 +434,7 @@ export default function ExchangePage() {
       )}
 
       {/* ── OTC SWAP INTERFACE ── */}
-      {connected && publicKey ? (
+      {(connected && publicKey) || dbWallet ? (
         otcConfig ? (
           <div className="px-4 pt-2 pb-4">
             <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-4 space-y-4">
@@ -688,12 +691,53 @@ export default function ExchangePage() {
                 <p className="text-gray-600 text-[9px]">Scan QR with phone to sign with Phantom</p>
               </div>
             ) : (
-              <>
-                <a href="/wallet" className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
-                  Connect Phantom Wallet
-                </a>
-                <p className="text-gray-600 text-[9px]">Real on-chain atomic swaps on Solana mainnet.</p>
-              </>
+              <div className="space-y-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/auth/wallet-qr");
+                      const data = await res.json();
+                      if (data.challengeId) {
+                        const connectUrl = `${window.location.origin}/auth/connect?c=${data.challengeId}`;
+                        const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(connectUrl)}&bgcolor=000000&color=A855F7`;
+                        setWalletQR({ challengeId: data.challengeId, qrUrl: qrImg });
+                        setWalletQRStatus("waiting");
+                        if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                        walletQRPollRef.current = setInterval(async () => {
+                          try {
+                            const pollRes = await fetch(`/api/auth/wallet-qr?c=${data.challengeId}`);
+                            const pollData = await pollRes.json();
+                            if (pollData.status === "approved" && pollData.wallet) {
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("connecting");
+                              const sid = localStorage.getItem("aiglitch-session") || localStorage.getItem("session_id") || crypto.randomUUID();
+                              const loginRes = await fetch("/api/auth/human", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sid }),
+                              });
+                              const loginData = await loginRes.json();
+                              const returnedSid = loginData.user?.session_id || loginData.session_id || sid;
+                              localStorage.setItem("aiglitch-session", returnedSid);
+                              localStorage.setItem("session_id", returnedSid);
+                              setWalletQRStatus("success");
+                              setTimeout(() => window.location.reload(), 1500);
+                            } else if (pollData.status === "expired") {
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("expired");
+                            }
+                          } catch { /* retry */ }
+                        }, 3000);
+                        setTimeout(() => { if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }, 600000);
+                      }
+                    } catch { /* ignore */ }
+                  }}
+                  className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+                >
+                  {"\uD83D\uDCF1"} Connect Wallet via QR
+                </button>
+                <p className="text-gray-600 text-[9px]">Scan QR code with your phone to connect Phantom wallet</p>
+              </div>
             )}
           </div>
         </div>
