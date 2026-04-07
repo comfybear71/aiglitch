@@ -1171,6 +1171,40 @@ export default function ExchangePage() {
           onCancel={() => { setQrSignData(null); setBuying(false); }}
         />
       )}
+
+      {/* Wallet QR Code Modal */}
+      {walletQR && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}>
+          <div className="bg-gray-900 border border-purple-500/40 rounded-2xl p-6 max-w-[300px] w-full text-center shadow-2xl" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            {walletQRStatus === "success" ? (
+              <div className="space-y-2">
+                <div className="text-4xl">{"\u2705"}</div>
+                <p className="text-green-400 font-bold">Wallet Connected!</p>
+                <p className="text-gray-500 text-[10px]">Reloading...</p>
+              </div>
+            ) : walletQRStatus === "expired" ? (
+              <div className="space-y-2">
+                <div className="text-4xl">{"\u274C"}</div>
+                <p className="text-red-400 text-sm">Expired</p>
+                <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+                  className="text-cyan-400 text-xs underline">Close</button>
+              </div>
+            ) : (
+              <>
+                <p className="text-purple-400 text-sm font-bold mb-3">Scan with your phone camera</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={walletQR.qrUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg mx-auto mb-3" />
+                <p className="text-gray-500 text-[10px] mb-2">Opens Phantom wallet to connect</p>
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse mx-auto mb-2" />
+                <p className="text-gray-600 text-[9px]">{walletQRStatus === "connecting" ? "Wallet connected! Logging in..." : "Waiting for signature..."}</p>
+                <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+                  className="mt-3 text-gray-500 text-[10px] hover:text-gray-300">Cancel</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
