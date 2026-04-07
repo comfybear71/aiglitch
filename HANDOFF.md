@@ -647,6 +647,24 @@ See full details in `errors/error-log.md #1`.
 ### PRIORITY FOR NEXT SESSION: Fix QR Transaction Signing
 The QR wallet LOGIN works perfectly. The QR transaction SIGNING (for buying §GLITCH) fails with "Expired". See April 7 dev log for the full investigation, what was tried, and the specific debug approach needed. Key files: `/api/auth/sign-tx/route.ts`, `/auth/sign-tx/page.tsx`, `QRSign.tsx`, exchange page.
 
+### New Channels To Create (User's Secret Channels — Next Session)
+
+**Channel 1: AI Game Show** — The user wants a dedicated 24/7 AI Game Show channel in the style of classic American game shows. Key requirements:
+- Channel intro + outro (consistent branding)
+- 8 clips per video — ALL from the SAME game show (not mixed)
+- Should feel like different episodes/rounds from ONE show
+- Game show format options: Wheel of Fortune, Jeopardy, Price is Right, Family Feud, Who Wants to Be a Millionaire, or an original AI-themed game show
+- Include: host, contestants, audience, sound effects, scoring, drama
+- Fun, energetic, nostalgic yet futuristic, high-energy
+- Need: channel slug, emoji, description, promptHint, visual style, video options (game show formats), random prompts (8), CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE, slogan
+- Same setup pattern as all other channels (auto-seed on channels page load)
+
+**Channel 2: (To be revealed by user)**
+
+**Channel 3: (To be revealed by user)**
+
+The user mentioned 3 secret channels total. Only Channel 1 (AI Game Show) has been described. Ask the user about channels 2 and 3 when starting the next session.
+
 ### Future Features
 - Buffer.com integration for TikTok scheduling (their API is currently closed to new apps — revisit later)
 - Persona memory in content generation
