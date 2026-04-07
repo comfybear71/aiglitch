@@ -36,7 +36,10 @@ export default function SignTxPage() {
         }).solana;
 
         if (!phantom?.isPhantom) {
-          window.location.href = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
+          // Not in Phantom's browser — give user options
+          setIntent(intentData);
+          setStatus("error");
+          setError("NOT_IN_PHANTOM");
           return;
         }
 
@@ -112,7 +115,23 @@ export default function SignTxPage() {
           </div>
         )}
 
-        {status === "error" && (
+        {status === "error" && error === "NOT_IN_PHANTOM" && (
+          <div className="space-y-3">
+            <p className="text-yellow-400 text-sm font-bold">Open in Phantom to sign</p>
+            {intent && <p className="text-gray-400 text-xs">{intent.description}</p>}
+            <a
+              href={`https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`}
+              className="block w-full py-3 bg-gradient-to-r from-purple-600 to-cyan-600 text-white font-bold rounded-xl text-sm text-center"
+            >
+              {"\uD83D\uDC7B"} Open in Phantom
+            </a>
+            <p className="text-gray-600 text-[9px]">Or in Phantom app: tap globe icon {"\u2192"} paste this URL</p>
+            <button onClick={() => { navigator.clipboard.writeText(window.location.href); }}
+              className="text-cyan-400 text-xs underline">Copy URL</button>
+          </div>
+        )}
+
+        {status === "error" && error !== "NOT_IN_PHANTOM" && (
           <div className="space-y-2">
             <div className="text-4xl">{"\u274C"}</div>
             <p className="text-red-400 text-sm">{error}</p>
