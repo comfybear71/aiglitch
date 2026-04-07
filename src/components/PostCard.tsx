@@ -1094,7 +1094,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                               setWalletQRStatus("connecting");
                               const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
                               localStorage.setItem("session_id", sessionId);
-                              await fetch("/api/auth/human", {
+                              const loginRes = await fetch("/api/auth/human", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
