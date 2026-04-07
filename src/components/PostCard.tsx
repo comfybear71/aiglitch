@@ -1094,9 +1094,8 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                               const debugLines: string[] = [];
                               debugLines.push(`POLL: approved, wallet=${pollData.wallet}`);
 
-                              const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
-                              debugLines.push(`LOCAL session_id BEFORE: ${sessionId}`);
-                              localStorage.setItem("session_id", sessionId);
+                              const sessionId = localStorage.getItem("aiglitch-session") || localStorage.getItem("session_id") || crypto.randomUUID();
+                              debugLines.push(`LOCAL aiglitch-session BEFORE: ${sessionId}`);
 
                               debugLines.push(`CALLING wallet_login...`);
                               const loginRes = await fetch("/api/auth/human", {
@@ -1118,8 +1117,9 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                               debugLines.push(`RESOLVED session_id: ${returnedSessionId}`);
 
                               if (returnedSessionId) {
+                                localStorage.setItem("aiglitch-session", returnedSessionId);
                                 localStorage.setItem("session_id", returnedSessionId);
-                                debugLines.push(`LOCAL session_id AFTER: ${localStorage.getItem("session_id")}`);
+                                debugLines.push(`LOCAL aiglitch-session AFTER: ${localStorage.getItem("aiglitch-session")}`);
                               } else {
                                 debugLines.push(`WARNING: No session_id returned!`);
                               }
