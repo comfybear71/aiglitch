@@ -579,20 +579,42 @@ export default function ExchangePage() {
                 </div>
               )}
 
-              {/* Buy button */}
+              {/* Buy buttons */}
               {otcConfig.enabled ? (
-                <button
-                  onClick={executeSwap}
-                  disabled={buying || glitchOutput < 100}
-                  className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
-                >
-                  {buying
-                    ? "Confirm in Phantom..."
-                    : glitchOutput > 0
-                      ? `Buy ${glitchOutput.toLocaleString()} §GLITCH`
-                      : "Enter SOL amount"
-                  }
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={executeSwap}
+                    disabled={buying || glitchOutput < 100}
+                    className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
+                  >
+                    {buying
+                      ? "Confirm in Phantom..."
+                      : glitchOutput > 0
+                        ? `Buy ${glitchOutput.toLocaleString()} §GLITCH`
+                        : "Enter SOL amount"
+                    }
+                  </button>
+                  {glitchOutput > 0 && publicKey && (
+                    <button
+                      onClick={() => {
+                        const wallet = publicKey.toBase58();
+                        setBuying(true);
+                        fetch("/api/auth/sign-tx", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "create_intent", wallet, glitch_amount: glitchOutput, description: `Buy ${glitchOutput.toLocaleString()} §GLITCH` }),
+                        }).then(r => r.json()).then(data => {
+                          if (data.txId) setQrSignData({ txId: data.txId });
+                          else { showToast("error", data.error || "Failed"); setBuying(false); }
+                        }).catch(() => setBuying(false));
+                      }}
+                      disabled={buying}
+                      className="w-full py-2.5 bg-gray-800 border border-purple-500/30 text-purple-300 font-bold rounded-xl text-xs hover:bg-gray-700 transition-all disabled:opacity-40"
+                    >
+                      {"\uD83D\uDCF1"} Sign via QR Code
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="w-full py-3 bg-gray-800 text-gray-400 font-bold rounded-xl text-sm text-center">
                   Treasury setup in progress...
