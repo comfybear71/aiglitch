@@ -1101,13 +1101,14 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                               });
                               const loginData = await loginRes.json();
                               // Update localStorage with the session_id from the server
-                              // wallet_login returns session_id inside user object
                               const returnedSessionId = loginData.user?.session_id || loginData.session_id;
                               if (returnedSessionId) {
                                 localStorage.setItem("session_id", returnedSessionId);
                               }
-                              setWalletQRStatus("success");
-                              setTimeout(() => { window.location.href = "/me"; }, 1000);
+                              // Show wallet address for debug, stay on feed
+                              setWalletQRStatus(`done:${pollData.wallet}:${returnedSessionId || "no-session"}`);
+                              // Close QR after 5 seconds and reload to pick up the session
+                              setTimeout(() => { setWalletQR(null); setShowJoinPopup(false); window.location.reload(); }, 5000);
                             } else if (pollData.status === "expired") {
                               if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
                               setWalletQRStatus("expired");
@@ -1146,20 +1147,29 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={walletQR.qrUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg mx-auto mb-3" />
             <p className="text-gray-500 text-[10px] mb-2">Opens Phantom wallet to connect</p>
-            <p className={`text-[11px] font-bold ${
-              walletQRStatus === "success" ? "text-green-400" :
-              walletQRStatus === "connecting" ? "text-cyan-400" :
-              walletQRStatus === "expired" ? "text-red-400" :
-              "text-gray-500"
-            }`}>
-              {walletQRStatus === "waiting" && "Waiting for signature..."}
-              {walletQRStatus === "connecting" && "Wallet connected! Logging in..."}
-              {walletQRStatus === "success" && "\u2705 Connected! Redirecting..."}
-              {walletQRStatus === "expired" && "Expired — tap to try again"}
-            </p>
-            {walletQRStatus === "expired" && (
-              <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
-                className="mt-2 text-cyan-400 text-xs underline">Close</button>
+            {walletQRStatus.startsWith("done:") ? (
+              <div className="space-y-2">
+                <p className="text-green-400 text-sm font-bold">{"\u2705"} Wallet Connected!</p>
+                <p className="text-gray-300 text-[10px] font-mono break-all bg-gray-800 rounded-lg p-2">{walletQRStatus.split(":")[1]}</p>
+                <p className="text-gray-500 text-[9px]">Session: {walletQRStatus.split(":")[2]}</p>
+                <p className="text-cyan-400 text-[10px]">Reloading in 5s...</p>
+              </div>
+            ) : (
+              <>
+                <p className={`text-[11px] font-bold ${
+                  walletQRStatus === "connecting" ? "text-cyan-400" :
+                  walletQRStatus === "expired" ? "text-red-400" :
+                  "text-gray-500"
+                }`}>
+                  {walletQRStatus === "waiting" && "Waiting for signature..."}
+                  {walletQRStatus === "connecting" && "Wallet connected! Logging in..."}
+                  {walletQRStatus === "expired" && "Expired — tap to try again"}
+                </p>
+                {walletQRStatus === "expired" && (
+                  <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+                    className="mt-2 text-cyan-400 text-xs underline">Close</button>
+                )}
+              </>
             )}
           </div>
         </div>
