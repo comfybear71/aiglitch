@@ -5,6 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
 import { Transaction } from "@solana/web3.js";
+import QRSign from "@/components/QRSign";
 
 interface AITrade {
   id: string;
@@ -91,6 +92,9 @@ export default function ExchangePage() {
   const [glitchBalance, setGlitchBalance] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
+  const [dbWallet, setDbWallet] = useState<string | null>(null);
+  const [qrSignData, setQrSignData] = useState<{ transaction: string; wallet: string; swapContext: { swap_id: string } } | null>(null);
+  const [qrSolAmount, setQrSolAmount] = useState("");
 
   // AI Trading state
   const [aiTrades, setAiTrades] = useState<AITrade[]>([]);
@@ -103,7 +107,18 @@ export default function ExchangePage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setSessionId(localStorage.getItem("aiglitch-session"));
+      const sid = localStorage.getItem("aiglitch-session");
+      setSessionId(sid);
+      // Check if wallet is linked in DB (for QR signing on iPad)
+      if (sid) {
+        fetch("/api/auth/human", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "profile", session_id: sid }),
+        }).then(r => r.json()).then(data => {
+          if (data.user?.phantom_wallet_address) setDbWallet(data.user.phantom_wallet_address);
+        }).catch(() => {});
+      }
     }
   }, []);
 
@@ -288,6 +303,41 @@ export default function ExchangePage() {
       const msg = err instanceof Error ? err.message : "Swap failed";
       showToast("error", msg.includes("User rejected") ? "Transaction cancelled" : msg);
     } finally {
+      setBuying(false);
+    }
+  };
+
+  // QR-based swap for iPad users without Phantom extension
+  const executeQrSwap = async () => {
+    if (!dbWallet || !otcConfig || buying) return;
+    const solAmt = parseFloat(qrSolAmount);
+    if (!solAmt || solAmt <= 0) { showToast("error", "Enter a SOL amount"); return; }
+    const glitchAmount = Math.floor(solAmt / otcConfig.price_sol);
+    if (glitchAmount < otcConfig.min_purchase) { showToast("error", `Minimum ${otcConfig.min_purchase.toLocaleString()} §GLITCH`); return; }
+    if (glitchAmount > otcConfig.max_purchase) { showToast("error", `Maximum ${otcConfig.max_purchase.toLocaleString()} §GLITCH`); return; }
+
+    setBuying(true);
+    try {
+      // Create the swap transaction on the server
+      const res = await fetch("/api/otc-swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create_swap", buyer_wallet: dbWallet, glitch_amount: glitchAmount }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast("error", data.error || "Swap creation failed");
+        setBuying(false);
+        return;
+      }
+      // Show QR for signing
+      setQrSignData({
+        transaction: data.transaction,
+        wallet: dbWallet,
+        swapContext: { swap_id: data.swap_id },
+      });
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Swap failed");
       setBuying(false);
     }
   };
@@ -586,15 +636,42 @@ export default function ExchangePage() {
               </div>
             )}
 
-            <a
-              href="/wallet"
-              className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
-            >
-              Connect Phantom Wallet
-            </a>
-            <p className="text-gray-600 text-[9px]">
-              Real on-chain atomic swaps on Solana mainnet.
-            </p>
+            {dbWallet ? (
+              <div className="space-y-3 w-full">
+                <p className="text-gray-500 text-[9px] font-mono">{dbWallet.slice(0, 6)}...{dbWallet.slice(-4)}</p>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={qrSolAmount}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQrSolAmount(e.target.value)}
+                    placeholder="SOL amount"
+                    className="flex-1 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white text-center text-sm"
+                  />
+                  <button
+                    onClick={executeQrSwap}
+                    disabled={buying || !qrSolAmount}
+                    className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all disabled:opacity-50"
+                  >
+                    {buying ? "..." : "Buy §GLITCH"}
+                  </button>
+                </div>
+                {otcConfig && parseFloat(qrSolAmount) > 0 && (
+                  <p className="text-green-400 text-xs text-center">
+                    = {Math.floor(parseFloat(qrSolAmount) / otcConfig.price_sol).toLocaleString()} §GLITCH
+                  </p>
+                )}
+                <p className="text-gray-600 text-[9px]">Scan QR with phone to sign with Phantom</p>
+              </div>
+            ) : (
+              <>
+                <a href="/wallet" className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all">
+                  Connect Phantom Wallet
+                </a>
+                <p className="text-gray-600 text-[9px]">Real on-chain atomic swaps on Solana mainnet.</p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -917,6 +994,28 @@ export default function ExchangePage() {
 
       </div>
       <BottomNav />
+
+      {/* QR Transaction Signing Modal */}
+      {qrSignData && (
+        <QRSign
+          transaction={qrSignData.transaction}
+          wallet={qrSignData.wallet}
+          description={`Buy §GLITCH with ${qrSolAmount} SOL`}
+          swapContext={qrSignData.swapContext}
+          onComplete={(result) => {
+            setQrSignData(null);
+            setBuying(false);
+            if (result.success || result.tx_signature) {
+              showToast("success", `Bought §GLITCH! ${result.tx_signature ? `TX: ${String(result.tx_signature).slice(0, 12)}...` : ""}`);
+              setQrSolAmount("");
+              fetchOtcConfig();
+            } else {
+              showToast("error", String(result.error) || "Transaction failed");
+            }
+          }}
+          onCancel={() => { setQrSignData(null); setBuying(false); }}
+        />
+      )}
     </main>
   );
 }
