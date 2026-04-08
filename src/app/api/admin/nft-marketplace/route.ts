@@ -22,12 +22,11 @@ async function ensureTable() {
  * POST: Generate a Grok image for a product
  */
 export async function GET(request: NextRequest) {
-  if (!await isAdminAuthenticated(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // Public read — product images are public (shown on marketplace)
+  // Admin auth only needed for POST (generating/deleting images)
   await ensureTable();
   const sql = getDb();
-  const images = await sql`SELECT * FROM nft_product_images ORDER BY created_at DESC`;
+  const images = await sql`SELECT product_id, image_url FROM nft_product_images ORDER BY created_at DESC`;
   return NextResponse.json({ images });
 }
 
