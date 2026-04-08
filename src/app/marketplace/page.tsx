@@ -250,9 +250,10 @@ export default function MarketplacePage() {
       .then((data) => {
         const map: Record<string, string> = {};
         (data.images || []).forEach((img: { product_id: string; image_url: string }) => { map[img.product_id] = img.image_url; });
+        console.log("[marketplace] Loaded product images:", Object.keys(map).length, "first:", Object.entries(map)[0]);
         setProductImages(map);
       })
-      .catch(() => {});
+      .catch((err) => { console.error("[marketplace] Failed to load product images:", err); });
   }, []);
 
   useEffect(() => {
