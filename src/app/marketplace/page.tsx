@@ -95,6 +95,7 @@ function ProductCard({
       </div>
 
       {/* Image or Emoji + Name */}
+      {imageUrl && <input type="hidden" data-debug-image={imageUrl} />}
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 relative">
           {imageUrl ? (
@@ -250,7 +251,7 @@ export default function MarketplacePage() {
       .then((data) => {
         const map: Record<string, string> = {};
         (data.images || []).forEach((img: { product_id: string; image_url: string }) => { map[img.product_id] = img.image_url; });
-        console.log("[marketplace] Loaded product images:", Object.keys(map).length, "first:", Object.entries(map)[0]);
+        console.log("[marketplace] Loaded product images:", Object.keys(map).length, "prod-001:", map["prod-001"]?.slice(0, 60), "keys:", Object.keys(map).slice(0, 3));
         setProductImages(map);
       })
       .catch((err) => { console.error("[marketplace] Failed to load product images:", err); });
@@ -670,6 +671,7 @@ export default function MarketplacePage() {
                   owned={owned}
                   compact={true}
                   remaining={100 - (supplyMap[product.id] || 0)}
+                  imageUrl={productImages[product.id]}
                 />
                 {/* Buy/status button below card */}
                 {nft ? (
