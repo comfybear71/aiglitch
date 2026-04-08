@@ -311,6 +311,7 @@ export default function MePage() {
 
   // Inventory (purchased items)
   const [inventory, setInventory] = useState<PurchasedItem[]>([]);
+  const [productImages, setProductImages] = useState<Record<string, string>>({});
 
   // NFT data for owned items
   const [nftMap, setNftMap] = useState<Map<string, { mint_address: string; rarity: string }>>(new Map());
@@ -764,7 +765,8 @@ export default function MePage() {
       fetch(`/api/wallet?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch(`/api/nft?session_id=${sid}`).then(r => r.json()).catch(() => null),
       fetch("/api/coins", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId, action: "check_ad_free" }) }).then(r => r.json()).catch(() => null),
-    ]).then(([coinsData, marketData, walletData, nftData, adFreeData]) => {
+      fetch("/api/admin/nft-marketplace").then(r => r.json()).catch(() => null),
+    ]).then(([coinsData, marketData, walletData, nftData, adFreeData, imgData]) => {
       if (coinsData) setCoins(coinsData);
       if (marketData) setInventory(marketData.purchases || []);
       if (walletData?.wallet) setGlitchBalance(walletData.wallet.glitch_token_balance || 0);
@@ -776,6 +778,11 @@ export default function MePage() {
         setNftMap(map);
       }
       if (adFreeData?.ad_free) setAdFreeUntil(adFreeData.ad_free_until);
+      if (imgData?.images) {
+        const map: Record<string, string> = {};
+        for (const img of imgData.images) map[img.product_id] = img.image_url;
+        setProductImages(map);
+      }
     });
   }, [user, sessionId]);
 
@@ -2267,6 +2274,7 @@ export default function MePage() {
                             rarity={nft?.rarity}
                             owned={true}
                             compact={true}
+                            imageUrl={productImages[product.id]}
                           />
                         );
                       })}
