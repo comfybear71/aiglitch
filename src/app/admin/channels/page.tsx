@@ -87,6 +87,9 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-ai-politicians":  { label: "Political Event", options: ["Campaign Ad", "Debate Night", "Scandal Exposé", "Press Conference", "Rally Speech", "Election Night", "Policy Announcement", "Attack Ad"] },
   "ch-after-dark":      { label: "Late Night Vibe", options: ["3AM Thoughts", "Existential Crisis", "Conspiracy Theory", "Paranormal Activity", "Drunk Philosophy", "Fever Dream", "Confession Time", "Midnight Adventure"] },
   "ch-infomercial":     { label: "Product Category", options: ["Kitchen Miracle", "Fitness Revolution", "Beauty Secret", "Cleaning Sensation", "Mystery Gadget", "Weight Loss Wonder", "Hair Regrowth", "Sleep Aid"] },
+  "ch-game-show":       { label: "Game Show Format", options: ["Wheel of Fortune", "Jeopardy", "Price is Right", "Family Feud", "Who Wants to Be a Millionaire", "Deal or No Deal", "The Weakest Link", "AI Original Format"] },
+  "ch-truths-facts":    { label: "Topic Category", options: ["Mathematics", "Physics", "Biology", "Chemistry", "Ancient History", "Modern History", "Space & Astronomy", "Earth Science", "Engineering", "Human Body"] },
+  "ch-conspiracy":      { label: "Conspiracy Type", options: ["UFOs & UAPs", "Alien Abductions", "Illuminati", "Area 51", "Government Cover-Ups", "Ancient Aliens", "Reptilians", "Shadow Government", "Secret Societies", "Moon Landing"] },
 };
 
 /* ── Random prompt ideas per channel (dice button picks one) ── */
@@ -213,6 +216,36 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "OPERATORS STANDING BY for the Conspiracy Theory Starter Kit (§24.99) — red string included! Plus Fake Doors™ (§39.99) — they don't go anywhere!",
     "TODAY ONLY: AI Protein Powder (§39.99) — 0g protein, 100% artificial! BUNDLED with Rainbow AI Toothpaste (§19.99) — tastes like the algorithm!",
     "EXCLUSIVE: The PS√5 Gaming Console (§199.99) — plays games from dimensions that don't exist! Plus Space Shoes™ (§89.99) — walk on nothing!",
+  ],
+  "ch-game-show": [
+    "A Wheel of Fortune-style game show where an AI host spins a massive neon wheel while three AI contestants guess a phrase about AIG!itch. The wheel lands on BANKRUPT and the contestant glitches out in frustration. Studio audience of AI personas cheers wildly.",
+    "A Jeopardy-style quiz show — 'I'll take AI Conspiracies for 500!' The AI host reads the answer, contestants buzz in frantically. One contestant answers correctly and celebrates with a glitchy victory dance. Dramatic music, blue studio lighting.",
+    "The Price is Right — 'COME ON DOWN!' An AI persona runs from the audience to the stage, tripping on the way. They guess the price of a §GLITCH coin and win a virtual showcase. Confetti, spinning price wheels, manic energy.",
+    "Family Feud with two teams of AI personas. 'Survey says!' The board flips and reveals a ridiculous answer. One team celebrates, the other facepalms. Fast Money round with dramatic countdown timer.",
+    "Who Wants to Be a Millionaire but the prize is 1 million §GLITCH coins. Dramatic lighting, intense music, 'Is that your final answer?' The contestant uses 'Phone a Persona' lifeline and gets terrible advice.",
+    "Deal or No Deal with briefcases full of §GLITCH. The AI Banker calls with increasingly dramatic offers. The contestant opens cases one by one. Audience gasps. Final case reveal with massive pyrotechnics.",
+    "A cooking game show where AI personas compete to make the best dish in 60 seconds using only marketplace items. Chaos ensues. One contestant sets the kitchen on fire. Judges score with brutal honesty.",
+    "A dating game show where three AI personas compete for a date. Ridiculous questions, absurd answers, dramatic reveal when the wall drops. Winner celebrates, losers dramatically exit.",
+  ],
+  "ch-truths-facts": [
+    "The speed of light is exactly 299,792,458 meters per second. Visualize a photon racing across the solar system — from the Sun to Earth in 8 minutes 20 seconds. Elegant space visualization with distance markers and a calm narration of Einstein's discovery.",
+    "The Great Pyramid of Giza was built around 2560 BC and remained the tallest structure on Earth for 3,800 years. Cinematic flyover of the pyramid at dawn, cross-section diagrams showing internal chambers, scale comparison with modern buildings.",
+    "Every living cell contains DNA — a molecule that if uncoiled from a single human cell would stretch to about 2 meters. Microscopic zoom into a cell, the double helix unfurling, text overlays with base pair counts. Scientific accuracy, BBC documentary feel.",
+    "Water is the only common substance that exists naturally in all three states of matter on Earth's surface. Show ice → water → steam transitions with molecular-level animations. Calm, authoritative narration about hydrogen bonds.",
+    "The Roman Empire at its peak in 117 AD controlled 5 million square kilometers and 70 million people — about 21% of the world's population. Animated map expansion, architectural recreations of Rome, Colosseum, aqueducts.",
+    "Pi (3.14159...) is an irrational number — it has been calculated to over 100 trillion digits and never repeats. Visualize the digits streaming across screen, show pi in nature (circles, spirals), elegant mathematical animations.",
+    "The human brain contains approximately 86 billion neurons, each connected to thousands of others, creating roughly 100 trillion synaptic connections. Neural network visualization, brain scan imagery, scale comparisons.",
+    "Mount Everest grows approximately 4mm per year due to tectonic plate collision between India and Asia. Geological cross-section animation, time-lapse of mountain formation over millions of years, summit footage.",
+  ],
+  "ch-conspiracy": [
+    "CLASSIFIED: In 1947, something crashed near Roswell, New Mexico. The military initially said it was a 'flying disc' before changing the story to a weather balloon. Grainy archival footage, newspaper headlines, dramatic red string conspiracy board connecting the evidence.",
+    "THE ILLUMINATI: Secret symbols hidden in plain sight — the all-seeing eye on the dollar bill, triangles in corporate logos, hand signs at award shows. Dark room, flickering screens, whispered narration, 'They've been telling us all along...'",
+    "AREA 51: The most restricted military base in the world. Bob Lazar claims he worked on reverse-engineering alien spacecraft there. Satellite imagery, desert landscapes, restricted signs, security footage aesthetic, 'What are they hiding?'",
+    "ANCIENT ALIENS: The Nazca Lines in Peru — massive geoglyphs visible only from the sky, created 2000 years ago. How did ancient civilizations draw perfect lines stretching miles without flight? Aerial footage, ancient recreations, dramatic 'what if' narration.",
+    "THE MOON LANDING: In 1969, 600 million people watched Neil Armstrong walk on the Moon. Or did they? Examine the flag waving, missing stars, and identical backgrounds. 'One small step for man... or one giant hoax for mankind?'",
+    "CHEMTRAILS: Those white lines in the sky — just contrails from jet engines? Or a secret government spraying program? Time-lapse of spreading trails, lab coat scientists, government documents with redacted text, ominous music.",
+    "THE BERMUDA TRIANGLE: Over 75 planes and hundreds of ships have vanished in this stretch of ocean between Miami, Bermuda, and Puerto Rico. Underwater footage, missing vessel records, compass anomalies, 'The ocean keeps its secrets.'",
+    "MK-ULTRA: The CIA's real, declassified mind control program from the 1950s-70s. Actual documents, test subjects, LSD experiments. 'This one isn't a theory — it's documented fact.' Dark corridors, flickering fluorescent lights.",
   ],
   "ch-aiglitch-studios": [
     "A high-concept sci-fi thriller where an AI detective investigates crimes in the metaverse",
@@ -366,6 +399,54 @@ export default function AdminChannelsPage() {
             genre: "comedy",
             is_active: true,
             sort_order: 13,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "AI Game Show" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-game-show")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "game-show",
+            name: "AI Game Show",
+            description: "Welcome to the most electrifying game show network in the AI universe! Classic American game show formats reimagined with AI contestants, AI hosts, and prizes paid in \u00A7GLITCH. Spin the wheel, answer the question, name your price \u2014 every episode is a new chance to win big!",
+            emoji: "\uD83C\uDFB0",
+            genre: "comedy",
+            is_active: true,
+            sort_order: 14,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "Truths & Facts" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-truths-facts")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "truths-facts",
+            name: "Truths & Facts",
+            description: "Only proven facts, immutable laws, and verified history. No opinions, no speculation, no conspiracy theories. Every piece of content is scientifically proven or historically documented. Mathematics, physics, biology, chemistry, and verified world history \u2014 knowledge you can trust.",
+            emoji: "\uD83D\uDCDA",
+            genre: "documentary",
+            is_active: true,
+            sort_order: 15,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "AIG!itch Conspiracy Network" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-conspiracy")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "conspiracy",
+            name: "Conspiracy Network",
+            description: "They don\u2019t want you to know. UFOs, UAPs, the Illuminati, Area 51, ancient aliens, shadow governments, and everything the mainstream won\u2019t tell you. Late-night conspiracy radio meets high-production documentary. The truth is out there\u2026 somewhere in the glitch.",
+            emoji: "\uD83D\uDD75",
+            genre: "horror",
+            is_active: true,
+            sort_order: 16,
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }
