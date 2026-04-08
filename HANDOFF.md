@@ -183,6 +183,35 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### April 8, 2026 — 4 New Channels, NFT Marketplace Art, Cosmic Wanderer
+
+**4 new channels created:**
+1. **AI Game Show** (`ch-game-show`, 🎰) — Classic American game show formats (Wheel of Fortune, Jeopardy, Price is Right, Family Feud, Millionaire, Deal or No Deal). 8 random prompts with full game show scenarios. Bright TV studio visual style.
+2. **Truths & Facts** (`ch-truths-facts`, 📚) — Calm documentary, only provable science + verified history. STRICTLY no religion, politics, speculation. 10 topics (Math, Physics, Biology, History, etc.), 8 prompts (speed of light, Pyramids, DNA, Pi, Roman Empire). National Geographic aesthetic.
+3. **Conspiracy Network** (`ch-conspiracy`, 🕵) — UFOs, Illuminati, Area 51, ancient aliens. Dark, grainy, CLASSIFIED stamps, red string boards. 10 conspiracy types, 8 prompts (Roswell, Illuminati, Moon Landing, Bermuda Triangle, MK-ULTRA). "They Don't Want You to Know."
+4. **Cosmic Wanderer** (`ch-cosmic-wanderer`, 🌌) — Carl Sagan-inspired space documentary. 12 cosmic topics, 8 prompts in Sagan narration style. Breathtaking nebulae, Vangelis/Zimmer scores. "We Are All Made of Star Stuff."
+
+All channels follow same pattern: auto-seed, video options, random prompts, CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE, slogans.
+
+**NFT Marketplace admin page:**
+- New admin tab "NFT Art" at `/admin/nft-marketplace`
+- Grid of all 55 marketplace products
+- Grokify button generates premium product photos via Grok
+- "Grokify All" batch button for remaining products
+- Images saved to Vercel Blob at `marketplace/{product-id}.png`
+- DB: `nft_product_images` table
+- Public marketplace page now shows Grokified images instead of emojis
+- API GET is public (marketplace reads images), POST is admin-only
+
+**Files changed:**
+- `src/app/admin/channels/page.tsx` (4 new channels: video options, random prompts, auto-seed)
+- `src/lib/content/director-movies.ts` (CHANNEL_TITLE_PREFIX + CHANNEL_VISUAL_STYLE for all 4)
+- `src/lib/bible/constants.ts` (slogans for all 4)
+- `src/app/admin/nft-marketplace/page.tsx` (NEW — NFT art admin)
+- `src/app/api/admin/nft-marketplace/route.ts` (NEW — Grokify API)
+- `src/app/admin/admin-types.ts` (nft-marketplace tab)
+- `src/app/marketplace/page.tsx` (shows Grokified images)
+
 ### April 7, 2026 — QR Wallet Auth, Exchange Overhaul, Persona Verticals, Spec Ads
 
 **QR Wallet Login (WORKING):**
@@ -636,53 +665,16 @@ See full details in `errors/error-log.md #1`.
 ## What's Next
 
 ### Active/Recent Work
+- **4 new channels built** (April 8): AI Game Show (🎰), Truths & Facts (📚), Conspiracy Network (🕵), Cosmic Wanderer (🌌)
+- **NFT Marketplace art** — admin page to Grokify all 55 product images, connected to public marketplace
 - **QR Wallet Login WORKING** — cross-device Phantom wallet auth on iPad/PC via QR code scan
 - **QR Transaction Signing NOT WORKING** — needs debugging (see April 7 dev log for details + debug approach)
 - **Exchange page overhauled** — "What is §GLITCH?" section, treasury progress bar, removed AI trading dashboard
 - **Spec Ad Generator** live at `/admin/spec-ads` — generates product placement demo clips
-- **Persona verticals categorized** — 96 personas in 8 sponsor verticals
-- **6 in-house sponsor products** live with logos in Blob
-- **LikLok revenge channel** live with 10 savage prompts
+- **16 channels total** on AIG!itch TV
 
 ### PRIORITY FOR NEXT SESSION: Fix QR Transaction Signing
 The QR wallet LOGIN works perfectly. The QR transaction SIGNING (for buying §GLITCH) fails with "Expired". See April 7 dev log for the full investigation, what was tried, and the specific debug approach needed. Key files: `/api/auth/sign-tx/route.ts`, `/auth/sign-tx/page.tsx`, `QRSign.tsx`, exchange page.
-
-### New Channels To Create (User's Secret Channels — Next Session)
-
-**Channel 1: AI Game Show** — The user wants a dedicated 24/7 AI Game Show channel in the style of classic American game shows. Key requirements:
-- Channel intro + outro (consistent branding)
-- 8 clips per video — ALL from the SAME game show (not mixed)
-- Should feel like different episodes/rounds from ONE show
-- Game show format options: Wheel of Fortune, Jeopardy, Price is Right, Family Feud, Who Wants to Be a Millionaire, or an original AI-themed game show
-- Include: host, contestants, audience, sound effects, scoring, drama
-- Fun, energetic, nostalgic yet futuristic, high-energy
-- Need: channel slug, emoji, description, promptHint, visual style, video options (game show formats), random prompts (8), CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE, slogan
-- Same setup pattern as all other channels (auto-seed on channels page load)
-
-**Channel 2: Truths & Facts** — Calm, authoritative, documentary-style 24/7 channel presenting only absolute truths, proven facts, immutable laws, and verified history. Key requirements:
-- Channel intro (30-45s) + outro (15-25s) — professional, clean, trustworthy tone
-- 8 clips per video — all same documentary style, each focused on one provable fact
-- National Geographic / BBC Documentary quality aesthetic
-- Calm, deep, trustworthy narrator voice
-- Allowed topics: Mathematics, Physics, Biology, Chemistry, verified non-controversial history (Pyramids, Roman Empire, Alexander the Great, Buddha, invention of the wheel, etc.)
-- STRICTLY EXCLUDED: Jesus, religious miracles, unproven theories, modern politics, debated history, opinions, conspiracy theories
-- Visual style: archival footage, animations, diagrams, historical recreations, text overlays with facts
-- Clean, credible, educational, addictive for knowledge lovers
-- Same setup pattern as all other channels
-
-**Channel 3: AIG!itch Conspiracy Network** — Wild, mysterious, addictive 24/7 conspiracy theory channel. Key requirements:
-- Channel intro (30-45s, dramatic/mysterious) + outro (eerie sign-off)
-- 8 clips per video — all same cohesive series style, each one specific conspiracy
-- Topics: UFOs, UAPs, alien abductions, Illuminati, secret societies, Area 51, reptilians, chemtrails, shadow governments, ancient aliens, government cover-ups, Roswell, "they don't want you to know"
-- Tone: intriguing, slightly paranoid, dramatic, entertaining — like late-night conspiracy radio meets high-production documentary
-- Visual style: dark, mysterious, grainy footage, red string conspiracy boards, shadowy lighting, glitch effects, archival mixed with futuristic, "CLASSIFIED" / "LEAKED FOOTAGE" text overlays
-- Narrator: deep, serious, slightly urgent or whispering conspiracy voice
-- Tense background music, dramatic sound design
-- Suggested names: "Shadow Realm TV", "Red Pill Network", "Black Vault TV", "The Hidden Truth", "Cosmic Conspiracy"
-- Must feel addictive, mysterious, and fun in a "what if it's all true?" way
-- Same setup pattern as all other channels
-
-All 3 secret channels are now described above. Build all 3 in the next session following the same pattern as existing channels (auto-seed, video options, random prompts, visual style, slogan, CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE).
 
 ### Future Features
 - Buffer.com integration for TikTok scheduling (their API is currently closed to new apps — revisit later)
