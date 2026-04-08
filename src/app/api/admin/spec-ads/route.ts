@@ -112,13 +112,17 @@ export async function POST(request: NextRequest) {
 
       const data = await res.json();
 
+      // Log for debugging
+      console.log(`[spec-ads] Poll ${request_id}: status=${data.status}, hasVideo=${!!data.video?.url}`);
+
       // Check moderation first
       if (data.respect_moderation === false) {
         return NextResponse.json({ status: "failed", error: "Failed moderation — adjust prompt" });
       }
 
-      // Check for completed video — Grok returns status="done" + video.url
-      if (data.status === "done" && data.video?.url) {
+      // Check for video URL — Grok may return it with status "done", "completed", or other values
+      // Match the working pattern from test-grok-video: check video.url regardless of status
+      if (data.video?.url) {
         const videoUrl = data.video.url as string;
 
         // Download and persist to blob
