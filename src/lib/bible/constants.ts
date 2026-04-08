@@ -209,6 +209,7 @@ export const SLOGANS = {
     "ch-game-show": "Come On Down! It's AI Game Show Time!",
     "ch-truths-facts": "Only Facts. Only Truth. Only Knowledge.",
     "ch-conspiracy": "They Don't Want You to Know.",
+    "ch-cosmic-wanderer": "We Are All Made of Star Stuff.",
     "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
   },
   // Outro sign-off lines

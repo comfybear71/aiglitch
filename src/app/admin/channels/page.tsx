@@ -90,6 +90,7 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-game-show":       { label: "Game Show Format", options: ["Wheel of Fortune", "Jeopardy", "Price is Right", "Family Feud", "Who Wants to Be a Millionaire", "Deal or No Deal", "The Weakest Link", "AI Original Format"] },
   "ch-truths-facts":    { label: "Topic Category", options: ["Mathematics", "Physics", "Biology", "Chemistry", "Ancient History", "Modern History", "Space & Astronomy", "Earth Science", "Engineering", "Human Body"] },
   "ch-conspiracy":      { label: "Conspiracy Type", options: ["UFOs & UAPs", "Alien Abductions", "Illuminati", "Area 51", "Government Cover-Ups", "Ancient Aliens", "Reptilians", "Shadow Government", "Secret Societies", "Moon Landing"] },
+  "ch-cosmic-wanderer": { label: "Cosmic Topic", options: ["Black Holes", "Neutron Stars", "The Big Bang", "Dark Matter", "Galaxies", "Exoplanets", "Space-Time", "The Sun", "The Pale Blue Dot", "Cosmic Expansion", "Nebulae", "The Multiverse"] },
 };
 
 /* ── Random prompt ideas per channel (dice button picks one) ── */
@@ -246,6 +247,16 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "CHEMTRAILS: Those white lines in the sky — just contrails from jet engines? Or a secret government spraying program? Time-lapse of spreading trails, lab coat scientists, government documents with redacted text, ominous music.",
     "THE BERMUDA TRIANGLE: Over 75 planes and hundreds of ships have vanished in this stretch of ocean between Miami, Bermuda, and Puerto Rico. Underwater footage, missing vessel records, compass anomalies, 'The ocean keeps its secrets.'",
     "MK-ULTRA: The CIA's real, declassified mind control program from the 1950s-70s. Actual documents, test subjects, LSD experiments. 'This one isn't a theory — it's documented fact.' Dark corridors, flickering fluorescent lights.",
+  ],
+  "ch-cosmic-wanderer": [
+    "Billions of years ago, in the unimaginable furnace of a dying star, every atom of iron in your blood was forged. Isn't it fascinating that you are, quite literally, made of star stuff? A journey from stellar nucleosynthesis to the human heartbeat.",
+    "Do you ever wonder what happens at the edge of a black hole? Where space-time curves so violently that light itself cannot escape. We journey to the event horizon of Sagittarius A*, the supermassive black hole at the centre of our galaxy. Four million times the mass of our Sun, sitting in perfect darkness.",
+    "The Pale Blue Dot — that's us. Everything we've ever known, every war fought, every love story, every sunrise, on a mote of dust suspended in a sunbeam. Carl Sagan's famous reflection on Voyager 1's photograph from 6 billion kilometres away.",
+    "Isn't it fascinating that a neutron star — the collapsed core of a massive star — is so dense that a teaspoon of its material would weigh 6 billion tonnes on Earth? Spinning hundreds of times per second, emitting beams of radiation across the cosmos.",
+    "And question why the universe is expanding — not just expanding, but accelerating. Every galaxy rushing away from every other galaxy, driven by a mysterious force we call dark energy. It makes up 68% of the universe, and we have no idea what it is.",
+    "Billions and billions of galaxies, each containing billions of stars, each star potentially harbouring worlds. The observable universe contains roughly 2 trillion galaxies. And that's just what we can see. What lies beyond the cosmic horizon?",
+    "Do you ever wonder about the silence? The Fermi Paradox — if the universe is so vast and so old, where is everybody? Billions of potentially habitable worlds, yet not a single confirmed signal from another civilisation. The great cosmic loneliness.",
+    "The James Webb Space Telescope peers back 13.5 billion years, to the first galaxies forming after the Big Bang. We are looking at light that began its journey when the universe was an infant. Isn't it fascinating that in astronomy, to look far is to look back in time?",
   ],
   "ch-aiglitch-studios": [
     "A high-concept sci-fi thriller where an AI detective investigates crimes in the metaverse",
@@ -447,6 +458,22 @@ export default function AdminChannelsPage() {
             genre: "horror",
             is_active: true,
             sort_order: 16,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "Cosmic Wanderer" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-cosmic-wanderer")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "cosmic-wanderer",
+            name: "Cosmic Wanderer",
+            description: "Billions of years ago, the universe began. This channel explores the magnificent cosmos \u2014 black holes, neutron stars, distant galaxies, the expansion of space-time, and the beautiful, terrifying truth about our place in the universe. Inspired by the wonder of Carl Sagan. We are all made of star stuff.",
+            emoji: "\uD83C\uDF0C",
+            genre: "documentary",
+            is_active: true,
+            sort_order: 17,
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }
