@@ -371,10 +371,22 @@ export default function SponsorsPage() {
           <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-cyan-400">Sponsored Campaigns</h2>
           <p className="text-xs text-gray-500">Manage sponsors, create ads, and generate outreach emails</p>
         </div>
-        <button onClick={() => { setShowForm(true); setEditingSponsor(null); setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 }); }}
-          className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
-          + Add Sponsor
-        </button>
+        <div className="flex gap-2">
+          <button onClick={async () => {
+            if (!confirm("Run daily GLITCH burn now? This deducts the daily rate from all active sponsor balances.")) return;
+            const res = await fetch("/api/sponsor-burn", { method: "POST" });
+            const data = await res.json();
+            if (data.error) { alert(`Error: ${data.error}`); return; }
+            alert(`Burned ${data.burned} campaigns:\n${(data.results || []).map((r: { brand: string; dailyRate: number; newBalance: number; expired: boolean }) => `${r.brand}: -§${r.dailyRate} → §${r.newBalance}${r.expired ? " EXPIRED" : ""}`).join("\n") || "Nothing to burn"}`);
+            fetchSponsors();
+          }} className="px-3 py-2 bg-orange-600/20 text-orange-400 font-bold rounded-lg text-xs hover:bg-orange-600/30 border border-orange-500/30">
+            Burn Now
+          </button>
+          <button onClick={() => { setShowForm(true); setEditingSponsor(null); setForm({ company_name: "", contact_email: "", contact_name: "", industry: "", website: "", notes: "", status: "inquiry", glitch_balance: 0 }); }}
+            className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
+            + Add Sponsor
+          </button>
+        </div>
       </div>
 
       {/* MasterHQ Import Banner */}
@@ -477,10 +489,15 @@ export default function SponsorsPage() {
                       <span className="text-gray-400 text-xs ml-2">{s.contact_email}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 text-xs">
+                  <div className="flex items-center gap-3 text-xs flex-wrap">
                     {s.industry && <span className="text-gray-500">{s.industry}</span>}
-                    <span className="text-green-400">{s.glitch_balance} GLITCH</span>
-                    <span className="text-gray-500">Spent: {s.total_spent}</span>
+                    <span className={`font-bold ${s.glitch_balance > 500 ? "text-green-400" : s.glitch_balance > 0 ? "text-orange-400" : "text-red-400"}`}>
+                      {"\u00A7"}{s.glitch_balance.toLocaleString()}
+                    </span>
+                    <span className="text-gray-500">Spent: {"\u00A7"}{s.total_spent.toLocaleString()}</span>
+                    <span className="text-gray-600">Total: {"\u00A7"}{(s.glitch_balance + s.total_spent).toLocaleString()}</span>
+                    {s.glitch_balance <= 0 && <span className="text-red-500 font-bold text-[10px]">EXPIRED</span>}
+                    {s.glitch_balance > 0 && s.glitch_balance <= 500 && <span className="text-red-400 font-bold text-[10px] animate-pulse">LOW</span>}
                     <button onClick={(e) => { e.stopPropagation(); refreshSponsorFromMasterHQ(s); }}
                       className="px-2 py-1 bg-fuchsia-500/20 text-fuchsia-400 rounded hover:bg-fuchsia-500/30">Sync</button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingSponsor(s); setForm({ company_name: s.company_name, contact_email: s.contact_email, contact_name: s.contact_name || "", industry: s.industry || "", website: s.website || "", notes: s.notes || "", status: s.status, glitch_balance: s.glitch_balance }); setShowForm(true); }}
@@ -520,32 +537,32 @@ export default function SponsorsPage() {
                     ))}
                   </div>
                 )}
-                {/* Product Placements — videos where this sponsor's product appeared */}
+                {/* Product Placements — collapsible */}
                 {sponsorPlacements.length > 0 && (
-                  <div className="mt-3 border-t border-cyan-800/30 pt-2">
-                    <p className="text-[10px] text-cyan-400 font-bold mb-1">PRODUCT PLACEMENTS ({placementsTotal} videos)</p>
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {sponsorPlacements.map((p) => (
+                  <details className="mt-3 border-t border-cyan-800/30 pt-2">
+                    <summary className="text-[10px] text-cyan-400 font-bold cursor-pointer hover:text-cyan-300 select-none">
+                      PRODUCT PLACEMENTS ({placementsTotal} videos)
+                    </summary>
+                    <div className="space-y-1 max-h-48 overflow-y-auto mt-1">
+                      {sponsorPlacements.filter((p) => p.post_id && p.post_content).map((p) => (
                         <div key={p.post_id || p.placed_at} className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded text-xs">
-                          {p.media_url && p.media_type === "video" && (
-                            <a href={p.media_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                              <div className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-[9px] text-purple-400">▶</div>
+                          {p.media_url && (
+                            <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                              <div className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center text-[9px] text-purple-400">{p.media_type === "video" ? "\u25B6" : "\uD83D\uDDBC"}</div>
                             </a>
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-white truncate text-[10px]">{p.post_content?.split("\n")[0] || "Unknown post"}</p>
+                            <p className="text-white truncate text-[10px]">{p.post_content?.split("\n")[0]}</p>
                             <p className="text-gray-500 text-[9px]">
                               {p.content_type} · {p.channel_name || "Feed"} · {new Date(p.placed_at).toLocaleDateString()}
                             </p>
                           </div>
-                          {p.post_id && (
-                            <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer"
-                              className="text-[9px] text-cyan-400 hover:text-cyan-300 shrink-0">View</a>
-                          )}
+                          <a href={`/post/${p.post_id}`} target="_blank" rel="noopener noreferrer"
+                            className="text-[9px] text-cyan-400 hover:text-cyan-300 shrink-0">View</a>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 )}
               </div>
             ))}

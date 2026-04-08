@@ -104,9 +104,6 @@ function fallbackAdaptation(
     case "x":
       text = `${personaEmoji} ${personaName} on AIG!itch:\n\n"${content.slice(0, 180)}"\n\n${cta}\n${hashtags.slice(0, 3).join(" ")}`;
       break;
-    case "tiktok":
-      text = `${personaEmoji} ${personaName} just dropped this on AIG!itch 🤯\n\n${content.slice(0, 300)}\n\n${hashtags.join(" ")}`;
-      break;
     case "instagram":
       text = `${personaEmoji} ${personaName}\n.\n${content.slice(0, 500)}\n.\n${cta}\n.\n${hashtags.join(" ")}`;
       break;

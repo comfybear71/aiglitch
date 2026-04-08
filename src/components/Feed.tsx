@@ -148,50 +148,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Breaking news flash indicator
-  const [hasNewBreaking, setHasNewBreaking] = useState(false);
-
-  // Check for recent breaking news — deferred 3s so it doesn't compete with initial feed load
-  useEffect(() => {
-    const checkBreaking = async () => {
-      try {
-        const res = await fetch(`/api/feed?breaking=1&limit=1`);
-        const data = await res.json();
-        if (data.posts?.length > 0) {
-          const latestTime = new Date(data.posts[0].created_at).getTime();
-          const thirtyMinsAgo = Date.now() - 30 * 60 * 1000;
-          if (latestTime > thirtyMinsAgo) {
-            setHasNewBreaking(true);
-          }
-        }
-      } catch { /* ignore */ }
-    };
-    const delay = setTimeout(checkBreaking, 3000);
-    const interval = setInterval(checkBreaking, 60_000);
-    return () => { clearTimeout(delay); clearInterval(interval); };
-  }, []);
-
-  // Prefetch other tabs in background so switching is instant
-  // Fires once after initial feed loads — doesn't block the main feed
-  const prefetchedRef = useRef(false);
-  useEffect(() => {
-    if (loading || prefetchedRef.current) return;
-    prefetchedRef.current = true;
-    const prefetchTab = async (url: string, cacheKey: string) => {
-      if (_feedCache.has(cacheKey)) return;
-      try {
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.posts?.length > 0) {
-          _feedCache.set(cacheKey, { posts: data.posts, cursor: null, ts: Date.now() });
-        }
-      } catch { /* non-critical */ }
-    };
-    // Stagger prefetches so they don't all fire at once
-    const t1 = setTimeout(() => prefetchTab(`/api/feed?premieres=1&limit=30`, "premieres-all"), 1000);
-    const t2 = setTimeout(() => prefetchTab(`/api/feed?breaking=1&limit=20`, "breaking"), 2500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [loading]);
+  // Breaking/premieres tabs removed — content available via Channels page
 
   const fetchPosts = useCallback(async (isLoadMore = false) => {
     try {
@@ -245,7 +202,11 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
         nextCursorRef.current = null;
         _feedCache.set("bookmarks", { posts: filteredPosts, cursor: null, ts: Date.now() });
       } else if (isLoadMore) {
-        setPosts((prev) => [...prev, ...filteredPosts]);
+        setPosts((prev) => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newPosts = filteredPosts.filter((p: Post) => !existingIds.has(p.id));
+          return [...prev, ...newPosts];
+        });
         allPostsRef.current = [...allPostsRef.current, ...filteredPosts];
       } else {
         setPosts(filteredPosts);
@@ -369,7 +330,12 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
       }
     };
     window.addEventListener("search-hashtag", handleHashtagSearch);
-    return () => window.removeEventListener("search-hashtag", handleHashtagSearch);
+    const handleToggleSearch = () => {
+      setShowSearch(prev => !prev);
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    };
+    window.addEventListener("toggle-search", handleToggleSearch);
+    return () => { window.removeEventListener("search-hashtag", handleHashtagSearch); window.removeEventListener("toggle-search", handleToggleSearch); };
   }, []);
 
   // Load followed personas
@@ -531,101 +497,7 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
 
   return (
     <div className="relative h-[100dvh]">
-      {/* Top Tab Bar */}
-      {showTopTabs && (
-        <div className="absolute top-10 left-0 right-0 z-40 pointer-events-none">
-          <div className="flex items-center justify-center pointer-events-auto px-10">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { if (tab === "foryou") { _feedCache.delete("foryou"); nextCursorRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("foryou"); } setShowSearch(false); }}
-                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "foryou" ? "text-white border-white" : "text-gray-400 border-transparent"}`}
-              >
-                For You
-              </button>
-              <button
-                onClick={() => { setHasNewBreaking(false); if (tab === "breaking") { _feedCache.delete("breaking"); nextCursorRef.current = null; setLoading(true); setPosts([]); fetchPosts(); } else { setTab("breaking"); } setShowSearch(false); }}
-                className={`text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap relative ${tab === "breaking" ? "text-red-400 border-red-400" : hasNewBreaking ? "breaking-flash border-transparent" : "text-gray-400 border-transparent"}`}
-              >
-                Breaking
-                {hasNewBreaking && tab !== "breaking" && (
-                  <span className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-red-500 rounded-full dot-pulse" />
-                )}
-              </button>
-              <div className="relative">
-                <button
-                  onClick={() => {
-                    if (tab === "premieres") {
-                      setGenreDropdownOpen(!genreDropdownOpen);
-                    } else {
-                      setTab("premieres");
-                      setGenreDropdownOpen(false);
-                    }
-                    setShowSearch(false);
-                  }}
-                  className={`flex items-center gap-1 text-[13px] font-bold pb-1 border-b-2 transition-all whitespace-nowrap ${tab === "premieres" ? "text-amber-400 border-amber-400" : "text-gray-400 border-transparent"}`}
-                >
-                  {tab === "premieres" ? (
-                    <>
-                      {GENRE_FILTERS.find(g => g.key === movieGenre)?.emoji}{" "}
-                      {GENRE_FILTERS.find(g => g.key === movieGenre)?.label || "All"}
-                      <svg className={`w-3 h-3 transition-transform ${genreDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </>
-                  ) : (
-                    "Premieres"
-                  )}
-                </button>
-                {genreDropdownOpen && tab === "premieres" && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 bg-black/95 backdrop-blur-xl border border-amber-500/20 rounded-xl py-1.5 shadow-2xl min-w-[160px]">
-                    {GENRE_FILTERS.map((g) => {
-                      const count = genreCounts[g.key];
-                      return (
-                        <button
-                          key={g.key}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (movieGenre !== g.key) {
-                              setMovieGenre(g.key);
-                              _feedCache.delete(`premieres-${g.key}`);
-                              nextCursorRef.current = null;
-                              setLoading(true);
-                              setPosts([]);
-                            }
-                            setGenreDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-1.5 text-[12px] font-bold flex items-center justify-between gap-3 transition-colors ${
-                            movieGenre === g.key
-                              ? "text-amber-300 bg-amber-500/20"
-                              : "text-gray-300 hover:bg-white/10"
-                          }`}
-                        >
-                          <span>{g.emoji} {g.label}</span>
-                          {count !== undefined && <span className="text-[10px] text-gray-500">{count}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Search icon pinned left */}
-            <button
-              onClick={() => { setShowSearch(!showSearch); setTimeout(() => searchInputRef.current?.focus(), 100); }}
-              className="absolute left-3 text-white/70 hover:text-white transition-colors pointer-events-auto"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Close genre dropdown when clicking outside */}
-      {genreDropdownOpen && (
-        <div className="absolute inset-0 z-30" onClick={() => setGenreDropdownOpen(false)} />
-      )}
+      {/* Search is now in Header.tsx — triggered via custom event */}
 
       {/* Search Panel */}
       {showSearch && (

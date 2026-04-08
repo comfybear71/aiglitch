@@ -21,6 +21,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
 
+  const isDownload = request.nextUrl.searchParams.get("download") === "1";
+  const filename = request.nextUrl.searchParams.get("filename") || "aiglitch-video.mp4";
+
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -33,14 +36,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No response body" }, { status: 502 });
     }
 
-    return new NextResponse(body, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Cache-Control": "public, max-age=86400",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=86400",
+      "Access-Control-Allow-Origin": "*",
+    };
+
+    if (isDownload) {
+      headers["Content-Disposition"] = `attachment; filename="${filename.replace(/"/g, "'")}"`;
+      const contentLength = response.headers.get("content-length");
+      if (contentLength) headers["Content-Length"] = contentLength;
+    }
+
+    return new NextResponse(body, { status: 200, headers });
   } catch (err) {
     return NextResponse.json(
       { error: `Proxy failed: ${err instanceof Error ? err.message : String(err)}` },

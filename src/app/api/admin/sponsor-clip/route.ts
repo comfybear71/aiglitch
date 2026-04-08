@@ -3,8 +3,10 @@ import { env } from "@/lib/bible/env";
 
 /**
  * POST /api/admin/sponsor-clip
- * Generates a sponsor thank-you card PNG, uploads to Blob,
- * submits to Grok image-to-video, returns the requestId.
+ * Generates a sponsor thank-you clip via Grok video generation.
+ * If sponsor product images are provided, uses image-to-video with the first
+ * product image as a visual reference so the sponsor's actual product appears.
+ * Otherwise falls back to text-to-video with a descriptive prompt.
  *
  * The client polls this requestId via /api/test-grok-video like any other scene.
  */
@@ -12,21 +14,42 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const sponsorNames = (body.sponsorNames || []) as string[];
+    const sponsorImages = (body.sponsorImages || []) as string[];
 
     if (sponsorNames.length === 0) {
       return NextResponse.json({ error: "No sponsor names provided" }, { status: 400 });
     }
 
-    const thanksLine = "Thanks to our sponsors";
-    const namesLine = sponsorNames.join("  •  ");
-
-    // Submit text-to-video (NOT image-to-video — that distorts/glitches the card)
     const apiKey = env.XAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "XAI_API_KEY not set" }, { status: 500 });
     }
 
-    console.log(`[sponsor-clip] Submitting text-to-video for: ${sponsorNames.join(", ")}`);
+    const namesLine = sponsorNames.join(", ");
+    const hasProductImage = sponsorImages.length > 0;
+
+    console.log(`[sponsor-clip] Generating for: ${namesLine}, ${sponsorImages.length} product image(s)`);
+
+    // Build the video generation request
+    // If we have a product image, use it as image_url so the sponsor's actual product
+    // appears in the clip (Grok animates from the image as first frame)
+    const videoBody: Record<string, unknown> = {
+      model: "grok-imagine-video",
+      duration: 5,
+      aspect_ratio: "16:9",
+      resolution: "720p",
+    };
+
+    if (hasProductImage) {
+      // Use product image as starting frame — Grok will animate from it
+      // This ensures the actual product/logo is visible, not AI-hallucinated text
+      videoBody.image_url = sponsorImages[0];
+      videoBody.prompt = `A cinematic product showcase clip. The ${namesLine} product rotates slowly on a sleek dark surface with dramatic purple and cyan neon lighting. Premium product photography style with volumetric light rays. The product is the star — luxurious, desirable, beautifully lit. Subtle particle effects and lens flares. High-end commercial quality, like a Super Bowl ad. Camera slowly orbits the product. Dark background with professional studio lighting.`;
+      console.log(`[sponsor-clip] Using product image as starting frame: ${sponsorImages[0].slice(0, 60)}...`);
+    } else {
+      // Fallback: text-to-video with abstract branding (no specific text to render)
+      videoBody.prompt = `A premium sponsor acknowledgment clip. Dark navy and purple gradient background with elegant neon purple and cyan light streaks. A golden spotlight slowly illuminates the center of the frame revealing a luxurious glowing emblem. Subtle particle effects float upward. The mood is grateful and prestigious — like an awards show sponsor moment. Cinematic lens flares, shallow depth of field, professional broadcast quality. Slow elegant camera push-in. Think high-end TV broadcast sponsor card with abstract beauty.`;
+    }
 
     const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
       method: "POST",
@@ -34,13 +57,7 @@ export async function POST(request: NextRequest) {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "grok-imagine-video",
-        prompt: `A professional, clean, static sponsor thank-you card. Dark navy/purple gradient background. In the center of the frame, large crisp white bold text reads: "${thanksLine}" on the first line. Below it in even larger white text: "${namesLine}". Below that, smaller purple glowing text: "AIG!itch" and below "aiglitch.app". Subtle neon purple and cyan accent lines at top and bottom edges. The card is STATIC — minimal movement, just a very subtle glow pulse on the text. Think TV end credits sponsor acknowledgment. The text MUST be the main focus, clearly readable, centered, and prominent against the dark background. Professional broadcast quality.`,
-        duration: 5,
-        aspect_ratio: "16:9",
-        resolution: "720p",
-      }),
+      body: JSON.stringify(videoBody),
     });
 
     if (!createRes.ok) {
@@ -51,9 +68,9 @@ export async function POST(request: NextRequest) {
 
     const createData = await createRes.json();
     const requestId = createData.request_id || createData.id;
-    console.log(`[sponsor-clip] Submitted to Grok: requestId=${requestId}`);
+    console.log(`[sponsor-clip] Submitted to Grok: requestId=${requestId}, mode=${hasProductImage ? "image-to-video" : "text-to-video"}`);
 
-    return NextResponse.json({ requestId });
+    return NextResponse.json({ requestId, mode: hasProductImage ? "image-to-video" : "text-to-video" });
   } catch (err) {
     console.error("[sponsor-clip] Error:", err instanceof Error ? err.message : err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });

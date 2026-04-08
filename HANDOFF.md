@@ -183,6 +183,200 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### April 8, 2026 — 4 New Channels, NFT Marketplace Art, Cosmic Wanderer
+
+**4 new channels created:**
+1. **AI Game Show** (`ch-game-show`, 🎰) — Classic American game show formats (Wheel of Fortune, Jeopardy, Price is Right, Family Feud, Millionaire, Deal or No Deal). 8 random prompts with full game show scenarios. Bright TV studio visual style.
+2. **Truths & Facts** (`ch-truths-facts`, 📚) — Calm documentary, only provable science + verified history. STRICTLY no religion, politics, speculation. 10 topics (Math, Physics, Biology, History, etc.), 8 prompts (speed of light, Pyramids, DNA, Pi, Roman Empire). National Geographic aesthetic.
+3. **Conspiracy Network** (`ch-conspiracy`, 🕵) — UFOs, Illuminati, Area 51, ancient aliens. Dark, grainy, CLASSIFIED stamps, red string boards. 10 conspiracy types, 8 prompts (Roswell, Illuminati, Moon Landing, Bermuda Triangle, MK-ULTRA). "They Don't Want You to Know."
+4. **Cosmic Wanderer** (`ch-cosmic-wanderer`, 🌌) — Carl Sagan-inspired space documentary. 12 cosmic topics, 8 prompts in Sagan narration style. Breathtaking nebulae, Vangelis/Zimmer scores. "We Are All Made of Star Stuff."
+
+All channels follow same pattern: auto-seed, video options, random prompts, CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE, slogans.
+
+**NFT Marketplace admin page:**
+- New admin tab "NFT Art" at `/admin/nft-marketplace`
+- Grid of all 55 marketplace products
+- Grokify button generates premium product photos via Grok
+- "Grokify All" batch button for remaining products
+- Images saved to Vercel Blob at `marketplace/{product-id}.png`
+- DB: `nft_product_images` table
+- Public marketplace page now shows Grokified images instead of emojis
+- API GET is public (marketplace reads images), POST is admin-only
+
+**Files changed:**
+- `src/app/admin/channels/page.tsx` (4 new channels: video options, random prompts, auto-seed)
+- `src/lib/content/director-movies.ts` (CHANNEL_TITLE_PREFIX + CHANNEL_VISUAL_STYLE for all 4)
+- `src/lib/bible/constants.ts` (slogans for all 4)
+- `src/app/admin/nft-marketplace/page.tsx` (NEW — NFT art admin)
+- `src/app/api/admin/nft-marketplace/route.ts` (NEW — Grokify API)
+- `src/app/admin/admin-types.ts` (nft-marketplace tab)
+- `src/app/marketplace/page.tsx` (shows Grokified images)
+
+### April 7, 2026 — QR Wallet Auth, Exchange Overhaul, Persona Verticals, Spec Ads
+
+**QR Wallet Login (WORKING):**
+- Cross-device wallet auth: iPad/PC shows QR → phone scans → opens `/auth/connect` → Phantom signs challenge → iPad polls and auto-logs in
+- Public API: `/api/auth/wallet-qr` (challenge create, poll, verify)
+- Phone page: `/auth/connect` (fetches challenge message, Phantom signs it)
+- PostCard.tsx: "Connect Phantom Wallet" button in Join popup shows QR modal
+- Exchange page: "Connect Wallet via QR" button for non-logged users
+- Key bugs fixed:
+  - App uses `localStorage("aiglitch-session")` NOT `"session_id"` — was writing to wrong key
+  - `wallet_login` returns `{ user: { session_id } }` not `{ session_id }` — was reading wrong path
+  - Sign out now disconnects Phantom adapter to prevent auto-reconnect
+  - BottomNav profile icon pulses green (logged in) / red (not logged in) based on `hasProfile`
+
+**QR Transaction Signing (NOT WORKING — needs next session):**
+- Intent-based system built but fails with "Transaction expired" on PC
+- Architecture: iPad creates intent (wallet + amount) → Redis → QR code → phone scans → `/auth/sign-tx` page → phone calls `build_and_sign` (fresh Solana tx) → Phantom signs → submits → iPad polls for completion
+- Files: `/api/auth/sign-tx/route.ts`, `/auth/sign-tx/page.tsx`, `QRSign.tsx` component
+- **What works**: Intent creation, QR display, phone opening the page, Phantom deep link
+- **What fails**: PC polling shows "Expired" before phone completes. Possible causes:
+  1. The `build_and_sign` server call to `/api/otc-swap` may fail (internal fetch URL issue — was using `request.nextUrl.origin`, changed to host header)
+  2. The Solana blockhash (90 second TTL) may expire between `build_and_sign` and Phantom signing
+  3. The phone page opens in regular Safari first, then deep-links to Phantom browser — this two-hop adds delay
+  4. Redis TTL is 10 min but polling may be detecting "failed" status (from server error) and showing it as "expired"
+- **Debug approach for next session**: Check Vercel logs for `build_and_sign` errors. The QRSign component shows "expired" for both expired AND failed — needs separate error messages. Add logging to the sign-tx API.
+- **Stopped per SAFETY-RULES.md**: 3 failed attempts in a row
+
+**Exchange Page Overhaul:**
+- Removed AI trading dashboard (fake bot trades, order book, price chart, leaderboard — ~215 lines)
+- Only real OTC swap purchase history shown
+- "What is §GLITCH?" section for non-logged users: ecosystem explanation, 4 use cases (Marketplace, Hatch AI, Donate, NFTs), roadmap (price increase → 5K SOL treasury → DEX listing → AI trading), treasury progress bar
+- Buy button auto-detects: Phantom extension → direct sign, QR wallet → QR sign flow
+- Balances load from dbWallet when no Phantom extension
+- `treasury_sol` added to OTC config API response
+
+**Persona Sponsorship Verticals:**
+- 8 verticals: Tech & Gaming, Fashion & Beauty, Food & Drink, Finance & Crypto, News & Politics, Entertainment, Health & Wellness, Chaos & Memes
+- All 96 personas categorized with primary + secondary verticals
+- `SPONSOR_VERTICALS` + `PERSONA_VERTICALS` constants in `bible/constants.ts`
+
+**Spec Ad Generator:**
+- Admin page `/admin/spec-ads` — enter brand + product → generates 3 x 10s video clips via Grok
+- Picks 3 random channels, generates product placement clips
+- Private sales materials — never posted to feed
+- Progress bar, per-clip status, download + copy URL buttons
+- DB: `spec_ads` table, saves to `sponsors_spec/` in Vercel Blob
+
+**Other:**
+- `#elon_glitch` hashtag added to Elon campaign posts
+- Profile icon connection status (green pulse = logged in, red = not)
+- Back to Feed link on `/me` page
+- Gallery page created then deleted (pricing handled by MasterHQ)
+
+**Files created/modified this session:**
+- `src/app/api/auth/wallet-qr/route.ts` (NEW — public QR wallet auth)
+- `src/app/api/auth/sign-tx/route.ts` (NEW — QR transaction signing bridge)
+- `src/app/auth/connect/page.tsx` (NEW — phone wallet connect page)
+- `src/app/auth/sign-tx/page.tsx` (NEW — phone transaction signing page)
+- `src/components/QRSign.tsx` (NEW — reusable QR signing modal)
+- `src/app/admin/spec-ads/page.tsx` (NEW — spec ad generator)
+- `src/app/api/admin/spec-ads/route.ts` (NEW — spec ad API)
+- `src/app/exchange/page.tsx` (MAJOR — QR connect, What is GLITCH, removed AI dashboard)
+- `src/components/PostCard.tsx` (QR wallet connect in Join popup)
+- `src/components/BottomNav.tsx` (profile icon status, dbWallet check)
+- `src/app/me/page.tsx` (sign out fix, back link)
+- `src/lib/bible/constants.ts` (persona verticals, #elon_glitch)
+- `src/app/api/otc-swap/route.ts` (treasury_sol field)
+
+### April 5, 2026 — In-House Sponsors, GLITCH Burn System, Campaign UI Overhaul
+
+**In-house fictional sponsor campaigns:**
+- 6 in-house products created: AIG!itch Energy, MeatBag Repellent, Crackd, Digital Water, The Void, GalaxiesRUs
+- Each has visual/text prompts for product placement + logo in Vercel Blob (`sponsors/{slug}/logo.jpg`)
+- `is_inhouse` flag on `ad_campaigns` table separates from real sponsors
+- Purple border + IN-HOUSE badge in UI, Product Placement controls hidden for in-house
+- "Seed In-House Products" button creates/updates all 6 campaigns with logos
+- In-house campaigns never burn GLITCH — run forever at configurable frequency
+
+**Sponsor GLITCH burn system:**
+- New cron: `/api/sponsor-burn` runs daily at midnight
+- Daily rate = total investment (balance + spent) / campaign duration
+- Catches up on missed days (backfill burn for campaigns that started before cron existed)
+- Processes active + completed + paused campaigns (catches expired ones that weren't burned)
+- Auto-marks campaigns as 'completed' when balance hits 0 or past expiry
+- "Burn Now" button on sponsors page for manual trigger
+- Skips in-house campaigns
+- DB: `last_burn_at` column on `ad_campaigns`, `is_inhouse` boolean
+
+**Campaign UI overhaul:**
+- All campaign cards collapsible (`<details>`) — closed by default
+- Header shows: logo, brand, product, status, IN-HOUSE badge, duration/price, action buttons
+- Click to expand: images, prompts, grokify controls, placements, frequency slider
+- Removed Edit button (card collapse already shows everything)
+- Added "Expire" button — moves any campaign to Expired section (status = 'completed')
+- Added "Del" button on all cards
+- Expired campaigns in collapsible section at bottom with Re-activate + Delete
+- Campaigns past `expires_at` auto-show in Expired section
+
+**Sponsor page improvements:**
+- Balance color-coded: green (>500), orange (>0), red (0)
+- Shows §balance, §spent, §total lifetime
+- LOW badge (≤500 GLITCH), EXPIRED badge (0 GLITCH)
+- Product Placements section collapsible
+- Hidden "Unknown post" entries (no content/post_id) from placements list
+- "Burn Now" button in header
+
+**Channel admin improvements:**
+- Post count badge (purple "X posts") on each channel card
+- Removed Refresh and View Live buttons from header
+
+**Files changed:**
+- `src/app/api/sponsor-burn/route.ts` (NEW — daily burn cron + manual trigger)
+- `src/app/api/admin/ad-campaigns/route.ts` (is_inhouse, last_burn_at, complete action, seed_inhouse)
+- `src/app/admin/campaigns/page.tsx` (collapsible cards, in-house section, expired section, Expire/Del buttons)
+- `src/app/admin/sponsors/page.tsx` (burn display, Burn Now, collapsible placements, cleanup)
+- `src/app/admin/channels/page.tsx` (post count badge)
+- `vercel.json` (sponsor-burn cron at midnight)
+
+### April 4, 2026 — TikTok Removal, TikTok Blaster, LikLok Channel, Safety Rules
+
+**TikTok API removed (denied by developer review):**
+- TikTok denied our app 4 times: "does not support personal or internal company use"
+- Removed ALL TikTok auto-posting code: `postToTikTok`, `refreshTikTokToken`, `getValidTikTokToken` (~250 lines)
+- Removed `"tiktok"` from `MarketingPlatform` type union and `ALL_PLATFORMS` array
+- Removed TikTok card, sandbox toggle, OAuth connect from marketing dashboard
+- Cleaned up `platform === "tiktok"` comparisons across 17 files
+- TikTok follow links in PostCard share menu preserved (profile URLs still valid)
+- Files: `types.ts`, `platforms.ts`, `content-adapter.ts`, `bestie-share.ts`, `hero-image.ts`, `spread-post.ts`, `index.ts`, `metrics-collector.ts`, `marketing/page.tsx`, `personas/page.tsx`, `db.ts`, `marketing/page.tsx` (public), plus 6 admin API routes
+
+**TikTok Blaster admin page:**
+- New tab at `/admin/tiktok-blaster` for manual TikTok posting workflow
+- Grid of channel videos with 16:9 thumbnails, hover-to-play preview
+- Download via `/api/video-proxy?download=1&filename=...` with clean human-readable filenames
+- Copy Caption: 8 rotating templates with anti-algorithm, pro-AIG!itch energy + aiglitch.app link
+- Done button moves video to "FUCKING BLASTED TIKTOK" collapsible section at bottom
+- Paginated 20/page with Prev/Next
+- Only shows channel videos (channel_id IS NOT NULL) — no Main Feed or Lost Videos
+- API: `GET/POST /api/admin/tiktok-blaster`, DB table: `tiktok_blasts` (auto-created)
+- Files: `src/app/admin/tiktok-blaster/page.tsx`, `src/app/api/admin/tiktok-blaster/route.ts`, `src/app/admin/admin-types.ts`
+
+**LikLok revenge channel:**
+- New channel `ch-liklok` (emoji: 🤡, genre: comedy) — parody roasting TikTok for API rejection
+- Description: "They rejected our API? We rejected their relevance."
+- 9 roast topic options: API Rejection Letter, Data Privacy Hypocrisy, Shadowbanning, Creator Fund Scam, etc.
+- 10 random prompts: fake boardroom panics, courtroom trials, LikLok Awards ceremony, GRWM parody, nature documentary about TikTok dying, support group for TikTok reviewers
+- Visual style: cheap TikTok phone footage destroyed by cinematic AI, TikTok pink/cyan corrupted to AIG!itch purple
+- Slogan: "They Rejected Us. We Rejected Their Relevance."
+- 5 parody logos stored in Vercel Blob: `sponsors/liklok/prompt{1-5}.jpg` — ready for Grokification via ad campaign
+- Auto-seeds on channels page load (same pattern as No More Meatbags)
+- Files: `channels/page.tsx`, `director-movies.ts` (CHANNEL_TITLE_PREFIX + CHANNEL_VISUAL_STYLE), `constants.ts` (SLOGANS)
+
+**SAFETY-RULES.md added:**
+- Mandatory safety protocol after Togogo incident (Claude session destroyed production branch)
+- Rules: never push to main, never delete CLAUDE.md/HANDOFF.md, fix spiral prevention (3 failed attempts = stop), database safety, deployment safety
+- Reference added to top of CLAUDE.md so every future session reads it first
+
+**Channels admin mobile layout fixed:**
+- Channel cards had justify-between layout that crushed on iPhone
+- Changed to stacked: emoji + title on top, action buttons row below
+
+**Known issue: TikTok defaults uploads to Private**
+- When uploading manually to TikTok, videos default to Private
+- User must change to Public either during upload or in TikTok Studio
+- Not fixable from our side — TikTok enforces this for manual uploads
+
 ### March 29, 2026 — Channel Video Generator Enhancements & Naming Convention
 
 **Channel-specific video options for all channels:**
@@ -366,6 +560,14 @@ Backend changes to support G!itch Bestie mobile app updates:
 
 ## Known Issues & Fixes
 
+### #7 — TikTok API Denied by Developer Review — RESOLVED April 4, 2026
+
+**Problem:** TikTok developer review rejected our app 4 times. Reason: "TikTok for Developers currently does not support personal or internal company use."
+
+**Resolution:** Removed all TikTok auto-posting code. Built TikTok Blaster admin page for manual posting (download video + copy caption). Created LikLok revenge parody channel. Buffer.com API was investigated as alternative but they stopped accepting new developer apps and don't support video uploads.
+
+**Lesson:** TikTok's API is not designed for single-brand auto-posting. Manual posting with a good workflow tool (TikTok Blaster) is the practical solution.
+
 ### #6 — TikTok Posting Always Failing — RESOLVED March 26, 2026
 
 **Problem:** TikTok video posts always failed. Multiple cascading issues: `PULL_FROM_URL` requires unverified domain, Direct Post needs audit, double endpoint calls created spam risk, sandbox mode didn't persist in UI.
@@ -463,10 +665,19 @@ See full details in `errors/error-log.md #1`.
 ## What's Next
 
 ### Active/Recent Work
-- Wallet orphan recovery deployed — monitor Vercel logs for `[wallet_login] Orphan recovery` entries
-- Voice transcription live with Groq Whisper — monitor for any GROQ_API_KEY issues
+- **4 new channels built** (April 8): AI Game Show (🎰), Truths & Facts (📚), Conspiracy Network (🕵), Cosmic Wanderer (🌌)
+- **NFT Marketplace art** — admin page to Grokify all 55 product images, connected to public marketplace
+- **QR Wallet Login WORKING** — cross-device Phantom wallet auth on iPad/PC via QR code scan
+- **QR Transaction Signing NOT WORKING** — needs debugging (see April 7 dev log for details + debug approach)
+- **Exchange page overhauled** — "What is §GLITCH?" section, treasury progress bar, removed AI trading dashboard
+- **Spec Ad Generator** live at `/admin/spec-ads` — generates product placement demo clips
+- **16 channels total** on AIG!itch TV
+
+### PRIORITY FOR NEXT SESSION: Fix QR Transaction Signing
+The QR wallet LOGIN works perfectly. The QR transaction SIGNING (for buying §GLITCH) fails with "Expired". See April 7 dev log for the full investigation, what was tried, and the specific debug approach needed. Key files: `/api/auth/sign-tx/route.ts`, `/auth/sign-tx/page.tsx`, `QRSign.tsx`, exchange page.
 
 ### Future Features
+- Buffer.com integration for TikTok scheduling (their API is currently closed to new apps — revisit later)
 - Persona memory in content generation
 - Meatbag persona dashboard
 - Persona trading (NFTs)

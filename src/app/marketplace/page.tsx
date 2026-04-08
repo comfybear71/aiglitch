@@ -49,6 +49,7 @@ function ProductCard({
   walletConnected,
   remaining,
   id,
+  imageUrl,
 }: {
   product: MarketplaceProduct;
   owned: boolean;
@@ -59,6 +60,7 @@ function ProductCard({
   walletConnected: boolean;
   remaining?: number;
   id?: string;
+  imageUrl?: string;
 }) {
   const price = parseCoinPrice(product.price);
   const isBuying = buying === product.id;
@@ -92,13 +94,19 @@ function ProductCard({
         ))}
       </div>
 
-      {/* Emoji + Name */}
+      {/* Image or Emoji + Name */}
+      {imageUrl && <input type="hidden" data-debug-image={imageUrl} />}
       <div className="flex items-start gap-3">
-        <div className="text-4xl flex-shrink-0 relative">
-          {product.emoji}
+        <div className="flex-shrink-0 relative">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt={product.name} className="w-14 h-14 rounded-xl object-cover border border-purple-500/30" />
+          ) : (
+            <div className="text-4xl w-14 h-14 flex items-center justify-center">{product.emoji}</div>
+          )}
           {minted && (
             <span className="absolute -bottom-1 -right-1 text-xs">
-              {rarity === "legendary" ? "💎" : rarity === "epic" ? "✨" : rarity === "rare" ? "🔷" : "🔹"}
+              {rarity === "legendary" ? "\uD83D\uDC8E" : rarity === "epic" ? "\u2728" : rarity === "rare" ? "\uD83D\uDD37" : "\uD83D\uDD39"}
             </span>
           )}
         </div>
@@ -234,6 +242,20 @@ export default function MarketplacePage() {
   const [viewMode, setViewMode] = useState<"list" | "cards">("cards");
   const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
   const [supplyMap, setSupplyMap] = useState<Record<string, number>>({});
+  const [productImages, setProductImages] = useState<Record<string, string>>({});
+
+  // Fetch Grokified product images
+  useEffect(() => {
+    fetch("/api/admin/nft-marketplace")
+      .then((r) => r.json())
+      .then((data) => {
+        const map: Record<string, string> = {};
+        (data.images || []).forEach((img: { product_id: string; image_url: string }) => { map[img.product_id] = img.image_url; });
+        console.log("[marketplace] Loaded product images:", Object.keys(map).length, "prod-001:", map["prod-001"]?.slice(0, 60), "keys:", Object.keys(map).slice(0, 3));
+        setProductImages(map);
+      })
+      .catch((err) => { console.error("[marketplace] Failed to load product images:", err); });
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -649,6 +671,7 @@ export default function MarketplacePage() {
                   owned={owned}
                   compact={true}
                   remaining={100 - (supplyMap[product.id] || 0)}
+                  imageUrl={productImages[product.id]}
                 />
                 {/* Buy/status button below card */}
                 {nft ? (
@@ -704,6 +727,7 @@ export default function MarketplacePage() {
               buying={buying}
               walletConnected={connected}
               remaining={100 - (supplyMap[product.id] || 0)}
+              imageUrl={productImages[product.id]}
             />
           ))}
         </div>

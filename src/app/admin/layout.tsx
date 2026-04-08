@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AdminProvider, useAdmin } from "./AdminContext";
 import { TABS, type Tab } from "./admin-types";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,9 +14,18 @@ function AdminShell({ children }: { children: React.ReactNode }) {
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
 
   const pathname = usePathname();
   const router = useRouter();
+
+  // Auto-authenticate if admin cookie is still valid (avoids re-entering password on refresh)
+  useEffect(() => {
+    fetch("/api/admin/stats").then(res => {
+      if (res.ok) setAuthenticated(true);
+      setAuthChecking(false);
+    }).catch(() => setAuthChecking(false));
+  }, [setAuthenticated]);
 
   // Derive active tab from pathname
   const pathSegment = pathname.split("/admin/")[1]?.split("/")[0] || "";
@@ -43,6 +52,14 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       router.push(`/admin/${tabId}`);
     }
   };
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-gray-500 text-sm animate-pulse">Checking session...</div>
+      </div>
+    );
+  }
 
   if (!authenticated) {
     return (
@@ -182,7 +199,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin", scrollbarColor: "#4b5563 transparent" }}>
           {TABS.map((t) => (
             <button key={t.id} onClick={() => navigateToTab(t.id)}
               className={`flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${

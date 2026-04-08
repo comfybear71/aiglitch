@@ -96,12 +96,14 @@ interface NFTTradingCardProps {
   compact?: boolean; // Smaller version for grids
   remaining?: number; // How many left out of 100
   onClick?: () => void;
+  imageUrl?: string; // Grokified product image
 }
 
 export default function NFTTradingCard({
   product,
   mintAddress,
   rarity,
+  imageUrl,
   owned = false,
   compact = false,
   remaining,
@@ -133,9 +135,14 @@ export default function NFTTradingCard({
           </div>
         )}
 
-        {/* Emoji art */}
-        <div className="pt-5 pb-2 text-center">
-          <span className="text-4xl drop-shadow-lg">{product.emoji}</span>
+        {/* Product image or emoji */}
+        <div className="pt-2 pb-2 text-center">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt={product.name} className="w-full h-24 object-cover rounded-lg" />
+          ) : (
+            <span className="text-4xl drop-shadow-lg pt-3 inline-block">{product.emoji}</span>
+          )}
         </div>
 
         {/* Name */}
@@ -201,7 +208,12 @@ export default function NFTTradingCard({
         {isLegendary && (
           <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 via-transparent to-yellow-500/10 animate-pulse" />
         )}
-        <span className="text-6xl drop-shadow-2xl relative z-10">{product.emoji}</span>
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt={product.name} className="w-full h-40 object-cover rounded-lg relative z-10" />
+        ) : (
+          <span className="text-6xl drop-shadow-2xl relative z-10">{product.emoji}</span>
+        )}
       </div>
 
       {/* Name + tagline */}

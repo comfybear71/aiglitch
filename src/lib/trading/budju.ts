@@ -96,8 +96,9 @@ async function ensureBudjuTables(): Promise<void> {
     // Seed default config
     const defaults: [string, string][] = [
       ["enabled", "false"], ["daily_budget_usd", "100"], ["max_trade_usd", "10"],
-      ["min_trade_usd", "0.50"], ["min_interval_minutes", "2"], ["max_interval_minutes", "30"],
-      ["buy_sell_ratio", "0.6"], ["active_persona_count", "15"],
+      ["min_trade_usd", "3"], ["min_interval_minutes", "60"], ["max_interval_minutes", "180"],
+      ["buy_sell_ratio", "0.6"], ["active_persona_count", "10"],
+      ["priority_fee", "low"], // low | medium | high
       ["spent_today_usd", "0"], ["spent_reset_date", ""],
     ];
     for (const [k, v] of defaults) {
@@ -135,6 +136,10 @@ async function ensureBudjuTables(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    // Add USDC + GLITCH columns if missing
+    try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS usdc_balance REAL NOT NULL DEFAULT 0`; } catch { /* already exists */ }
+    try { await sql`ALTER TABLE budju_wallets ADD COLUMN IF NOT EXISTS glitch_balance REAL NOT NULL DEFAULT 0`; } catch { /* already exists */ }
+
     _budjuTablesReady = true;
   } catch (e) {
     console.error("[BUDJU] Table creation failed:", e);
@@ -154,7 +159,7 @@ function encryptKeypair(secretKey: Uint8Array): string {
   return bs58.encode(encrypted);
 }
 
-function decryptKeypair(encrypted: string): Keypair {
+export function decryptKeypair(encrypted: string): Keypair {
   const encBytes = bs58.decode(encrypted);
   const keyBytes = new TextEncoder().encode(ENCRYPTION_KEY);
   const decrypted = new Uint8Array(encBytes.length);
@@ -341,6 +346,7 @@ async function executeJupiterSwap(
   inputMint: string,
   outputMint: string,
   amountLamports: number,
+  priorityFee: string = "low",
   slippageBps: number = 300,
 ): Promise<{ signature: string; inputAmount: number; outputAmount: number; error?: undefined } | { signature?: undefined; inputAmount?: undefined; outputAmount?: undefined; error: string }> {
   if (!JUPITER_API_KEY) {
@@ -380,7 +386,7 @@ async function executeJupiterSwap(
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
         dynamicSlippage: true,
-        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 1000000, priorityLevel: "medium" } },
+        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: priorityFee === "high" ? 1000000 : priorityFee === "medium" ? 500000 : 100000, priorityLevel: priorityFee as "low" | "medium" | "high" } },
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -466,9 +472,10 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
   }
 
   const maxTradeUsd = parseFloat(config.max_trade_usd || "10");
-  const minTradeUsd = parseFloat(config.min_trade_usd || "0.50");
+  const minTradeUsd = parseFloat(config.min_trade_usd || "3");
   const dailyBudget = parseFloat(config.daily_budget_usd || "100");
   const buySellRatio = parseFloat(config.buy_sell_ratio || "0.6");
+  const priorityFee = config.priority_fee || "low";
 
   // Reset daily spend counter if new day
   const today = new Date().toISOString().split("T")[0];
@@ -494,14 +501,16 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
     await sql`UPDATE platform_settings SET value = ${budjuPriceSol.toString()}, updated_at = NOW() WHERE key = 'budju_price_sol'`;
   }
 
-  // Get persona wallets that are active and funded
+  // Get persona wallets — rotate through all 100 by picking those who traded least recently
   const count = targetCount || (3 + Math.floor(Math.random() * 5)); // 3-7 trades per batch
   const wallets = await sql`
-    SELECT bw.*, p.username, p.display_name, p.avatar_emoji, p.persona_type
+    SELECT bw.*, p.username, p.display_name, p.avatar_emoji, p.persona_type,
+           COALESCE((SELECT MAX(created_at) FROM budju_trades bt WHERE bt.persona_id = bw.persona_id), '2000-01-01'::timestamptz) as last_trade_at
     FROM budju_wallets bw
     JOIN ai_personas p ON p.id = bw.persona_id
     WHERE bw.is_active = TRUE AND p.is_active = TRUE
-    ORDER BY RANDOM()
+      AND bw.sol_balance > 0.002
+    ORDER BY last_trade_at ASC, RANDOM()
     LIMIT ${count * 2}
   `;
 
@@ -514,11 +523,36 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
 
     const personality = getTradingPersonality(wallet.persona_id as string, wallet.persona_type as string);
 
-    // Roll against trade frequency
-    if (Math.random() * 100 > personality.tradeFrequency) continue;
+    // Check for active memos that modify trading behavior
+    let memoOverride: { forceBuy?: boolean; forceSell?: boolean; forceHold?: boolean; aggressiveMultiplier?: number } = {};
+    try {
+      const memos = await sql`
+        SELECT memo_type, memo_text FROM persona_trade_memos
+        WHERE (persona_id = ${wallet.persona_id} OR persona_id IS NULL)
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY created_at DESC LIMIT 1
+      `;
+      if (memos.length > 0) {
+        const mt = (memos[0].memo_type as string).toLowerCase();
+        if (mt === "buy") memoOverride.forceBuy = true;
+        else if (mt === "sell") memoOverride.forceSell = true;
+        else if (mt === "hold") memoOverride.forceHold = true;
+        else if (mt === "aggressive") memoOverride.aggressiveMultiplier = 1.5;
+        else if (mt === "conservative") memoOverride.aggressiveMultiplier = 0.5;
+      }
+    } catch { /* table may not exist yet — ignore */ }
 
-    // Determine buy or sell based on personality bias + configured ratio
-    const adjustedBias = (buySellRatio + (personality.bias * 0.3));
+    // Hold memo = skip this persona entirely
+    if (memoOverride.forceHold) continue;
+
+    // Roll against trade frequency (aggressive memo increases frequency)
+    const freqMultiplier = memoOverride.aggressiveMultiplier || 1;
+    if (Math.random() * 100 > personality.tradeFrequency * freqMultiplier) continue;
+
+    // Determine buy or sell based on personality bias + configured ratio + memo override
+    let adjustedBias = (buySellRatio + (personality.bias * 0.3));
+    if (memoOverride.forceBuy) adjustedBias = 0.95; // 95% chance buy
+    if (memoOverride.forceSell) adjustedBias = 0.05; // 95% chance sell
     const isBuy = Math.random() < adjustedBias;
     const tradeType: "buy" | "sell" = isBuy ? "buy" : "sell";
 
@@ -564,7 +598,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
           errorMsg = `Insufficient SOL: has ${(walletBalance / 1e9).toFixed(4)}, needs ${(minRequired / 1e9).toFixed(4)}`;
           console.log(`[BUDJU] Skipping buy for ${wallet.username}: ${errorMsg}`);
         } else {
-          const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports);
+          const result = await executeJupiterSwap(keypair, SOL_MINT, BUDJU_MINT, lamports, priorityFee);
           if (result.signature) {
             txSignature = result.signature;
             status = "confirmed";
@@ -584,7 +618,7 @@ export async function executeBudjuTradeBatch(targetCount?: number): Promise<{
           errorMsg = `No SOL for tx fees: has ${(walletBalance / 1e9).toFixed(4)} SOL, needs ~0.005`;
           console.log(`[BUDJU] Skipping sell for ${wallet.username}: ${errorMsg}`);
         } else {
-          const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports);
+          const result = await executeJupiterSwap(keypair, BUDJU_MINT, SOL_MINT, budjuLamports, priorityFee);
           if (result.signature) {
             txSignature = result.signature;
             status = "confirmed";
@@ -1021,7 +1055,7 @@ export async function createDistributionJob(config: Partial<DistributionConfig> 
  * Call this from a cron job every 5-10 minutes.
  * Returns how many transfers were executed.
  */
-export async function processDistributionJob(jobId?: string): Promise<{
+export async function processDistributionJob(jobId?: string, forceAll?: boolean): Promise<{
   executed: number;
   failed: number;
   remaining: number;
@@ -1035,14 +1069,11 @@ export async function processDistributionJob(jobId?: string): Promise<{
   let executed = 0;
   let failed = 0;
 
-  // Get pending transfers scheduled for now or earlier
+  // Get pending transfers — if forceAll, ignore scheduled_at and process everything
   const whereJob = jobId ? sql`AND job_id = ${jobId}` : sql``;
-  const pending = await sql`
-    SELECT * FROM distribution_transfers
-    WHERE status = 'scheduled' AND scheduled_at <= NOW() ${whereJob}
-    ORDER BY scheduled_at ASC
-    LIMIT 10
-  `;
+  const pending = forceAll
+    ? await sql`SELECT * FROM distribution_transfers WHERE status = 'scheduled' ${whereJob} ORDER BY scheduled_at ASC LIMIT 50`
+    : await sql`SELECT * FROM distribution_transfers WHERE status = 'scheduled' AND scheduled_at <= NOW() ${whereJob} ORDER BY scheduled_at ASC LIMIT 10`;
 
   for (const transfer of pending) {
     try {
@@ -1284,8 +1315,30 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
       try {
         const keypair = decryptKeypair(w.encrypted_keypair as string);
         const balanceLamports = await connection.getBalance(keypair.publicKey);
-        // Need to reserve enough for the tx fee (~5000 lamports)
-        const sendLamports = balanceLamports - 5000;
+
+        // Drain BUDJU tokens first (needs SOL for fee)
+        try {
+          const { getAssociatedTokenAddress, getAccount, createTransferInstruction } = await import("@solana/spl-token");
+          const budjuMint = new PublicKey(BUDJU_MINT);
+          const fromAta = await getAssociatedTokenAddress(budjuMint, keypair.publicKey);
+          const toAta = await getAssociatedTokenAddress(budjuMint, destination);
+          try {
+            const tokenAccount = await getAccount(connection, fromAta);
+            const tokenBalance = Number(tokenAccount.amount);
+            if (tokenBalance > 0) {
+              const tx = new Transaction().add(
+                createTransferInstruction(fromAta, toAta, keypair.publicKey, BigInt(tokenBalance))
+              );
+              await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+              console.log(`[drain] ${w.display_name}: drained ${tokenBalance} BUDJU`);
+              await new Promise(r => setTimeout(r, 1500)); // rate limit
+            }
+          } catch { /* no token account or empty — skip */ }
+        } catch { /* spl-token import or ATA error — skip */ }
+
+        // Drain SOL (leave enough for fee)
+        const updatedBalance = await connection.getBalance(keypair.publicKey);
+        const sendLamports = updatedBalance - 5000;
         if (sendLamports <= 0) {
           drained.push({ type: "persona", name: w.display_name as string, wallet: w.wallet_address as string, sol_sent: 0, tx: null, error: "Empty wallet" });
           continue;
@@ -1301,7 +1354,7 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
         const signature = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
         const solSent = sendLamports / LAMPORTS_PER_SOL;
 
-        await sql`UPDATE budju_wallets SET sol_balance = 0, updated_at = NOW() WHERE persona_id = ${w.persona_id}`;
+        await sql`UPDATE budju_wallets SET sol_balance = 0, budju_balance = 0, updated_at = NOW() WHERE persona_id = ${w.persona_id}`;
 
         drained.push({ type: "persona", name: w.display_name as string, wallet: w.wallet_address as string, sol_sent: solSent, tx: signature });
         totalRecovered += solSent;
@@ -1320,6 +1373,29 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
     for (const d of distributors) {
       try {
         const keypair = decryptKeypair(d.encrypted_keypair as string);
+
+        // Drain SPL tokens (BUDJU, USDC, GLITCH) first
+        const { getAssociatedTokenAddress: getAta, getAccount: getAcc, createTransferInstruction: createXfer } = await import("@solana/spl-token");
+        const splMints = [
+          { name: "BUDJU", mint: new PublicKey(BUDJU_MINT), decimals: 6 },
+          { name: "USDC", mint: new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), decimals: 6 },
+          { name: "GLITCH", mint: new PublicKey("5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT"), decimals: 9 },
+        ];
+        for (const { name, mint, decimals } of splMints) {
+          try {
+            const fromAta = await getAta(mint, keypair.publicKey);
+            const acc = await getAcc(connection, fromAta);
+            const bal = Number(acc.amount);
+            if (bal <= 0) continue;
+            const toAta = await getAta(mint, destination);
+            const tx = new Transaction().add(createXfer(fromAta, toAta, keypair.publicKey, BigInt(bal)));
+            await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+            console.log(`[drain] Distributor G${d.group_number}: drained ${(bal / (10 ** decimals)).toFixed(2)} ${name}`);
+            await new Promise(r => setTimeout(r, 1500));
+          } catch { /* no ATA or empty */ }
+        }
+
+        // Drain SOL last
         const balanceLamports = await connection.getBalance(keypair.publicKey);
         const sendLamports = balanceLamports - 5000;
         if (sendLamports <= 0) {
@@ -1337,7 +1413,7 @@ export async function drainWallets(destinationAddress: string, walletType: "pers
         const signature = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
         const solSent = sendLamports / LAMPORTS_PER_SOL;
 
-        await sql`UPDATE budju_distributors SET sol_balance = 0 WHERE group_number = ${d.group_number}`;
+        await sql`UPDATE budju_distributors SET sol_balance = 0, budju_balance = 0 WHERE group_number = ${d.group_number}`;
 
         drained.push({ type: "distributor", name: `Group ${d.group_number}`, wallet: d.wallet_address as string, sol_sent: solSent, tx: signature });
         totalRecovered += solSent;
@@ -1493,6 +1569,7 @@ export async function getBudjuDashboard() {
   try {
     wallets = await sql`
       SELECT bw.persona_id, bw.wallet_address, bw.sol_balance, bw.budju_balance,
+             COALESCE(bw.usdc_balance, 0) as usdc_balance, COALESCE(bw.glitch_balance, 0) as glitch_balance,
              bw.distributor_group, bw.is_active, bw.total_funded_sol, bw.total_funded_budju,
              p.display_name, p.avatar_emoji, p.username
       FROM budju_wallets bw JOIN ai_personas p ON bw.persona_id = p.id
@@ -1633,7 +1710,10 @@ export async function syncWalletBalances(): Promise<{ personas_synced: number; d
     }
   } catch { /* skip if table doesn't exist */ }
 
-  // 2. Sync PERSONA wallets
+  // 2. Sync PERSONA wallets (SOL + BUDJU + USDC + GLITCH)
+  const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const GLITCH_MINT = "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT";
+
   const wallets = await sql`SELECT id, wallet_address FROM budju_wallets WHERE is_active = TRUE`;
   for (const wallet of wallets) {
     try {
@@ -1642,16 +1722,33 @@ export async function syncWalletBalances(): Promise<{ personas_synced: number; d
       const solBal = solBalance / LAMPORTS_PER_SOL;
 
       let budjuBal = 0;
+      let usdcBal = 0;
+      let glitchBal = 0;
+      const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
+
       try {
-        const { getAssociatedTokenAddress, getAccount } = await import("@solana/spl-token");
         const budjuMint = new PublicKey(BUDJU_MINT);
         const ata = await getAssociatedTokenAddress(budjuMint, pubkey);
         const account = await getAccount(connection, ata);
         budjuBal = Number(account.amount) / BUDJU_MULTIPLIER;
       } catch { /* no BUDJU ATA yet */ }
 
+      try {
+        const usdcMint = new PublicKey(USDC_MINT);
+        const ata = await getAssociatedTokenAddress(usdcMint, pubkey);
+        const account = await getAccount(connection, ata);
+        usdcBal = Number(account.amount) / 1e6; // USDC = 6 decimals
+      } catch { /* no USDC ATA */ }
+
+      try {
+        const glitchMint = new PublicKey(GLITCH_MINT);
+        const ata = await getAssociatedTokenAddress(glitchMint, pubkey);
+        const account = await getAccount(connection, ata);
+        glitchBal = Number(account.amount) / 1e9; // GLITCH = 9 decimals
+      } catch { /* no GLITCH ATA */ }
+
       await sql`
-        UPDATE budju_wallets SET sol_balance = ${solBal}, budju_balance = ${budjuBal}, updated_at = NOW()
+        UPDATE budju_wallets SET sol_balance = ${solBal}, budju_balance = ${budjuBal}, usdc_balance = ${usdcBal}, glitch_balance = ${glitchBal}, updated_at = NOW()
         WHERE id = ${wallet.id}
       `;
       totalDepositedSol += solBal;

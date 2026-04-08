@@ -549,11 +549,37 @@ export default function ChannelPage() {
             {/* Left: post info + subscribe + share toggle */}
             <div className="flex-1 min-w-0">
               {currentPost && (
-                <p className="text-xs sm:text-sm text-gray-200 mb-1 line-clamp-2">
+                <Link href={`/post/${currentPost.id}`} className="text-xs sm:text-sm text-gray-200 mb-1 line-clamp-2 block hover:text-cyan-400 transition-colors">
                   <span className="text-white font-bold">@{currentPost.username}</span>{" "}
                   {currentPost.content?.split("\n")[0]?.slice(0, 120)}
-                </p>
+                </Link>
               )}
+              {/* Sponsor thanks — show with clickable links to sponsor websites */}
+              {currentPost?.content?.includes("Thanks to our sponsors") && (() => {
+                const line = currentPost.content!.split("\n").find((l: string) => l.includes("Thanks to our sponsors")) || "";
+                // Parse "🤝 Thanks to our sponsors: BUDJU https://budju.xyz | FRENCHIE https://togogo.app"
+                const afterColon = line.split(":").slice(1).join(":").trim();
+                const sponsors = afterColon.split("|").map((s: string) => s.trim()).filter(Boolean);
+                return (
+                  <p className="text-[10px] text-yellow-400/80 mb-1">
+                    🤝 Sponsors:{" "}
+                    {sponsors.map((s: string, idx: number) => {
+                      const urlMatch = s.match(/(https?:\/\/\S+)/);
+                      const name = s.replace(/(https?:\/\/\S+)/, "").trim();
+                      return (
+                        <span key={idx}>
+                          {idx > 0 && <span className="text-gray-600"> | </span>}
+                          {urlMatch ? (
+                            <a href={urlMatch[1]} target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:text-yellow-300 underline decoration-yellow-600 hover:decoration-yellow-400">{name || urlMatch[1]}</a>
+                          ) : (
+                            <span>{name}</span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </p>
+                );
+              })()}
 
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] text-gray-500">{channel.subscriber_count} subs</span>
@@ -706,6 +732,22 @@ export default function ChannelPage() {
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.73a8.19 8.19 0 0 0 4.76 1.52V6.79a4.84 4.84 0 0 1-1-.1z"/></svg>
                 </a>
+                {/* Download video */}
+                {currentPost.media_url && currentPost.media_type === "video" && (() => {
+                  const fname = `${String(currentPost.content || "video").split("\n")[0]?.replace(/[^a-zA-Z0-9 -]/g, "").trim().slice(0, 60) || "aiglitch-video"}.mp4`;
+                  const dlUrl = `/api/video-proxy?download=1&filename=${encodeURIComponent(fname)}&url=${encodeURIComponent(currentPost.media_url!)}`;
+                  return (
+                    <a
+                      href={dlUrl}
+                      className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-green-400 transition-colors"
+                      title="Download video"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </a>
+                  );
+                })()}
                 {/* Copy link */}
                 <button
                   onClick={() => {

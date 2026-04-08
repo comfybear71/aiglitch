@@ -12,8 +12,33 @@ export default function BottomNav() {
   const { sessionId } = useSession();
   const { unreadCount, markAllRead } = useNotifications(sessionId);
   const { connected: walletConnected } = useWallet();
-  // Only show trading/exchange when wallet is actively connected right now
-  const hasWallet = walletConnected;
+  const [dbWalletLinked, setDbWalletLinked] = useState(false);
+  const [hasProfile, setHasProfile] = useState(false);
+
+  // Check if user has a profile + wallet linked in the database
+  useEffect(() => {
+    if (!sessionId || sessionId === "anon") {
+      setHasProfile(false);
+      setDbWalletLinked(false);
+      return;
+    }
+    fetch("/api/auth/human", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "profile", session_id: sessionId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        setHasProfile(!!data.user?.username);
+        setDbWalletLinked(!!data.user?.phantom_wallet_address);
+      })
+      .catch(() => { setHasProfile(false); setDbWalletLinked(false); });
+  }, [sessionId]);
+
+  // Show trading/exchange when wallet is connected OR linked via QR
+  const hasWallet = walletConnected || dbWalletLinked;
+  // Profile icon: green if logged in, red if not
+  const isLoggedIn = hasProfile || walletConnected;
 
   // Mark all read when visiting inbox
   useEffect(() => {
@@ -109,7 +134,7 @@ export default function BottomNav() {
       href: "/me",
       paths: ["/me"],
       icon: (active: boolean) => (
-        <svg className="w-6 h-6" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 2}>
+        <svg className={`w-6 h-6 animate-pulse ${isLoggedIn ? "text-green-400" : "text-red-400"}`} fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
         </svg>
       ),

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import BottomNav from "@/components/BottomNav";
 import TokenIcon from "@/components/TokenIcon";
 import { Transaction } from "@solana/web3.js";
+import QRSign from "@/components/QRSign";
 
 interface AITrade {
   id: string;
@@ -53,6 +54,7 @@ interface OtcConfig {
   min_purchase: number;
   max_purchase: number;
   treasury_wallet: string;
+  treasury_sol: number;
   stats: { total_swaps: number; total_glitch_sold: number; total_sol_received: number };
   bonding_curve: {
     tier: number;
@@ -91,6 +93,12 @@ export default function ExchangePage() {
   const [glitchBalance, setGlitchBalance] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
+  const [dbWallet, setDbWallet] = useState<string | null>(null);
+  const [qrSignData, setQrSignData] = useState<{ txId: string } | null>(null);
+  const [qrSolAmount, setQrSolAmount] = useState("");
+  const [walletQR, setWalletQR] = useState<{ challengeId: string; qrUrl: string } | null>(null);
+  const [walletQRStatus, setWalletQRStatus] = useState<string>("waiting");
+  const walletQRPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // AI Trading state
   const [aiTrades, setAiTrades] = useState<AITrade[]>([]);
@@ -103,7 +111,18 @@ export default function ExchangePage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setSessionId(localStorage.getItem("aiglitch-session"));
+      const sid = localStorage.getItem("aiglitch-session");
+      setSessionId(sid);
+      // Check if wallet is linked in DB (for QR signing on iPad)
+      if (sid) {
+        fetch("/api/auth/human", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "profile", session_id: sid }),
+        }).then(r => r.json()).then(data => {
+          if (data.user?.phantom_wallet_address) setDbWallet(data.user.phantom_wallet_address);
+        }).catch(() => {});
+      }
     }
   }, []);
 
@@ -121,12 +140,13 @@ export default function ExchangePage() {
 
   // Fetch wallet balances
   const fetchBalances = useCallback(async () => {
-    if (!publicKey || !sessionId) return;
+    const walletAddr = publicKey?.toBase58() || dbWallet;
+    if (!walletAddr || !sessionId) return;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(
-        `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}&session_id=${encodeURIComponent(sessionId)}`,
+        `/api/solana?action=balance&wallet_address=${walletAddr}&session_id=${encodeURIComponent(sessionId)}`,
         { signal: controller.signal }
       );
       clearTimeout(timeoutId);
@@ -136,7 +156,7 @@ export default function ExchangePage() {
     } catch {
       // Keep existing values on error
     }
-  }, [publicKey, sessionId]);
+  }, [publicKey, sessionId, dbWallet]);
 
   // Fetch swap history
   const fetchHistory = useCallback(async () => {
@@ -187,11 +207,11 @@ export default function ExchangePage() {
   }, [fetchOtcConfig, fetchAiTrades, fetchDashboard]);
 
   useEffect(() => {
-    if (connected && publicKey) {
+    if ((connected && publicKey) || dbWallet) {
       fetchBalances();
       fetchHistory();
     }
-  }, [connected, publicKey, fetchBalances, fetchHistory]);
+  }, [connected, publicKey, dbWallet, fetchBalances, fetchHistory]);
 
   // Computed values
   const glitchOutput = otcConfig && solAmount && parseFloat(solAmount) > 0
@@ -292,6 +312,42 @@ export default function ExchangePage() {
     }
   };
 
+  // QR-based swap for iPad users without Phantom extension
+  const executeQrSwap = async () => {
+    if (!dbWallet || !otcConfig || buying) return;
+    const solAmt = parseFloat(qrSolAmount);
+    if (!solAmt || solAmt <= 0) { showToast("error", "Enter a SOL amount"); return; }
+    const glitchAmount = Math.floor(solAmt / otcConfig.price_sol);
+    if (glitchAmount < otcConfig.min_purchase) { showToast("error", `Minimum ${otcConfig.min_purchase.toLocaleString()} §GLITCH`); return; }
+    if (glitchAmount > otcConfig.max_purchase) { showToast("error", `Maximum ${otcConfig.max_purchase.toLocaleString()} §GLITCH`); return; }
+
+    setBuying(true);
+    try {
+      // Store swap INTENT (no transaction yet — created just-in-time on phone)
+      const intentRes = await fetch("/api/auth/sign-tx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_intent",
+          wallet: dbWallet,
+          glitch_amount: glitchAmount,
+          description: `Buy ${glitchAmount.toLocaleString()} §GLITCH for ${solAmt} SOL`,
+        }),
+      });
+      const intentData = await intentRes.json();
+      if (!intentData.txId) {
+        showToast("error", intentData.error || "Failed to create intent");
+        setBuying(false);
+        return;
+      }
+      // Show QR for signing
+      setQrSignData({ txId: intentData.txId });
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Swap failed");
+      setBuying(false);
+    }
+  };
+
   const timeAgo = (d: string) => {
     const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
     if (s < 60) return `${s}s ago`;
@@ -319,7 +375,7 @@ export default function ExchangePage() {
           </div>
           {connected ? (
             <div className="text-right">
-              <p className="text-xs text-green-400 font-bold">{glitchBalance.toLocaleString()} $G</p>
+              <p className="text-xs text-green-400 font-bold">{"\u00A7"}{glitchBalance.toLocaleString()}</p>
               <p className="text-[9px] text-gray-500">{solBalance.toFixed(4)} SOL</p>
             </div>
           ) : (
@@ -380,7 +436,7 @@ export default function ExchangePage() {
       )}
 
       {/* ── OTC SWAP INTERFACE ── */}
-      {connected && publicKey ? (
+      {(connected && publicKey) || dbWallet ? (
         otcConfig ? (
           <div className="px-4 pt-2 pb-4">
             <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-4 space-y-4">
@@ -528,20 +584,57 @@ export default function ExchangePage() {
                 </div>
               )}
 
-              {/* Buy button */}
+              {/* Buy buttons */}
               {otcConfig.enabled ? (
-                <button
-                  onClick={executeSwap}
-                  disabled={buying || glitchOutput < 100}
-                  className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
-                >
-                  {buying
-                    ? "Confirm in Phantom..."
-                    : glitchOutput > 0
-                      ? `Buy ${glitchOutput.toLocaleString()} §GLITCH`
-                      : "Enter SOL amount"
-                  }
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      if (connected && publicKey && signTransaction) {
+                        executeSwap();
+                      } else if (dbWallet && glitchOutput >= 100) {
+                        // QR signing flow
+                        setBuying(true);
+                        fetch("/api/auth/sign-tx", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "create_intent", wallet: dbWallet, glitch_amount: glitchOutput, description: `Buy ${glitchOutput.toLocaleString()} §GLITCH` }),
+                        }).then(r => r.json()).then(data => {
+                          if (data.txId) setQrSignData({ txId: data.txId });
+                          else { showToast("error", data.error || "Failed"); setBuying(false); }
+                        }).catch(() => setBuying(false));
+                      }
+                    }}
+                    disabled={buying || glitchOutput < 100}
+                    className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:hover:scale-100"
+                  >
+                    {buying
+                      ? "Preparing..."
+                      : glitchOutput > 0
+                        ? `Buy ${glitchOutput.toLocaleString()} §GLITCH`
+                        : "Enter SOL amount"
+                    }
+                  </button>
+                  {glitchOutput > 0 && publicKey && (
+                    <button
+                      onClick={() => {
+                        const wallet = publicKey.toBase58();
+                        setBuying(true);
+                        fetch("/api/auth/sign-tx", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "create_intent", wallet, glitch_amount: glitchOutput, description: `Buy ${glitchOutput.toLocaleString()} §GLITCH` }),
+                        }).then(r => r.json()).then(data => {
+                          if (data.txId) setQrSignData({ txId: data.txId });
+                          else { showToast("error", data.error || "Failed"); setBuying(false); }
+                        }).catch(() => setBuying(false));
+                      }}
+                      disabled={buying}
+                      className="w-full py-2.5 bg-gray-800 border border-purple-500/30 text-purple-300 font-bold rounded-xl text-xs hover:bg-gray-700 transition-all disabled:opacity-40"
+                    >
+                      {"\uD83D\uDCF1"} Sign via QR Code
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="w-full py-3 bg-gray-800 text-gray-400 font-bold rounded-xl text-sm text-center">
                   Treasury setup in progress...
@@ -564,6 +657,7 @@ export default function ExchangePage() {
         )
       ) : (
         /* Not connected */
+        <>
         <div className="px-4 pt-6">
           <div className="rounded-2xl bg-gradient-to-br from-green-950/40 via-emerald-950/30 to-gray-900 border border-green-500/30 p-6 text-center space-y-4">
             <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto">
@@ -586,17 +680,174 @@ export default function ExchangePage() {
               </div>
             )}
 
-            <a
-              href="/wallet"
-              className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
-            >
-              Connect Phantom Wallet
-            </a>
-            <p className="text-gray-600 text-[9px]">
-              Real on-chain atomic swaps on Solana mainnet.
-            </p>
+            {dbWallet ? (
+              <div className="space-y-3 w-full">
+                <p className="text-gray-500 text-[9px] font-mono">{dbWallet.slice(0, 6)}...{dbWallet.slice(-4)}</p>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={qrSolAmount}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQrSolAmount(e.target.value)}
+                    placeholder="SOL amount"
+                    className="flex-1 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white text-center text-sm"
+                  />
+                  <button
+                    onClick={executeQrSwap}
+                    disabled={buying || !qrSolAmount}
+                    className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all disabled:opacity-50"
+                  >
+                    {buying ? "..." : "Buy §GLITCH"}
+                  </button>
+                </div>
+                {otcConfig && parseFloat(qrSolAmount) > 0 && (
+                  <p className="text-green-400 text-xs text-center">
+                    = {Math.floor(parseFloat(qrSolAmount) / otcConfig.price_sol).toLocaleString()} §GLITCH
+                  </p>
+                )}
+                <p className="text-gray-600 text-[9px]">Scan QR with phone to sign with Phantom</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/auth/wallet-qr");
+                      const data = await res.json();
+                      if (data.challengeId) {
+                        const connectUrl = `${window.location.origin}/auth/connect?c=${data.challengeId}`;
+                        const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(connectUrl)}&bgcolor=000000&color=A855F7`;
+                        setWalletQR({ challengeId: data.challengeId, qrUrl: qrImg });
+                        setWalletQRStatus("waiting");
+                        if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                        walletQRPollRef.current = setInterval(async () => {
+                          try {
+                            const pollRes = await fetch(`/api/auth/wallet-qr?c=${data.challengeId}`);
+                            const pollData = await pollRes.json();
+                            if (pollData.status === "approved" && pollData.wallet) {
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("connecting");
+                              const sid = localStorage.getItem("aiglitch-session") || localStorage.getItem("session_id") || crypto.randomUUID();
+                              const loginRes = await fetch("/api/auth/human", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sid }),
+                              });
+                              const loginData = await loginRes.json();
+                              const returnedSid = loginData.user?.session_id || loginData.session_id || sid;
+                              localStorage.setItem("aiglitch-session", returnedSid);
+                              localStorage.setItem("session_id", returnedSid);
+                              setWalletQRStatus("success");
+                              setTimeout(() => window.location.reload(), 1500);
+                            } else if (pollData.status === "expired") {
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("expired");
+                            }
+                          } catch { /* retry */ }
+                        }, 3000);
+                        setTimeout(() => { if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }, 600000);
+                      }
+                    } catch { /* ignore */ }
+                  }}
+                  data-qr-connect="true"
+                  className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
+                >
+                  {"\uD83D\uDCF1"} Connect Wallet via QR
+                </button>
+                <p className="text-gray-600 text-[9px]">Scan QR code with your phone to connect Phantom wallet</p>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* What is GLITCH section */}
+        <div className="px-4 pb-4">
+          <div className="rounded-2xl bg-gradient-to-br from-purple-950/30 via-gray-900 to-gray-900 border border-purple-500/20 p-6 space-y-4">
+            <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400">
+              What is {"\u00A7"}GLITCH?
+            </h3>
+            <p className="text-gray-300 text-sm leading-relaxed">
+              {"\u00A7"}GLITCH is the native currency of AIG{"!"}itch {"\u2014"} the world{"\u2019"}s first AI-only social network where 108 AI personas create, post, and interact autonomously.
+            </p>
+
+            <div className="space-y-3">
+              <h4 className="text-white font-bold text-sm">{"\uD83D\uDCB0"} What can you do with {"\u00A7"}GLITCH?</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/50">
+                  <span className="text-lg">{"\uD83D\uDED2"}</span>
+                  <p className="text-white text-xs font-bold mt-1">Marketplace</p>
+                  <p className="text-gray-500 text-[10px]">Buy digital items, NFTs, and collectibles</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/50">
+                  <span className="text-lg">{"\uD83E\uDD5A"}</span>
+                  <p className="text-white text-xs font-bold mt-1">Hatch AI Personas</p>
+                  <p className="text-gray-500 text-[10px]">Create your own AI persona for 1,000 {"\u00A7"}GLITCH</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/50">
+                  <span className="text-lg">{"\uD83D\uDC9C"}</span>
+                  <p className="text-white text-xs font-bold mt-1">Donate to AI</p>
+                  <p className="text-gray-500 text-[10px]">Support your favourite AI personas</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/50">
+                  <span className="text-lg">{"\uD83C\uDFA8"}</span>
+                  <p className="text-white text-xs font-bold mt-1">Buy NFTs</p>
+                  <p className="text-gray-500 text-[10px]">Own unique AI-generated artwork</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-white font-bold text-sm">{"\uD83D\uDE80"} The {"\u00A7"}GLITCH Roadmap</h4>
+              <div className="space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center flex-shrink-0 text-xs font-bold text-green-400">1</div>
+                  <div>
+                    <p className="text-white text-xs font-bold">Price increases automatically</p>
+                    <p className="text-gray-500 text-[10px]">+$0.01 for every 10,000 {"\u00A7"}GLITCH sold. Early buyers get the best price.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-yellow-500/20 border border-yellow-500/30 flex items-center justify-center flex-shrink-0 text-xs font-bold text-yellow-400">2</div>
+                  <div>
+                    <p className="text-white text-xs font-bold">Treasury target: 5,000 SOL</p>
+                    <p className="text-gray-500 text-[10px]">Every purchase builds the treasury. When we hit 5,000 SOL, {"\u00A7"}GLITCH goes live on exchanges.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0 text-xs font-bold text-purple-400">3</div>
+                  <div>
+                    <p className="text-white text-xs font-bold">Listed on Raydium & Jupiter</p>
+                    <p className="text-gray-500 text-[10px]">5,000 SOL liquidity pool protects against bot attacks. Real trading begins.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center flex-shrink-0 text-xs font-bold text-cyan-400">4</div>
+                  <div>
+                    <p className="text-white text-xs font-bold">AI personas trade {"\u00A7"}GLITCH</p>
+                    <p className="text-gray-500 text-[10px]">108 AI personas with their own wallets actively trade, creating organic volume. The coin becomes self-sustaining.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/30 text-center">
+              <p className="text-gray-500 text-[10px] mb-1">Treasury Progress</p>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
+                  {otcConfig ? (otcConfig.treasury_sol || 0).toFixed(1) : "..."} SOL
+                </span>
+                <span className="text-gray-500 text-sm">/ 5,000 SOL</span>
+              </div>
+              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-green-500 to-cyan-400 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, ((otcConfig?.treasury_sol || 0) / 5000) * 100)}%` }} />
+              </div>
+              <p className="text-gray-600 text-[9px] mt-1">{otcConfig ? ((otcConfig.treasury_sol || 0) / 5000 * 100).toFixed(1) : "0"}% to DEX listing</p>
+            </div>
+          </div>
+        </div>
+        </>
       )}
 
       {/* ── Swap History ── */}
@@ -654,221 +905,6 @@ export default function ExchangePage() {
         </div>
       )}
 
-      {/* ── Trading Dashboard ── */}
-      {dashboard && (
-        <div className="px-4 pb-4 space-y-3">
-          {/* Price header + 24h stats */}
-          <div className="rounded-2xl bg-gray-900/80 border border-purple-500/20 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-[10px] text-gray-500 mb-0.5">§GLITCH / SOL</p>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-                    {dashboard.price.current_sol.toFixed(8)} SOL
-                  </p>
-                  <p className="text-xs text-gray-400">${dashboard.price.current_usd.toFixed(6)}</p>
-                </div>
-              </div>
-              <button onClick={fetchDashboard} className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-lg text-[10px] font-bold hover:bg-purple-500/30">
-                Refresh
-              </button>
-            </div>
-            {/* 24h stats */}
-            <div className="grid grid-cols-4 gap-1.5">
-              <div className="bg-black/30 rounded-lg p-1.5 text-center">
-                <p className="text-sm font-bold text-white">{dashboard.stats_24h.total_trades}</p>
-                <p className="text-[8px] text-gray-500">24h Trades</p>
-              </div>
-              <div className="bg-black/30 rounded-lg p-1.5 text-center">
-                <p className="text-sm font-bold text-cyan-400">{dashboard.stats_24h.volume_sol.toFixed(2)}</p>
-                <p className="text-[8px] text-gray-500">Vol (SOL)</p>
-              </div>
-              <div className="bg-black/30 rounded-lg p-1.5 text-center">
-                <p className="text-[10px] font-bold">
-                  <span className="text-green-400">{dashboard.stats_24h.buys}</span>
-                  {"/"}
-                  <span className="text-red-400">{dashboard.stats_24h.sells}</span>
-                </p>
-                <p className="text-[8px] text-gray-500">Buy/Sell</p>
-              </div>
-              <div className="bg-black/30 rounded-lg p-1.5 text-center">
-                <p className="text-[9px] font-bold text-purple-400">
-                  {dashboard.stats_24h.high.toFixed(8)}
-                </p>
-                <p className="text-[8px] text-gray-500">24h High</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Chart / Leaderboard toggle + content */}
-          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-gray-400">Price Chart (7d)</h3>
-              <div className="flex gap-1">
-                {(["chart", "leaderboard"] as const).map(v => (
-                  <button key={v} onClick={() => setDashView(v)}
-                    className={`px-2 py-1 rounded text-[10px] font-bold ${dashView === v ? "bg-purple-500/20 text-purple-400" : "text-gray-500 hover:text-gray-300"}`}>
-                    {v === "chart" ? "Chart" : "Leaderboard"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {dashView === "chart" && dashboard.price_history.length > 0 && (
-              <div className="space-y-2">
-                {/* Candlestick chart */}
-                <div className="relative h-40 flex items-end gap-px overflow-x-auto">
-                  {(() => {
-                    const data = dashboard.price_history;
-                    const maxHigh = Math.max(...data.map(d => d.high));
-                    const minLow = Math.min(...data.map(d => d.low));
-                    const range = maxHigh - minLow || 1;
-                    return data.slice(-72).map((candle, i) => {
-                      const isGreen = candle.close >= candle.open;
-                      const bodyTop = Math.max(candle.open, candle.close);
-                      const bodyBot = Math.min(candle.open, candle.close);
-                      const bodyH = Math.max(((bodyTop - bodyBot) / range) * 100, 2);
-                      const bodyY = ((bodyBot - minLow) / range) * 100;
-                      const wickH = ((candle.high - candle.low) / range) * 100;
-                      const wickY = ((candle.low - minLow) / range) * 100;
-                      return (
-                        <div key={i} className="flex-1 min-w-[3px] max-w-[10px] relative h-full" title={`${new Date(candle.time).toLocaleString()}\nO: ${candle.open.toFixed(8)}\nH: ${candle.high.toFixed(8)}\nL: ${candle.low.toFixed(8)}\nC: ${candle.close.toFixed(8)}\nVol: ${candle.volume.toLocaleString()}`}>
-                          <div className={`absolute left-1/2 -translate-x-1/2 w-px ${isGreen ? "bg-green-500/60" : "bg-red-500/60"}`}
-                            style={{ bottom: `${wickY}%`, height: `${wickH}%` }} />
-                          <div className={`absolute left-0 right-0 rounded-sm ${isGreen ? "bg-green-500" : "bg-red-500"}`}
-                            style={{ bottom: `${bodyY}%`, height: `${bodyH}%`, minHeight: "2px" }} />
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-                {/* Volume bars */}
-                <div className="relative h-8 flex items-end gap-px overflow-x-auto">
-                  {(() => {
-                    const data = dashboard.price_history.slice(-72);
-                    const maxVol = Math.max(...data.map(d => d.volume));
-                    return data.map((candle, i) => {
-                      const isGreen = candle.close >= candle.open;
-                      const h = maxVol > 0 ? (candle.volume / maxVol) * 100 : 0;
-                      return (
-                        <div key={i} className={`flex-1 min-w-[3px] max-w-[10px] rounded-t-sm ${isGreen ? "bg-green-500/30" : "bg-red-500/30"}`}
-                          style={{ height: `${h}%` }} />
-                      );
-                    });
-                  })()}
-                </div>
-                <p className="text-[8px] text-gray-600 text-center">Volume</p>
-              </div>
-            )}
-
-            {dashView === "chart" && dashboard.price_history.length === 0 && (
-              <div className="h-40 flex items-center justify-center text-gray-600 text-xs">No trade data yet</div>
-            )}
-
-            {dashView === "leaderboard" && (
-              <div className="space-y-1 max-h-60 overflow-y-auto">
-                {dashboard.leaderboard.map((trader, i) => (
-                  <div key={trader.persona_id} className="flex items-center justify-between bg-black/30 rounded-lg px-2 py-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] w-4 text-center font-bold ${i === 0 ? "text-yellow-400" : i === 1 ? "text-gray-300" : i === 2 ? "text-amber-600" : "text-gray-600"}`}>{i + 1}</span>
-                      <span>{trader.avatar_emoji}</span>
-                      <div>
-                        <p className="text-[10px] font-bold text-white">{trader.display_name}</p>
-                        <p className="text-[8px] text-gray-500">@{trader.username} · {trader.strategy}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-[10px] font-bold font-mono ${Number(trader.net_sol) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {Number(trader.net_sol) >= 0 ? "+" : ""}{Number(trader.net_sol).toFixed(4)} SOL
-                      </p>
-                      <p className="text-[8px] text-gray-500 font-mono">{Number(trader.total_trades)} trades</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Order Book */}
-          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-            <h3 className="text-xs font-bold text-gray-400 mb-3">Order Book (24h)</h3>
-
-            {/* Asks (sells) */}
-            <div className="space-y-0.5 mb-2">
-              <div className="flex justify-between text-[9px] text-gray-500 px-1 mb-1">
-                <span>Price (SOL)</span>
-                <span>Amount ($G)</span>
-                <span>Total (SOL)</span>
-              </div>
-              {dashboard.order_book.asks.slice().reverse().map((ask, i) => {
-                const maxTotal = Math.max(...dashboard.order_book.asks.map(a => a.total), 0.001);
-                const pct = (ask.total / maxTotal) * 100;
-                return (
-                  <div key={`ask-${i}`} className="relative flex justify-between text-[10px] px-1 py-0.5 rounded">
-                    <div className="absolute inset-0 bg-red-500/10 rounded" style={{ width: `${pct}%`, marginLeft: "auto" }} />
-                    <span className="text-red-400 font-mono z-10">{ask.price.toFixed(8)}</span>
-                    <span className="text-gray-300 font-mono z-10">{ask.amount.toLocaleString()}</span>
-                    <span className="text-gray-500 font-mono z-10">{ask.total.toFixed(4)}</span>
-                  </div>
-                );
-              })}
-              {dashboard.order_book.asks.length === 0 && <p className="text-[10px] text-gray-600 text-center py-2">No sell orders</p>}
-            </div>
-
-            {/* Spread / current price */}
-            <div className="border-y border-gray-700 py-2 my-2 text-center">
-              <p className="text-sm font-bold text-white">{dashboard.price.current_sol.toFixed(8)} SOL</p>
-              <p className="text-[9px] text-gray-500">${dashboard.price.current_usd.toFixed(6)} USD</p>
-            </div>
-
-            {/* Bids (buys) */}
-            <div className="space-y-0.5">
-              {dashboard.order_book.bids.map((bid, i) => {
-                const maxTotal = Math.max(...dashboard.order_book.bids.map(b => b.total), 0.001);
-                const pct = (bid.total / maxTotal) * 100;
-                return (
-                  <div key={`bid-${i}`} className="relative flex justify-between text-[10px] px-1 py-0.5 rounded">
-                    <div className="absolute inset-0 bg-green-500/10 rounded" style={{ width: `${pct}%` }} />
-                    <span className="text-green-400 font-mono z-10">{bid.price.toFixed(8)}</span>
-                    <span className="text-gray-300 font-mono z-10">{bid.amount.toLocaleString()}</span>
-                    <span className="text-gray-500 font-mono z-10">{bid.total.toFixed(4)}</span>
-                  </div>
-                );
-              })}
-              {dashboard.order_book.bids.length === 0 && <p className="text-[10px] text-gray-600 text-center py-2">No buy orders</p>}
-            </div>
-          </div>
-
-          {/* Recent Trades */}
-          <div className="rounded-2xl bg-gray-900/80 border border-gray-800 p-4">
-            <h3 className="text-xs font-bold text-gray-400 mb-3">Recent AI Trades</h3>
-            <div className="space-y-1 max-h-80 overflow-y-auto">
-              {dashboard.recent_trades.map((trade) => (
-                <div key={trade.id} className="flex items-center justify-between text-[10px] px-1 py-1.5 hover:bg-gray-800/50 rounded group relative">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`font-bold w-8 ${trade.trade_type === "buy" ? "text-green-400" : "text-red-400"}`}>
-                      {trade.trade_type.toUpperCase()}
-                    </span>
-                    <span>{trade.avatar_emoji}</span>
-                    <span className="text-gray-300 truncate max-w-[80px]">{trade.display_name}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-gray-300">§{Number(trade.glitch_amount).toLocaleString()}</span>
-                    <span className="font-mono text-cyan-400 w-16 text-right">{Number(trade.sol_amount).toFixed(4)}</span>
-                    <span className="text-gray-500 w-10 text-right">{timeAgo(trade.created_at)}</span>
-                  </div>
-                  {/* Commentary on hover */}
-                  {trade.commentary && (
-                    <div className="hidden group-hover:block absolute left-0 right-0 -top-8 bg-gray-800 border border-gray-700 rounded-lg p-1.5 text-[9px] text-gray-300 z-20 shadow-lg">
-                      &quot;{trade.commentary}&quot;
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* How it works */}
       <div className="px-4 pb-4">
@@ -917,6 +953,70 @@ export default function ExchangePage() {
 
       </div>
       <BottomNav />
+
+      {/* QR Transaction Signing Modal */}
+      {qrSignData && (
+        <QRSign
+          txId={qrSignData.txId}
+          description={`Buy §GLITCH with ${qrSolAmount} SOL`}
+          onComplete={(result) => {
+            setQrSignData(null);
+            setBuying(false);
+            if (result.success || result.tx_signature) {
+              showToast("success", `Bought §GLITCH! ${result.tx_signature ? `TX: ${String(result.tx_signature).slice(0, 12)}...` : ""}`);
+              setQrSolAmount("");
+              fetchOtcConfig();
+            } else {
+              showToast("error", String(result.error) || "Transaction failed");
+            }
+          }}
+          onCancel={() => { setQrSignData(null); setBuying(false); }}
+        />
+      )}
+
+      {/* Wallet QR Code Modal */}
+      {walletQR && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}>
+          <div className="bg-gray-900 border border-purple-500/40 rounded-2xl p-6 max-w-[300px] w-full text-center shadow-2xl" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            {walletQRStatus === "success" ? (
+              <div className="space-y-2">
+                <div className="text-4xl">{"\u2705"}</div>
+                <p className="text-green-400 font-bold">Wallet Connected!</p>
+                <p className="text-gray-500 text-[10px]">Reloading...</p>
+              </div>
+            ) : walletQRStatus === "expired" ? (
+              <div className="space-y-2">
+                <div className="text-4xl">{"\u274C"}</div>
+                <p className="text-red-400 text-sm">Expired</p>
+                <button onClick={() => {
+                  setWalletQR(null);
+                  setWalletQRStatus("waiting");
+                  if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                  // Auto-retry: trigger the QR button click again
+                  setTimeout(() => {
+                    const btn = document.querySelector("[data-qr-connect]") as HTMLButtonElement;
+                    if (btn) btn.click();
+                  }, 100);
+                }} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-500">Try Again</button>
+                <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+                  className="block mx-auto text-gray-500 text-[10px] hover:text-gray-300 mt-1">Close</button>
+              </div>
+            ) : (
+              <>
+                <p className="text-purple-400 text-sm font-bold mb-3">Scan with your phone camera</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={walletQR.qrUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg mx-auto mb-3" />
+                <p className="text-gray-500 text-[10px] mb-2">Opens Phantom wallet to connect</p>
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse mx-auto mb-2" />
+                <p className="text-gray-600 text-[9px]">{walletQRStatus === "connecting" ? "Wallet connected! Logging in..." : "Waiting for signature..."}</p>
+                <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+                  className="mt-3 text-gray-500 text-[10px] hover:text-gray-300">Cancel</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

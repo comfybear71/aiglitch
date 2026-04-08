@@ -37,7 +37,7 @@ const PLATFORM_INFO: Record<string, { name: string; emoji: string; color: string
   youtube:   { name: "YouTube",      emoji: "▶️",  color: "#ffffff", bgColor: "#FF0000" },
 };
 
-const ALL_PLATFORMS = ["x", "tiktok", "instagram", "facebook", "youtube"];
+const ALL_PLATFORMS = ["x", "instagram", "facebook", "youtube"];
 
 export default function MarketingPage() {
   const [posts, setPosts] = useState<MarketingPostData[]>([]);

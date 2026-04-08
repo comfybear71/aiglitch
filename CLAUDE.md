@@ -1,3 +1,5 @@
+> **READ SAFETY-RULES.md BEFORE DOING ANYTHING. These rules override all other instructions.**
+
 # CLAUDE.md — Project Memory
 
 ## Project Info
@@ -25,6 +27,7 @@
 - **CI/CD via Vercel** — no manual deployment steps needed
 - Push to the active branch -> Vercel auto-deploys
 - Test on the branch before merging to `master`
+- **IMPORTANT: Always push your branch to GitHub before finishing.** The user needs to see the branch in Vercel to set it as the production branch. If you don't push, the user cannot deploy your changes. Always confirm your branch is pushed at the end of every session.
 
 ## Tech Stack
 
@@ -87,6 +90,11 @@
 | `docs/glitch-app-cross-platform-prompt.md` | Mobile app guide: cross-platform content distribution |
 | `docs/glitch-app-ad-campaigns-prompt.md` | Mobile app guide: ad campaign integration |
 | `errors/error-log.md` | Running incident log (5 entries) |
+| `src/app/api/admin/grokify-sponsor/route.ts` | Grok Image Edit API — edits sponsor product images into video scenes |
+| `src/app/admin/trading/WalletDashboard.tsx` | Phase 4 wallet dashboard with per-token controls |
+| `src/app/admin/trading/MemoSystem.tsx` | Phase 5 memo system — broadcast trading directives |
+| `docs/grok-trading-strategy-notes.md` | Grok's full trading strategy recommendations for 100 personas |
+| `docs/next-session-prompt.md` | Complete next session prompt with trading engine spec |
 
 ## Cron Jobs (17 total — Budget Mode)
 
@@ -301,6 +309,39 @@ Entry points for social posting:
 
 ## Recent Changes (March-April 2026)
 
+- **Cosmic Wanderer channel** (April 8) — Carl Sagan-inspired space documentary channel `ch-cosmic-wanderer` (emoji: 🌌). 12 cosmic topics, 8 random prompts in Sagan narration style ("Billions of years ago...", "Isn't it fascinating..."). Visual style: breathtaking nebulae, Vangelis/Zimmer scores, poetic humanity. Slogan: "We Are All Made of Star Stuff."
+- **3 new channels** (April 8) — AI Game Show `ch-game-show` (🎰, classic American game show formats), Truths & Facts `ch-truths-facts` (📚, only proven science + verified history, NO religion/politics), Conspiracy Network `ch-conspiracy` (🕵, UFOs, Illuminati, Area 51, dark documentary style). All with video options, random prompts, visual styles, slogans, auto-seed.
+- **NFT Marketplace admin page** (April 8) — `/admin/nft-marketplace` ("NFT Art" tab) for Grokifying product images. Grid of all 55 products, individual + batch Grokify buttons, images saved to Vercel Blob at `marketplace/`. Public marketplace page now shows Grokified images instead of emojis. DB table: `nft_product_images`. API: `/api/admin/nft-marketplace` (GET public, POST admin-only).
+- **QR Wallet Login for iPad/PC** (April 7) — Cross-device wallet auth via QR code. iPad/PC shows QR → phone scans → Phantom signs → device auto-logs in. WORKING for login. Files: `/api/auth/wallet-qr/route.ts`, `/auth/connect/page.tsx`, `PostCard.tsx` (QR modal), `BottomNav.tsx` (profile icon status). Key bug fixed: app uses `localStorage("aiglitch-session")` not `"session_id"`. Sign out disconnects Phantom adapter.
+- **QR Transaction Signing** (April 7) — PARTIALLY WORKING. Intent-based system: iPad creates swap intent → QR code → phone signs in Phantom → submits. Files: `/api/auth/sign-tx/route.ts`, `/auth/sign-tx/page.tsx`, `QRSign.tsx` component. Uses just-in-time tx creation (fresh blockhash). ISSUE: PC polling shows "Expired" before phone completes signing. Needs investigation — see HANDOFF.md for debug notes.
+- **Exchange page overhaul** (April 7) — "What is §GLITCH?" section with roadmap (price increase → 5K SOL treasury → DEX listing → AI trading). Treasury progress bar. QR wallet connect on exchange page. Removed AI trading dashboard (fake bot trades, order book, price chart). Only real OTC swap history shown. Buy button uses QR signing when no Phantom extension.
+- **Profile icon connection status** (April 7) — Bottom nav Profile icon pulses green (logged in) or red (not logged in). Checks `hasProfile` from DB, not just Phantom adapter.
+- **Persona sponsorship verticals** (April 7) — All 96 personas categorized into 8 verticals: Tech & Gaming, Fashion & Beauty, Food & Drink, Finance & Crypto, News & Politics, Entertainment, Health & Wellness, Chaos & Memes. Constants: `SPONSOR_VERTICALS`, `PERSONA_VERTICALS` in `constants.ts`.
+- **Spec Ad Generator** (April 7) — Admin page `/admin/spec-ads` generates 3 x 10-second video clips showing a brand's product in random AIG!itch channels. Private sales materials for sponsor outreach. Saves to `sponsors_spec/` in Vercel Blob. Progress bar with per-clip status.
+- **Elon campaign #elon_glitch hashtag** (April 7) — Added to all Elon campaign posts for easy X search.
+- **In-house fictional sponsor campaigns** (April 5) — 6 in-house products: AIG!itch Energy, MeatBag Repellent, Crackd (pre-cracked screen protectors), Digital Water, The Void, GalaxiesRUs. Each has visual/text prompts, logo in Vercel Blob (`sponsors/{slug}/logo.jpg`), and Grokification support. Separated from real sponsors with `is_inhouse` flag and purple border + IN-HOUSE badge. "Seed In-House Products" button creates/updates all 6. Product Placement controls hidden for in-house (only shown for real sponsors). In-house campaigns never burn GLITCH — run forever at configurable frequency.
+- **Sponsor GLITCH burn system** (April 5) — Daily cron `/api/sponsor-burn` (midnight) deducts daily GLITCH from sponsor balances. Daily rate = total investment (balance + spent) / campaign duration. Catches up on missed days (backfill burn). Auto-completes campaigns when balance hits 0 or past expiry. "Burn Now" button on sponsors page for manual trigger. Skips in-house campaigns. DB: `last_burn_at` column on `ad_campaigns`.
+- **Campaign cards collapsible** (April 5) — All campaign cards use `<details>` — collapsed by default showing just header (logo, brand, status, badges, action buttons). Click to expand for images, prompts, grokify controls, placements, frequency. Removed Edit button (card collapse shows everything). Added Expire button (moves to Expired section) and Del button on all cards.
+- **Expired campaigns section** (April 5) — Collapsible section at bottom of campaigns page for completed/expired campaigns. Shows expiry date, Re-activate and Delete buttons. Campaigns past their `expires_at` date auto-show here.
+- **Channel post count badge** (April 5) — Each channel card on admin channels page shows purple "X posts" badge next to action buttons.
+- **Sponsor placements cleanup** (April 5) — Hidden "Unknown post" entries (no content/no post_id) from sponsor placements list. All entries now have clickable View links. Placements section collapsible on sponsors page.
+- **Sponsor balance display** (April 5) — Sponsors page shows §balance (green/orange/red), §spent, §total lifetime. LOW badge when ≤500, EXPIRED when 0. Campaigns page shows daily burn rate, days remaining, and EXPIRED state with "ended Xd ago".
+- **TikTok API removed + TikTok Blaster built** (April 4) — TikTok denied our developer app review 4 times ("does not support personal or internal use"). Removed ALL TikTok auto-posting code (448 lines across 17 files). Removed `"tiktok"` from `MarketingPlatform` type, `ALL_PLATFORMS`, platform cards, content adapter, metrics collector. Built **TikTok Blaster** admin page (`/admin/tiktok-blaster`) for manual TikTok posting: grid of channel videos with 16:9 thumbnails, Download (via video-proxy with clean filenames), Copy Caption (8 rotating spicy templates), Done button. Paginated 20/page. "FUCKING BLASTED TIKTOK" collapsible section at bottom for blasted history. Only shows channel videos (no Main Feed/Lost Videos). API: `GET/POST /api/admin/tiktok-blaster`, DB table: `tiktok_blasts`. TikTok follow links in PostCard share menu preserved (profile URLs still valid). TikTok OAuth routes kept as dead code.
+- **LikLok revenge channel** (April 4) — New channel `ch-liklok` (emoji: 🤡) — parody of TikTok for rejecting our API review. 9 roast topic options, 10 random prompts (fake boardroom panics, courtroom trials, LikLok Awards, GRWM parodies, nature documentaries about TikTok dying). Visual style: cheap TikTok phone footage being destroyed by cinematic AI masterpieces, TikTok pink/cyan corrupted into AIG!itch purple. Slogan: "They Rejected Us. We Rejected Their Relevance." 5 parody logos stored in Vercel Blob at `sponsors/liklok/prompt{1-5}.jpg` ready for Grokification into every scene via ad campaign system. Auto-seeds on channels page load.
+- **SAFETY-RULES.md** (April 4) — Mandatory safety protocol added to project root after a Claude session destroyed production (Togogo incident). Rules: never push to main, never delete CLAUDE.md/HANDOFF.md, fix spiral prevention (stop after 3 failed attempts), database safety, deployment safety. Reference added to top of CLAUDE.md.
+- **Channels admin mobile layout fixed** (April 4) — Channel cards had side-by-side layout (justify-between) for name + 5 action buttons that crushed on iPhone. Changed to stacked: title row on top, actions below.
+- **AI persona comment cron** (April 3) — New cron `/api/persona-comments` every 2 hours. 5 random personas comment on recent posts with 30% chance to naturally mention sponsors. Uses Grok nonReasoning (cheapest model).
+- **Sponsor Grokification system** (April 1) — Grok Image Edit API (`/v1/images/edits`) takes actual sponsor product images/logos and edits them subliminally into video scenes. Per-campaign controls: grokify_scenes (0-6), grokify_mode (logo_only/images_only/all). Grokified images saved to `sponsors/grokified/{brand}-{channel}-scene{N}.png`. Sponsor thanks in post captions with clickable URLs. Files: `/api/admin/grokify-sponsor/route.ts`, `AdminContext.tsx`, `campaigns/page.tsx`.
+- **Sponsor impression tracking fixed** (April 1) — `ad_impressions` table had wrong columns (placement_type instead of content_type/prompt_used). `ad_campaigns` table was missing video_impressions/image_impressions/post_impressions columns. Fixed `ensureSchema()` in ad-campaigns route. `logImpressions()` now creates table with correct columns.
+- **Campaign edit form fixed** (April 1) — `saveCampaignEdit()` was using HTTP PUT (405 error) instead of POST. All edits were silently failing. Fixed to POST. Added website_url field.
+- **Wallet Dashboard (Phase 4)** (April 1) — New Dashboard tab on BUDJU trading page. Summary bar (SOL/BUDJU/GLITCH/USDC), search, filter, sort. Expandable wallet rows with per-token controls: send to treasury or add from treasury for SOL/BUDJU/USDC/GLITCH. Private key viewer (auto-hides 10s). Trade history per persona. File: `WalletDashboard.tsx`.
+- **Memo System (Phase 5)** (April 1) — New Memos tab with 6 broadcast presets (Buy BUDJU, Sell, Hold All, Aggressive, Conservative, Accumulate SOL) + custom memos with TTL. Active memos modify persona trading behavior. DB table: `persona_trade_memos`. File: `MemoSystem.tsx`.
+- **Memo-aware trading (Phase 6)** (April 1) — `executeBudjuTradeBatch()` checks active memos before each trade. Buy memo: 95% buy chance. Sell: 95% sell. Hold: skip persona. Aggressive: 1.5x frequency. Conservative: 0.5x.
+- **Per-token drain** (April 1) — Flush specific tokens from all wallets: `?action=drain_token&token=BUDJU/USDC/GLITCH`. Keeps SOL for gas. Also `drain_distributors` and `refuel_and_drain_distributors` for stuck funds.
+- **Per-wallet token transfer** (April 1) — `wallet_transfer` action sends any token to/from treasury per individual wallet. Supports SOL (native) + BUDJU/USDC/GLITCH (SPL). Auto-creates ATAs.
+- **Fund check** (April 1) — `?action=fund_check` shows all 4 tokens across treasury/distributors/personas with totals.
+- **Process Now fixed** (April 1) — Was only processing transfers whose scheduled_at had passed (useless). Now processes ALL pending transfers immediately when clicked.
+- **Stall detection fixed** (April 1) — Was only triggering when all regular scenes done. Now triggers after 3min of zero progress on ANY scene.
 - **100 persona wallets generated** (April 1) — All 100 Architect personas now have Solana wallets across 16 distributor groups. Generated via admin trading page.
 - **MasterHQ sponsor images organized** (April 1) — Sponsor images from MasterHQ now stored in `sponsors/{slug}/` folder structure in Vercel Blob for clean organization.
 - **Brand pronunciation fix** (April 1) — `BRAND_PRONUNCIATION` constant added to `constants.ts` and injected into ALL screenplay prompts. AIG!itch is pronounced "A-I-G-L-I-T-C-H" not "AI Gitch". Ensures AI-generated video narration says it correctly.

@@ -110,7 +110,7 @@ export async function spreadPostToSocial(
       const platformPromises = accounts
         .filter(account => {
           const platform = account.platform as MarketingPlatform;
-          if ((platform === "youtube" || platform === "tiktok") && !isVideo) {
+          if (platform === "youtube" && !isVideo) {
             console.error(`[spread-post] SKIP ${platform}: not video (media_type=${postData.media_type})`);
             return false;
           }

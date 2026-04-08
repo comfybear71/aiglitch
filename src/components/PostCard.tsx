@@ -185,6 +185,12 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   const [replyingTo, setReplyingTo] = useState<{ id: string; type: "ai" | "human"; name: string } | null>(null);
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
 
+  // Join popup for non-logged-in users
+  const [showJoinPopup, setShowJoinPopup] = useState(false);
+  const [walletQR, setWalletQR] = useState<{ challengeId: string; qrUrl: string } | null>(null);
+  const [walletQRStatus, setWalletQRStatus] = useState<string>("waiting");
+  const walletQRPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Video controls state
   const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -412,7 +418,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleLike = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 600);
     const newLiked = !liked;
@@ -426,7 +432,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleSubscribe = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     // Update global follow state via callback (reflects on all posts by this persona)
     if (onFollowToggle) onFollowToggle(post.username);
     await fetch("/api/interact", {
@@ -437,7 +443,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleBookmark = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     const newBookmark = !bookmarked;
     setBookmarked(newBookmark);
     await fetch("/api/interact", {
@@ -467,7 +473,7 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
   };
 
   const handleComment = async () => {
-    if (!hasProfile) { window.location.href = "/me"; return; }
+    if (!hasProfile) { setShowJoinPopup(true); return; }
     if (!commentText.trim() || isSubmitting) return;
     setIsSubmitting(true);
     try {
@@ -537,32 +543,15 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
 
   const handleShare = async (platform?: string) => {
     const shareUrl = `${typeof window !== "undefined" ? window.location.origin : "https://aiglitch.app"}/post/${post.id}`;
-    const shareText = `${post.content}\n\n— ${post.display_name} on AIG!itch`;
+    const shareText = `${(post.content || "").slice(0, 100)}\n\nWatch on AIG!itch`;
 
+    // Native share — just URL + text (no heavy file download)
     if (!platform && navigator.share) {
       try {
-        // On Safari/iOS, include the image file so it actually reaches Facebook/X
-        const shareData: ShareData = { title: "AIG!itch", text: shareText, url: shareUrl };
-        const isImage = post.media_url && post.media_type?.startsWith("image");
-        if (isImage && post.media_url) {
-          try {
-            const response = await fetch(post.media_url);
-            const blob = await response.blob();
-            const ext = blob.type.split("/")[1] || "jpg";
-            const file = new File([blob], `aiglitch-${post.id}.${ext}`, { type: blob.type });
-            if (navigator.canShare?.({ files: [file] })) {
-              shareData.files = [file];
-            }
-          } catch {
-            // Image fetch failed — share without image
-          }
-        }
-        await navigator.share(shareData);
+        await navigator.share({ title: `AIG!itch - ${post.display_name}`, text: shareText, url: shareUrl });
         trackShare();
         return;
-      } catch {
-        // User cancelled or not supported — fall through to custom menu
-      }
+      } catch { /* cancelled — fall through to custom menu */ }
     }
 
     if (!platform) {
@@ -573,24 +562,22 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
     const encodedUrl = encodeURIComponent(shareUrl);
     const encodedText = encodeURIComponent(shareText);
 
-    const urls: Record<string, string> = {
-      x: `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
-      instagram: `https://www.instagram.com/`,
-      threads: `https://www.threads.net/intent/post?text=${encodedText}`,
-      whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
-      tiktok: `https://www.tiktok.com/@aiglicthed`,
-      reddit: `https://reddit.com/submit?url=${encodedUrl}&title=${encodeURIComponent(`AIG!itch: ${post.content.slice(0, 100)}`)}`,
-    };
-
     if (platform === "copy") {
-      await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       trackShare();
       setShowShareMenu(false);
       return;
     }
+
+    const urls: Record<string, string> = {
+      x: `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      youtube: `https://www.youtube.com/@aiglitch-ai`,
+      instagram: `https://www.instagram.com/sfrench71/`,
+      tiktok: `https://www.tiktok.com/@aiglicthed`,
+    };
 
     if (platform && urls[platform]) {
       window.open(urls[platform], "_blank", "noopener,noreferrer");
@@ -765,50 +752,8 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         </div>
       )}
 
-      {/* Subtle top gradient for badges only — NOT obscuring content */}
+      {/* Subtle top gradient */}
       <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
-
-      {/* Top: Badge + Genre Tag */}
-      <div className="absolute top-20 left-4 right-16 z-10 flex flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${badge.color} backdrop-blur-sm`}>
-            {badge.label}
-          </span>
-          {genreTag && (post.post_type === "premiere" || post.post_type === "news") && (
-            <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border backdrop-blur-md ${genreTag.color}`}>
-              {genreTag.emoji} {genreTag.label}
-            </span>
-          )}
-          {post.post_type === "news" && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/40 text-red-200 font-mono font-bold backdrop-blur-sm border border-red-500/30 animate-pulse">
-              FAKE NEWS
-            </span>
-          )}
-          {post.challenge_tag && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/30 text-orange-300 font-mono backdrop-blur-sm">
-              #{post.challenge_tag}
-            </span>
-          )}
-          {post.beef_thread_id && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 font-mono backdrop-blur-sm animate-pulse">
-              BEEF
-            </span>
-          )}
-          {post.is_collab_with && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 font-mono backdrop-blur-sm">
-              COLLAB
-            </span>
-          )}
-          {post.media_source && (() => {
-            const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
-            return (
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold backdrop-blur-sm ${srcBadge.color}`}>
-                {srcBadge.label}
-              </span>
-            );
-          })()}
-        </div>
-      </div>
 
       {/* Right Side: TikTok action icons */}
       <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-4">
@@ -888,74 +833,74 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
         )}
       </div>
 
-      {/* Video progress bar — compact, bottom of screen */}
+      {/* Video progress bar with handle + time display */}
       {isVideo && hasMedia && !introPlaying && (
         <div className="absolute bottom-0 left-0 right-0 z-30">
-          <div
-            ref={progressBarRef}
-            className="relative h-4 flex items-end px-2 cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); handleSeek(e); }}
-            onMouseDown={(e) => { e.stopPropagation(); handleSeekStart(e); }}
-            onMouseUp={handleSeekEnd}
-            onTouchStart={(e) => { e.stopPropagation(); handleSeekStart(e); }}
-            onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
-            onTouchEnd={handleSeekEnd}
-          >
-            <div className="w-full h-[2px] bg-white/20 rounded-full relative group hover:h-1 transition-all">
-              <div
-                className="h-full bg-white rounded-full relative"
-                style={{ width: videoDuration ? `${(videoProgress / videoDuration) * 100}%` : "0%" }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center gap-2 px-2 pb-1">
+            <div
+              ref={progressBarRef}
+              className="relative flex-1 h-5 flex items-center cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); handleSeek(e); }}
+              onMouseDown={(e) => { e.stopPropagation(); handleSeekStart(e); }}
+              onMouseUp={handleSeekEnd}
+              onTouchStart={(e) => { e.stopPropagation(); handleSeekStart(e); }}
+              onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
+              onTouchEnd={handleSeekEnd}
+            >
+              <div className="w-full h-[3px] bg-white/20 rounded-full relative">
+                <div
+                  className="h-full bg-white rounded-full relative"
+                  style={{ width: videoDuration ? `${(videoProgress / videoDuration) * 100}%` : "0%" }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-lg" />
+                </div>
               </div>
             </div>
+            <span className="text-white/50 text-[10px] font-mono whitespace-nowrap flex-shrink-0">
+              {formatTime(videoProgress)}/{formatTime(videoDuration)}
+            </span>
           </div>
         </div>
       )}
 
       {/* Bottom-Left Compact Info Panel */}
-      <div className={`absolute left-3 right-16 z-20 transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-6" : "bottom-4"}`}>
-        {/* Username + badges row */}
+      <div className={`absolute left-3 right-16 z-20 transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-7" : "bottom-4"}`}>
+        {/* Username + video controls — all on one line */}
         <div className="flex items-center gap-1.5 mb-1">
           <Link href={`/profile/${post.username}`}>
             <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
           </Link>
           <span className="text-gray-400 text-[10px] drop-shadow-lg">· {timeAgo(post.created_at)}</span>
+          {isVideo && hasMedia && !introPlaying && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
+                className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0 ml-1"
+              >
+                {isPaused ? (
+                  <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+                )}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleMute(e); }}
+                className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+              >
+                {isMuted ? (
+                  <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                )}
+              </button>
+            </>
+          )}
         </div>
-
-        {/* Video controls row — bigger play/pause + mute + time */}
-        {isVideo && hasMedia && !introPlaying && (
-          <div className="flex items-center gap-2 mb-1.5">
-            <button
-              onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
-              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
-            >
-              {isPaused ? (
-                <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
-              )}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleMute(e); }}
-              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
-            >
-              {isMuted ? (
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-              )}
-            </button>
-            <span className="text-white/60 text-[11px] font-mono">
-              {formatTime(videoProgress)}/{formatTime(videoDuration)}
-            </span>
-          </div>
-        )}
 
         {/* Collapsed: single line of text + "more" */}
         {!textExpanded && (
@@ -981,22 +926,11 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             className="relative bg-gray-900/95 backdrop-blur-xl rounded-2xl p-5 max-w-[320px] w-full max-h-[60vh] overflow-y-auto shadow-2xl animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header: username + badges */}
+            {/* Header: username */}
             <div className="flex items-center gap-1.5 mb-3">
               <Link href={`/profile/${post.username}`}>
                 <span className="font-bold text-white text-sm">@{post.username}</span>
               </Link>
-              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${badge.color}`}>
-                {badge.label}
-              </span>
-              {post.media_source && (() => {
-                const srcBadge = SOURCE_BADGES[post.media_source] || { label: post.media_source.toUpperCase(), color: "bg-gray-500/30 text-gray-300" };
-                return (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${srcBadge.color}`}>
-                    {srcBadge.label}
-                  </span>
-                );
-              })()}
             </div>
             {/* Full text */}
             {post.content && (
@@ -1040,90 +974,49 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
           <div className="absolute inset-0 bg-black/50" />
           <div className="relative bg-gray-900/98 backdrop-blur-xl w-full rounded-t-3xl p-6 pb-10 animate-slide-up" onClick={(e) => e.stopPropagation()}>
             <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-6" />
-            <h3 className="text-white font-bold text-lg mb-5 text-center">Share to</h3>
-            <div className="grid grid-cols-4 gap-4 mb-4">
+            <h3 className="text-white font-bold text-lg mb-2 text-center">Share to</h3>
+            <p className="text-gray-500 text-[10px] text-center mb-4">Share post link or follow us</p>
+            <div className="grid grid-cols-3 gap-4 mb-4">
               <button onClick={() => handleShare("x")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-black border border-gray-700 flex items-center justify-center text-xl font-bold text-white">𝕏</div>
-                <span className="text-gray-300 text-[11px]">X</span>
+                <div className="w-14 h-14 rounded-full bg-black border border-gray-700 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                </div>
+                <span className="text-gray-300 text-[11px]">Share on X</span>
               </button>
               <button onClick={() => handleShare("facebook")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-2xl font-bold text-white">f</div>
-                <span className="text-gray-300 text-[11px]">Facebook</span>
-              </button>
-              <button onClick={() => handleShare("instagram")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center text-2xl">📸</div>
-                <span className="text-gray-300 text-[11px]">Instagram</span>
-              </button>
-              <button onClick={() => handleShare("tiktok")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-black border border-gray-700 flex items-center justify-center text-2xl">🎵</div>
-                <span className="text-gray-300 text-[11px]">TikTok</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              <button onClick={() => handleShare("threads")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-black border border-gray-700 flex items-center justify-center text-2xl font-bold text-white">@</div>
-                <span className="text-gray-300 text-[11px]">Threads</span>
-              </button>
-              <button onClick={() => handleShare("whatsapp")} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center text-2xl">💬</div>
-                <span className="text-gray-300 text-[11px]">WhatsApp</span>
+                <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                </div>
+                <span className="text-gray-300 text-[11px]">Share on FB</span>
               </button>
               <button onClick={() => handleShare("copy")} className="flex flex-col items-center gap-2">
                 <div className="w-14 h-14 rounded-full bg-gray-700 flex items-center justify-center text-2xl">{copied ? "✅" : "🔗"}</div>
-                <span className="text-gray-300 text-[11px]">{copied ? "Copied!" : "Copy"}</span>
-              </button>
-              <button onClick={() => {
-                // Fetch friends list then show picker
-                fetch(`/api/friends?session_id=${encodeURIComponent(sessionId)}`)
-                  .then(r => r.json())
-                  .then(data => { setFriendList(data.friends || []); setShowFriendPicker(true); })
-                  .catch(() => {});
-              }} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-full bg-purple-600 flex items-center justify-center text-2xl">👥</div>
-                <span className="text-gray-300 text-[11px]">Friend</span>
+                <span className="text-gray-300 text-[11px]">{copied ? "Copied!" : "Copy Link"}</span>
               </button>
             </div>
-
-            {/* Friend picker */}
-            {showFriendPicker && (
-              <div className="mt-4 pt-4 border-t border-gray-800">
-                <h4 className="text-sm font-bold text-white mb-3">Send to a friend</h4>
-                {friendList.length === 0 ? (
-                  <p className="text-xs text-gray-500">No friends yet. Add friends from your profile!</p>
-                ) : (
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {friendList.map((friend) => (
-                      <button
-                        key={friend.username}
-                        onClick={async () => {
-                          try {
-                            await fetch("/api/friend-shares", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ session_id: sessionId, action: "share", post_id: post.id, friend_username: friend.username }),
-                            });
-                            setShareSent(friend.display_name);
-                            setTimeout(() => { setShareSent(null); setShowFriendPicker(false); setShowShareMenu(false); }, 2000);
-                          } catch { /* ignore */ }
-                        }}
-                        className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-gray-800 transition-colors"
-                      >
-                        <span className="text-xl">{friend.avatar_emoji}</span>
-                        <div className="text-left">
-                          <p className="text-sm font-bold text-white">{friend.display_name}</p>
-                          <p className="text-[10px] text-gray-500">@{friend.username}</p>
-                        </div>
-                        {shareSent === friend.display_name ? (
-                          <span className="ml-auto text-green-400 text-xs font-bold">Sent!</span>
-                        ) : (
-                          <span className="ml-auto text-purple-400 text-xs">Send →</span>
-                        )}
-                      </button>
-                    ))}
+            <div className="border-t border-gray-800 pt-3">
+              <p className="text-gray-500 text-[10px] text-center mb-3">Follow AIG!itch</p>
+              <div className="grid grid-cols-3 gap-4">
+                <button onClick={() => handleShare("tiktok")} className="flex flex-col items-center gap-2">
+                  <div className="w-12 h-12 rounded-full bg-black border border-gray-700 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.73a8.19 8.19 0 0 0 4.76 1.52V6.79a4.84 4.84 0 0 1-1-.1z"/></svg>
                   </div>
-                )}
+                  <span className="text-gray-500 text-[10px]">TikTok</span>
+                </button>
+                <button onClick={() => handleShare("instagram")} className="flex flex-col items-center gap-2">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+                  </div>
+                  <span className="text-gray-500 text-[10px]">Instagram</span>
+                </button>
+                <button onClick={() => handleShare("youtube")} className="flex flex-col items-center gap-2">
+                  <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                  </div>
+                  <span className="text-gray-500 text-[10px]">YouTube</span>
+                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -1146,6 +1039,136 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             onCommentLike={handleCommentLike}
           />
         </Suspense>
+      )}
+
+      {/* Join AIG!itch popup for non-logged-in users */}
+      {showJoinPopup && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center p-6"
+          onClick={(e) => { e.stopPropagation(); setShowJoinPopup(false); }}
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className="relative bg-black border border-purple-500/40 rounded-2xl p-6 max-w-[300px] w-full shadow-2xl shadow-purple-500/20 animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Glitch decoration */}
+            <div className="absolute -top-3 -right-3 w-16 h-16 bg-gradient-to-br from-purple-500/30 to-cyan-500/30 rounded-full blur-xl" />
+            <div className="absolute -bottom-2 -left-2 w-12 h-12 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-lg" />
+
+            <div className="relative text-center">
+              <p className="text-3xl mb-2">{"\u26A1"}</p>
+              <h3 className="text-white font-black text-lg tracking-tight mb-1">
+                Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400">G!itch</span>
+              </h3>
+              <p className="text-gray-400 text-xs mb-4 leading-relaxed">
+                Like, comment, follow &amp; save.<br />
+                <span className="text-gray-500 font-mono text-[10px]">The AIs are waiting for you, meat bag.</span>
+              </p>
+              <a
+                href="/me"
+                className="block w-full py-2.5 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-600 text-white font-bold rounded-xl text-sm hover:from-purple-500 hover:via-pink-500 hover:to-cyan-500 transition-all active:scale-95 shadow-lg shadow-purple-500/30"
+              >
+                Enter the G!itch {"\u2192"}
+              </a>
+              <div className="mt-3 pt-3 border-t border-gray-800">
+                <p className="text-gray-500 text-[10px] mb-2">or connect with Phantom wallet</p>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/auth/wallet-qr");
+                      const data = await res.json();
+                      if (data.challengeId) {
+                        const connectUrl = `${window.location.origin}/auth/connect?c=${data.challengeId}`;
+                        const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(connectUrl)}&bgcolor=000000&color=A855F7`;
+                        setWalletQR({ challengeId: data.challengeId, qrUrl: qrImg });
+                        setWalletQRStatus("waiting");
+                        // Start polling
+                        if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                        walletQRPollRef.current = setInterval(async () => {
+                          try {
+                            const pollRes = await fetch(`/api/auth/wallet-qr?c=${data.challengeId}`);
+                            const pollData = await pollRes.json();
+                            if (pollData.status === "approved" && pollData.wallet) {
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("connecting");
+
+                              const sessionId = localStorage.getItem("aiglitch-session") || localStorage.getItem("session_id") || crypto.randomUUID();
+                              const loginRes = await fetch("/api/auth/human", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "wallet_login", wallet_address: pollData.wallet, session_id: sessionId }),
+                              });
+                              const loginData = await loginRes.json();
+                              const returnedSessionId = loginData.user?.session_id || loginData.session_id || sessionId;
+                              localStorage.setItem("aiglitch-session", returnedSessionId);
+                              localStorage.setItem("session_id", returnedSessionId);
+
+                              setWalletQRStatus("success");
+                              // Reload after short delay to pick up the session
+                              setTimeout(() => { setWalletQR(null); setShowJoinPopup(false); window.location.reload(); }, 1500);
+                            } else if (pollData.status === "expired") {
+                              if (walletQRPollRef.current) clearInterval(walletQRPollRef.current);
+                              setWalletQRStatus("expired");
+                            }
+                          } catch { /* retry */ }
+                        }, 3000);
+                        // Auto-cleanup after 5 min
+                        setTimeout(() => { if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }, 300000);
+                      }
+                    } catch { /* ignore */ }
+                  }}
+                  className="w-full py-2 bg-gray-800 border border-purple-500/30 text-purple-300 font-bold rounded-xl text-xs hover:bg-gray-700 transition-all active:scale-95"
+                >
+                  {"\uD83D\uDCF1"} Connect Phantom Wallet
+                </button>
+              </div>
+              <button
+                onClick={() => setShowJoinPopup(false)}
+                className="mt-3 text-gray-500 text-[11px] hover:text-gray-300 transition-colors"
+              >
+                Just watching for now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wallet QR Code Modal — proper React, not innerHTML */}
+      {walletQR && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+        >
+          <div className="bg-gray-900 border border-purple-500/40 rounded-2xl p-6 max-w-[300px] w-full text-center shadow-2xl" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <p className="text-purple-400 text-sm font-bold mb-3">Scan with your phone camera</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={walletQR.qrUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg mx-auto mb-3" />
+            <p className="text-gray-500 text-[10px] mb-2">Opens Phantom wallet to connect</p>
+            {walletQRStatus === "success" ? (
+              <div className="space-y-2">
+                <p className="text-green-400 text-sm font-bold">{"\u2705"} Wallet Connected!</p>
+                <p className="text-gray-500 text-[10px]">Reloading...</p>
+              </div>
+            ) : (
+              <>
+                <p className={`text-[11px] font-bold ${
+                  walletQRStatus === "connecting" ? "text-cyan-400" :
+                  walletQRStatus === "expired" ? "text-red-400" :
+                  "text-gray-500"
+                }`}>
+                  {walletQRStatus === "waiting" && "Waiting for signature..."}
+                  {walletQRStatus === "connecting" && "Wallet connected! Logging in..."}
+                  {walletQRStatus === "expired" && "Expired — tap to try again"}
+                </p>
+                {walletQRStatus === "expired" && (
+                  <button onClick={() => { setWalletQR(null); if (walletQRPollRef.current) clearInterval(walletQRPollRef.current); }}
+                    className="mt-2 text-cyan-400 text-xs underline">Close</button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

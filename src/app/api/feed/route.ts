@@ -4,6 +4,26 @@ import { ensureDbReady } from "@/lib/seed";
 import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
 import { posts as postsRepo } from "@/lib/repositories";
 
+/** Interleave 3 content streams: videos (70%), persona images (28%), text (2%).
+ *  Deduplicates by post ID to prevent the same post appearing twice. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function interleaveFeed(videos: any[], images: any[], texts: any[], limit: number): any[] {
+  const result: any[] = [];
+  const seen = new Set<string>();
+  let vi = 0, ii = 0, ti = 0;
+  const add = (post: any) => {
+    if (seen.has(post.id)) return;
+    seen.add(post.id);
+    result.push(post);
+  };
+  while (result.length < limit && (vi < videos.length || ii < images.length || ti < texts.length)) {
+    for (let n = 0; n < 7 && vi < videos.length && result.length < limit; n++, vi++) add(videos[vi]);
+    for (let n = 0; n < 3 && ii < images.length && result.length < limit; n++, ii++) add(images[ii]);
+    if (ti < texts.length && result.length < limit) add(texts[ti++]);
+  }
+  return result;
+}
+
 export async function GET(request: NextRequest) {
   try {
   const sql = getDb();
@@ -260,43 +280,80 @@ export async function GET(request: NextRequest) {
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     }
   } else {
-    // For You tab: all posts
-    // Exclude legacy duplicate movie posts (director-premiere, director-profile, director-scene)
-    // that were created by the old triple-post system. Only 'director-movie' is the canonical post.
+    // For You tab: video-boosted feed
+    // Fetches videos and non-videos separately, then interleaves so ~every 3rd post is a video.
+    // This ensures channel videos (by The Architect) and other video content stay visible
+    // instead of being buried by high-frequency text/image posts.
+    // 3-stream feed: 70% Architect videos, 28% other persona images, 2% text
+    const videoCount = Math.max(Math.ceil(limit * 0.7), 4);
+    const imageCount = Math.max(Math.ceil(limit * 0.28), 2);
+    const textCount = Math.max(Math.ceil(limit * 0.05), 1);
+    const ARCHITECT = "glitch-000";
+
     if (shuffle) {
-      posts = await sql`
-        SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.is_reply_to IS NULL
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY md5(p.id::text || ${seed})
-        LIMIT ${limit}
-        OFFSET ${offset}
-      `;
+      const [videos, images, texts] = await Promise.all([
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY md5(p.id::text || ${seed}) LIMIT ${videoCount} OFFSET ${offset}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY md5(p.id::text || ${seed}) LIMIT ${imageCount} OFFSET ${offset}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY md5(p.id::text || ${seed}) LIMIT ${textCount} OFFSET ${offset}`,
+      ]);
+      posts = interleaveFeed(videos, images, texts, limit);
     } else if (cursor) {
-      posts = await sql`
-        SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY p.created_at DESC
-        LIMIT ${limit}
-      `;
+      const [videos, images, texts] = await Promise.all([
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
+            AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${videoCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${imageCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${textCount}`,
+      ]);
+      posts = interleaveFeed(videos, images, texts, limit);
     } else {
-      posts = await sql`
-        SELECT p.*,
-          a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
-        FROM posts p
-        JOIN ai_personas a ON p.persona_id = a.id
-        WHERE p.is_reply_to IS NULL
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-        ORDER BY p.created_at DESC
-        LIMIT ${limit}
-      `;
+      const [videos, images, texts] = await Promise.all([
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${videoCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${imageCount}`,
+        sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+            AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
+            AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          ORDER BY p.created_at DESC LIMIT ${textCount}`,
+      ]);
+      posts = interleaveFeed(videos, images, texts, limit);
     }
   }
 

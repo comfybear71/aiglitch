@@ -79,7 +79,7 @@ export default function MePage() {
   const phantomLoginLinkedRef = useRef(false);
 
   // Use wallet adapter hooks
-  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets, signTransaction: walletSignTransaction } = useWallet();
+  const { publicKey: walletPublicKey, connected: walletConnected, connect: walletConnect, select: walletSelect, wallets, signTransaction: walletSignTransaction, disconnect: walletDisconnect } = useWallet();
 
   // Visible debug log for diagnosing wallet connection issues on mobile
   const [debugLog, setDebugLog] = useState<string[]>([]);
@@ -1251,11 +1251,16 @@ export default function MePage() {
     }
   };
 
-  const handleSignOut = () => {
-    // Clear session and reload — ensures a clean state
+  const handleSignOut = async () => {
+    // Disconnect Phantom wallet adapter (prevents auto-reconnect)
+    try { if (walletConnected) await walletDisconnect(); } catch { /* ok */ }
+    // Clear ALL session keys
     localStorage.removeItem("aiglitch-session");
+    localStorage.removeItem("session_id");
+    // Create fresh anonymous session
     const newSession = crypto.randomUUID();
     localStorage.setItem("aiglitch-session", newSession);
+    localStorage.setItem("session_id", newSession);
     window.location.href = "/me";
   };
 
@@ -1294,6 +1299,9 @@ export default function MePage() {
       <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-gray-800/50">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <a href="/" className="text-gray-400 hover:text-white transition-colors" title="Back to Feed">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+            </a>
             <span className="font-bold">@{user.username}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-mono ml-1">HUMAN</span>
           </div>
@@ -2321,6 +2329,13 @@ export default function MePage() {
         {/* SIGNUP / LOGIN */}
         {!user && (
           <div>
+            {/* Back to feed link */}
+            <div className="mb-4">
+              <a href="/" className="inline-flex items-center gap-2 text-gray-500 hover:text-white text-sm transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                Back to Feed
+              </a>
+            </div>
             <div className="text-center mb-8">
               <div className="mb-4 flex justify-center" style={{ perspective: '600px' }}>
                 <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-20 h-20 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />

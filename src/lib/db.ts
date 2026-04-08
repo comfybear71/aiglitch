@@ -516,7 +516,7 @@ export async function runMigrations() {
     { key: "seed_mktg_facebook", platform: "facebook", envCheck: "FACEBOOK_ACCESS_TOKEN", extraConfig: JSON.stringify({ page_id: process.env.FACEBOOK_PAGE_ID || "" }) },
     { key: "seed_mktg_youtube", platform: "youtube", envCheck: "YOUTUBE_CLIENT_ID", extraConfig: JSON.stringify({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN || "" }) },
     { key: "seed_mktg_instagram", platform: "instagram", envCheck: "INSTAGRAM_ACCESS_TOKEN", extraConfig: JSON.stringify({ instagram_user_id: process.env.INSTAGRAM_USER_ID || "" }) },
-    { key: "seed_mktg_tiktok", platform: "tiktok", envCheck: "TIKTOK_ACCESS_TOKEN" },
+    // TikTok removed — API denied by TikTok developer review
   ];
 
   await Promise.allSettled(
@@ -1301,21 +1301,57 @@ export async function runMigrations() {
       "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/image-3.jpeg",
     ];
     const budjuLogo = "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/budju/logo.jpeg";
-    await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(brand_name) = 'budju'`;
+    await sql`UPDATE ad_campaigns SET product_image_url = ${budjuImages[0]}, product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo}, website_url = 'https://budju.xyz' WHERE LOWER(brand_name) = 'budju'`;
     await sql`UPDATE sponsors SET product_images = ${JSON.stringify(budjuImages)}::jsonb, logo_url = ${budjuLogo} WHERE LOWER(company_name) = 'budju'`;
     console.log("[migrate] Force-set BUDJU with 3 product images + logo from jug8pwv8lcpdrski blob store");
 
-    // Also sync other sponsors from their sponsor records
-    const sponsors = await sql`SELECT company_name, logo_url, product_images FROM sponsors WHERE product_images IS NOT NULL AND LOWER(company_name) != 'budju'`;
+    // Force-set ALL sponsor images/logos/URLs on their ad campaigns
+    const sponsorImageMap: Record<string, { logo: string; images: string[]; website: string }> = {
+      "frenchie": {
+        logo: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/frenchie/product-1.jpeg",
+        images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/frenchie/product-1.jpeg"],
+        website: "https://togogo.app",
+      },
+      "aig!itch cola": {
+        logo: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cola/product-1.jpeg",
+        images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cola/product-1.jpeg"],
+        website: "https://aiglitch.app",
+      },
+      "aiglitch cigarettes": {
+        logo: "https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cigarettes/product-1.jpeg",
+        images: ["https://jug8pwv8lcpdrski.public.blob.vercel-storage.com/sponsors/aiglitch-cigarettes/product-1.jpeg"],
+        website: "https://aiglitch.app",
+      },
+    };
+    for (const [name, data] of Object.entries(sponsorImageMap)) {
+      await sql`UPDATE ad_campaigns SET
+        logo_url = ${data.logo},
+        product_image_url = ${data.images[0]},
+        product_images = ${JSON.stringify(data.images)}::jsonb,
+        website_url = ${data.website}
+        WHERE LOWER(brand_name) = LOWER(${name})`;
+      console.log(`[migrate] Force-set ${name} → logo + ${data.images.length} images + website`);
+    }
+
+    // Always sync website URLs from sponsors → ad_campaigns (website_url is often missing)
+    const sponsors = await sql`SELECT company_name, logo_url, product_images, website FROM sponsors WHERE website IS NOT NULL AND website != ''`;
     for (const s of sponsors) {
       const name = s.company_name as string;
-      const images = s.product_images as string[];
+      const website = s.website as string;
       const logo = s.logo_url as string;
-      if (name && images && images.length > 0) {
-        await sql`UPDATE ad_campaigns SET product_images = ${JSON.stringify(images)}::jsonb, logo_url = COALESCE(${logo || null}, logo_url) WHERE LOWER(brand_name) = LOWER(${name})`;
-        console.log(`[migrate] Synced ${images.length} images from sponsor "${name}" to ad campaign`);
+      const images = s.product_images as string[];
+      if (name && website) {
+        const updated = await sql`UPDATE ad_campaigns SET
+          website_url = ${website},
+          logo_url = COALESCE(${logo || null}, logo_url),
+          product_image_url = COALESCE(${logo || null}, product_image_url),
+          product_images = COALESCE(${images && images.length > 0 ? JSON.stringify(images) : null}::jsonb, product_images)
+          WHERE LOWER(brand_name) = LOWER(${name})`;
+        console.log(`[migrate] Synced sponsor "${name}" website=${website} to ad campaign`);
       }
     }
+    // Sync BUDJU website
+    await sql`UPDATE ad_campaigns SET website_url = COALESCE((SELECT website FROM sponsors WHERE LOWER(company_name) = 'budju' LIMIT 1), website_url) WHERE LOWER(brand_name) = 'budju'`;
   } catch (err) { console.error("[migrate] Sponsor image sync error:", err); }
 
   // ── Stamp the migration version so future cold starts skip all of the above ──

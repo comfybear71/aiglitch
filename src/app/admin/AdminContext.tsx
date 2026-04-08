@@ -86,10 +86,23 @@ async function runBackgroundGeneration(
     }
     setLog(prev => [...prev, ``]);
 
-    // ── Phase 2: Submit each scene to Grok ──
+    // ── Phase 2: Grokify sponsor images + Submit each scene to Grok ──
     setLog(prev => [...prev, `📡 Submitting ${scenes.length} scenes to xAI...`]);
     setProgress({ label: `📡 Submitting`, current: 1, total: scenes.length, startTime: Date.now() });
     const sceneJobs: { sceneNumber: number; title: string; requestId: string | null }[] = [];
+
+    // Sponsor campaign details for Grokifying product images into scenes
+    const sponsorCampaigns = screenplay.sponsorCampaigns || [];
+    const sponsorImages: string[] = screenplay.sponsorImages || (screenplay.sponsorImageUrl ? [screenplay.sponsorImageUrl] : []);
+    const hasSponsorVisuals = sponsorCampaigns.length > 0 && sponsorCampaigns.some((c: { visualPrompt?: string }) => c.visualPrompt);
+    // Track Grokify count PER CAMPAIGN — each sponsor gets their own scene budget
+    const grokifyCountPerCampaign: Record<number, number> = {};
+    const totalGrokifyBudget = sponsorCampaigns.reduce((sum: number, c: { grokifyScenes?: number }) => sum + (c.grokifyScenes ?? 3), 0);
+
+    if (hasSponsorVisuals && totalGrokifyBudget > 0) {
+      const breakdown = sponsorCampaigns.map((c: { brandName?: string; grokifyScenes?: number }, idx: number) => `${c.brandName}=${c.grokifyScenes ?? 3}`).join(", ");
+      setLog(prev => [...prev, `  💰 ${sponsors.length} sponsor(s) — ${totalGrokifyBudget} total Grokified scenes (${breakdown})`]);
+    }
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
@@ -105,12 +118,85 @@ async function runBackgroundGeneration(
       setLog(prev => [...prev, `  📝 "${scene.videoPrompt.slice(0, 100)}..."`]);
 
       try {
-        // Pass sponsor logo as reference image if sponsors were placed
-        const sponsorImageUrl = screenplay.sponsorImageUrl || undefined;
+        let sceneImageUrl: string | undefined;
+        const isContentScene = i > 0 && i < scenes.length - 1;
+        const isOutro = i === scenes.length - 1;
+
+        // Find the next sponsor that still has Grokify budget remaining
+        let campaignIdx = -1;
+        if (isContentScene && hasSponsorVisuals) {
+          for (let c = 0; c < sponsorCampaigns.length; c++) {
+            // Round-robin: start from scene-based offset to distribute evenly
+            const idx = (i + c) % sponsorCampaigns.length;
+            const limit = (sponsorCampaigns[idx] as { grokifyScenes?: number }).grokifyScenes ?? 3;
+            const used = grokifyCountPerCampaign[idx] || 0;
+            if (limit > 0 && used < limit) {
+              campaignIdx = idx;
+              break;
+            }
+          }
+        }
+        // Only Grokify content scenes — outro keeps its channel branding clean.
+        // Sponsor thanks handled in post caption text instead.
+        const shouldGrokify = isContentScene && campaignIdx >= 0;
+
+        if (shouldGrokify) {
+          // For content scenes: use the campaign with remaining budget. For outro: use first campaign.
+          const campaign = isOutro
+            ? sponsorCampaigns[0] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[]; grokifyMode?: string }
+            : sponsorCampaigns[campaignIdx] as { brandName?: string; productName?: string; visualPrompt?: string; logoUrl?: string; productImageUrl?: string; productImages?: string[]; grokifyMode?: string };
+          const allBrandNames = sponsorCampaigns.map((c: { brandName?: string }) => c.brandName).filter(Boolean).join(", ");
+          if (campaign?.visualPrompt || isOutro) {
+            const logLabel = isOutro ? `Sponsor acknowledgment (${allBrandNames})` : (campaign.brandName || "sponsor");
+            setLog(prev => [...prev, `  🖼️ Grokifying ${logLabel} into scene...`]);
+            try {
+              // For the outro, override the prompt to show sponsor acknowledgment
+              const outroVisualPrompt = isOutro
+                ? `The ${allBrandNames} brand logo prominently displayed. Sponsor acknowledgment — the logo is the hero, large, centered, beautifully lit, prestigious.`
+                : campaign.visualPrompt || "";
+              const grokRes = await fetch("/api/admin/grokify-sponsor", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  scenePrompt: scene.videoPrompt,
+                  visualPrompt: outroVisualPrompt,
+                  brandName: isOutro ? allBrandNames : (campaign.brandName || "Sponsor"),
+                  productName: isOutro ? allBrandNames : (campaign.productName || "Product"),
+                  logoUrl: campaign.logoUrl || "",
+                  productImageUrl: campaign.productImageUrl || "",
+                  productImages: sponsorImages,
+                  sceneIndex: i,
+                  isOutro,
+                  grokifyMode: campaign.grokifyMode || "all",
+                  channelId: chId,
+                  sceneNumber: scene.sceneNumber,
+                }),
+              });
+              const grokData = await grokRes.json();
+              if (grokData.grokifiedUrl) {
+                sceneImageUrl = grokData.grokifiedUrl;
+                if (!isOutro && campaignIdx >= 0) {
+                  grokifyCountPerCampaign[campaignIdx] = (grokifyCountPerCampaign[campaignIdx] || 0) + 1;
+                }
+                const used = isOutro ? 0 : (grokifyCountPerCampaign[campaignIdx] || 0);
+                const limit = isOutro ? 0 : ((sponsorCampaigns[campaignIdx] as { grokifyScenes?: number })?.grokifyScenes ?? 3);
+                const mode = grokData.mode === "image-edit" ? "product image edited in" : "generated from description";
+                setLog(prev => [...prev, `  ✅ Grokified ${campaign.brandName || "sponsor"}${!isOutro ? ` (${used}/${limit})` : ""} — ${mode}`]);
+              } else {
+                setLog(prev => [...prev, `  ⚠️ Grokify returned no image: ${grokData.error || "unknown"}`]);
+              }
+              // Rate limit before video submission
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            } catch (err) {
+              setLog(prev => [...prev, `  ⚠️ Grokify failed: ${err instanceof Error ? err.message : "unknown"}`]);
+            }
+          }
+        }
+
         const submitRes = await fetch("/api/test-grok-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sponsorImageUrl }),
+          body: JSON.stringify({ prompt: scene.videoPrompt, duration: scene.duration, folder, image_url: sceneImageUrl }),
         });
         const submitData = await submitRes.json();
 
@@ -148,29 +234,9 @@ async function runBackgroundGeneration(
 
     const pendingJobs = sceneJobs.filter(j => j.requestId);
 
-    // ── Phase 2.5: Submit sponsor thank-you clip if sponsors were placed ──
-    if (sponsors.length > 0) {
-      setLog(prev => [...prev, `  🎬 Generating sponsor thank-you clip for: ${sponsors.join(", ")}...`]);
-      try {
-        // Generate PNG card, upload to Blob, submit as image-to-video
-        const sponsorRes = await fetch("/api/admin/sponsor-clip", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sponsorNames: sponsors }),
-        });
-        const sponsorData = await sponsorRes.json();
-        if (sponsorData.requestId) {
-          const sponsorSceneNum = scenes.length + 1;
-          sceneJobs.push({ sceneNumber: sponsorSceneNum, title: "Sponsor Thanks", requestId: sponsorData.requestId });
-          pendingJobs.push({ sceneNumber: sponsorSceneNum, title: "Sponsor Thanks", requestId: sponsorData.requestId });
-          setLog(prev => [...prev, `  ✅ Sponsor clip submitted: ${sponsorData.requestId.slice(0, 12)}...`]);
-        } else {
-          setLog(prev => [...prev, `  ⚠️ Sponsor clip failed: ${sponsorData.error || "unknown"}`]);
-        }
-      } catch (err) {
-        setLog(prev => [...prev, `  ⚠️ Sponsor clip error: ${err instanceof Error ? err.message : "unknown"}`]);
-      }
-    }
+    // Sponsor products are placed subliminally via Grokification into scenes.
+    // No separate "thank you" clip — Grok can't render readable text in video,
+    // and each channel already has its own branded outro.
 
     if (pendingJobs.length === 0) {
       setLog(prev => [...prev, `❌ No scenes submitted successfully`]);
@@ -228,17 +294,9 @@ async function runBackgroundGeneration(
 
       if (totalDone >= pendingJobs.length) break;
 
-      // Stall detection — but never skip the sponsor clip
-      const regularSceneCount = scenes.length;
-      const regularDone = [...doneScenes].filter(n => n <= regularSceneCount).length;
-      const regularFailed = [...failedScenes].filter(n => n <= regularSceneCount).length;
-      const regularTotal = regularDone + regularFailed;
-      if (regularTotal >= regularSceneCount && doneScenes.size >= Math.ceil(pendingJobs.length / 2) && lastProgressAttempt > 0 && (attempt - lastProgressAttempt) >= 18) {
+      // Stall detection — if no progress for 3 minutes (18 polls), proceed to stitch with what we have
+      if (lastProgressAttempt > 0 && (attempt - lastProgressAttempt) >= 18 && doneScenes.size >= Math.ceil(pendingJobs.length / 2)) {
         const stuckCount = pendingJobs.length - totalDone;
-        if (stuckCount <= 1 && !doneScenes.has(pendingJobs[pendingJobs.length - 1]?.sceneNumber)) {
-          // The only stuck scene is the sponsor clip — give it more time (6 more attempts = 60s)
-          if ((attempt - lastProgressAttempt) < 36) continue;
-        }
         setLog(prev => [...prev, `  ⏰ ${stuckCount} scene(s) stalled for 3min — proceeding to stitch with ${doneScenes.size}/${pendingJobs.length} clips`]);
         break;
       }
@@ -271,11 +329,31 @@ async function runBackgroundGeneration(
       stitchForm.append("tagline", screenplay.tagline || "");
       stitchForm.append("castList", JSON.stringify(isStudios ? (screenplay.castList || []) : []));
       stitchForm.append("channelId", chId);
-      // Always append sponsorPlacements (even if empty) so the POST handler knows
       const sponsorList = screenplay.sponsorPlacements || [];
       stitchForm.append("sponsorPlacements", JSON.stringify(sponsorList));
-      console.log("[AdminContext] Appending sponsorPlacements to stitch form:", JSON.stringify(sponsorList));
-      const stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm });
+
+      // 5-minute timeout — stitch downloads clips, concatenates, uploads to blob,
+      // creates feed post, and spreads to 5 social platforms. Can take 2+ minutes.
+      const stitchController = new AbortController();
+      const stitchTimeout = setTimeout(() => stitchController.abort(), 300000);
+      let stitchRes: Response;
+      try {
+        stitchRes = await fetch("/api/generate-director-movie", { method: "POST", body: stitchForm, signal: stitchController.signal });
+      } catch (fetchErr) {
+        clearTimeout(stitchTimeout);
+        const msg = fetchErr instanceof Error ? fetchErr.message : "unknown";
+        if (msg === "Failed to fetch" || msg.includes("abort")) {
+          setLog(prev => [...prev, `⚠️ Stitch request timed out — but the server may still be processing`]);
+          setLog(prev => [...prev, `  💡 Check the channel feed in 1-2 minutes — video may appear`]);
+          setLog(prev => [...prev, `  💡 If not, try generating again`]);
+        } else {
+          setLog(prev => [...prev, `❌ Stitch error: ${msg}`]);
+        }
+        setProgress(null);
+        setGenerating(false);
+        return;
+      }
+      clearTimeout(stitchTimeout);
       const stitchData = await stitchRes.json();
 
       if (stitchRes.ok) {
@@ -381,6 +459,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [autopilotQueue, setAutopilotQueue] = useState<{ channelId: string; channelName: string; channelSlug: string; isStudios: boolean; screenplayBody: Record<string, unknown> }[]>([]);
   const [autopilotTotal, setAutopilotTotal] = useState(0);
   const [autopilotCurrent, setAutopilotCurrent] = useState(0);
+  const autopilotCooldownRef = useRef(false); // Prevents re-dequeue during 2-min cooldown
 
   const startGeneration = useCallback((params: {
     channelId: string;
@@ -408,23 +487,33 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   // Autopilot: when generation finishes, start next in queue
   useEffect(() => {
-    if (!generating && autopilotQueue.length > 0) {
+    // Guard: don't dequeue during 2-min cooldown or while still generating
+    if (generating || autopilotCooldownRef.current) return;
+
+    if (autopilotQueue.length > 0) {
       const [next, ...rest] = autopilotQueue;
-      setAutopilotQueue(rest);
       const current = autopilotTotal - autopilotQueue.length + 1;
       setAutopilotCurrent(current);
+      setAutopilotQueue(rest);
       // Clear the log for a fresh start — only show the autopilot counter
       setGenerationLog([`🤖 AUTOPILOT: ${current}/${autopilotTotal} — Starting ${next.channelName} in 2 min (rate limit cooldown)...`]);
-      // 2-minute cooldown between autopilot generations — Grok needs breathing room after 8 clips
-      setTimeout(() => startGeneration(next), 120000);
+      // Set cooldown flag BEFORE setTimeout to prevent re-entry
+      autopilotCooldownRef.current = true;
+      // 2-minute cooldown between autopilot generations
+      setTimeout(() => {
+        autopilotCooldownRef.current = false;
+        startGeneration(next);
+      }, 120000);
+      return;
     }
+
     // Autopilot complete
-    if (!generating && autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
+    if (autopilotQueue.length === 0 && autopilotTotal > 0 && autopilotCurrent >= autopilotTotal) {
       setGenerationLog([`✅ AUTOPILOT COMPLETE: ${autopilotTotal} videos generated!`]);
       setAutopilotTotal(0);
       setAutopilotCurrent(0);
     }
-  }, [generating, autopilotQueue, autopilotTotal, autopilotCurrent, startGeneration]);
+  }, [generating, autopilotQueue.length, autopilotTotal, autopilotCurrent, startGeneration]);
 
   // Elapsed timer for generation progress
   useEffect(() => {

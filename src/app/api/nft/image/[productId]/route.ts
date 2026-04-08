@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProductById } from "@/lib/marketplace";
 import { getRarity, parseCoinPrice, rarityColor } from "@/lib/nft-mint";
+import { getDb } from "@/lib/db";
 
 /**
  * GET /api/nft/image/[productId]
  *
  * Generates an SVG trading card image for an NFT.
  * Used as the `image` field in Metaplex metadata.
- * Displays the product emoji, name, rarity, and AIG!itch branding.
+ * Shows Grokified product image when available, falls back to emoji.
  */
 export async function GET(
   _request: NextRequest,
@@ -17,7 +18,6 @@ export async function GET(
   const product = getProductById(productId);
 
   if (!product) {
-    // Fallback generic card
     const svg = generateCard("?", "Unknown NFT", "common", "#9CA3AF", 0);
     return new NextResponse(svg, {
       headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=86400" },
@@ -28,12 +28,20 @@ export async function GET(
   const rarity = getRarity(price);
   const color = rarityColor(rarity);
 
-  const svg = generateCard(product.emoji, product.name, rarity, color, price);
+  // Check for Grokified product image
+  let grokImageUrl: string | null = null;
+  try {
+    const sql = getDb();
+    const rows = await sql`SELECT image_url FROM nft_product_images WHERE product_id = ${productId} LIMIT 1`;
+    if (rows.length > 0) grokImageUrl = rows[0].image_url as string;
+  } catch { /* table may not exist */ }
+
+  const svg = generateCard(product.emoji, product.name, rarity, color, price, grokImageUrl);
 
   return new NextResponse(svg, {
     headers: {
       "Content-Type": "image/svg+xml",
-      "Cache-Control": "public, max-age=86400, s-maxage=604800",
+      "Cache-Control": "public, max-age=3600, s-maxage=86400",
     },
   });
 }
@@ -44,6 +52,7 @@ function generateCard(
   rarity: string,
   color: string,
   price: number,
+  imageUrl?: string | null,
 ): string {
   // Background gradient based on rarity
   const bgGradient = {
@@ -91,9 +100,12 @@ function generateCard(
   <text x="35" y="46" font-family="monospace" font-size="14" fill="${color}" font-weight="bold">AIG!itch NFT</text>
   <text x="465" y="46" font-family="monospace" font-size="13" fill="${color}" text-anchor="end">${rarityLabel}</text>
 
-  <!-- Emoji artwork area -->
+  <!-- Artwork area -->
   <rect x="40" y="80" width="420" height="340" rx="12" fill="rgba(0,0,0,0.4)" stroke="${color}" stroke-opacity="0.2" stroke-width="1"/>
-  <text x="250" y="290" font-size="140" text-anchor="middle" dominant-baseline="central">${emoji}</text>
+  ${imageUrl
+    ? `<image href="${imageUrl}" x="40" y="80" width="420" height="340" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 12px)"/>`
+    : `<text x="250" y="290" font-size="140" text-anchor="middle" dominant-baseline="central">${emoji}</text>`
+  }
 
   <!-- Name plate -->
   <rect x="40" y="440" width="420" height="60" rx="10" fill="rgba(0,0,0,0.5)" stroke="${color}" stroke-opacity="0.15" stroke-width="1"/>

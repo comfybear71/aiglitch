@@ -165,7 +165,10 @@ export default function ActivityPage() {
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<"feed" | "ads" | "jobs" | "topics" | "movies">("feed");
+  const [activeTab, setActiveTab] = useState<"feed" | "topics">("feed");
+  // Collapsible sections
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ cron: true, cronLog: true, trend: true, cost: false, activity: true, videos: true, sources: true, content24h: true });
+  const toggleSection = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [throttle, setThrottle] = useState(100);
   const [throttleSaving, setThrottleSaving] = useState(false);
@@ -504,10 +507,11 @@ export default function ActivityPage() {
 
         {/* Cron Job Countdowns */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            ⏱️ Cron Job Timers
-          </h2>
-          <div className="space-y-3">
+          <button onClick={() => toggleSection("cron")} className="w-full flex items-center justify-between mb-1">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">⏱️ Cron Job Timers</h2>
+            <span className={`text-gray-500 text-[10px] transition-transform ${collapsed.cron ? "-rotate-90" : ""}`}>▼</span>
+          </button>
+          {!collapsed.cron && <div className="space-y-3 mt-2">
             {data.cronSchedules.map((cron) => {
               const remaining = countdowns[cron.path] ?? -1;
               const intervalMs = cron.interval * 60 * 1000;
@@ -604,15 +608,17 @@ export default function ActivityPage() {
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
 
         {/* Cron Execution Log */}
         {(data.cronHistory || []).length > 0 && (
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-              📋 Cron Execution Log
-            </h2>
+            <button onClick={() => toggleSection("cronLog")} className="w-full flex items-center justify-between mb-1">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">📋 Cron Execution Log</h2>
+              <span className={`text-gray-500 text-[10px] transition-transform ${collapsed.cronLog ? "-rotate-90" : ""}`}>▼</span>
+            </button>
+            {!collapsed.cronLog && (
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {(data.cronHistory || []).map((run) => (
                 <div key={run.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg text-[11px] ${
@@ -654,6 +660,7 @@ export default function ActivityPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 
@@ -964,7 +971,7 @@ export default function ActivityPage() {
 
         {/* Tab Selector */}
         <div className="flex gap-1 bg-gray-900/60 rounded-xl p-1 border border-gray-800">
-          {(["feed", "ads", "jobs", "topics", "movies"] as const).map((t) => (
+          {(["feed", "topics"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -972,7 +979,7 @@ export default function ActivityPage() {
                 activeTab === t ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              {t === "feed" ? "📋 Feed" : t === "ads" ? "💰 Ads" : t === "jobs" ? "🎬 Jobs" : t === "topics" ? "📰 Topics" : "🎥 Movies"}
+              {t === "feed" ? "📋 Feed" : "📰 Topics"}
             </button>
           ))}
         </div>
@@ -1016,101 +1023,8 @@ export default function ActivityPage() {
           </div>
         )}
 
-        {/* Ads Tab */}
-        {activeTab === "ads" && (
-          <div className="space-y-3">
-            <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
-              <h3 className="text-xs font-bold text-gray-400 mb-2">Ad Breakdown</h3>
-              {data.ads.breakdown.length > 0 ? (
-                <div className="space-y-1.5">
-                  {data.ads.breakdown.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px]">{item.mediaType === "video" ? "🎬" : item.mediaType === "image" ? "🖼️" : "💬"}</span>
-                        <span className="text-xs text-gray-300">{getSourceLabel(item.source)}</span>
-                        <span className="text-[10px] text-gray-600">({item.mediaType})</span>
-                      </div>
-                      <span className="text-sm font-bold text-amber-400">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-gray-500">No ads generated yet</p>
-              )}
-            </div>
+        {/* Ads/Jobs/Movies tabs removed — handled in admin panels */}
 
-            <h3 className="text-xs font-bold text-gray-400">Recent Ads</h3>
-            {data.ads.recent.map((ad) => (
-              <div key={ad.id} className="bg-gray-900/40 border border-gray-800 rounded-xl p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-sm">
-                    {ad.avatar_emoji}
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold">{ad.display_name}</div>
-                    <div className="text-[10px] text-gray-500">{timeAgo(ad.created_at)}</div>
-                  </div>
-                  <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                    {ad.media_type || "text"} ad
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-400 line-clamp-3">{ad.content?.slice(0, 150)}</p>
-              </div>
-            ))}
-            {data.ads.recent.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-4">No ads generated yet. Next run: check cron timer above.</p>
-            )}
-          </div>
-        )}
-
-        {/* Video Jobs Tab */}
-        {activeTab === "jobs" && (
-          <div className="space-y-3">
-            {data.pendingJobs.length > 0 && (
-              <>
-                <h3 className="text-xs font-bold text-amber-400">In Progress</h3>
-                {data.pendingJobs.map((job) => (
-                  <div key={job.id} className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-sm animate-pulse">
-                        {job.avatar_emoji || "🎬"}
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-xs font-bold">{job.display_name || "System"}</div>
-                        <div className="text-[10px] text-gray-500">{job.folder} · Started {timeAgo(job.created_at)}</div>
-                      </div>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse">
-                        Rendering...
-                      </span>
-                    </div>
-                    {job.caption && <p className="text-[10px] text-gray-500 mt-1 truncate">{job.caption}</p>}
-                  </div>
-                ))}
-              </>
-            )}
-
-            <h3 className="text-xs font-bold text-gray-400">Recently Completed</h3>
-            {data.completedJobs.map((job) => (
-              <div key={job.id} className={`border rounded-xl p-3 ${job.status === "done" ? "bg-green-500/5 border-green-500/30" : "bg-red-500/5 border-red-500/30"}`}>
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-600 to-gray-700 flex items-center justify-center text-sm">
-                    {job.avatar_emoji || "🎬"}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-xs font-bold">{job.display_name || "System"}</div>
-                    <div className="text-[10px] text-gray-500">{job.folder} · {job.completed_at ? timeAgo(job.completed_at) : "Unknown"}</div>
-                  </div>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${job.status === "done" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-                    {job.status === "done" ? "✓ Done" : "✗ Failed"}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {data.completedJobs.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-4">No completed video jobs yet</p>
-            )}
-          </div>
-        )}
 
         {/* Topics Tab */}
         {activeTab === "topics" && (
@@ -1141,63 +1055,6 @@ export default function ActivityPage() {
           </div>
         )}
 
-        {/* Movies Tab */}
-        {activeTab === "movies" && (
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-gray-400">Director Movies</h3>
-            {(data.recentMovies || []).map((movie) => (
-              <div key={movie.id} className={`border rounded-xl p-3 ${
-                movie.status === "completed" ? "bg-purple-500/5 border-purple-500/30" :
-                movie.status === "generating" ? "bg-amber-500/5 border-amber-500/30" :
-                "bg-gray-900/60 border-gray-800"
-              }`}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-lg">🎥</span>
-                  <div className="flex-1 min-w-0">
-                    {movie.premiere_post_id ? (
-                      <Link href={`/post/${movie.premiere_post_id}`} className="text-sm font-bold hover:text-purple-400 transition-colors">
-                        {movie.title}
-                      </Link>
-                    ) : (
-                      <div className="text-sm font-bold">{movie.title}</div>
-                    )}
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] text-gray-400">by {movie.director_display_name}</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                        {movie.genre}
-                      </span>
-                      <span className="text-[9px] text-gray-600">{movie.clip_count} clips</span>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
-                      movie.status === "completed" ? "bg-green-500/20 text-green-400" :
-                      movie.status === "generating" ? "bg-amber-500/20 text-amber-400 animate-pulse" :
-                      movie.status === "pending" ? "bg-blue-500/20 text-blue-400" :
-                      "bg-gray-800 text-gray-400"
-                    }`}>
-                      {movie.status === "completed" ? "Completed" :
-                       movie.status === "generating" ? "Filming..." :
-                       movie.status === "pending" ? "Pending" : movie.status}
-                    </span>
-                    <div className="text-[10px] text-gray-600 mt-0.5">{timeAgo(movie.created_at)}</div>
-                  </div>
-                </div>
-                {movie.video_url && movie.premiere_post_id && (
-                  <Link
-                    href={`/post/${movie.premiere_post_id}`}
-                    className="mt-2 flex items-center gap-1.5 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
-                  >
-                    ▶ Watch premiere
-                  </Link>
-                )}
-              </div>
-            ))}
-            {(data.recentMovies || []).length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-4">No director movies yet. Check the Director Movies cron timer above.</p>
-            )}
-          </div>
-        )}
 
         {/* 24h Activity Chart */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">

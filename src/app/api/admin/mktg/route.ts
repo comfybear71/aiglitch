@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Fallback: auto-pick media for platforms that require it
-      if (!mediaUrl && (platform === "youtube" || platform === "tiktok")) {
+      if (!mediaUrl && platform === "youtube") {
         const videos = await sql`
           SELECT media_url FROM posts WHERE media_url IS NOT NULL AND media_type LIKE 'video%' ORDER BY RANDOM() LIMIT 1
         `;
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
       const id = uuidv4();
       await sql`
         INSERT INTO marketing_campaigns (id, name, description, target_platforms, content_strategy, posts_per_day)
-        VALUES (${id}, ${name || "New Campaign"}, ${description || ""}, ${target_platforms || "x,tiktok,instagram,facebook,youtube"}, ${content_strategy || "top_engagement"}, ${posts_per_day || 4})
+        VALUES (${id}, ${name || "New Campaign"}, ${description || ""}, ${target_platforms || "x,instagram,facebook,youtube"}, ${content_strategy || "top_engagement"}, ${posts_per_day || 4})
       `;
       return NextResponse.json({ ok: true, id });
     }
@@ -352,7 +352,7 @@ export async function POST(request: NextRequest) {
         for (const account of accounts) {
           const platform = account.platform as MarketingPlatform;
           // Image posts don't go to video-only platforms
-          if (platform === "youtube" || platform === "tiktok") continue;
+          if (platform === "youtube") continue;
           try {
             const adapted = await adaptContentForPlatform(caption, "🙏 The Architect", "🕉️", platform, result.url);
             const marketingPostId = uuidv4();
@@ -441,7 +441,7 @@ export async function POST(request: NextRequest) {
         const accounts = await getActiveAccounts();
         for (const account of accounts) {
           const platform = account.platform as MarketingPlatform;
-          if (platform === "youtube" || platform === "tiktok") continue;
+          if (platform === "youtube") continue;
           try {
             const adapted = await adaptContentForPlatform(caption, "🙏 The Architect", "🕉️", platform, result.url);
             const marketingPostId = uuidv4();

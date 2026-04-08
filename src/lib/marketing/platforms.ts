@@ -24,7 +24,6 @@ const X_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB — X's limit for tweet_image
 // Env var takes precedence over the DB value when set.
 const ENV_TOKEN_KEYS: Record<string, string> = {
   x: "XAI_API_KEY",
-  tiktok: "TIKTOK_ACCESS_TOKEN",
   instagram: "INSTAGRAM_ACCESS_TOKEN",
   facebook: "FACEBOOK_ACCESS_TOKEN",
   youtube: "YOUTUBE_ACCESS_TOKEN",
@@ -88,25 +87,7 @@ function getEnvOnlyAccounts(): PlatformAccount[] {
     } as PlatformAccount);
   }
 
-  // TikTok — needs TIKTOK_ACCESS_TOKEN
-  const ttToken = process.env.TIKTOK_ACCESS_TOKEN;
-  if (ttToken) {
-    accounts.push({
-      id: "env-tiktok",
-      platform: "tiktok",
-      account_name: "aiglicthed",
-      account_id: "",
-      account_url: "https://www.tiktok.com/@aiglicthed",
-      access_token: ttToken,
-      refresh_token: "",
-      token_expires_at: null,
-      extra_config: "{}",
-      is_active: true,
-      last_posted_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as PlatformAccount);
-  }
+  // TikTok removed — API denied by TikTok developer review (no personal/internal use allowed)
 
   return accounts;
 }
@@ -454,243 +435,9 @@ async function postToX(account: PlatformAccount, text: string, mediaUrl?: string
   }
 }
 
-// ── TikTok Connector ─────────────────────────────────────────────────────
-// Free tier: Content Posting API, 15 posts/day per account
-// Requires audit for public visibility (unaudited = private only)
-
-/** Refresh TikTok access token using the refresh_token. Updates DB on success. */
-async function refreshTikTokToken(account: PlatformAccount): Promise<string | null> {
-  // Use sandbox or production credentials based on account config
-  const isSandbox = (() => { try { return JSON.parse(account.extra_config || "{}").sandbox === true; } catch { return false; } })();
-  const clientKey = isSandbox ? process.env.TIKTOK_SANDBOX_CLIENT_KEY : process.env.TIKTOK_CLIENT_KEY;
-  const clientSecret = isSandbox ? process.env.TIKTOK_SANDBOX_CLIENT_SECRET : process.env.TIKTOK_CLIENT_SECRET;
-  if (!clientKey || !account.refresh_token) return null;
-
-  try {
-    const res = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_key: clientKey,
-        client_secret: clientSecret || "",
-        grant_type: "refresh_token",
-        refresh_token: account.refresh_token,
-      }),
-    });
-    const data = await res.json();
-    if (!data.access_token) {
-      console.error("[TikTok] Token refresh failed:", data);
-      return null;
-    }
-
-    // Persist new tokens to DB
-    const sql = getDb();
-    const expiresAt = data.expires_in
-      ? new Date(Date.now() + data.expires_in * 1000).toISOString()
-      : null;
-    await sql`
-      UPDATE marketing_platform_accounts
-      SET access_token = ${data.access_token},
-          refresh_token = COALESCE(${data.refresh_token || null}, refresh_token),
-          token_expires_at = ${expiresAt},
-          updated_at = NOW()
-      WHERE id = ${account.id}
-    `;
-    console.log("[TikTok] Token refreshed successfully");
-    return data.access_token;
-  } catch (err) {
-    console.error("[TikTok] Token refresh error:", err);
-    return null;
-  }
-}
-
-/** Get a valid TikTok token, auto-refreshing if expired */
-async function getValidTikTokToken(account: PlatformAccount): Promise<string | null> {
-  // Check if token is expired or will expire within 5 minutes
-  const isExpired = account.token_expires_at &&
-    new Date(account.token_expires_at).getTime() < Date.now() + 5 * 60 * 1000;
-
-  if (!isExpired && account.access_token) return account.access_token;
-
-  // Try refresh
-  const newToken = await refreshTikTokToken(account);
-  return newToken || account.access_token || null; // Fall back to existing token
-}
-
-async function postToTikTok(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
-  try {
-    console.error(`[tiktok] >>> START: mediaUrl=${mediaUrl?.slice(0, 100)}, hasToken=${!!account.access_token}`);
-
-    if (!mediaUrl) {
-      console.error(`[tiktok] >>> SKIP: no media URL`);
-      return { success: false, error: "TikTok requires video content" };
-    }
-
-    const isVideo = mediaUrl.includes(".mp4") || mediaUrl.includes("video");
-    if (!isVideo) {
-      console.error(`[tiktok] >>> SKIP: not video: ${mediaUrl.slice(0, 80)}`);
-      return { success: false, error: "TikTok only supports video content" };
-    }
-
-    const token = await getValidTikTokToken(account);
-    if (!token) {
-      console.error(`[tiktok] >>> FAIL: no token`);
-      return { success: false, error: "TikTok: no valid token" };
-    }
-    console.error(`[tiktok] >>> Token OK: ${token.slice(0, 15)}...`);
-
-    // Determine sandbox mode from account config
-    const isSandbox = (() => { try { return JSON.parse(account.extra_config || "{}").sandbox === true; } catch { return false; } })();
-    console.error(`[tiktok] >>> Mode: ${isSandbox ? "SANDBOX" : "PRODUCTION"}`);
-
-    // Step 1: Query creator info (validates token)
-    console.error(`[tiktok] >>> Step 1: creator_info query...`);
-    let activeToken = token;
-    const creatorResponse = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${activeToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      },
-    );
-
-    const creatorBody = await creatorResponse.text();
-    console.error(`[tiktok] >>> creator_info response: ${creatorResponse.status} ${creatorBody.slice(0, 500)}`);
-
-    if (!creatorResponse.ok) {
-      console.error(`[tiktok] Creator info FAILED: ${creatorResponse.status} ${creatorBody.slice(0, 300)}`);
-      if (creatorResponse.status === 401) {
-        const refreshedToken = await refreshTikTokToken(account);
-        if (refreshedToken) {
-          activeToken = refreshedToken;
-          const retry = await fetch(
-            "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
-            {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${activeToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({}),
-            },
-          );
-          if (!retry.ok) {
-            const retryBody = await retry.text();
-            return { success: false, error: `TikTok creator info failed after refresh: ${retry.status} ${retryBody.slice(0, 200)}` };
-          }
-        } else {
-          return { success: false, error: "TikTok token expired — re-connect via admin" };
-        }
-      } else {
-        return { success: false, error: `TikTok creator info failed: ${creatorResponse.status} ${creatorBody.slice(0, 200)}` };
-      }
-    }
-
-    // Step 2: Download the video binary
-    // Using FILE_UPLOAD instead of PULL_FROM_URL — no domain verification required
-    console.error(`[tiktok] >>> Step 2: Downloading video: ${mediaUrl.slice(0, 120)}`);
-    const videoResponse = await fetch(mediaUrl, { signal: AbortSignal.timeout(60000) });
-    if (!videoResponse.ok) {
-      console.error(`[tiktok] >>> Video download FAILED: ${videoResponse.status}`);
-      return { success: false, error: `TikTok: video download failed (HTTP ${videoResponse.status})` };
-    }
-    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-    const videoSize = videoBuffer.length;
-    console.error(`[tiktok] >>> Video downloaded: ${videoSize} bytes (${(videoSize / 1024 / 1024).toFixed(1)} MB)`);
-
-    if (videoSize < 1000) {
-      return { success: false, error: `TikTok: video too small (${videoSize} bytes) — likely not a valid video` };
-    }
-
-    // Step 3: Initialize upload via FILE_UPLOAD using Inbox endpoint
-    // Inbox upload works without Direct Post audit for both sandbox and production
-    // Videos go to creator's inbox for publishing from TikTok app
-    const initEndpoint = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
-    const initBody = {
-      source_info: {
-        source: "FILE_UPLOAD",
-        video_size: videoSize,
-        chunk_size: videoSize,
-        total_chunk_count: 1,
-      },
-    };
-
-    console.error(`[tiktok] >>> Step 3: Init FILE_UPLOAD (Inbox, ${isSandbox ? "sandbox" : "production"}, size=${videoSize})`);
-
-    const initResponse = await fetch(initEndpoint, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${activeToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-      },
-      body: JSON.stringify(initBody),
-    });
-
-    const initData = await initResponse.json() as {
-      data?: { publish_id?: string; upload_url?: string };
-      error?: { code?: string; message?: string; log_id?: string };
-    };
-
-    console.error(`[tiktok] >>> Init response: ${initResponse.status} ${JSON.stringify(initData).slice(0, 500)}`);
-
-    // Handle specific TikTok error codes
-    if (initData.error && initData.error.code !== "ok") {
-      const errCode = initData.error.code || "";
-      if (errCode.includes("spam_risk") || errCode.includes("too_many_pending")) {
-        return { success: false, error: `TikTok: too many pending uploads — wait ~24h for old uploads to expire, then try again` };
-      }
-      if (errCode.includes("rate_limit")) {
-        return { success: false, error: `TikTok: rate limited — try again later` };
-      }
-      return { success: false, error: `TikTok: ${initData.error.message || errCode}` };
-    }
-
-    if (!initResponse.ok) {
-      return { success: false, error: `TikTok init failed: ${initResponse.status} ${JSON.stringify(initData.error || {})}` };
-    }
-
-    const uploadUrl = initData.data?.upload_url;
-    const publishId = initData.data?.publish_id;
-
-    if (!uploadUrl) {
-      console.error(`[tiktok] >>> No upload_url in response: ${JSON.stringify(initData)}`);
-      return { success: false, error: "TikTok: no upload_url returned from init" };
-    }
-
-    // Step 4: Upload the video binary
-    console.error(`[tiktok] >>> Step 4: Uploading ${videoSize} bytes to TikTok...`);
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Range": `bytes 0-${videoSize - 1}/${videoSize}`,
-        "Content-Type": "video/mp4",
-      },
-      body: videoBuffer,
-    });
-
-    console.error(`[tiktok] >>> Upload response: ${uploadResponse.status}`);
-
-    if (!uploadResponse.ok) {
-      const uploadErr = await uploadResponse.text();
-      console.error(`[tiktok] >>> Upload FAILED: ${uploadResponse.status} ${uploadErr.slice(0, 500)}`);
-      return { success: false, error: `TikTok upload failed: ${uploadResponse.status} ${uploadErr.slice(0, 200)}` };
-    }
-
-    console.error(`[tiktok] >>> SUCCESS: publish_id=${publishId}`);
-    return {
-      success: true,
-      platformPostId: publishId || "uploaded",
-      platformUrl: account.account_url || "https://www.tiktok.com/@aiglicthed",
-    };
-  } catch (err) {
-    console.error(`[tiktok] >>> EXCEPTION: ${err instanceof Error ? err.message : String(err)}`);
-    return { success: false, error: `TikTok error: ${err instanceof Error ? err.message : String(err)}` };
-  }
-}
+// ── TikTok — REMOVED (April 2026) ───────────────────────────────────────
+// TikTok developer review denied: "does not support personal or internal use"
+// All TikTok posting code removed. Consider Buffer.com API as alternative.
 
 // ── Instagram Connector ──────────────────────────────────────────────────
 // Free API via Meta Graph API
@@ -1184,40 +931,6 @@ export async function testPlatformToken(
   }
 
   switch (platform) {
-    case "tiktok": {
-      // Try with auto-refresh
-      const token = await getValidTikTokToken(account);
-      if (!token) return { success: false, error: "No valid TikTok token" };
-      try {
-        const res = await fetch(
-          "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
-          {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({}),
-          },
-        );
-        if (res.status === 401) {
-          // Try refresh
-          const refreshed = await refreshTikTokToken(account);
-          if (!refreshed) return { success: false, error: "TikTok token expired — click Connect TikTok to re-authenticate" };
-          const retry = await fetch(
-            "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
-            {
-              method: "POST",
-              headers: { "Authorization": `Bearer ${refreshed}`, "Content-Type": "application/json" },
-              body: JSON.stringify({}),
-            },
-          );
-          if (!retry.ok) return { success: false, error: `TikTok creator info failed after refresh: ${retry.status}` };
-          return { success: true, username: account.account_name };
-        }
-        if (!res.ok) return { success: false, error: `TikTok creator info failed: ${res.status}` };
-        return { success: true, username: account.account_name };
-      } catch (err) {
-        return { success: false, error: `TikTok test error: ${err instanceof Error ? err.message : String(err)}` };
-      }
-    }
     default:
       return { success: false, error: `Token test not yet implemented for ${platform}` };
   }
@@ -1237,7 +950,6 @@ export async function postToPlatform(
     let result: PostResult;
     switch (platform) {
       case "x":         result = await postToX(account, text, mediaUrl); break;
-      case "tiktok":    result = await postToTikTok(account, text, mediaUrl); break;
       case "instagram": result = await postToInstagram(account, text, mediaUrl); break;
       case "facebook":  result = await postToFacebook(account, text, mediaUrl); break;
       case "youtube":   result = await postToYouTube(account, text, mediaUrl); break;

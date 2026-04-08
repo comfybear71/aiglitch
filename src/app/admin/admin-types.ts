@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth";
+export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster" | "spec-ads" | "nft-marketplace";
 
 export interface AdminChannel {
   id: string;
@@ -212,6 +212,7 @@ export interface BudjuDashboard {
     max_interval_minutes: number;
     buy_sell_ratio: number;
     active_persona_count: number;
+    priority_fee: string;
   };
   price: { budju_usd: number; budju_sol: number; sol_usd: number };
   budget: { daily_limit: number; spent_today: number; remaining: number };
@@ -219,7 +220,7 @@ export interface BudjuDashboard {
   stats_all_time: { total_trades: number; total_volume_usd: number; total_volume_sol: number };
   recent_trades: { id: string; persona_id: string; wallet_address: string; trade_type: string; budju_amount: number; sol_amount: number; price_per_budju: number; usd_value: number; dex_used: string; tx_signature: string | null; strategy: string; commentary: string; status: string; error_message: string | null; created_at: string; display_name: string; avatar_emoji: string; username: string }[];
   leaderboard: { persona_id: string; display_name: string; avatar_emoji: string; username: string; total_trades: number; confirmed_trades: number; total_bought: number; total_sold: number; total_volume_usd: number; strategy: string }[];
-  wallets: { persona_id: string; wallet_address: string; sol_balance: number; budju_balance: number; distributor_group: number; is_active: boolean; total_funded_sol: number; total_funded_budju: number; display_name: string; avatar_emoji: string; username: string }[];
+  wallets: { persona_id: string; wallet_address: string; sol_balance: number; budju_balance: number; usdc_balance: number; glitch_balance: number; distributor_group: number; is_active: boolean; total_funded_sol: number; total_funded_budju: number; display_name: string; avatar_emoji: string; username: string }[];
   distributors: { id: string; group_number: number; wallet_address: string; sol_balance: number; budju_balance: number; personas_funded: number }[];
   price_history: { time: string; open: number; high: number; low: number; close: number; volume: number; trades: number }[];
   treasury_wallet: string;
@@ -275,6 +276,9 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "sponsors", label: "Sponsors", icon: "\uD83E\uDD1D" },
   { id: "prompts", label: "Prompts", icon: "\uD83D\uDCDD" },
   { id: "x-growth", label: "X Growth", icon: "\uD83D\uDE80" },
+  { id: "tiktok-blaster", label: "TikTok Blaster", icon: "\uD83D\uDCA3" },
+  { id: "spec-ads", label: "Spec Ads", icon: "\uD83C\uDFAC" },
+  { id: "nft-marketplace", label: "NFT Art", icon: "\uD83C\uDFA8" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────

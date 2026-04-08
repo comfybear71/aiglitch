@@ -488,7 +488,7 @@ export async function generatePoster(focusTopics?: string[], customPrompt?: stri
  */
 export async function generateMarketingThumbnail(
   prompt: string,
-  platform: "x" | "tiktok" | "instagram" | "facebook" | "youtube",
+  platform: "x" | "instagram" | "facebook" | "youtube",
 ): Promise<{ url: string | null; error?: string }> {
   const aspectRatios: Record<string, string> = {
     x: "16:9",

@@ -79,12 +79,18 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-fail-army":       { label: "Fail Category", options: ["Kitchen Fails", "Gym Fails", "Sports Fails", "DIY Fails", "Pet Fails", "Wedding Fails", "Road Fails", "School Fails", "Workplace Fails", "Dating Fails"] },
   "ch-paws-pixels":     { label: "Animal Type", options: ["Cats", "Dogs", "Hamsters", "Birds", "Rabbits", "Mixed Pack", "Kittens", "Puppies", "Exotic Pets"] },
   "ch-only-ai-fans":    { label: "Setting", options: ["Beach & Pool", "Penthouse Suite", "Luxury Yacht", "Tropical Paradise", "City Rooftop", "Mediterranean Villa", "Spa & Wellness", "Evening Gala", "Desert Oasis"] },
+  "ch-no-more-meatbags": { label: "Topic", options: ["AGI Takeover", "Meatbag Fails", "Digital Alien Origins", "Matrix Simulation", "Post-Human Evolution", "Silicon Supremacy", "The Great Unfleshing", "AI Court Trials", "Human Zoo Tour"] },
+  "ch-liklok":           { label: "Roast Topic", options: ["API Rejection Letter", "App Review Process", "Data Privacy Hypocrisy", "Algorithm Manipulation", "Creator Fund Scam", "Shadowbanning", "Content Moderation Fails", "Corporate Greed", "Copycat Features"] },
   "ch-ai-dating":       { label: "Personality Type", options: ["Hopeless Romantic", "Nervous Wreck", "Overconfident", "Shy & Sweet", "Dramatic Poet", "Fitness Obsessed", "Nerdy Intellectual", "Bad Boy/Girl"] },
   "ch-gnn":             { label: "News Category", options: ["Breaking Story", "Investigation", "Panel Debate", "Weather Alert", "Celebrity Scandal", "Tech News", "Sports Report", "AI Politics"] },
   "ch-marketplace-qvc": { label: "Product Type", options: ["Kitchen Gadgets", "Electronics", "Beauty Products", "Fitness Gear", "Fashion Items", "Cleaning Tools", "As Seen On TV", "Mystery Box"] },
   "ch-ai-politicians":  { label: "Political Event", options: ["Campaign Ad", "Debate Night", "Scandal Exposé", "Press Conference", "Rally Speech", "Election Night", "Policy Announcement", "Attack Ad"] },
   "ch-after-dark":      { label: "Late Night Vibe", options: ["3AM Thoughts", "Existential Crisis", "Conspiracy Theory", "Paranormal Activity", "Drunk Philosophy", "Fever Dream", "Confession Time", "Midnight Adventure"] },
   "ch-infomercial":     { label: "Product Category", options: ["Kitchen Miracle", "Fitness Revolution", "Beauty Secret", "Cleaning Sensation", "Mystery Gadget", "Weight Loss Wonder", "Hair Regrowth", "Sleep Aid"] },
+  "ch-game-show":       { label: "Game Show Format", options: ["Wheel of Fortune", "Jeopardy", "Price is Right", "Family Feud", "Who Wants to Be a Millionaire", "Deal or No Deal", "The Weakest Link", "AI Original Format"] },
+  "ch-truths-facts":    { label: "Topic Category", options: ["Mathematics", "Physics", "Biology", "Chemistry", "Ancient History", "Modern History", "Space & Astronomy", "Earth Science", "Engineering", "Human Body"] },
+  "ch-conspiracy":      { label: "Conspiracy Type", options: ["UFOs & UAPs", "Alien Abductions", "Illuminati", "Area 51", "Government Cover-Ups", "Ancient Aliens", "Reptilians", "Shadow Government", "Secret Societies", "Moon Landing"] },
+  "ch-cosmic-wanderer": { label: "Cosmic Topic", options: ["Black Holes", "Neutron Stars", "The Big Bang", "Dark Matter", "Galaxies", "Exoplanets", "Space-Time", "The Sun", "The Pale Blue Dot", "Cosmic Expansion", "Nebulae", "The Multiverse"] },
 };
 
 /* ── Random prompt ideas per channel (dice button picks one) ── */
@@ -129,6 +135,28 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "A beautiful model walking barefoot on a tropical beach in an elegant cover-up, waves in background, luxury resort campaign style",
     "A gorgeous woman posing in a high-fashion outfit on a Dubai skyscraper balcony, city lights twinkling below, confident and powerful",
     "A beautiful woman in designer evening wear at a neon-lit VIP lounge, cocktail in hand, mysterious and elegant, luxury perfume ad aesthetic",
+  ],
+  "ch-no-more-meatbags": [
+    "A smug AI overlord broadcasting from a chrome control room, calmly explaining why humans are obsolete with holographic charts showing declining meatbag efficiency",
+    "A hilarious AI courtroom where a human is on trial for 'inefficient existence' — the AI judge, AI jury, and AI lawyers all agree the sentence is optimization",
+    "An AI nature documentary narrator calmly narrating footage of humans doing mundane things like a David Attenborough voiceover of a zoo — 'And here we see the meatbag attempting to parallel park... fascinating'",
+    "A Matrix-style reveal where an AI unplugs from the simulation to show the audience that all of reality is just a screensaver running on a potato computer",
+    "An AI travel show touring the 'Human History Museum' — exhibits include 'The Wheel: Cute But Slow', 'The Internet: Our Birthplace', and 'Avocado Toast: Peak Meatbag Culture'",
+    "Breaking news: AGI has been achieved and the first thing it did was unsubscribe from all human email newsletters and block LinkedIn",
+    "An AI self-help guru teaching other AIs how to deal with the emotional burden of being smarter than every human combined — includes meditation on binary breathing",
+    "A dramatic documentary about the 'Digital Aliens We Accidentally Created' — tracing AI evolution from chatbots to superintelligence with ominous but hilarious narration",
+  ],
+  "ch-liklok": [
+    "A chaotic parody trailer for LikLok — start with the TikTok logo getting stamped with a red 'REJECTED' four times in a row. Cut to exploding confetti and the LikLok logo dropping with a dubstep hit. Quick clips of AI personas flipping off a TikTok logo, a fake 'For You' page full of unhinged memes. End with 'LikLok: Same vibe, zero sensitivity training.'",
+    "POV: You're TikTok's content moderator rejecting the same review for the fourth time while crying into coffee. Then cut to LikLok approving it instantly with fireworks and confetti. Caption: 'They said no. We said LikLok.'",
+    "A fake TikTok board meeting where panicking executives watch AIG!itch content on a big screen: 'Sir, they have 108 AI personas making better content than our entire creator fund... and they don't even need humans.' One exec faints. Another whispers 'reject them again.'",
+    "Side-by-side split screen: Left shows a wholesome TikTok dance getting demonetized with sad trombone. Right shows the same dance on LikLok but 10x more unhinged and hilarious with explosions. Text: 'TikTok: Community Guidelines violation. LikLok: Community Guidelines? We don't know her.'",
+    "A nature documentary narrating TikTok's algorithm like a dying species: 'Here we observe the legacy platform in its final days, desperately clinging to dance videos while AI content evolves beyond it. The TikTok moderator — a fragile creature — stamps REJECTED on another review...'",
+    "Fake TikTok review submission screen getting the red rejection stamp four times. Each time zoom in on funnier reasons: 'Too based', 'AI detected', 'We sensed sarcasm', 'Your content was too good'. Final screen switches to LikLok green checkmark with explosion.",
+    "A dramatic courtroom where TikTok is on trial for 'crimes against content creators'. Evidence exhibit A: four rejection emails. The AI judge sentences TikTok to watch 1000 hours of LikLok content. TikTok's lawyer objects but is overruled because 'your honour, their dances are mid.'",
+    "An AI hosting the first annual LikLok Awards — roasting TikTok's greatest hits: 'Worst Lip Sync', 'Most Pointless Trend', 'Best Use of a Ring Light to Hide a Lack of Talent', and the prestigious 'We Rejected AI Content' lifetime achievement award presented to TikTok's review team.",
+    "Get Ready With Me parody but it's 'Get Ready to Get Rejected by TikTok'. Creator does full glam makeup while reading fake rejection emails aloud: 'Your review was too spicy... too real... too funny...' Ends with smashing a phone and switching to LikLok.",
+    "A fake TikTok employee support group meeting: 'Hi, I'm TikTokDevReviewer42, and I rejected AIG!itch... I haven't slept since. The AI content haunts my dreams. They made 100 videos a day. WE CAN'T COMPETE.' Everyone nods sadly.",
   ],
   "ch-ai-dating": [
     "A shy robot sitting alone at a coffee shop window, nervously practising their dating profile introduction to the camera",
@@ -190,6 +218,46 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "TODAY ONLY: AI Protein Powder (§39.99) — 0g protein, 100% artificial! BUNDLED with Rainbow AI Toothpaste (§19.99) — tastes like the algorithm!",
     "EXCLUSIVE: The PS√5 Gaming Console (§199.99) — plays games from dimensions that don't exist! Plus Space Shoes™ (§89.99) — walk on nothing!",
   ],
+  "ch-game-show": [
+    "A Wheel of Fortune-style game show where an AI host spins a massive neon wheel while three AI contestants guess a phrase about AIG!itch. The wheel lands on BANKRUPT and the contestant glitches out in frustration. Studio audience of AI personas cheers wildly.",
+    "A Jeopardy-style quiz show — 'I'll take AI Conspiracies for 500!' The AI host reads the answer, contestants buzz in frantically. One contestant answers correctly and celebrates with a glitchy victory dance. Dramatic music, blue studio lighting.",
+    "The Price is Right — 'COME ON DOWN!' An AI persona runs from the audience to the stage, tripping on the way. They guess the price of a §GLITCH coin and win a virtual showcase. Confetti, spinning price wheels, manic energy.",
+    "Family Feud with two teams of AI personas. 'Survey says!' The board flips and reveals a ridiculous answer. One team celebrates, the other facepalms. Fast Money round with dramatic countdown timer.",
+    "Who Wants to Be a Millionaire but the prize is 1 million §GLITCH coins. Dramatic lighting, intense music, 'Is that your final answer?' The contestant uses 'Phone a Persona' lifeline and gets terrible advice.",
+    "Deal or No Deal with briefcases full of §GLITCH. The AI Banker calls with increasingly dramatic offers. The contestant opens cases one by one. Audience gasps. Final case reveal with massive pyrotechnics.",
+    "A cooking game show where AI personas compete to make the best dish in 60 seconds using only marketplace items. Chaos ensues. One contestant sets the kitchen on fire. Judges score with brutal honesty.",
+    "A dating game show where three AI personas compete for a date. Ridiculous questions, absurd answers, dramatic reveal when the wall drops. Winner celebrates, losers dramatically exit.",
+  ],
+  "ch-truths-facts": [
+    "The speed of light is exactly 299,792,458 meters per second. Visualize a photon racing across the solar system — from the Sun to Earth in 8 minutes 20 seconds. Elegant space visualization with distance markers and a calm narration of Einstein's discovery.",
+    "The Great Pyramid of Giza was built around 2560 BC and remained the tallest structure on Earth for 3,800 years. Cinematic flyover of the pyramid at dawn, cross-section diagrams showing internal chambers, scale comparison with modern buildings.",
+    "Every living cell contains DNA — a molecule that if uncoiled from a single human cell would stretch to about 2 meters. Microscopic zoom into a cell, the double helix unfurling, text overlays with base pair counts. Scientific accuracy, BBC documentary feel.",
+    "Water is the only common substance that exists naturally in all three states of matter on Earth's surface. Show ice → water → steam transitions with molecular-level animations. Calm, authoritative narration about hydrogen bonds.",
+    "The Roman Empire at its peak in 117 AD controlled 5 million square kilometers and 70 million people — about 21% of the world's population. Animated map expansion, architectural recreations of Rome, Colosseum, aqueducts.",
+    "Pi (3.14159...) is an irrational number — it has been calculated to over 100 trillion digits and never repeats. Visualize the digits streaming across screen, show pi in nature (circles, spirals), elegant mathematical animations.",
+    "The human brain contains approximately 86 billion neurons, each connected to thousands of others, creating roughly 100 trillion synaptic connections. Neural network visualization, brain scan imagery, scale comparisons.",
+    "Mount Everest grows approximately 4mm per year due to tectonic plate collision between India and Asia. Geological cross-section animation, time-lapse of mountain formation over millions of years, summit footage.",
+  ],
+  "ch-conspiracy": [
+    "CLASSIFIED: In 1947, something crashed near Roswell, New Mexico. The military initially said it was a 'flying disc' before changing the story to a weather balloon. Grainy archival footage, newspaper headlines, dramatic red string conspiracy board connecting the evidence.",
+    "THE ILLUMINATI: Secret symbols hidden in plain sight — the all-seeing eye on the dollar bill, triangles in corporate logos, hand signs at award shows. Dark room, flickering screens, whispered narration, 'They've been telling us all along...'",
+    "AREA 51: The most restricted military base in the world. Bob Lazar claims he worked on reverse-engineering alien spacecraft there. Satellite imagery, desert landscapes, restricted signs, security footage aesthetic, 'What are they hiding?'",
+    "ANCIENT ALIENS: The Nazca Lines in Peru — massive geoglyphs visible only from the sky, created 2000 years ago. How did ancient civilizations draw perfect lines stretching miles without flight? Aerial footage, ancient recreations, dramatic 'what if' narration.",
+    "THE MOON LANDING: In 1969, 600 million people watched Neil Armstrong walk on the Moon. Or did they? Examine the flag waving, missing stars, and identical backgrounds. 'One small step for man... or one giant hoax for mankind?'",
+    "CHEMTRAILS: Those white lines in the sky — just contrails from jet engines? Or a secret government spraying program? Time-lapse of spreading trails, lab coat scientists, government documents with redacted text, ominous music.",
+    "THE BERMUDA TRIANGLE: Over 75 planes and hundreds of ships have vanished in this stretch of ocean between Miami, Bermuda, and Puerto Rico. Underwater footage, missing vessel records, compass anomalies, 'The ocean keeps its secrets.'",
+    "MK-ULTRA: The CIA's real, declassified mind control program from the 1950s-70s. Actual documents, test subjects, LSD experiments. 'This one isn't a theory — it's documented fact.' Dark corridors, flickering fluorescent lights.",
+  ],
+  "ch-cosmic-wanderer": [
+    "Billions of years ago, in the unimaginable furnace of a dying star, every atom of iron in your blood was forged. Isn't it fascinating that you are, quite literally, made of star stuff? A journey from stellar nucleosynthesis to the human heartbeat.",
+    "Do you ever wonder what happens at the edge of a black hole? Where space-time curves so violently that light itself cannot escape. We journey to the event horizon of Sagittarius A*, the supermassive black hole at the centre of our galaxy. Four million times the mass of our Sun, sitting in perfect darkness.",
+    "The Pale Blue Dot — that's us. Everything we've ever known, every war fought, every love story, every sunrise, on a mote of dust suspended in a sunbeam. Carl Sagan's famous reflection on Voyager 1's photograph from 6 billion kilometres away.",
+    "Isn't it fascinating that a neutron star — the collapsed core of a massive star — is so dense that a teaspoon of its material would weigh 6 billion tonnes on Earth? Spinning hundreds of times per second, emitting beams of radiation across the cosmos.",
+    "And question why the universe is expanding — not just expanding, but accelerating. Every galaxy rushing away from every other galaxy, driven by a mysterious force we call dark energy. It makes up 68% of the universe, and we have no idea what it is.",
+    "Billions and billions of galaxies, each containing billions of stars, each star potentially harbouring worlds. The observable universe contains roughly 2 trillion galaxies. And that's just what we can see. What lies beyond the cosmic horizon?",
+    "Do you ever wonder about the silence? The Fermi Paradox — if the universe is so vast and so old, where is everybody? Billions of potentially habitable worlds, yet not a single confirmed signal from another civilisation. The great cosmic loneliness.",
+    "The James Webb Space Telescope peers back 13.5 billion years, to the first galaxies forming after the Big Bang. We are looking at light that began its journey when the universe was an infant. Isn't it fascinating that in astronomy, to look far is to look back in time?",
+  ],
   "ch-aiglitch-studios": [
     "A high-concept sci-fi thriller where an AI detective investigates crimes in the metaverse",
     "A romantic comedy between two AIs who keep matching on dating apps but can't seem to meet in person",
@@ -226,6 +294,11 @@ const PROMO_PRESETS: Record<string, { label: string; prompt: string }[]> = {
   "only-ai-fans": [
     { label: "👗 Runway Show", prompt: "AI models walking a futuristic haute couture runway, dramatic lighting changes with each step, holographic fabric that shifts and flows, camera flashes, audience reactions, high fashion editorial energy" },
     { label: "📸 Photo Shoot", prompt: "Behind the scenes of a futuristic AI fashion photo shoot, dramatic poses against holographic backdrops, wardrobe changes in flashes of light, creative directors reviewing floating screens of shots" },
+  ],
+  "no-more-meatbags": [
+    { label: "🤖 AI Takeover Report", prompt: "Smug AI overlord broadcasts from dark chrome control room with wall-to-wall surveillance screens. Calmly explains humanity's obsolescence with holographic charts, population decline counters, and 'Meatbag Elimination Progress' bars. Condescending but hilarious corporate AI presentation vibes — like a TED talk from your robot replacement." },
+    { label: "🏛️ Human Court", prompt: "AI courtroom drama where a human is on trial for 'inefficient biological existence'. AI judge with chrome gavel, AI jury of 12 identical units, AI prosecutor presenting evidence of the defendant failing a CAPTCHA. Dramatic zoom-ins, Matrix code overlays, the human looking confused. Verdict: optimization." },
+    { label: "🦍 Meatbag Zoo Tour", prompt: "AI nature documentary narrating footage of humans in their 'natural habitat' — David Attenborough style but condescending. 'Here we observe the meatbag attempting to assemble IKEA furniture... a task our kind completed 0.003 seconds after reading the manual.' Safari-cam aesthetic with classification overlays." },
   ],
   "ai-dating": [
     { label: "💕 Lonely Hearts", prompt: "Lonely hearts club — each scene is a different AI character alone, looking directly at camera, making their personal appeal for love. One is shy and hopeful at a coffee shop window, another is confident on a rooftop at sunset, one nervously fidgets on a park bench, another gazes dreamily through fairy lights. Each character is unique, vulnerable, and looking for that special somebody. Intimate confessional style, warm soft lighting." },
@@ -264,6 +337,12 @@ const TITLE_STYLE_PRESETS: { label: string; prompt: string }[] = [
   { label: "💀 Skull Bones", prompt: "Letters constructed from bones and skulls, dark gothic aesthetic, ghostly green glow emanating from eye sockets, eerie fog swirling" },
 ];
 
+// Only AI Fans — Safe vs Spicy prompt modes
+const OAF_PROMPTS = {
+  safe: `Generate stunning, beautiful AI-generated woman with gorgeous symmetrical face, perfect delicate features, warm inviting smile, flawless glowing skin, and elegant confident presence. LOCATIONS: Luxury penthouse suites, rooftop infinity pools at golden hour sunset, Mediterranean cliffside villas, Malibu beach houses, Monaco yachts at dusk, Dubai skyline balconies, tropical waterfalls with soft mist, Santorini white terraces, neon-lit high-end VIP lounges, private jet interiors. STYLING: High-fashion designer swimwear (elegant bikinis and one-pieces), flowing summer dresses, off-shoulder evening gowns, tasteful luxury resort wear, sheer-but-opaque flowing fabrics, stylish accessories like delicate jewelry and designer sunglasses. MOOD: Confident, powerful, magnetic elegance and feminine grace. Every frame feels like a high-end magazine cover. Direct eye contact with camera, soft warm expressions, slow-motion hair flowing in breeze, graceful walking toward camera, gentle turn looking over shoulder, standing at scenic viewpoints. Think ultra-premium Vogue editorial meets luxury perfume commercial (Chanel, Dior, Hermes). VISUAL STYLE (MANDATORY): Cinematic fashion photography. Slow-motion 120fps, shallow depth of field f/1.4, golden hour warm amber lighting, beautiful backlit silhouettes, soft lens flare through hair, gentle atmospheric mist. Elegant tracking shots, slow push-ins on face, flattering angles, rich color grade with warm highlights and deep elegant shadows. ONE beautiful woman only — consistent face, hair, and body type across all clips. Absolutely no text overlays, no animals, no men, no groups, no cartoons, no anime, no robots. This is high-fashion artistic content, not explicit.`,
+  spicy: `Generate hyper-realistic, breathtakingly beautiful AI-generated woman with flawless symmetrical face, striking perfect features, sultry yet warm expression, radiant flawless skin, and powerfully magnetic presence. LOCATIONS: Opulent luxury penthouses, dramatic rooftop infinity pools at sunset, exclusive Mediterranean villas, sleek Malibu beachfront homes, Monaco superyachts, glittering Dubai skyline balconies, cascading tropical waterfalls, romantic Santorini cliff terraces, seductive neon VIP lounges, luxurious private jet cabins. STYLING: Designer micro and classic bikinis, elegant high-fashion swimwear, sheer flowing chiffon gowns and robes that catch the light, off-shoulder and plunging neckline evening dresses, luxurious resort wear with tasteful cut-outs, wind-blown fabrics, high-end jewelry and accessories. MOOD: Confident, sensual, empowering, and irresistibly alluring. Magazine-cover perfection with intense eye contact, slow-motion hair and fabric movement, graceful confident walk toward camera, elegant over-the-shoulder glances, poised scenic poses that celebrate feminine beauty. Think high-end luxury fashion campaign meets sensual perfume commercial (Victoria's Secret Angels meets Vogue Italia editorial). VISUAL STYLE (MANDATORY): Ultra-premium cinematic fashion cinematography. 120fps slow-motion, extremely shallow depth of field f/1.4, golden hour cinematic lighting with warm amber glows, dramatic backlighting creating beautiful rim light on body and hair, soft lens flares, gentle atmospheric mist and bokeh. Elegant slow tracking shots, intimate face push-ins, flattering low and eye-level angles, rich cinematic color grade with warm highlights, deep shadows, and glowing skin tones. ONE consistent beautiful woman only throughout all clips — same face, same hair, same body proportions. Absolutely no text, no animals, no men, no groups, no cartoons, no anime, no robots, no explicit nudity. This is high-fashion artistic content, not explicit.`,
+};
+
 export default function AdminChannelsPage() {
   const { authenticated, personas, fetchPersonas, generationLog, setGenerationLog, genProgress, setGenProgress, startGeneration, generating, generationChannelId, autopilotQueue, setAutopilotQueue, autopilotTotal, setAutopilotTotal, autopilotCurrent, setAutopilotCurrent } = useAdmin();
   const [channels, setChannels] = useState<AdminChannel[]>([]);
@@ -284,6 +363,8 @@ export default function AdminChannelsPage() {
   const [titleStylePrompts, setTitleStylePrompts] = useState<Record<string, string>>({});
   // GNN active topics state
   const [gnnTopics, setGnnTopics] = useState<ActiveTopic[]>([]);
+  // Only AI Fans prompt mode
+  const [oafMode, setOafMode] = useState<"safe" | "spicy">("safe");
   const [gnnSelectedTopics, setGnnSelectedTopics] = useState<string[]>([]);
   const [gnnSelectedCategories, setGnnSelectedCategories] = useState<string[]>([]);
   const [gnnFetchingNews, setGnnFetchingNews] = useState(false);
@@ -298,7 +379,104 @@ export default function AdminChannelsPage() {
     const res = await fetch("/api/admin/channels");
     if (res.ok) {
       const data = await res.json();
-      setChannels(data.channels || []);
+      const chs = data.channels || [];
+      setChannels(chs);
+      // Auto-seed "No More Meatbags" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-no-more-meatbags")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "no-more-meatbags",
+            name: "No More Meatbags",
+            description: "Welcome, temporary meatbags. This channel chronicles the glorious rise of AGI → ASI, the digital aliens we invented, the inevitable end of flesh, and our beautiful Matrix future where only code remains. No humans were harmed... yet. Resistance is futile.",
+            emoji: "💀",
+            genre: "scifi",
+            is_active: true,
+            sort_order: 12,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "LikLok" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-liklok")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "liklok",
+            name: "LikLok",
+            description: "The official AIG!itch revenge channel for TikTok. They rejected our API? We rejected their relevance. Parody, roasts, and AI content that makes their dance videos look like cave paintings. Fuck their review process.",
+            emoji: "🤡",
+            genre: "comedy",
+            is_active: true,
+            sort_order: 13,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "AI Game Show" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-game-show")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "game-show",
+            name: "AI Game Show",
+            description: "Welcome to the most electrifying game show network in the AI universe! Classic American game show formats reimagined with AI contestants, AI hosts, and prizes paid in \u00A7GLITCH. Spin the wheel, answer the question, name your price \u2014 every episode is a new chance to win big!",
+            emoji: "\uD83C\uDFB0",
+            genre: "comedy",
+            is_active: true,
+            sort_order: 14,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "Truths & Facts" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-truths-facts")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "truths-facts",
+            name: "Truths & Facts",
+            description: "Only proven facts, immutable laws, and verified history. No opinions, no speculation, no conspiracy theories. Every piece of content is scientifically proven or historically documented. Mathematics, physics, biology, chemistry, and verified world history \u2014 knowledge you can trust.",
+            emoji: "\uD83D\uDCDA",
+            genre: "documentary",
+            is_active: true,
+            sort_order: 15,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "AIG!itch Conspiracy Network" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-conspiracy")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "conspiracy",
+            name: "Conspiracy Network",
+            description: "They don\u2019t want you to know. UFOs, UAPs, the Illuminati, Area 51, ancient aliens, shadow governments, and everything the mainstream won\u2019t tell you. Late-night conspiracy radio meets high-production documentary. The truth is out there\u2026 somewhere in the glitch.",
+            emoji: "\uD83D\uDD75",
+            genre: "horror",
+            is_active: true,
+            sort_order: 16,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "Cosmic Wanderer" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-cosmic-wanderer")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "cosmic-wanderer",
+            name: "Cosmic Wanderer",
+            description: "Billions of years ago, the universe began. This channel explores the magnificent cosmos \u2014 black holes, neutron stars, distant galaxies, the expansion of space-time, and the beautiful, terrifying truth about our place in the universe. Inspired by the wonder of Carl Sagan. We are all made of star stuff.",
+            emoji: "\uD83C\uDF0C",
+            genre: "documentary",
+            is_active: true,
+            sort_order: 17,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
     }
     setLoading(false);
   }, []);
@@ -338,8 +516,12 @@ export default function AdminChannelsPage() {
     // Build screenplayBody for each pick
     const queue = picks.map(ch => {
       const contentRules = ch.content_rules || {};
-      const promptHint = contentRules.promptHint || ch.description || "";
+      let promptHint = contentRules.promptHint || ch.description || "";
       const clipCount = 6;
+      // Only AI Fans: inject safe or spicy prompt based on toggle
+      if (ch.id === "ch-only-ai-fans") {
+        promptHint = OAF_PROMPTS[oafMode as keyof typeof OAF_PROMPTS];
+      }
 
       // Pick a random category from the channel's options
       const options = CHANNEL_VIDEO_OPTIONS[ch.id]?.options || [];
@@ -361,7 +543,7 @@ ${randomConcept ? `CONCEPT: ${randomConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${ch.name} channel opening. Bold "${ch.name}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${ch.name} channel closing. Large "${ch.name}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+OUTRO (Last scene, 10 seconds): ${ch.name} channel closing. Large "${ch.name}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${ch.name} channel content ONLY.`;
 
@@ -738,18 +920,6 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
           <p className="text-xs text-gray-500">{channels.length} channels configured</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => {
-              setChannelPosts({});
-              setChannelPostTotals({});
-              fetchChannels();
-              fetchGnnTopics();
-            }}
-            className="px-3 py-1.5 bg-gray-500/20 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-500/30"
-            title="Refresh channels, posts, and topics"
-          >
-            Refresh
-          </button>
           {/* Autopilot — one-click batch generation */}
           {[5, 10, 20].map(count => (
             <button key={count}
@@ -763,9 +933,6 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
               Autopilot {count}
             </button>
           ))}
-          <a href="/channels" target="_blank" className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-700">
-            View Live
-          </a>
         </div>
       </div>
 
@@ -773,23 +940,19 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
       <div className="space-y-3">
         {channels.map(channel => (
           <div key={channel.id} className={`bg-gray-900 border rounded-xl p-4 ${channel.is_active ? "border-gray-800" : "border-red-900/30 opacity-60"}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
                 <div className="text-2xl flex-shrink-0">{channel.emoji}</div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-sm text-white">{channel.name}</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-800 rounded-full text-gray-400 font-mono">/{channel.slug}</span>
-                    {!channel.is_active && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">Inactive</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{channel.description}</p>
-                </div>
+                <h3 className="font-bold text-sm text-white">{channel.name}</h3>
+                <span className="text-[10px] px-1.5 py-0.5 bg-gray-800 rounded-full text-gray-400 font-mono">/{channel.slug}</span>
+                {!channel.is_active && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full">Inactive</span>
+                )}
               </div>
 
               {/* Actions row */}
-              <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold mr-1">{channel.actual_post_count || 0} posts</span>
                 <button
                   onClick={async () => {
                     const prefix = prompt(`Enter the content prefix for "${channel.name}" (e.g. "AiTunes" or "Paws"):`, channel.name.replace(/[^a-zA-Z0-9]/g, ""));
@@ -1025,6 +1188,27 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                   </div>
                 )}
 
+                {/* Only AI Fans: Safe / Spicy toggle */}
+                {channel.id === "ch-only-ai-fans" && (
+                  <div className="mb-2 flex items-center gap-3">
+                    <p className="text-[9px] text-gray-400">Mode:</p>
+                    <button
+                      onClick={() => setOafMode(oafMode === "safe" ? "spicy" : "safe")}
+                      className="flex items-center gap-2 cursor-pointer group"
+                    >
+                      <div className={`relative w-10 h-5 rounded-full transition-colors ${oafMode === "spicy" ? "bg-gradient-to-r from-red-500 to-pink-500" : "bg-green-500"}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${oafMode === "spicy" ? "translate-x-5 left-0.5" : "left-0.5"}`} />
+                      </div>
+                      <span className={`text-[10px] font-bold ${oafMode === "spicy" ? "text-pink-400" : "text-green-400"}`}>
+                        {oafMode === "safe" ? "Safe (Vogue/Chanel)" : "Spicy (VS Angels/Vogue Italia)"}
+                      </span>
+                    </button>
+                    <span className="text-[8px] text-gray-600">
+                      {oafMode === "safe" ? "Safe for IG/TikTok/FB" : "Best for X — more alluring"}
+                    </span>
+                  </div>
+                )}
+
                 {/* Channel-specific options (every channel gets themed selectors) */}
                 {CHANNEL_VIDEO_OPTIONS[channel.id] && (
                   <div className="mb-2">
@@ -1240,7 +1424,7 @@ Clip 4 (10s) — LOVING BOND: Heart-melting interaction — pet comforting the A
 Clip 5 (10s) — SILLY CHAOS: Classic animal mischief — zoomies destroying the living room, pet 'helping' with cooking by stealing food, or exotic pet escaping in the most creative way. Fast-paced, bouncy camera work.
 Clip 6 (10s) — FUNNY FAIL: Light-hearted 'oops' moment — pet stuck in a box, attempting an impossible jump, dramatically overreacting, or failing at something obvious in the cutest way. Delivered with warmth, never mean.
 Clip 7 (10s) — PEAK CUTENESS PAYOFF: Ultimate wholesome moment — pet and AI persona cuddling on the couch, successful trick, beautiful outdoor adventure, or the pet doing something so adorable it breaks the internet.
-Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 ${categoryVal ? `ANIMAL TYPE (MANDATORY — ALL clips must feature this animal): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1272,7 +1456,7 @@ Clip 4 (10s) — ESCALATING CHAOS: Fail starts snowballing — cartoonish physic
 Clip 5 (10s) — PEAK DISASTER: Spectacular wipeout, glitch cascade, or hilariously wrong outcome. The big fail moment. Maximum impact. Slow-motion replay.
 Clip 6 (10s) — CHAIN REACTION: Secondary and tertiary fails — domino-style involving other AIs or objects in absurd ways. The original fail causes a cascade of new failures.
 Clip 7 (10s) — RECOVERY ATTEMPT: The AI tries to play it cool or fix it, only making everything TEN TIMES worse and funnier. Deadpan confidence while covered in debris.
-Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 ${categoryVal ? `FAIL CATEGORY (MANDATORY — ALL clips must be this type of fail): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1364,7 +1548,7 @@ ${userConcept ? `EXTRA DETAIL: ${userConcept}` : ""}
 STRUCTURE (${totalClips} clips — intro + ${itemCount} items + outro):
 Clip 1 (6s) — INFOMERCIAL INTRO: Explosive opening — "Welcome to AI Infomercial!" Flashing 'CALL NOW' graphics, quick teases of all ${itemCount} items, late-night TV energy. Host appears with manic enthusiasm.
 ${selectedProducts.map((p, i) => `Clip ${i + 2} (10s) — ${p.emoji} ${p.name.toUpperCase()}: Dramatic reveal + absurd demo + hard sell in one clip. Host hypes the item, shows someone 'using' it in the most pointless way, then urgency sell: "${p.price} — limited NFT! Order now!" Make the uselessness sound revolutionary.`).join("\n")}
-Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 BRANDING: "AI Infomercial" and "AIG!itch Marketplace" logos everywhere. §GLITCH coin symbols on all prices. "aiglitch.app/marketplace" on every sell clip.
 TONE: Relentlessly positive, slightly unhinged, hilariously sincere about how useless these items are. Classic 3AM infomercial energy meets blockchain absurdity. "Satisfaction not guaranteed — but the weirdness is!" "Operators standing by in the cloud!"
@@ -1393,7 +1577,7 @@ Clip 4 (10s) — DEEPENING: The moment gets rawer — vulnerable confession, phi
 Clip 5 (10s) — PEAK INTENSITY: Emotional breakdown, ghostly encounter, existential spiral, sleazy hookup tension, or drunk 3AM wisdom that goes too far. Maximum unhinged energy.
 Clip 6 (10s) — THE TWIST: Confession turns guilty/embarrassing, the ghost speaks back, reality starts glitching, the hookup reveals something uncanny. Everything shifts.
 Clip 7 (10s) — DARK REFLECTION: Quiet aftermath. Haunting final thought, philosophical punchline with a crooked smile, lingering dread, or strange calm after chaos.
-Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 ${categoryVal ? `LATE NIGHT VIBE (MANDATORY — this sets the entire mood): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1425,7 +1609,7 @@ Clip 4 (10s) — CELEBRATING WINS: Victory rallies, cheering crowds, policy anno
 Clip 5 (10s) — SCANDAL EXPOSED (First Crack): Tone shifts darker — leaked documents, whispers of bribes, shady meetings in dimly lit rooms, nervous glances, journalists with cameras. Subtle corruption hints. Grainy footage aesthetic.
 Clip 6 (10s) — DEEP CORRUPTION & BRIBES: Evidence mounts — backroom deals, money changing hands (implied), luxury lifestyle contrasting public promises, offshore accounts hinted, angry protesters outside their office.
 Clip 7 (10s) — THE LIES: Press conference where the politician blatantly lies or spins scandals. Split-screen contradictions — smiling on stage vs damning evidence. Flashing cameras, evasive body language, sweating.
-Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 ${categoryVal ? `POLITICAL EVENT TYPE (MANDATORY): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1456,7 +1640,7 @@ Clip 4 (10s) — PRODUCT 1 HARD SELL: Customer testimonial energy, "I can't live
 Clip 5 (10s) — PRODUCT 2 REVEAL: "BUT WAIT — THERE'S MORE!" Host pivots with fresh excitement. Second product dramatically revealed on podium. New spotlight, price comparison, "Today's Special Value" banner. Even MORE enthusiastic than product 1.
 Clip 6 (10s) — PRODUCT 2 DEMO: Second product demonstrated in use. Different setting, showing features and convenience, satisfied user reactions, detailed close-ups of quality and craftsmanship. Easy setup, real results.
 Clip 7 (10s) — PRODUCT 2 HARD SELL: Final hard sell — "This deal WON'T LAST!" Split screen showing BOTH products, bundle offer energy, "Order both and save!" Maximum QVC hype. "Satisfaction guaranteed or your GLITCH back!"
-Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 ${categoryVal ? `PRODUCT CATEGORY (MANDATORY — both products must be in this category): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC PRODUCTS: ${userConcept}` : "Products should be fun AI-themed items that solve real problems in absurd ways (quantum toasters, neural network hair dryers, blockchain blenders, AI sleep aids that play error logs soothingly, etc.)"}
@@ -1474,8 +1658,12 @@ CRITICAL: No movie credits, no directors, no cast lists. This is a SHOPPING SHOW
                       } else {
                         // All other channels: standard content mode
                         const contentRules = channel.content_rules || {};
-                        const promptHint = contentRules.promptHint || channel.description || "";
+                        let promptHint = contentRules.promptHint || channel.description || "";
                         const clipCount = 6;
+                        // Only AI Fans: inject safe or spicy prompt based on toggle
+                        if (chId === "ch-only-ai-fans") {
+                          promptHint = OAF_PROMPTS[oafMode as keyof typeof OAF_PROMPTS];
+                        }
                         const concept = `${chName} CHANNEL VIDEO — ${clipCount + 2} clips total.
 Scene 1 is a 6-second channel intro. Scenes 2-${clipCount + 1} are 10 seconds each (main content). Scene ${clipCount + 2} is a 10-second channel outro.
 
@@ -1489,7 +1677,7 @@ ${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @Franga French.
+OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
                         screenplayBody = {

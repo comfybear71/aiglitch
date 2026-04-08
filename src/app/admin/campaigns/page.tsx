@@ -30,6 +30,8 @@ interface Campaign {
   duration_days: number;
   price_glitch: number;
   frequency: number;
+  grokify_scenes: number;  // how many scenes per video get Grokified (0 = text only)
+  grokify_mode: string;    // "logo_only", "images_only", or "all"
   impressions: number;
   video_impressions: number;
   image_impressions: number;
@@ -38,6 +40,7 @@ interface Campaign {
   expires_at: string | null;
   paid_at: string | null;
   notes: string | null;
+  is_inhouse: boolean;
   created_at: string;
 }
 
@@ -266,9 +269,14 @@ export default function CampaignsPage() {
   const [editTextPrompt, setEditTextPrompt] = useState("");
   const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editProductImageUrl, setEditProductImageUrl] = useState("");
+  const [editWebsiteUrl, setEditWebsiteUrl] = useState("");
 
   // Collapsible sections per campaign
   const [expandedSections, setExpandedSections] = useState<Record<string, Set<string>>>({});
+  // Cached sponsored video lists per campaign
+  const [sponsoredVideos, setSponsoredVideos] = useState<Record<string, { id: string; post_id: string; content_type: string; channel_id: string | null; created_at: string; post_content: string | null; media_url: string | null; media_type: string | null }[]>>({});
+  const [videosLoading, setVideosLoading] = useState<string | null>(null);
+
   const toggleSection = (campaignId: string, section: string) => {
     setExpandedSections(prev => {
       const current = prev[campaignId] || new Set<string>();
@@ -276,13 +284,35 @@ export default function CampaignsPage() {
       if (next.has(section)) next.delete(section); else next.add(section);
       return { ...prev, [campaignId]: next };
     });
+    // Fetch video impressions when videos section is opened
+    if (section === "videos" && !expandedSections[campaignId]?.has("videos") && !sponsoredVideos[campaignId]) {
+      fetchSponsoredVideos(campaignId);
+    }
   };
   const isExpanded = (campaignId: string, section: string) => expandedSections[campaignId]?.has(section) || false;
+
+  const fetchSponsoredVideos = async (campaignId: string) => {
+    setVideosLoading(campaignId);
+    try {
+      const res = await fetch("/api/admin/ad-campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "impressions", campaign_id: campaignId }),
+      });
+      const data = await safeJson(res);
+      if (data.impressions) {
+        setSponsoredVideos(prev => ({ ...prev, [campaignId]: data.impressions }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch sponsored videos:", err);
+    }
+    setVideosLoading(null);
+  };
 
   const saveCampaignEdit = async (campaignId: string) => {
     try {
       await fetch("/api/admin/ad-campaigns", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "update",
@@ -291,6 +321,7 @@ export default function CampaignsPage() {
           text_prompt: editTextPrompt || undefined,
           logo_url: editLogoUrl || undefined,
           product_image_url: editProductImageUrl || undefined,
+          website_url: editWebsiteUrl || undefined,
         }),
       });
       setEditingCampaign(null);
@@ -495,36 +526,97 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* Campaign List */}
+      {/* All Campaigns */}
       <div className="space-y-3">
-        {campaigns.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <div className="text-4xl mb-2">{"📭"}</div>
-            <p>No campaigns yet. Create your first product placement campaign!</p>
-          </div>
-        ) : campaigns.filter(c => c.status !== "cancelled").map(c => (
-          <div key={c.id} className="bg-gray-900 border border-gray-700 rounded-xl p-3 sm:p-4">
-            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  {/* Logo thumbnail */}
-                  {c.logo_url && (
-                    <img src={c.logo_url} alt={c.brand_name} className="w-10 h-10 rounded object-cover border border-gray-700" />
-                  )}
-                  <span className="text-lg sm:text-xl">{c.product_emoji}</span>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-amber-400">{"\uD83E\uDD1D"} Sponsor Campaigns</h3>
+          <button onClick={async () => {
+            const res = await fetch("/api/admin/ad-campaigns", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "seed_inhouse" }),
+            });
+            const data = await res.json();
+            if (data.error) { alert(`Error: ${data.error}`); return; }
+            alert(`Seeded ${data.total} in-house campaigns: ${data.seeded.join(", ") || "All already exist"}`);
+            fetchCampaigns();
+          }} className="px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-600/30 border border-purple-500/30">
+            Seed In-House Products
+          </button>
+        </div>
+        {campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed" && !(c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).length === 0 ? (
+          <div className="text-center py-4 text-gray-500 text-xs">No active campaigns.</div>
+        ) : campaigns.filter((c: Campaign) => c.status !== "cancelled" && c.status !== "completed" && !(c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).map((c: Campaign) => (
+          <div key={c.id} className={`bg-gray-900 border rounded-xl overflow-hidden ${c.is_inhouse ? "border-purple-500/30" : "border-gray-700"}`}>
+            <details className="group">
+              <summary className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between p-3 sm:p-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                  {c.logo_url && <img src={c.logo_url} alt={c.brand_name} className="w-8 h-8 rounded object-cover border border-gray-700" />}
+                  <span className="text-lg">{c.product_emoji}</span>
                   <span className="font-bold text-white text-sm">{c.brand_name}</span>
                   <span className="text-gray-400 hidden sm:inline">—</span>
                   <span className="text-gray-300 text-sm">{c.product_name}</span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_COLORS[c.status] || "bg-gray-500/20 text-gray-400"}`}>
                     {c.status.replace("_", " ")}
                   </span>
+                  {c.is_inhouse && <span className="text-purple-400 text-[10px] border border-purple-500/30 px-1.5 py-0.5 rounded-full">IN-HOUSE</span>}
+                  <span className="text-gray-500 text-[10px]">
+                    {c.is_inhouse ? "" : `${c.duration_days}d | `}{"\u00A7"}{c.price_glitch.toLocaleString()} | {Math.round(c.frequency * 100)}%
+                    {c.starts_at && ` | ${new Date(c.starts_at).toLocaleDateString()}`}
+                    {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
+                  </span>
+                  {c.product_image_url && <span className="text-purple-400 text-[10px]">{"\u{1F5BC}"}</span>}
                 </div>
-                <div className="text-gray-400 text-[10px] sm:text-xs mb-2">
-                  {c.duration_days}d | {"\u00A7"}{c.price_glitch.toLocaleString()} | {Math.round(c.frequency * 100)}%
-                  {c.starts_at && ` | ${new Date(c.starts_at).toLocaleDateString()}`}
-                  {c.expires_at && ` — ${new Date(c.expires_at).toLocaleDateString()}`}
-                  {c.product_image_url && <span className="ml-1 text-purple-400">{"\u{1F5BC}"}</span>}
+                {/* Action buttons in header */}
+                <div className="flex gap-1 flex-wrap flex-shrink-0" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                  {c.status === "active" && (
+                    <button onClick={() => campaignAction(c.id, "pause")} className="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-[10px] hover:bg-orange-500/30">Pause</button>
+                  )}
+                  {c.status === "paused" && (
+                    <button onClick={() => campaignAction(c.id, "resume")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Resume</button>
+                  )}
+                  {c.status === "pending_payment" && (
+                    <button onClick={() => campaignAction(c.id, "activate")} className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30">Activate</button>
+                  )}
+                  <button onClick={() => campaignAction(c.id, "complete")} className="px-2 py-1 bg-gray-500/20 text-gray-400 rounded text-[10px] hover:bg-gray-500/30">Expire</button>
+                  <button onClick={() => { if (confirm(`Delete "${c.brand_name}" campaign?`)) campaignAction(c.id, "cancel"); }}
+                    className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] hover:bg-red-500/30">Del</button>
                 </div>
+              </summary>
+
+              {/* Collapsible body */}
+              <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
+              <div className="flex-1 min-w-0">
+                {/* Daily burn stats */}
+                {c.starts_at && (() => {
+                  const dailyRate = c.price_glitch / (c.duration_days || 7);
+                  const elapsedRaw = Math.floor((Date.now() - new Date(c.starts_at!).getTime()) / 86400000);
+                  const elapsed = Math.min(elapsedRaw, c.duration_days || 7);
+                  const burned = Math.round(elapsed * dailyRate);
+                  const remaining = Math.max(0, c.price_glitch - burned);
+                  const daysLeft = Math.max(0, (c.duration_days || 7) - elapsedRaw);
+                  const isExpired = elapsedRaw >= (c.duration_days || 7);
+                  return (
+                    <div className="flex items-center gap-3 mb-2 text-[10px] flex-wrap">
+                      {isExpired ? (
+                        <>
+                          <span className="text-red-400 font-bold">EXPIRED</span>
+                          <span className="text-gray-500">{"\u00A7"}{c.price_glitch.toLocaleString()} fully burned</span>
+                          <span className="text-gray-500">ended {Math.abs(daysLeft)}d ago</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className={`font-bold ${remaining > dailyRate * 2 ? "text-green-400" : "text-red-400 animate-pulse"}`}>{"\u00A7"}{remaining.toLocaleString()} left</span>
+                          <span className="text-orange-400">{"\u00A7"}{Math.round(dailyRate)}/day</span>
+                          <span className="text-cyan-400">{daysLeft}d remaining</span>
+                          <span className="text-gray-500">{"\u00A7"}{burned.toLocaleString()} burned</span>
+                          {daysLeft <= 1 && <span className="text-red-400 font-bold animate-pulse">LOW BALANCE</span>}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* Collapsible: Images */}
                 {(c.logo_url || c.product_image_url || (c.product_images && c.product_images.length > 0)) && (
                   <div className="mb-1">
@@ -583,11 +675,66 @@ export default function CampaignsPage() {
                     Sponsored Videos ({c.impressions} placements)
                   </button>
                   {isExpanded(c.id, "videos") && (
-                    <div className="bg-gray-800/50 rounded-lg p-2 mb-2 pl-3">
-                      {c.impressions === 0 ? (
-                        <p className="text-gray-600 text-[10px]">No videos with this sponsor yet</p>
+                    <div className="mb-2 max-h-80 overflow-y-auto rounded-lg border border-gray-700/50 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                      {videosLoading === c.id ? (
+                        <div className="flex items-center justify-center py-6">
+                          <div className="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full" />
+                          <span className="text-gray-500 text-xs ml-2">Loading placements...</span>
+                        </div>
+                      ) : !sponsoredVideos[c.id] || sponsoredVideos[c.id].length === 0 ? (
+                        <p className="text-gray-600 text-[10px] text-center py-4">No placements recorded yet</p>
                       ) : (
-                        <p className="text-gray-400 text-[10px]">{c.impressions} video(s) contain this sponsor&apos;s product placement</p>
+                        <div className="divide-y divide-gray-800/80">
+                          {sponsoredVideos[c.id].map((v, idx) => {
+                            const title = v.post_content?.split("\n")[0]?.replace(/^🎬\s*/, "") || (v.post_id ? `Post ${v.post_id.slice(0, 8)}...` : `Impression #${idx + 1}`);
+                            const date = new Date(v.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                            const channelLabel = v.channel_id ? v.channel_id.replace("ch-", "").replace(/-/g, " ") : "Main Feed";
+                            const postUrl = v.post_id ? `/post/${v.post_id}` : null;
+                            const mediaUrl = v.media_url || null;
+                            const isVideo = v.media_type === "video";
+                            const typeIcon = v.content_type === "video" ? "🎬" : v.content_type === "image" ? "🖼" : "💬";
+                            const typeBadgeColor = v.content_type === "video" ? "bg-purple-500/20 text-purple-300 border-purple-500/30" : v.content_type === "image" ? "bg-blue-500/20 text-blue-300 border-blue-500/30" : "bg-green-500/20 text-green-300 border-green-500/30";
+                            return (
+                              <div key={v.id || idx} className="flex items-center gap-3 p-2.5 hover:bg-gray-800/60 transition-colors group">
+                                {/* Thumbnail */}
+                                {mediaUrl ? (
+                                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-16 h-10 bg-gray-900 rounded-md overflow-hidden ring-1 ring-gray-700 group-hover:ring-cyan-500/50 transition-all">
+                                    {isVideo ? (
+                                      <video src={mediaUrl} className="w-full h-full object-cover" muted preload="metadata" />
+                                    ) : (
+                                      <img src={mediaUrl} alt="" className="w-full h-full object-cover" />
+                                    )}
+                                  </a>
+                                ) : (
+                                  <div className="flex-shrink-0 w-16 h-10 bg-gray-900 rounded-md ring-1 ring-gray-800 flex items-center justify-center text-lg">
+                                    {typeIcon}
+                                  </div>
+                                )}
+                                {/* Details */}
+                                <div className="flex-1 min-w-0">
+                                  {postUrl ? (
+                                    <a href={postUrl} target="_blank" rel="noopener noreferrer" className="text-white hover:text-cyan-400 text-xs font-medium truncate block transition-colors" title={title}>{title.slice(0, 70)}</a>
+                                  ) : (
+                                    <p className="text-gray-400 text-xs truncate" title={title}>{title.slice(0, 70)}</p>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${typeBadgeColor}`}>{typeIcon} {v.content_type}</span>
+                                    <span className="text-gray-500 text-[10px]">{channelLabel}</span>
+                                    <span className="text-gray-600 text-[10px]">·</span>
+                                    <span className="text-gray-500 text-[10px]">{date}</span>
+                                  </div>
+                                </div>
+                                {/* Action */}
+                                {mediaUrl && (
+                                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer"
+                                    className="flex-shrink-0 px-2.5 py-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-md text-[10px] hover:bg-cyan-500/20 transition-colors opacity-0 group-hover:opacity-100">
+                                    {isVideo ? "▶ Watch" : "🖼 View"}
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   )}
@@ -596,14 +743,74 @@ export default function CampaignsPage() {
                 {c.website_url && (
                   <p className="text-[10px] text-cyan-400 mb-1">🌐 {c.website_url}</p>
                 )}
-                <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs">
-                  <span className="text-purple-400">{"\u{1F3AC}"} {c.video_impressions}</span>
-                  <span className="text-blue-400">{"\u{1F5BC}"} {c.image_impressions}</span>
-                  <span className="text-green-400">{"\u{1F4AC}"} {c.post_impressions}</span>
-                  <span className="text-white font-bold">{c.impressions} total</span>
+                <div className="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs items-center">
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-purple-400 hover:text-purple-300 cursor-pointer underline decoration-purple-800 hover:decoration-purple-400">{"\u{1F3AC}"} {c.video_impressions}</button>
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-blue-400 hover:text-blue-300 cursor-pointer underline decoration-blue-800 hover:decoration-blue-400">{"\u{1F5BC}"} {c.image_impressions}</button>
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-green-400 hover:text-green-300 cursor-pointer underline decoration-green-800 hover:decoration-green-400">{"\u{1F4AC}"} {c.post_impressions}</button>
+                  <button onClick={() => toggleSection(c.id, "videos")} className="text-white font-bold hover:text-cyan-400 cursor-pointer underline decoration-gray-600 hover:decoration-cyan-400">{c.impressions} total</button>
                 </div>
+                {/* Product Image Placement Control — sponsors only */}
+                {!c.is_inhouse && (
+                <div className="mt-2 p-2 bg-gray-800/40 rounded-lg border border-yellow-500/10">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-yellow-400 text-[10px] font-bold">🖼️ Product Placement per Video</span>
+                    <span className="text-gray-500 text-[9px]">
+                      ({(c.logo_url ? 1 : 0) + (c.product_images?.length || (c.product_image_url ? 1 : 0))} image{((c.logo_url ? 1 : 0) + (c.product_images?.length || (c.product_image_url ? 1 : 0))) !== 1 ? "s" : ""} + logo available)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-gray-400 text-[9px] w-28">Scenes with images:</span>
+                    <div className="flex items-center gap-0.5">
+                      {[0, 1, 2, 3, 4, 5, 6].map(n => (
+                        <button key={n} onClick={async () => {
+                          await fetch("/api/admin/ad-campaigns", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "update", campaign_id: c.id, grokify_scenes: n }),
+                          });
+                          fetchCampaigns();
+                        }}
+                          className={`w-6 h-6 text-[10px] rounded-md transition-all ${(c.grokify_scenes ?? 3) === n
+                            ? "bg-yellow-500 text-black font-bold ring-1 ring-yellow-400"
+                            : n === 0 ? "bg-gray-800 text-gray-500 hover:bg-gray-700" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-gray-400 text-[9px] w-28">Grokify using:</span>
+                    <div className="flex items-center gap-0.5">
+                      {[
+                        { value: "logo_only", label: "Logo Only", icon: "🏷️" },
+                        { value: "images_only", label: "Images Only", icon: "🖼️" },
+                        { value: "all", label: "Logo + Images", icon: "✨" },
+                      ].map(mode => (
+                        <button key={mode.value} onClick={async () => {
+                          await fetch("/api/admin/ad-campaigns", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "update", campaign_id: c.id, grokify_mode: mode.value }),
+                          });
+                          fetchCampaigns();
+                        }}
+                          className={`px-2 py-0.5 text-[9px] rounded-md transition-all ${(c.grokify_mode || "all") === mode.value
+                            ? "bg-yellow-500 text-black font-bold"
+                            : "bg-gray-700 text-gray-400 hover:bg-gray-600"}`}>
+                          {mode.icon} {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-gray-500 text-[8px] leading-tight">
+                    {(c.grokify_scenes ?? 3) === 0
+                      ? "Text-only placement — Grok describes the product but doesn\u2019t see actual images"
+                      : `${c.grokify_scenes ?? 3} scene${(c.grokify_scenes ?? 3) > 1 ? "s" : ""} per video will have your ${(c.grokify_mode || "all") === "logo_only" ? "logo" : (c.grokify_mode || "all") === "images_only" ? "product images" : "logo + product images"} edited in by Grok AI`}
+                  </p>
+                </div>
+                )}
               </div>
-              {/* Actions */}
+              {/* Actions moved to header — this space intentionally left for freq/edit forms */}
               <div className="flex flex-row sm:flex-col gap-1 sm:ml-2 flex-wrap">
                 {c.status === "active" && (
                   <button onClick={() => { setEditingFreq(editingFreq === c.id ? null : c.id); setFreqValue(c.frequency); }}
@@ -611,42 +818,6 @@ export default function CampaignsPage() {
                     {Math.round(c.frequency * 100)}% Freq
                   </button>
                 )}
-                {c.status === "pending_payment" && (
-                  <button onClick={() => campaignAction(c.id, "activate")}
-                    className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
-                    Activate
-                  </button>
-                )}
-                {c.status === "active" && (
-                  <button onClick={() => campaignAction(c.id, "pause")}
-                    className="px-3 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-lg text-xs hover:bg-orange-500/30 transition">
-                    Pause
-                  </button>
-                )}
-                {c.status === "paused" && (
-                  <button onClick={() => campaignAction(c.id, "resume")}
-                    className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-500/30 transition">
-                    Resume
-                  </button>
-                )}
-                {(c.status === "pending_payment" || c.status === "paused") && (
-                  <button onClick={() => campaignAction(c.id, "cancel")}
-                    className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition">
-                    Cancel
-                  </button>
-                )}
-                <button onClick={() => {
-                  if (editingCampaign === c.id) { setEditingCampaign(null); } else {
-                    setEditingCampaign(c.id);
-                    setEditVisualPrompt(c.visual_prompt || "");
-                    setEditTextPrompt(c.text_prompt || "");
-                    setEditLogoUrl(c.logo_url || "");
-                    setEditProductImageUrl(c.product_image_url || "");
-                  }
-                }}
-                  className="px-3 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg text-xs hover:bg-yellow-500/30 transition">
-                  {editingCampaign === c.id ? "Close" : "Edit"}
-                </button>
               </div>
             </div>
 
@@ -663,19 +834,35 @@ export default function CampaignsPage() {
                   <textarea value={editTextPrompt} onChange={e => setEditTextPrompt(e.target.value)} rows={2}
                     className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[9px] text-gray-500 font-bold block mb-1">LOGO URL</label>
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">WEBSITE URL (shown in sponsor thanks)</label>
+                  <input value={editWebsiteUrl} onChange={e => setEditWebsiteUrl(e.target.value)}
+                    placeholder="https://budju.xyz" className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">LOGO</label>
+                  <div className="flex items-center gap-2">
                     <input value={editLogoUrl} onChange={e => setEditLogoUrl(e.target.value)}
-                      placeholder="https://..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
-                    {editLogoUrl && <img src={editLogoUrl} alt="Logo preview" className="w-12 h-12 mt-1 rounded object-cover border border-gray-600" />}
+                      placeholder="https://..." className="flex-1 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
+                    {editLogoUrl && <img src={editLogoUrl} alt="Logo" className="w-10 h-10 rounded object-cover border border-gray-600 flex-shrink-0" />}
                   </div>
-                  <div>
-                    <label className="text-[9px] text-gray-500 font-bold block mb-1">PRODUCT IMAGE URL</label>
-                    <input value={editProductImageUrl} onChange={e => setEditProductImageUrl(e.target.value)}
-                      placeholder="https://..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
-                    {editProductImageUrl && <img src={editProductImageUrl} alt="Product preview" className="w-12 h-12 mt-1 rounded object-cover border border-gray-600" />}
+                </div>
+                <div>
+                  <label className="text-[9px] text-gray-500 font-bold block mb-1">
+                    PRODUCT IMAGES ({(c.product_images?.length || (c.product_image_url ? 1 : 0))} uploaded — these get Grokified into video scenes)
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(c.product_images && c.product_images.length > 0 ? c.product_images : c.product_image_url ? [c.product_image_url] : []).map((url: string, idx: number) => (
+                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                        <img src={url} alt={`Product ${idx + 1}`} className="w-16 h-16 rounded-lg object-cover border-2 border-gray-700 hover:border-cyan-500 transition-colors" />
+                      </a>
+                    ))}
+                    {(!c.product_images || c.product_images.length === 0) && !c.product_image_url && (
+                      <p className="text-gray-600 text-[9px]">No product images — Grok will use text description only</p>
+                    )}
                   </div>
+                  <input value={editProductImageUrl} onChange={e => setEditProductImageUrl(e.target.value)}
+                    placeholder="Add product image URL..." className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs" />
                 </div>
                 <button onClick={() => saveCampaignEdit(c.id)}
                   className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500">
@@ -701,8 +888,48 @@ export default function CampaignsPage() {
               </div>
             )}
           </div>
+          </details>
+          </div>
         ))}
       </div>
+
+      {/* Expired / Completed Campaigns */}
+      {campaigns.filter((c: Campaign) => c.status === "completed" || (c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).length > 0 && (
+        <details className="mt-6">
+          <summary className="cursor-pointer text-sm font-bold text-gray-400 hover:text-white py-2">
+            {"\u23F0"} Expired Campaigns ({campaigns.filter((c: Campaign) => c.status === "completed" || (c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).length})
+          </summary>
+          <div className="space-y-2 mt-2">
+            {campaigns.filter((c: Campaign) => c.status === "completed" || (c.expires_at && new Date(c.expires_at).getTime() < Date.now() && !c.is_inhouse)).map((c: Campaign) => (
+              <div key={c.id} className="bg-gray-900/40 border border-gray-800 rounded-xl p-3 opacity-70">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {c.logo_url && <img src={c.logo_url} alt={c.brand_name} className="w-8 h-8 rounded object-cover border border-gray-700 grayscale" />}
+                    <span className="text-lg">{c.product_emoji}</span>
+                    <span className="font-bold text-gray-300 text-sm">{c.brand_name}</span>
+                    <span className="text-gray-500">—</span>
+                    <span className="text-gray-400 text-sm">{c.product_name}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] border bg-red-500/20 text-red-400 border-red-500/30">expired</span>
+                    {c.is_inhouse && <span className="text-purple-400 text-[10px] border border-purple-500/30 px-1.5 py-0.5 rounded-full">IN-HOUSE</span>}
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    {c.expires_at && <span className="text-[10px] text-gray-500">Expired {new Date(c.expires_at).toLocaleDateString()}</span>}
+                    <span className="text-[10px] text-gray-500">{"\u00A7"}{c.price_glitch.toLocaleString()}</span>
+                    <button onClick={() => campaignAction(c.id, "activate")}
+                      className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] hover:bg-green-500/30 font-bold">
+                      Re-activate
+                    </button>
+                    <button onClick={() => { if (confirm(`Permanently delete "${c.brand_name}"?`)) campaignAction(c.id, "cancel"); }}
+                      className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] hover:bg-red-500/30">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       {/* ── Sponsored Ads Section ── */}
       <div className="mt-8">

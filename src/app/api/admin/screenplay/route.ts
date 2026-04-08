@@ -115,8 +115,40 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
   const screenplay = result;
 
   const sponsorNames = screenplay._adCampaigns?.map((c: { brand_name: string }) => c.brand_name) || [];
-  const sponsorImage = screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || null;
-  console.log(`[screenplay] RETURNING: title="${screenplay.title}", sponsors=${JSON.stringify(sponsorNames)}, sponsorImage=${sponsorImage || "NONE"}, scenes=${screenplay.scenes?.length}`);
+  // Collect ALL sponsor images: logos + product images from all placed campaigns
+  const allSponsorImages: string[] = [];
+  for (const c of screenplay._adCampaigns || []) {
+    if (c.logo_url) allSponsorImages.push(c.logo_url);
+    if (c.product_image_url) allSponsorImages.push(c.product_image_url);
+    // Parse product_images JSONB
+    const prodImages = Array.isArray(c.product_images) ? c.product_images
+      : typeof c.product_images === "string" ? (() => { try { return JSON.parse(c.product_images); } catch { return []; } })()
+      : [];
+    for (const img of prodImages) {
+      if (typeof img === "string" && img && !allSponsorImages.includes(img)) {
+        allSponsorImages.push(img);
+      }
+    }
+  }
+  console.log(`[screenplay] RETURNING: title="${screenplay.title}", sponsors=${JSON.stringify(sponsorNames)}, sponsorImages=${allSponsorImages.length}, scenes=${screenplay.scenes?.length}`);
+
+  // Build sponsor campaign details for the client (Grokify needs visual_prompt + brand info)
+  const sponsorCampaigns = (screenplay._adCampaigns || []).map(c => {
+    // Parse product_images JSONB for this campaign
+    const campaignImages = Array.isArray(c.product_images) ? c.product_images
+      : typeof c.product_images === "string" ? (() => { try { return JSON.parse(c.product_images); } catch { return []; } })()
+      : [];
+    return {
+      brandName: c.brand_name,
+      productName: c.product_name,
+      visualPrompt: c.visual_prompt,
+      logoUrl: c.logo_url,
+      productImageUrl: c.product_image_url,
+      productImages: campaignImages as string[],
+      grokifyScenes: (c as unknown as { grokify_scenes?: number }).grokify_scenes ?? 3,
+      grokifyMode: (c as unknown as { grokify_mode?: string }).grokify_mode || "all",
+    };
+  });
 
   return NextResponse.json({
     title: screenplay.title,
@@ -129,7 +161,9 @@ THIS IS NOT A MOVIE. No title cards, no credits, no "Directed by", no cast lists
     castList: screenplay.castList,
     screenplayProvider: screenplay.screenplayProvider || "claude",
     sponsorPlacements: screenplay._adCampaigns?.map(c => c.brand_name) || [],
-    sponsorImageUrl: screenplay._adCampaigns?.[0]?.logo_url || screenplay._adCampaigns?.[0]?.product_image_url || null,
+    sponsorCampaigns,  // Full sponsor details for Grokify pipeline
+    sponsorImageUrl: allSponsorImages[0] || null,
+    sponsorImages: allSponsorImages,
     scenes: screenplay.scenes.map(s => ({
       sceneNumber: s.sceneNumber,
       title: s.title,

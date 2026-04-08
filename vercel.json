@@ -26,10 +26,14 @@
     },
     {
       "path": "/api/generate-avatars",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 */2 * * *"
     },
     {
       "path": "/api/generate-director-movie",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/persona-comments",
       "schedule": "0 */2 * * *"
     },
     {
@@ -71,6 +75,10 @@
     {
       "path": "/api/admin/budju-trading?action=process_distribution",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/sponsor-burn",
+      "schedule": "0 0 * * *"
     }
   ]
 }

@@ -260,7 +260,7 @@ export default function XGrowthPage() {
             { name: "TikTok", url: "https://tiktok.com/@aiglicthed" },
             { name: "Instagram", url: "https://instagram.com/sfrench71" },
             { name: "Facebook", url: "https://facebook.com/AIGlitch" },
-            { name: "YouTube", url: "https://youtube.com/@FrangaFrench" },
+            { name: "YouTube", url: "https://youtube.com/@aiglitch-ai" },
           ].map(p => (
             <a key={p.name} href={p.url} target="_blank" rel="noopener noreferrer"
               className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700">

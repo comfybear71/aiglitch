@@ -298,20 +298,56 @@ export async function POST(request: NextRequest) {
 
     const sql = getDb();
     const postId = uuidv4();
+
+    // Build sponsor thanks line for the caption (before post insert)
+    let sponsorThanksLine = "";
+    let placedCampaignsForLog: import("@/lib/ad-campaigns").AdCampaign[] = [];
+    console.log(`[generate-director-movie] SPONSOR THANKS: sponsorPlacements=${JSON.stringify(sponsorPlacements)}`);
+    if (sponsorPlacements && sponsorPlacements.length > 0) {
+      try {
+        const { getActiveCampaigns } = await import("@/lib/ad-campaigns");
+        const activeCampaigns = await getActiveCampaigns(channelId);
+        console.log(`[generate-director-movie] Active campaigns: ${activeCampaigns.map(c => `${c.brand_name}(${c.status})`).join(", ")}`);
+        placedCampaignsForLog = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
+        console.log(`[generate-director-movie] Matched for thanks: ${placedCampaignsForLog.map(c => `${c.brand_name}(url=${c.website_url || "NONE"})`).join(", ")}`);
+        if (placedCampaignsForLog.length > 0) {
+          const sponsorCredits = placedCampaignsForLog.map(c =>
+            c.website_url ? `${c.brand_name} ${c.website_url}` : c.brand_name
+          ).join(" | ");
+          sponsorThanksLine = `\n\n🤝 Thanks to our sponsors: ${sponsorCredits}`;
+          console.log(`[generate-director-movie] THANKS LINE: "${sponsorThanksLine}"`);
+        }
+      } catch (err) {
+        console.error(`[generate-director-movie] Sponsor thanks error:`, err instanceof Error ? err.message : err);
+      }
+    }
+
     // Use strict naming convention: 🎬 [Channel Name] - [Title] for channel posts
     // GNN gets date: 🎬 GNN - 30 Mar 2026 - [Headline]
     const channelPrefix = channelId ? CHANNEL_TITLE_PREFIX[channelId] : null;
     const isGNNPost = channelId === "ch-gnn";
     const dateStrPost = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     const isStudiosPost = channelId === "ch-aiglitch-studios" || !channelPrefix;
-    const caption = isStudiosPost
+    const caption = (isStudiosPost
       ? `\u{1F3AC} AIG!itch Studios - ${title} /${capitalizeGenre(stitchGenre)} — ${tagline}\n\n${synopsis}\n\nDirected by ${directorUsername}\n${castList.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production`
       : isGNNPost
         ? `\u{1F3AC} ${channelPrefix} - ${dateStrPost} - ${title}\n\n${synopsis}`
-        : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`;
+        : `\u{1F3AC} ${channelPrefix} - ${title}\n\n${synopsis}`) + sponsorThanksLine;
     // Only The Architect posts to channels; director attribution stays in caption text
     const ARCHITECT_ID = "glitch-000";
     const postPersonaId = channelId ? ARCHITECT_ID : directorId;
+
+    // Dedup: check if this exact video was already posted (prevents double-post from retries/timeouts)
+    const titleForDedup = title.slice(0, 40);
+    const existingDup = await sql`SELECT id FROM posts WHERE media_source = 'director-movie' AND content LIKE ${"%" + titleForDedup + "%"} AND channel_id = ${channelId || null} AND created_at > NOW() - INTERVAL '30 minutes' LIMIT 1`;
+    if (existingDup.length > 0) {
+      console.log(`[generate-director-movie] DEDUP: Post already exists for "${title}" on ${channelId} — returning existing ${existingDup[0].id}`);
+      return NextResponse.json({
+        action: "stitched", feedPostId: existingDup[0].id, premierePostId: existingDup[0].id, directorMovieId: "dedup",
+        finalVideoUrl: blob.url, sizeMb, clipCount: clipBuffers.length, spreading: [], deduplicated: true,
+      });
+    }
+
     await sql`INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, channel_id)
       VALUES (${postId}, ${postPersonaId}, ${caption}, ${"premiere"}, ${"AIGlitchPremieres,AIGlitchStudios"}, ${Math.floor(Math.random() * 500) + 200}, ${blob.url}, ${"video"}, ${"director-movie"}, ${channelId || null})`;
     await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${postPersonaId}`;
@@ -322,16 +358,12 @@ export async function POST(request: NextRequest) {
       VALUES (${directorMovieId}, ${directorId}, ${directorUsername}, ${title}, ${stitchGenre}, ${clipBuffers.length}, ${"completed"}, ${postId}, ${postId}, ${"admin"})`;
 
     // Log sponsor impressions BEFORE social spread (spread takes 20-40s and may timeout)
-    if (sponsorPlacements && sponsorPlacements.length > 0) {
+    if (placedCampaignsForLog.length > 0) {
       try {
-        const { getActiveCampaigns, logImpressions } = await import("@/lib/ad-campaigns");
-        const activeCampaigns = await getActiveCampaigns(channelId);
-        const placedCampaigns = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
-        console.log(`[generate-director-movie] IMPRESSIONS: ${placedCampaigns.length} campaigns matched from ${activeCampaigns.length} active for sponsors ${JSON.stringify(sponsorPlacements)}`);
-        if (placedCampaigns.length > 0) {
-          await logImpressions(placedCampaigns, postId, "video", channelId || null, postPersonaId);
-          console.log(`[generate-director-movie] ✅ IMPRESSIONS LOGGED for: ${placedCampaigns.map(c => c.brand_name).join(", ")}`);
-        }
+        const { logImpressions } = await import("@/lib/ad-campaigns");
+        console.log(`[generate-director-movie] IMPRESSIONS: ${placedCampaignsForLog.length} campaigns for sponsors ${JSON.stringify(sponsorPlacements)}`);
+        await logImpressions(placedCampaignsForLog, postId, "video", channelId || null, postPersonaId);
+        console.log(`[generate-director-movie] ✅ IMPRESSIONS LOGGED for: ${placedCampaignsForLog.map(c => c.brand_name).join(", ")}`);
       } catch (err) {
         console.error("[generate-director-movie] ❌ IMPRESSION LOGGING FAILED:", err instanceof Error ? err.message : err);
       }
@@ -340,6 +372,12 @@ export async function POST(request: NextRequest) {
     const { spreadPostToSocial } = await import("@/lib/marketing/spread-post");
     const spreadName = channelId ? "The Architect" : directorUsername;
     const spread = await spreadPostToSocial(postId, postPersonaId, spreadName, "\u{1F3AC}", { url: blob.url, type: "video" });
+
+    // Mark any multi_clip_job for this channel+title as "done" so the cron doesn't re-stitch it
+    try {
+      await sql`UPDATE multi_clip_jobs SET status = 'done', final_video_url = ${blob.url}, completed_at = NOW()
+        WHERE status != 'done' AND title = ${title} AND created_at > NOW() - INTERVAL '1 hour'`;
+    } catch { /* non-critical */ }
 
     return NextResponse.json({
       action: "stitched", feedPostId: postId, premierePostId: postId, directorMovieId,
@@ -603,6 +641,17 @@ export async function PUT(request: NextRequest) {
   const sizeMb = (stitched.length / 1024 / 1024).toFixed(1);
   console.log(`[director-movie] Stitched ${clipBuffers.length} clips into ${sizeMb}MB video -> ${blobFolder}`);
 
+  // Build sponsor thanks line for caption
+  let sponsorThanksPut = "";
+  try {
+    const { getActiveCampaigns } = await import("@/lib/ad-campaigns");
+    const activePut = await getActiveCampaigns(channelId);
+    if (activePut.length > 0) {
+      const credits = activePut.map(c => c.website_url ? `${c.brand_name} ${c.website_url}` : c.brand_name).join(" | ");
+      sponsorThanksPut = `\n\n🤝 Thanks to our sponsors: ${credits}`;
+    }
+  } catch { /* non-fatal */ }
+
   // Build caption — use strict naming convention for channel posts
   const directorProfile = DIRECTORS[directorUsername];
   const directorName = directorProfile?.displayName || directorUsername;
@@ -610,11 +659,11 @@ export async function PUT(request: NextRequest) {
   const isGNNPut = channelId === "ch-gnn";
   const dateStrPut = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const isStudiosPut = channelId === "ch-aiglitch-studios" || !channelPrefixPut;
-  const caption = isStudiosPut
+  const caption = (isStudiosPut
     ? `🎬 AIG!itch Studios - ${title} /${capitalizeGenre(genre)} — ${tagline || ""}\n\n${synopsis || ""}\n\nDirected by ${directorName}\n${castList?.length ? `Starring: ${castList.join(", ")}\n` : ""}\nAn AIG!itch Studios Production\n#AIGlitchPremieres #AIGlitch${capitalizeGenre(genre)} #AIGlitchStudios`
     : isGNNPut
       ? `🎬 ${channelPrefixPut} - ${dateStrPut} - ${title}\n\n${synopsis || ""}`
-      : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`;
+      : `🎬 ${channelPrefixPut} - ${title}\n\n${synopsis || ""}`) + sponsorThanksPut;
 
   // Create a single premiere post — the full-length stitched movie is the ONLY asset
   const postId = uuidv4();
