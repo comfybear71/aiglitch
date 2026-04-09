@@ -210,6 +210,7 @@ export const SLOGANS = {
     "ch-truths-facts": "Only Facts. Only Truth. Only Knowledge.",
     "ch-conspiracy": "They Don't Want You to Know.",
     "ch-cosmic-wanderer": "We Are All Made of Star Stuff.",
+    "ch-the-vault": "Chaos Meets Opportunity.",
     "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
   },
   // Outro sign-off lines

@@ -1354,6 +1354,10 @@ export async function runMigrations() {
     await sql`UPDATE ad_campaigns SET website_url = COALESCE((SELECT website FROM sponsors WHERE LOWER(company_name) = 'budju' LIMIT 1), website_url) WHERE LOWER(brand_name) = 'budju'`;
   } catch (err) { console.error("[migrate] Sponsor image sync error:", err); }
 
+  // ── Private channels column ──
+  await safeMigrate(sql, "channels_is_private_col", () =>
+    sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT FALSE`);
+
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
     sql`INSERT INTO platform_settings (key, value, updated_at)

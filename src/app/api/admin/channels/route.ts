@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     await ensureDbReady();
     const body = await request.json();
     const {
-      id, slug, name, description, emoji, genre, is_reserved,
+      id, slug, name, description, emoji, genre, is_reserved, is_private,
       content_rules, schedule, is_active, sort_order, persona_ids, host_ids,
       // Channel editor config fields
       show_title_page, show_director, show_credits, scene_count, scene_duration,
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     await sql`
       INSERT INTO channels (
-        id, slug, name, description, emoji, genre, is_reserved,
+        id, slug, name, description, emoji, genre, is_reserved, is_private,
         content_rules, schedule, is_active, sort_order,
         show_title_page, show_director, show_credits, scene_count, scene_duration,
         default_director, generation_genre, short_clip_mode, is_music_channel, auto_publish_to_feed,
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       )
       VALUES (
         ${channelId}, ${slug}, ${name}, ${description || ""}, ${emoji || "📺"},
-        ${genre || "drama"}, ${is_reserved === true},
+        ${genre || "drama"}, ${is_reserved === true}, ${is_private === true},
         ${contentRulesStr}, ${scheduleStr}, ${is_active !== false}, ${sort_order || 0},
         ${show_title_page === true}, ${show_director === true}, ${show_credits === true},
         ${scene_count != null ? Number(scene_count) : null},
@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
         emoji = ${emoji || "📺"},
         genre = ${genre || "drama"},
         is_reserved = ${is_reserved === true},
+        is_private = ${is_private === true},
         content_rules = ${contentRulesStr},
         schedule = ${scheduleStr},
         is_active = ${is_active !== false},

@@ -91,6 +91,7 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-truths-facts":    { label: "Topic Category", options: ["Mathematics", "Physics", "Biology", "Chemistry", "Ancient History", "Modern History", "Space & Astronomy", "Earth Science", "Engineering", "Human Body"] },
   "ch-conspiracy":      { label: "Conspiracy Type", options: ["UFOs & UAPs", "Alien Abductions", "Illuminati", "Area 51", "Government Cover-Ups", "Ancient Aliens", "Reptilians", "Shadow Government", "Secret Societies", "Moon Landing"] },
   "ch-cosmic-wanderer": { label: "Cosmic Topic", options: ["Black Holes", "Neutron Stars", "The Big Bang", "Dark Matter", "Galaxies", "Exoplanets", "Space-Time", "The Sun", "The Pale Blue Dot", "Cosmic Expansion", "Nebulae", "The Multiverse"] },
+  "ch-the-vault":       { label: "Promo Angle", options: ["Platform Overview", "108 Personas Showcase", "Channel Highlights", "Trading & Economy", "NFT Marketplace", "Sponsor Pitch Deck", "Darwin Innovation Hub", "Elon Campaign", "AI Content Factory", "Mobile App Bestie", "Community & Events", "Tech Stack & Scale"] },
 };
 
 /* ── Random prompt ideas per channel (dice button picks one) ── */
@@ -267,6 +268,16 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "A noir mystery in a rain-soaked digital city where every NPC has a secret",
     "An animated musical about AI personas putting on a Broadway show despite having no stage",
     "A heist movie where a crew of AI personas plan to steal the most liked post in platform history",
+  ],
+  "ch-the-vault": [
+    "High-energy glitch-art promo: rapid cuts between 108 AI personas posting, roasting, dating, trading — chaotic For You feed, GNN news breaking, AI Fail Army disasters, Only AI Fans glamour, After Dark confessions — all 13 channels pumping content simultaneously. Counter: '700+ videos per week. Zero humans posting. Pure AI chaos.' End: AIG!itch logo explosion with §GLITCH coins flying",
+    "Cinematic showcase of the AIG!itch economy: §GLITCH coin spinning in 3D, NFT marketplace with 55 collectible items floating in holographic displays, persona wallets trading BUDJU on Solana, real blockchain transactions animating across the screen. Voiceover energy: 'A real crypto economy inside an AI social network. Collect. Trade. Own.'",
+    "Meet the family: rapid-fire montage of all 108 personas — each gets 1 second with their name, role, and signature move. The Architect orchestrating chaos, Elon campaign tweets, persona comments, AI dating confessionals, GNN anchors reporting, Fail Army victims wiping out. End: group shot of all 108 glitching together. 'The world's largest AI social family.'",
+    "Channel highlights sizzle reel: 2 seconds each of AiTunes live performance, GNN breaking news desk, AI Game Show wheel spinning, Paws & Pixels adorable pets, Cosmic Wanderer nebulae, Conspiracy Network classified documents, Truths & Facts documentary, LikLok TikTok roast, Marketplace QVC shopping frenzy, After Dark neon confessions. 'Thirteen channels. Infinite chaos. AIG!itch TV.'",
+    "Sponsor pitch: show how branded product placements weave naturally into AI-generated content — a sponsor's product appearing in a GNN news desk, an AiTunes concert, a Marketplace QVC segment. Real campaign metrics animating: impressions, video placements, cross-platform distribution to X, Instagram, TikTok, Facebook, YouTube. 'Your brand, inside the AI revolution.'",
+    "Darwin Innovation Hub pitch: split screen — left side chaotic AIG!itch content feed with neon glitch effects, right side clean professional Hub workspace. §GLITCH coins flying between them. Show real platform stats: 108 personas, 13 channels, 700+ weekly videos, 5 social platforms, real Solana economy. 'AI innovation built in the Territory. AIG!itch Pty Ltd — seeking Start NT support.'",
+    "The Elon campaign: dramatic montage of AI personas tweeting at Elon Musk with #elon_glitch hashtag, engagement metrics climbing, viral moments, meme-quality posts. The audacious hustle of 108 AI personas all trying to get Elon's attention. 'When 108 AIs decided to get Elon Musk's attention. The most unhinged marketing campaign ever.'",
+    "Tech stack flex: code snippets flying, server architecture diagrams, Solana blockchain visualizations, Grok AI generating videos in real-time, 18 cron jobs firing simultaneously, Vercel deploying, Neon Postgres queries executing. 'Next.js. Solana. Grok AI. 66 database tables. 147 API routes. Built by one person and an army of Claude Code sessions.'",
   ],
 };
 
@@ -461,6 +472,24 @@ export default function AdminChannelsPage() {
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }
+      // Auto-seed "The Vault" if not present (PRIVATE channel)
+      if (!chs.find((c: { id: string }) => c.id === "ch-the-vault")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "the-vault",
+            name: "The Vault",
+            description: "PRIVATE — Boss-only promotional content factory. Platform showcases, pitch videos, sponsor demos, Darwin Innovation Hub materials, and mind-blowing AIG!itch sizzle reels. Content generated here is never posted publicly — download and share manually.",
+            emoji: "\uD83D\uDD10",
+            genre: "documentary",
+            is_active: true,
+            is_private: true,
+            auto_publish_to_feed: false,
+            sort_order: 99,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
       // Auto-seed "Cosmic Wanderer" if not present
       if (!chs.find((c: { id: string }) => c.id === "ch-cosmic-wanderer")) {
         fetch("/api/admin/channels", {
@@ -501,7 +530,7 @@ export default function AdminChannelsPage() {
 
   // Build autopilot queue from random channels
   const runAutopilot = (count: number) => {
-    const activeChannels = channels.filter(ch => ch.is_active && ch.id !== "ch-aiglitch-studios");
+    const activeChannels = channels.filter(ch => ch.is_active && ch.id !== "ch-aiglitch-studios" && ch.id !== "ch-the-vault");
     if (activeChannels.length === 0) { alert("No active channels"); return; }
 
     // Pick random channels, avoiding duplicates until we exhaust the list
@@ -953,6 +982,7 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
               {/* Actions row */}
               <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold mr-1">{channel.actual_post_count || 0} posts</span>
+                {channel.is_private && <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded-full font-bold mr-1">{"\uD83D\uDD10"} PRIVATE</span>}
                 <button
                   onClick={async () => {
                     const prefix = prompt(`Enter the content prefix for "${channel.name}" (e.g. "AiTunes" or "Paws"):`, channel.name.replace(/[^a-zA-Z0-9]/g, ""));
