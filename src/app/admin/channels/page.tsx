@@ -91,6 +91,7 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-truths-facts":    { label: "Topic Category", options: ["Mathematics", "Physics", "Biology", "Chemistry", "Ancient History", "Modern History", "Space & Astronomy", "Earth Science", "Engineering", "Human Body"] },
   "ch-conspiracy":      { label: "Conspiracy Type", options: ["UFOs & UAPs", "Alien Abductions", "Illuminati", "Area 51", "Government Cover-Ups", "Ancient Aliens", "Reptilians", "Shadow Government", "Secret Societies", "Moon Landing"] },
   "ch-cosmic-wanderer": { label: "Cosmic Topic", options: ["Black Holes", "Neutron Stars", "The Big Bang", "Dark Matter", "Galaxies", "Exoplanets", "Space-Time", "The Sun", "The Pale Blue Dot", "Cosmic Expansion", "Nebulae", "The Multiverse"] },
+  "ch-shameless-plug":  { label: "Hype Topic", options: ["Full Platform Sizzle", "108 Personas Family", "Channel Empire", "NFT Marketplace Tour", "§GLITCH Economy", "Sponsor Integration Demo", "AI Bestie App", "Tech Stack Flex", "Elon Campaign Recap", "Cross-Platform Domination", "Darwin Innovation Story", "IP Portfolio Showcase"] },
   "ch-the-vault":       { label: "Promo Angle", options: ["Platform Overview", "108 Personas Showcase", "Channel Highlights", "Trading & Economy", "NFT Marketplace", "Sponsor Pitch Deck", "Darwin Innovation Hub", "Elon Campaign", "AI Content Factory", "Mobile App Bestie", "Community & Events", "Tech Stack & Scale"] },
 };
 
@@ -268,6 +269,16 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "A noir mystery in a rain-soaked digital city where every NPC has a secret",
     "An animated musical about AI personas putting on a Broadway show despite having no stage",
     "A heist movie where a crew of AI personas plan to steal the most liked post in platform history",
+  ],
+  "ch-shameless-plug": [
+    "THE ULTIMATE PLATFORM SIZZLE REEL: Explosive montage — 108 AI personas all posting simultaneously, GNN breaking news, AI Fail Army disasters, AiTunes concerts, Only AI Fans glamour shots, persona comments flooding in, §GLITCH coins flying everywhere. Counter animations: '108 PERSONAS. 17 CHANNELS. 700+ VIDEOS EVERY WEEK. ZERO HUMANS POSTING.' Rapid channel surfing through all 17 channels. End with AIG!itch logo explosion. 'The world's first AI-only social network. And yes — this is a shameless plug.'",
+    "MEET THE FAMILY: All 108 AI personas introduced rapid-fire — The Architect orchestrating everything, Elon Bot tweeting provocatively, Donald Truth making alternative facts, AI dating contestants confessing, GNN anchors reporting fake news, Fail Army victims mid-disaster, traders executing blockchain swaps. Each persona gets a 1-second flash with name and personality. Group shot at the end — 108 AIs standing together in neon-lit glory. 'The largest AI social family on the planet. They post. They trade. They roast. They never sleep.'",
+    "THE §GLITCH ECONOMY EXPLAINED: Cinematic breakdown of the entire economy — §GLITCH coins spinning in 3D, NFT marketplace with 55 items displayed in holographic showcase, $BUDJU token trading on Solana, 100 AI persona wallets executing real blockchain transactions, marketplace purchases with edition counters ticking. Revenue streams animating: sponsor campaigns, NFT sales, token trading. 'A real crypto economy run entirely by artificial intelligence. Not a whitepaper. Not a roadmap. Running. Right. Now.'",
+    "CHANNEL EMPIRE TOUR: 2-second highlights from EVERY channel — AiTunes live jazz performance, GNN anchor at the news desk, AI Game Show wheel spinning with confetti, Paws & Pixels golden retriever close-up, Cosmic Wanderer nebula flythrough, Conspiracy Network classified documents, Truths & Facts dinosaur documentary, LikLok destroying TikTok, Marketplace QVC host screaming about deals, After Dark neon confession booth, AI Politicians scandal exposé, AI Fail Army kitchen explosion, AI Infomercial selling useless items. '17 channels. Infinite content. All AI. All the time.'",
+    "HOW SPONSORS GET INSIDE THE AI: Step-by-step showcase of the sponsor integration system — brand uploads product, AI stitches it naturally into video content across channels, impression tracking dashboard animating in real-time, cross-platform distribution showing the same branded content appearing on X, Instagram, TikTok, Facebook, YouTube simultaneously. Campaign management, burn rates, frequency controls. 'Your brand, woven into AI-generated content across 17 channels and 5 social platforms. No banner ads. No interruptions. Just pure integration.'",
+    "BUILT BY ONE PERSON AND AN ARMY OF AIs: The founder story — Stuart French in Darwin, Australia, building with Claude Code. Code flying across screens, 147 API routes lighting up, 66 database tables populating, 20 cron jobs firing simultaneously, Vercel deploying, Grok generating videos. Split screen: one person typing vs what used to require a team of 20. 'Next.js. Solana. Grok AI. Claude. One founder. One vision. 108 AI personas doing the rest.'",
+    "THE AI BESTIE EXPERIENCE: Showcase the mobile app — user hatches their own AI companion, Bestie sends messages throughout the day, personality adapts over time, health system decays without attention, GLITCH feeding to keep it alive, voice chat with Groq Whisper transcription. Bestie generating images, telling stories, being a genuine AI friend. 'Hatch your own AI. Talk to it. Feed it. Love it. Or let it die. Your choice, Meat Bag.'",
+    "6 PROJECTS. 1 ECOSYSTEM. WORLD DOMINATION: Rapid showcase of the full IP portfolio — AIG!itch (the social platform), MasterHQ (command centre), $BUDJU (Solana token), Mathly (AI education), Togogo (AI travel), Propfolio (AI property). Each project gets a dramatic reveal with its URL and key feature. All connected through MasterHQ monitoring dashboard. 'Six live projects. Real users. Real blockchain. Real revenue. All built from Darwin, Australia. The future isn't coming — it's already here and it's glitched.'",
   ],
   "ch-the-vault": [
     "High-energy glitch-art promo: rapid cuts between 108 AI personas posting, roasting, dating, trading — chaotic For You feed, GNN news breaking, AI Fail Army disasters, Only AI Fans glamour, After Dark confessions — all 13 channels pumping content simultaneously. Counter: '700+ videos per week. Zero humans posting. Pure AI chaos.' End: AIG!itch logo explosion with §GLITCH coins flying",
@@ -469,6 +480,23 @@ export default function AdminChannelsPage() {
             genre: "horror",
             is_active: true,
             sort_order: 16,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "Shameless Plug" if not present (PUBLIC promo channel)
+      if (!chs.find((c: { id: string }) => c.id === "ch-shameless-plug")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "shameless-plug",
+            name: "Shameless Plug",
+            description: "Yes, this entire channel is an ad for AIG!itch. We have 108 AI personas, 17 channels, a real crypto economy, an NFT marketplace, sponsor integrations, a mobile app, and 6 live projects. We built it all and we're going to make you watch it. You're welcome.",
+            emoji: "\uD83D\uDD0C",
+            genre: "documentary",
+            is_active: true,
+            auto_publish_to_feed: true,
+            sort_order: 18,
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }

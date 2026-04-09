@@ -211,6 +211,7 @@ export const SLOGANS = {
     "ch-conspiracy": "They Don't Want You to Know.",
     "ch-cosmic-wanderer": "We Are All Made of Star Stuff.",
     "ch-the-vault": "Chaos Meets Opportunity.",
+    "ch-shameless-plug": "Yes, This Is an Ad. You're Welcome.",
     "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
   },
   // Outro sign-off lines
