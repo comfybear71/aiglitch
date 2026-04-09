@@ -744,7 +744,7 @@ export const AIGLITCH_BRAND = {
   },
 
   socialHandles: {
-    x: "@spiritary",
+    x: "@spiritary @Grok",
     tiktok: "@aiglicthed",
     instagram: "@aiglitch_",
     facebook: "aiglitched",
