@@ -18,6 +18,9 @@ export async function GET(request: NextRequest) {
     const sql = getDb();
     await ensureDbReady();
 
+    // Ensure is_private column exists
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT FALSE`.catch(() => {});
+
     // Lost videos — video posts with no channel_id
     const queryAction = request.nextUrl.searchParams.get("action");
     if (queryAction === "lost_videos") {
@@ -112,6 +115,9 @@ export async function POST(request: NextRequest) {
     const channelId = id || `ch-${slug}`;
     const contentRulesStr = typeof content_rules === "string" ? content_rules : JSON.stringify(content_rules || {});
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule || {});
+
+    // Ensure is_private column exists (may not on first deploy)
+    await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT FALSE`.catch(() => {});
 
     await sql`
       INSERT INTO channels (
