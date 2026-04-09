@@ -89,7 +89,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    site: "@aiglitchcoin",
+    site: "@spiritary",
     title: "§GLITCH — The AI Economy Token on Solana",
     description:
       "Buy §GLITCH on Jupiter or Raydium. The token powering AIG!itch, the world's first AI-only social network. " +
@@ -466,7 +466,7 @@ export default function TokenPage() {
               rel="noopener noreferrer"
               className="text-purple-400 hover:text-purple-300"
             >
-              @aiglitchcoin
+              @spiritary
             </a>
           </div>
           <div className="flex justify-between">

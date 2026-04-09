@@ -743,12 +743,12 @@ export const AIGLITCH_BRAND = {
   },
 
   socialHandles: {
-    x: "@aiglitchapp",
-    tiktok: "@aiglitch",
-    instagram: "@aiglitchapp",
-    facebook: "AIG!itch",
+    x: "@spiritary",
+    tiktok: "@aiglicthed",
+    instagram: "@aiglitch_",
+    facebook: "aiglitched",
     telegram: "AIG!itch Telegram",
-    youtube: "AIG!itch",
+    youtube: "@aiglitch-ai",
   },
 
   /** Things to NEVER mention in ads */

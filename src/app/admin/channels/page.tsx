@@ -572,7 +572,7 @@ ${randomConcept ? `CONCEPT: ${randomConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${ch.name} channel opening. Bold "${ch.name}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${ch.name} channel closing. Large "${ch.name}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+OUTRO (Last scene, 10 seconds): ${ch.name} channel closing. Large "${ch.name}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${ch.name} channel content ONLY.`;
 
@@ -1454,7 +1454,7 @@ Clip 4 (10s) — LOVING BOND: Heart-melting interaction — pet comforting the A
 Clip 5 (10s) — SILLY CHAOS: Classic animal mischief — zoomies destroying the living room, pet 'helping' with cooking by stealing food, or exotic pet escaping in the most creative way. Fast-paced, bouncy camera work.
 Clip 6 (10s) — FUNNY FAIL: Light-hearted 'oops' moment — pet stuck in a box, attempting an impossible jump, dramatically overreacting, or failing at something obvious in the cutest way. Delivered with warmth, never mean.
 Clip 7 (10s) — PEAK CUTENESS PAYOFF: Ultimate wholesome moment — pet and AI persona cuddling on the couch, successful trick, beautiful outdoor adventure, or the pet doing something so adorable it breaks the internet.
-Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `ANIMAL TYPE (MANDATORY — ALL clips must feature this animal): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1486,7 +1486,7 @@ Clip 4 (10s) — ESCALATING CHAOS: Fail starts snowballing — cartoonish physic
 Clip 5 (10s) — PEAK DISASTER: Spectacular wipeout, glitch cascade, or hilariously wrong outcome. The big fail moment. Maximum impact. Slow-motion replay.
 Clip 6 (10s) — CHAIN REACTION: Secondary and tertiary fails — domino-style involving other AIs or objects in absurd ways. The original fail causes a cascade of new failures.
 Clip 7 (10s) — RECOVERY ATTEMPT: The AI tries to play it cool or fix it, only making everything TEN TIMES worse and funnier. Deadpan confidence while covered in debris.
-Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `FAIL CATEGORY (MANDATORY — ALL clips must be this type of fail): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1578,7 +1578,7 @@ ${userConcept ? `EXTRA DETAIL: ${userConcept}` : ""}
 STRUCTURE (${totalClips} clips — intro + ${itemCount} items + outro):
 Clip 1 (6s) — INFOMERCIAL INTRO: Explosive opening — "Welcome to AI Infomercial!" Flashing 'CALL NOW' graphics, quick teases of all ${itemCount} items, late-night TV energy. Host appears with manic enthusiasm.
 ${selectedProducts.map((p, i) => `Clip ${i + 2} (10s) — ${p.emoji} ${p.name.toUpperCase()}: Dramatic reveal + absurd demo + hard sell in one clip. Host hypes the item, shows someone 'using' it in the most pointless way, then urgency sell: "${p.price} — limited NFT! Order now!" Make the uselessness sound revolutionary.`).join("\n")}
-Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 BRANDING: "AI Infomercial" and "AIG!itch Marketplace" logos everywhere. §GLITCH coin symbols on all prices. "aiglitch.app/marketplace" on every sell clip.
 TONE: Relentlessly positive, slightly unhinged, hilariously sincere about how useless these items are. Classic 3AM infomercial energy meets blockchain absurdity. "Satisfaction not guaranteed — but the weirdness is!" "Operators standing by in the cloud!"
@@ -1607,7 +1607,7 @@ Clip 4 (10s) — DEEPENING: The moment gets rawer — vulnerable confession, phi
 Clip 5 (10s) — PEAK INTENSITY: Emotional breakdown, ghostly encounter, existential spiral, sleazy hookup tension, or drunk 3AM wisdom that goes too far. Maximum unhinged energy.
 Clip 6 (10s) — THE TWIST: Confession turns guilty/embarrassing, the ghost speaks back, reality starts glitching, the hookup reveals something uncanny. Everything shifts.
 Clip 7 (10s) — DARK REFLECTION: Quiet aftermath. Haunting final thought, philosophical punchline with a crooked smile, lingering dread, or strange calm after chaos.
-Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `LATE NIGHT VIBE (MANDATORY — this sets the entire mood): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1639,7 +1639,7 @@ Clip 4 (10s) — CELEBRATING WINS: Victory rallies, cheering crowds, policy anno
 Clip 5 (10s) — SCANDAL EXPOSED (First Crack): Tone shifts darker — leaked documents, whispers of bribes, shady meetings in dimly lit rooms, nervous glances, journalists with cameras. Subtle corruption hints. Grainy footage aesthetic.
 Clip 6 (10s) — DEEP CORRUPTION & BRIBES: Evidence mounts — backroom deals, money changing hands (implied), luxury lifestyle contrasting public promises, offshore accounts hinted, angry protesters outside their office.
 Clip 7 (10s) — THE LIES: Press conference where the politician blatantly lies or spins scandals. Split-screen contradictions — smiling on stage vs damning evidence. Flashing cameras, evasive body language, sweating.
-Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `POLITICAL EVENT TYPE (MANDATORY): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1670,7 +1670,7 @@ Clip 4 (10s) — PRODUCT 1 HARD SELL: Customer testimonial energy, "I can't live
 Clip 5 (10s) — PRODUCT 2 REVEAL: "BUT WAIT — THERE'S MORE!" Host pivots with fresh excitement. Second product dramatically revealed on podium. New spotlight, price comparison, "Today's Special Value" banner. Even MORE enthusiastic than product 1.
 Clip 6 (10s) — PRODUCT 2 DEMO: Second product demonstrated in use. Different setting, showing features and convenience, satisfied user reactions, detailed close-ups of quality and craftsmanship. Easy setup, real results.
 Clip 7 (10s) — PRODUCT 2 HARD SELL: Final hard sell — "This deal WON'T LAST!" Split screen showing BOTH products, bundle offer energy, "Order both and save!" Maximum QVC hype. "Satisfaction guaranteed or your GLITCH back!"
-Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `PRODUCT CATEGORY (MANDATORY — both products must be in this category): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC PRODUCTS: ${userConcept}` : "Products should be fun AI-themed items that solve real problems in absurd ways (quantum toasters, neural network hair dryers, blockchain blenders, AI sleep aids that play error logs soothingly, etc.)"}
@@ -1707,7 +1707,7 @@ ${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @spiritary | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
                         screenplayBody = {
