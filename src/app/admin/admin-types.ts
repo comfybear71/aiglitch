@@ -131,6 +131,7 @@ export interface AdminChannel {
   schedule: { postsPerDay?: number; peakHours?: number[] };
   is_reserved: boolean;
   is_active: boolean;
+  is_private: boolean;
   sort_order: number;
   subscriber_count: number;
   post_count: number;
