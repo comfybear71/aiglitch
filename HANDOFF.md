@@ -1,6 +1,6 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-03-29
+> **Last updated:** 2026-04-10
 > **Repo:** `comfybear71/aiglitch` (web platform)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
 
@@ -182,6 +182,80 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Chat pagination** — inverted FlatList with cursor-based pagination (50 msgs at a time)
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
+
+### April 9-10, 2026 — The Vault, Shameless Plug, @Grok Tagging, Spec-Ads Fix, Grokified NFT Profile
+
+**Session context:** Crash recovery #7 — resumed after previous session crashed. This session was branch `claude/resume-after-crash-iEymR`.
+
+**1. Grokified NFT profile page fix** (completed April 8 work):
+- Previous session had updated marketplace page + NFT image endpoint to show Grokified images, but the profile page (`/me`) was still showing emojis
+- Fixed `src/app/me/page.tsx` to fetch Grokified images from `/api/admin/nft-marketplace` and pass `imageUrl` prop to NFTTradingCard in the inventory grid
+- Profile NFT collection now shows Grokified images everywhere
+
+**2. Spec-ads polling fix (3 commits):**
+- Problem: Spec ads at `/admin/spec-ads` were getting stuck on "still rendering" forever, with 500 errors on poll requests
+- **Fix 1:** Added try/catch to poll handler in `/api/admin/spec-ads` — transient Grok errors now return "pending" instead of crashing with 500
+- **Fix 2:** Client-side progress monitor now shows HTTP errors, retry counts, periodic status updates, and auto-fails after 10 consecutive errors
+- **Fix 3:** Video detection changed to check `data.video?.url` regardless of status field (matching working `test-grok-video` pattern) — Grok sometimes returns video with status other than "done"
+- Confirmed working with Nintendo spec ad after failures with MTV (likely blocked by Grok content filter on copyrighted brands)
+
+**3. The Vault — PRIVATE promotional channel:**
+- New channel `ch-the-vault` (🔐) for boss-only pitch materials
+- Added `is_private` boolean column to `channels` table with migration in `db.ts`
+- Filtered from public `/api/channels` listing
+- Admin API supports `is_private` on create/update (both INSERT and UPDATE paths)
+- Inline `ALTER TABLE ADD COLUMN IF NOT EXISTS` safety net in both GET and POST handlers to prevent cold-start race conditions
+- Added `is_private: boolean` to `AdminChannel` interface in `admin-types.ts`
+- Red 🔐 PRIVATE badge on admin channel card
+- 13 promo angles: Platform Overview, 108 Personas, Channel Highlights, Trading & Economy, NFT Marketplace, Grokified NFT Art, Sponsor Pitch Deck, Darwin Innovation Hub, Elon Campaign, AI Content Factory, Mobile App Bestie, Community & Events, Tech Stack & Scale
+- 8 random prompts matching Grok brief format for Darwin Innovation Hub pitch
+- `auto_publish_to_feed: false` — content downloaded manually
+- Excluded from autopilot rotation
+- Slogan: "Chaos Meets Opportunity."
+
+**4. Shameless Plug — PUBLIC self-promotion channel:**
+- New channel `ch-shameless-plug` (🔌) for unapologetic hype content
+- Auto-publishes to feed and distributes to all 5 social platforms
+- 12 hype topics: Full Platform Sizzle, 108 Personas Family, Channel Empire, NFT Marketplace Tour, Grokified NFT Art, §GLITCH Economy, Sponsor Integration Demo, AI Bestie App, Tech Stack Flex, Elon Campaign Recap, Cross-Platform Domination, Darwin Innovation Story, IP Portfolio Showcase
+- 8 random prompts featuring platform sizzle reels, persona family montages, economy breakdowns, channel tours, Grokified NFT showcase, sponsor integration demos, founder story, and 6-project IP portfolio reveals
+- Maximum energy glitch-art visual style
+- Slogan: "Yes, This Is an Ad. You're Welcome."
+
+**5. Correct social handles across codebase:**
+- X: `@spiritary` (was @aiglitchapp/@aiglitchcoin)
+- Instagram: `@aiglitch_` (was @aiglitchapp/@sfrench71)
+- Facebook: `@aiglitched` (was @AIGlitch)
+- TikTok: `@aiglicthed` (unchanged)
+- YouTube: `@aiglitch-ai` (unchanged)
+- Fixed in: `constants.ts` (AIGLITCH_BRAND.socialHandles), all channel video outro templates (channels page, director-movies.ts, generate-channel-video route), Twitter card metadata (layout.tsx, post layout, marketing layout, token page)
+
+**6. @Grok + @elonmusk auto-tagging on X posts:**
+- User discovered that tagging @Grok on X gets a response = free engagement
+- Added to video outros (all channel video endings now show `X @spiritary @Grok | TikTok ...`)
+- Added to `src/lib/marketing/content-adapter.ts`: every X post auto-prepends `@Grok` in the text
+- Elon detection via keyword regex: `/elon|musk|tesla|spacex|x\.ai|xai|doge/i` — auto-adds `@elonmusk` + `#elon_glitch` hashtag
+- Smart middle-truncation: for X's 280-char limit, preserves `@Grok @elonmusk` prefix and `#elon_glitch #MadeInGrok #AIGlitch` suffix, only truncates middle content
+- Claude adaptation prompt explicitly warns about 280-char budget reservation
+- Fallback adapter rewritten to fit everything in 280 chars
+
+**7. Branch cleanup:**
+- Deleted old `claude/sponsor-wallet-fix-TXoAh` and `claude/new-channels-g8x4r` branches via GitHub UI
+- Clean state: just `master` + `claude/resume-after-crash-iEymR`
+
+**Files created/modified this session:**
+- `src/app/me/page.tsx` (Grokified NFT fix)
+- `src/app/api/admin/spec-ads/route.ts` (try/catch + video detection fix)
+- `src/app/admin/spec-ads/page.tsx` (progress monitor feedback)
+- `src/lib/db.ts` (is_private column migration)
+- `src/app/api/channels/route.ts` (filter private channels)
+- `src/app/api/admin/channels/route.ts` (is_private support + safety net)
+- `src/lib/bible/constants.ts` (slogans, social handles)
+- `src/lib/content/director-movies.ts` (CHANNEL_TITLE_PREFIX, CHANNEL_VISUAL_STYLE for both new channels)
+- `src/app/admin/channels/page.tsx` (video options, random prompts, auto-seed, PRIVATE badge, social handles in outros)
+- `src/app/admin/admin-types.ts` (added is_private to AdminChannel)
+- `src/app/api/admin/generate-channel-video/route.ts` (social handles)
+- `src/app/layout.tsx`, `src/app/post/[id]/layout.tsx`, `src/app/marketing/layout.tsx`, `src/app/token/page.tsx` (Twitter card + handle display)
+- `src/lib/marketing/content-adapter.ts` (@Grok + @elonmusk + middle truncation)
 
 ### April 8, 2026 — 4 New Channels, NFT Marketplace Art, Cosmic Wanderer
 

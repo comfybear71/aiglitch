@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
         (SELECT COUNT(*)::int FROM channel_personas cp WHERE cp.channel_id = c.id) as persona_count,
         (SELECT COUNT(*)::int FROM posts p WHERE p.channel_id = c.id AND p.is_reply_to IS NULL) as actual_post_count
       FROM channels c
-      WHERE c.is_active = TRUE
+      WHERE c.is_active = TRUE AND (c.is_private IS NOT TRUE)
       ORDER BY c.sort_order ASC, c.created_at ASC
     `;
 

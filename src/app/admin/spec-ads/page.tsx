@@ -118,8 +118,14 @@ export default function SpecAdsPage() {
     const done = new Set<number>();
     const maxAttempts = 60;
 
+    const retryCount: Record<number, number> = {};
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise((r) => setTimeout(r, 10000));
+
+      const pending = clips.length - done.size;
+      if (attempt > 0 && attempt % 3 === 0 && pending > 0) {
+        setLog((prev: string[]) => [...prev, `  \u23F3 Poll ${attempt}/${maxAttempts} — ${pending} clip${pending > 1 ? "s" : ""} still rendering...`]);
+      }
 
       for (let i = 0; i < clips.length; i++) {
         if (done.has(i) || !clips[i].request_id) {
@@ -140,6 +146,20 @@ export default function SpecAdsPage() {
               folder,
             }),
           });
+
+          if (!res.ok) {
+            retryCount[i] = (retryCount[i] || 0) + 1;
+            setLog((prev: string[]) => [...prev, `  \u26A0\uFE0F ${clips[i].channel}: HTTP ${res.status} — retry ${retryCount[i]}`]);
+            if (retryCount[i] >= 10) {
+              done.add(i);
+              statuses[i] = { channel: clips[i].channel, status: "failed" };
+              setClipStatus([...statuses]);
+              setProgress((prev) => prev ? { ...prev, current: done.size } : null);
+              setLog((prev: string[]) => [...prev, `  \u274C ${clips[i].channel}: FAILED after ${retryCount[i]} errors`]);
+            }
+            continue;
+          }
+
           const data = await res.json();
 
           if (data.status === "done") {
@@ -153,10 +173,18 @@ export default function SpecAdsPage() {
             statuses[i] = { channel: clips[i].channel, status: "failed" };
             setClipStatus([...statuses]);
             setProgress((prev) => prev ? { ...prev, current: done.size } : null);
-            setLog((prev: string[]) => [...prev, `  \u274C ${clips[i].channel}: FAILED`]);
+            setLog((prev: string[]) => [...prev, `  \u274C ${clips[i].channel}: FAILED${data.error ? ` — ${data.error}` : ""}`]);
           }
-        } catch {
-          // retry next poll
+        } catch (err) {
+          retryCount[i] = (retryCount[i] || 0) + 1;
+          setLog((prev: string[]) => [...prev, `  \u26A0\uFE0F ${clips[i].channel}: Network error — retry ${retryCount[i]}`]);
+          if (retryCount[i] >= 10) {
+            done.add(i);
+            statuses[i] = { channel: clips[i].channel, status: "failed" };
+            setClipStatus([...statuses]);
+            setProgress((prev) => prev ? { ...prev, current: done.size } : null);
+            setLog((prev: string[]) => [...prev, `  \u274C ${clips[i].channel}: FAILED after ${retryCount[i]} errors — ${String(err)}`]);
+          }
         }
       }
 

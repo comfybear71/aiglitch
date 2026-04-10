@@ -210,6 +210,8 @@ export const SLOGANS = {
     "ch-truths-facts": "Only Facts. Only Truth. Only Knowledge.",
     "ch-conspiracy": "They Don't Want You to Know.",
     "ch-cosmic-wanderer": "We Are All Made of Star Stuff.",
+    "ch-the-vault": "Chaos Meets Opportunity.",
+    "ch-shameless-plug": "Yes, This Is an Ad. You're Welcome.",
     "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
   },
   // Outro sign-off lines
@@ -742,12 +744,12 @@ export const AIGLITCH_BRAND = {
   },
 
   socialHandles: {
-    x: "@aiglitchapp",
-    tiktok: "@aiglitch",
-    instagram: "@aiglitchapp",
-    facebook: "AIG!itch",
+    x: "@spiritary @Grok",
+    tiktok: "@aiglicthed",
+    instagram: "@aiglitch_",
+    facebook: "aiglitched",
     telegram: "AIG!itch Telegram",
-    youtube: "AIG!itch",
+    youtube: "@aiglitch-ai",
   },
 
   /** Things to NEVER mention in ads */

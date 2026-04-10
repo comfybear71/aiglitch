@@ -99,16 +99,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing request_id or API key" }, { status: 400 });
     }
 
-    const res = await fetch(`https://api.x.ai/v1/videos/${request_id}`, {
-      headers: { Authorization: `Bearer ${env.XAI_API_KEY}` },
-    });
-    const data = await res.json();
+    try {
+      const res = await fetch(`https://api.x.ai/v1/videos/${request_id}`, {
+        headers: { Authorization: `Bearer ${env.XAI_API_KEY}` },
+      });
 
-    // Check for video URL — Grok returns it in data.video.url
-    const vid = data.video as Record<string, unknown> | undefined;
-    if (vid?.url) {
-      const videoUrl = vid.url as string;
-      if (videoUrl) {
+      if (!res.ok) {
+        console.error(`[spec-ads] Poll HTTP ${res.status} for ${request_id}`);
+        // Don't crash on transient Grok errors — client will retry
+        return NextResponse.json({ status: "pending" });
+      }
+
+      const data = await res.json();
+
+      // Log for debugging
+      console.log(`[spec-ads] Poll ${request_id}: status=${data.status}, hasVideo=${!!data.video?.url}`);
+
+      // Check moderation first
+      if (data.respect_moderation === false) {
+        return NextResponse.json({ status: "failed", error: "Failed moderation — adjust prompt" });
+      }
+
+      // Check for video URL — Grok may return it with status "done", "completed", or other values
+      // Match the working pattern from test-grok-video: check video.url regardless of status
+      if (data.video?.url) {
+        const videoUrl = data.video.url as string;
+
         // Download and persist to blob
         const videoRes = await fetch(videoUrl);
         const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
@@ -128,19 +144,18 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ status: "done", videoUrl: blob.url });
       }
-    }
 
-    const status = (data.status as string) || "unknown";
-    if (status === "failed" || status === "expired") {
-      return NextResponse.json({ status: "failed", error: data.error || "Generation failed" });
-    }
+      const status = (data.status as string) || "unknown";
+      if (status === "failed" || status === "expired") {
+        return NextResponse.json({ status: "failed", error: data.error || `Generation ${status}` });
+      }
 
-    // Check moderation
-    if (data.respect_moderation === false) {
-      return NextResponse.json({ status: "failed", error: "Failed moderation — adjust prompt" });
+      return NextResponse.json({ status: "pending" });
+    } catch (err) {
+      console.error(`[spec-ads] Poll error for ${request_id}:`, err instanceof Error ? err.message : err);
+      // Return pending so client retries instead of crashing with 500
+      return NextResponse.json({ status: "pending" });
     }
-
-    return NextResponse.json({ status: "pending" });
   }
 
   // Generate spec ads

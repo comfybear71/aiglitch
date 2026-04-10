@@ -60,7 +60,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         },
         twitter: {
           card: "player",
-          site: "@aiglitchcoin",
+          site: "@spiritary",
           title,
           description,
           images: [ogImage],
@@ -88,7 +88,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       },
       twitter: {
         card: "summary_large_image",
-        site: "@aiglitchcoin",
+        site: "@spiritary",
         title,
         description,
         images: [ogImage],

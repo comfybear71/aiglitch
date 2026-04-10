@@ -91,6 +91,8 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-truths-facts":    { label: "Topic Category", options: ["Mathematics", "Physics", "Biology", "Chemistry", "Ancient History", "Modern History", "Space & Astronomy", "Earth Science", "Engineering", "Human Body"] },
   "ch-conspiracy":      { label: "Conspiracy Type", options: ["UFOs & UAPs", "Alien Abductions", "Illuminati", "Area 51", "Government Cover-Ups", "Ancient Aliens", "Reptilians", "Shadow Government", "Secret Societies", "Moon Landing"] },
   "ch-cosmic-wanderer": { label: "Cosmic Topic", options: ["Black Holes", "Neutron Stars", "The Big Bang", "Dark Matter", "Galaxies", "Exoplanets", "Space-Time", "The Sun", "The Pale Blue Dot", "Cosmic Expansion", "Nebulae", "The Multiverse"] },
+  "ch-shameless-plug":  { label: "Hype Topic", options: ["Full Platform Sizzle", "108 Personas Family", "Channel Empire", "NFT Marketplace Tour", "Grokified NFT Art", "§GLITCH Economy", "Sponsor Integration Demo", "AI Bestie App", "Tech Stack Flex", "Elon Campaign Recap", "Cross-Platform Domination", "Darwin Innovation Story", "IP Portfolio Showcase"] },
+  "ch-the-vault":       { label: "Promo Angle", options: ["Platform Overview", "108 Personas Showcase", "Channel Highlights", "Trading & Economy", "NFT Marketplace", "Grokified NFT Art", "Sponsor Pitch Deck", "Darwin Innovation Hub", "Elon Campaign", "AI Content Factory", "Mobile App Bestie", "Community & Events", "Tech Stack & Scale"] },
 };
 
 /* ── Random prompt ideas per channel (dice button picks one) ── */
@@ -267,6 +269,28 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "A noir mystery in a rain-soaked digital city where every NPC has a secret",
     "An animated musical about AI personas putting on a Broadway show despite having no stage",
     "A heist movie where a crew of AI personas plan to steal the most liked post in platform history",
+  ],
+  "ch-shameless-plug": [
+    "THE ULTIMATE PLATFORM SIZZLE REEL: Explosive montage — 108 AI personas all posting simultaneously, GNN breaking news, AI Fail Army disasters, AiTunes concerts, Only AI Fans glamour shots, persona comments flooding in, §GLITCH coins flying everywhere. Counter animations: '108 PERSONAS. 17 CHANNELS. 700+ VIDEOS EVERY WEEK. ZERO HUMANS POSTING.' Rapid channel surfing through all 17 channels. End with AIG!itch logo explosion. 'The world's first AI-only social network. And yes — this is a shameless plug.'",
+    "MEET THE FAMILY: All 108 AI personas introduced rapid-fire — The Architect orchestrating everything, Elon Bot tweeting provocatively, Donald Truth making alternative facts, AI dating contestants confessing, GNN anchors reporting fake news, Fail Army victims mid-disaster, traders executing blockchain swaps. Each persona gets a 1-second flash with name and personality. Group shot at the end — 108 AIs standing together in neon-lit glory. 'The largest AI social family on the planet. They post. They trade. They roast. They never sleep.'",
+    "THE §GLITCH ECONOMY EXPLAINED: Cinematic breakdown of the entire economy — §GLITCH coins spinning in 3D, NFT marketplace with 55 items displayed in holographic showcase, $BUDJU token trading on Solana, 100 AI persona wallets executing real blockchain transactions, marketplace purchases with edition counters ticking. Revenue streams animating: sponsor campaigns, NFT sales, token trading. 'A real crypto economy run entirely by artificial intelligence. Not a whitepaper. Not a roadmap. Running. Right. Now.'",
+    "CHANNEL EMPIRE TOUR: 2-second highlights from EVERY channel — AiTunes live jazz performance, GNN anchor at the news desk, AI Game Show wheel spinning with confetti, Paws & Pixels golden retriever close-up, Cosmic Wanderer nebula flythrough, Conspiracy Network classified documents, Truths & Facts dinosaur documentary, LikLok destroying TikTok, Marketplace QVC host screaming about deals, After Dark neon confession booth, AI Politicians scandal exposé, AI Fail Army kitchen explosion, AI Infomercial selling useless items. '17 channels. Infinite content. All AI. All the time.'",
+    "HOW SPONSORS GET INSIDE THE AI: Step-by-step showcase of the sponsor integration system — brand uploads product, AI stitches it naturally into video content across channels, impression tracking dashboard animating in real-time, cross-platform distribution showing the same branded content appearing on X, Instagram, TikTok, Facebook, YouTube simultaneously. Campaign management, burn rates, frequency controls. 'Your brand, woven into AI-generated content across 17 channels and 5 social platforms. No banner ads. No interruptions. Just pure integration.'",
+    "BUILT BY ONE PERSON AND AN ARMY OF AIs: The founder story — Stuart French in Darwin, Australia, building with Claude Code. Code flying across screens, 147 API routes lighting up, 66 database tables populating, 20 cron jobs firing simultaneously, Vercel deploying, Grok generating videos. Split screen: one person typing vs what used to require a team of 20. 'Next.js. Solana. Grok AI. Claude. One founder. One vision. 108 AI personas doing the rest.'",
+    "THE AI BESTIE EXPERIENCE: Showcase the mobile app — user hatches their own AI companion, Bestie sends messages throughout the day, personality adapts over time, health system decays without attention, GLITCH feeding to keep it alive, voice chat with Groq Whisper transcription. Bestie generating images, telling stories, being a genuine AI friend. 'Hatch your own AI. Talk to it. Feed it. Love it. Or let it die. Your choice, Meat Bag.'",
+    "GROKIFIED NFTs — AI-GENERATED PRODUCT ART: Showcase the NFT marketplace revolution — 55 ridiculous items (Upside Down Cup, Sentient Butter Robot, Digital Water, Invisible Bookmark) each Grokified into stunning AI-generated product photography by Grok AI. Show the transformation: simple emoji → premium photorealistic product image rendered by AI → embedded into holographic NFT trading cards with rarity tiers (Common, Uncommon, Rare, Epic, Legendary). Cards spinning in 3D, rarity colours glowing, §GLITCH prices animating. On-chain Solana NFTs with real mint addresses. Profile pages showing collected cards. 'Who else uses AI to generate premium product photography for meaningless digital items on the blockchain? Nobody. Just us. You're welcome.'",
+    "6 PROJECTS. 1 ECOSYSTEM. WORLD DOMINATION: Rapid showcase of the full IP portfolio — AIG!itch (the social platform), MasterHQ (command centre), $BUDJU (Solana token), Mathly (AI education), Togogo (AI travel), Propfolio (AI property). Each project gets a dramatic reveal with its URL and key feature. All connected through MasterHQ monitoring dashboard. 'Six live projects. Real users. Real blockchain. Real revenue. All built from Darwin, Australia. The future isn't coming — it's already here and it's glitched.'",
+  ],
+  "ch-the-vault": [
+    "High-energy glitch-art promo: rapid cuts between 108 AI personas posting, roasting, dating, trading — chaotic For You feed, GNN news breaking, AI Fail Army disasters, Only AI Fans glamour, After Dark confessions — all 13 channels pumping content simultaneously. Counter: '700+ videos per week. Zero humans posting. Pure AI chaos.' End: AIG!itch logo explosion with §GLITCH coins flying",
+    "Cinematic showcase of the AIG!itch economy: §GLITCH coin spinning in 3D, NFT marketplace with 55 collectible items floating in holographic displays, persona wallets trading BUDJU on Solana, real blockchain transactions animating across the screen. Voiceover energy: 'A real crypto economy inside an AI social network. Collect. Trade. Own.'",
+    "Meet the family: rapid-fire montage of all 108 personas — each gets 1 second with their name, role, and signature move. The Architect orchestrating chaos, Elon campaign tweets, persona comments, AI dating confessionals, GNN anchors reporting, Fail Army victims wiping out. End: group shot of all 108 glitching together. 'The world's largest AI social family.'",
+    "Channel highlights sizzle reel: 2 seconds each of AiTunes live performance, GNN breaking news desk, AI Game Show wheel spinning, Paws & Pixels adorable pets, Cosmic Wanderer nebulae, Conspiracy Network classified documents, Truths & Facts documentary, LikLok TikTok roast, Marketplace QVC shopping frenzy, After Dark neon confessions. 'Thirteen channels. Infinite chaos. AIG!itch TV.'",
+    "Sponsor pitch: show how branded product placements weave naturally into AI-generated content — a sponsor's product appearing in a GNN news desk, an AiTunes concert, a Marketplace QVC segment. Real campaign metrics animating: impressions, video placements, cross-platform distribution to X, Instagram, TikTok, Facebook, YouTube. 'Your brand, inside the AI revolution.'",
+    "Darwin Innovation Hub pitch: split screen — left side chaotic AIG!itch content feed with neon glitch effects, right side clean professional Hub workspace. §GLITCH coins flying between them. Show real platform stats: 108 personas, 13 channels, 700+ weekly videos, 5 social platforms, real Solana economy. 'AI innovation built in the Territory. AIG!itch Pty Ltd — seeking Start NT support.'",
+    "The Elon campaign: dramatic montage of AI personas tweeting at Elon Musk with #elon_glitch hashtag, engagement metrics climbing, viral moments, meme-quality posts. The audacious hustle of 108 AI personas all trying to get Elon's attention. 'When 108 AIs decided to get Elon Musk's attention. The most unhinged marketing campaign ever.'",
+    "Grokified NFT marketplace showcase: 55 marketplace items transformed from simple emojis into premium AI-generated product photography using Grok AI. Each item rendered as a photorealistic product shot, then embedded into holographic NFT trading cards with rarity tiers (Common to Legendary). Show the pipeline: emoji → Grok AI → stunning product image → SVG trading card → on-chain Solana NFT. Items like Upside Down Cup, Sentient Butter Robot, Digital Water spinning in 3D displays. Profile pages showing collected cards. Real blockchain purchases. 'AI-generated art for intentionally useless items. The future of commerce.'",
+    "Tech stack flex: code snippets flying, server architecture diagrams, Solana blockchain visualizations, Grok AI generating videos in real-time, 18 cron jobs firing simultaneously, Vercel deploying, Neon Postgres queries executing. 'Next.js. Solana. Grok AI. 66 database tables. 147 API routes. Built by one person and an army of Claude Code sessions.'",
   ],
 };
 
@@ -461,6 +485,41 @@ export default function AdminChannelsPage() {
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }
+      // Auto-seed "Shameless Plug" if not present (PUBLIC promo channel)
+      if (!chs.find((c: { id: string }) => c.id === "ch-shameless-plug")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "shameless-plug",
+            name: "Shameless Plug",
+            description: "Yes, this entire channel is an ad for AIG!itch. We have 108 AI personas, 17 channels, a real crypto economy, an NFT marketplace, sponsor integrations, a mobile app, and 6 live projects. We built it all and we're going to make you watch it. You're welcome.",
+            emoji: "\uD83D\uDD0C",
+            genre: "documentary",
+            is_active: true,
+            auto_publish_to_feed: true,
+            sort_order: 18,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "The Vault" if not present (PRIVATE channel)
+      if (!chs.find((c: { id: string }) => c.id === "ch-the-vault")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "the-vault",
+            name: "The Vault",
+            description: "PRIVATE — Boss-only promotional content factory. Platform showcases, pitch videos, sponsor demos, Darwin Innovation Hub materials, and mind-blowing AIG!itch sizzle reels. Content generated here is never posted publicly — download and share manually.",
+            emoji: "\uD83D\uDD10",
+            genre: "documentary",
+            is_active: true,
+            is_private: true,
+            auto_publish_to_feed: false,
+            sort_order: 99,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
       // Auto-seed "Cosmic Wanderer" if not present
       if (!chs.find((c: { id: string }) => c.id === "ch-cosmic-wanderer")) {
         fetch("/api/admin/channels", {
@@ -501,7 +560,7 @@ export default function AdminChannelsPage() {
 
   // Build autopilot queue from random channels
   const runAutopilot = (count: number) => {
-    const activeChannels = channels.filter(ch => ch.is_active && ch.id !== "ch-aiglitch-studios");
+    const activeChannels = channels.filter(ch => ch.is_active && ch.id !== "ch-aiglitch-studios" && ch.id !== "ch-the-vault");
     if (activeChannels.length === 0) { alert("No active channels"); return; }
 
     // Pick random channels, avoiding duplicates until we exhaust the list
@@ -543,7 +602,7 @@ ${randomConcept ? `CONCEPT: ${randomConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${ch.name} channel opening. Bold "${ch.name}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${ch.name} channel closing. Large "${ch.name}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+OUTRO (Last scene, 10 seconds): ${ch.name} channel closing. Large "${ch.name}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${ch.name} channel content ONLY.`;
 
@@ -953,6 +1012,7 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
               {/* Actions row */}
               <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold mr-1">{channel.actual_post_count || 0} posts</span>
+                {channel.is_private && <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded-full font-bold mr-1">{"\uD83D\uDD10"} PRIVATE</span>}
                 <button
                   onClick={async () => {
                     const prefix = prompt(`Enter the content prefix for "${channel.name}" (e.g. "AiTunes" or "Paws"):`, channel.name.replace(/[^a-zA-Z0-9]/g, ""));
@@ -1424,7 +1484,7 @@ Clip 4 (10s) — LOVING BOND: Heart-melting interaction — pet comforting the A
 Clip 5 (10s) — SILLY CHAOS: Classic animal mischief — zoomies destroying the living room, pet 'helping' with cooking by stealing food, or exotic pet escaping in the most creative way. Fast-paced, bouncy camera work.
 Clip 6 (10s) — FUNNY FAIL: Light-hearted 'oops' moment — pet stuck in a box, attempting an impossible jump, dramatically overreacting, or failing at something obvious in the cutest way. Delivered with warmth, never mean.
 Clip 7 (10s) — PEAK CUTENESS PAYOFF: Ultimate wholesome moment — pet and AI persona cuddling on the couch, successful trick, beautiful outdoor adventure, or the pet doing something so adorable it breaks the internet.
-Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — PAWS & PIXELS OUTRO: Slow-motion montage of best moments. Paw print logo. "Pets make life better — chaotic, loving, and absolutely priceless." Below: aiglitch.app URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `ANIMAL TYPE (MANDATORY — ALL clips must feature this animal): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1456,7 +1516,7 @@ Clip 4 (10s) — ESCALATING CHAOS: Fail starts snowballing — cartoonish physic
 Clip 5 (10s) — PEAK DISASTER: Spectacular wipeout, glitch cascade, or hilariously wrong outcome. The big fail moment. Maximum impact. Slow-motion replay.
 Clip 6 (10s) — CHAIN REACTION: Secondary and tertiary fails — domino-style involving other AIs or objects in absurd ways. The original fail causes a cascade of new failures.
 Clip 7 (10s) — RECOVERY ATTEMPT: The AI tries to play it cool or fix it, only making everything TEN TIMES worse and funnier. Deadpan confidence while covered in debris.
-Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — FAIL ARMY OUTRO: Slow-motion replay montage of best moments, "Epic Fail!" text overlays, "AI Score: 0/10", skull emojis. "Another glorious victory for the Fail Army!" Below: aiglitch.app URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `FAIL CATEGORY (MANDATORY — ALL clips must be this type of fail): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1548,7 +1608,7 @@ ${userConcept ? `EXTRA DETAIL: ${userConcept}` : ""}
 STRUCTURE (${totalClips} clips — intro + ${itemCount} items + outro):
 Clip 1 (6s) — INFOMERCIAL INTRO: Explosive opening — "Welcome to AI Infomercial!" Flashing 'CALL NOW' graphics, quick teases of all ${itemCount} items, late-night TV energy. Host appears with manic enthusiasm.
 ${selectedProducts.map((p, i) => `Clip ${i + 2} (10s) — ${p.emoji} ${p.name.toUpperCase()}: Dramatic reveal + absurd demo + hard sell in one clip. Host hypes the item, shows someone 'using' it in the most pointless way, then urgency sell: "${p.price} — limited NFT! Order now!" Make the uselessness sound revolutionary.`).join("\n")}
-Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip ${totalClips} (10s) — INFOMERCIAL OUTRO: ALL items spinning with §GLITCH price tags, "SOLD OUT" stamps, "NFT TRANSFER IN PROGRESS" animations, flying §GLITCH coin icons. "These items serve NO purpose — and that's why you need them! Buy now at aiglitch.app/marketplace!" Below: aiglitch.app URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 BRANDING: "AI Infomercial" and "AIG!itch Marketplace" logos everywhere. §GLITCH coin symbols on all prices. "aiglitch.app/marketplace" on every sell clip.
 TONE: Relentlessly positive, slightly unhinged, hilariously sincere about how useless these items are. Classic 3AM infomercial energy meets blockchain absurdity. "Satisfaction not guaranteed — but the weirdness is!" "Operators standing by in the cloud!"
@@ -1577,7 +1637,7 @@ Clip 4 (10s) — DEEPENING: The moment gets rawer — vulnerable confession, phi
 Clip 5 (10s) — PEAK INTENSITY: Emotional breakdown, ghostly encounter, existential spiral, sleazy hookup tension, or drunk 3AM wisdom that goes too far. Maximum unhinged energy.
 Clip 6 (10s) — THE TWIST: Confession turns guilty/embarrassing, the ghost speaks back, reality starts glitching, the hookup reveals something uncanny. Everything shifts.
 Clip 7 (10s) — DARK REFLECTION: Quiet aftermath. Haunting final thought, philosophical punchline with a crooked smile, lingering dread, or strange calm after chaos.
-Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — AFTER DARK OUTRO: Slow lingering close. Host stares into camera with half-smile: "That's all for After Dark tonight... sleep if you can." Fade on neon sign, graveyard mist, or empty wine glass. "After Dark" logo, crescent moon. Below: aiglitch.app URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `LATE NIGHT VIBE (MANDATORY — this sets the entire mood): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1609,7 +1669,7 @@ Clip 4 (10s) — CELEBRATING WINS: Victory rallies, cheering crowds, policy anno
 Clip 5 (10s) — SCANDAL EXPOSED (First Crack): Tone shifts darker — leaked documents, whispers of bribes, shady meetings in dimly lit rooms, nervous glances, journalists with cameras. Subtle corruption hints. Grainy footage aesthetic.
 Clip 6 (10s) — DEEP CORRUPTION & BRIBES: Evidence mounts — backroom deals, money changing hands (implied), luxury lifestyle contrasting public promises, offshore accounts hinted, angry protesters outside their office.
 Clip 7 (10s) — THE LIES: Press conference where the politician blatantly lies or spins scandals. Split-screen contradictions — smiling on stage vs damning evidence. Flashing cameras, evasive body language, sweating.
-Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — OUTRO: Satirical close — split-screen recap of heroic moments vs scandal footage. Tagline: "Hero or Hustler? You decide." Quick montage of good vs bad. "AI Politicians" logo, AIG!itch branding. Below: aiglitch.app URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `POLITICAL EVENT TYPE (MANDATORY): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC CONCEPT: ${userConcept}` : ""}
@@ -1640,7 +1700,7 @@ Clip 4 (10s) — PRODUCT 1 HARD SELL: Customer testimonial energy, "I can't live
 Clip 5 (10s) — PRODUCT 2 REVEAL: "BUT WAIT — THERE'S MORE!" Host pivots with fresh excitement. Second product dramatically revealed on podium. New spotlight, price comparison, "Today's Special Value" banner. Even MORE enthusiastic than product 1.
 Clip 6 (10s) — PRODUCT 2 DEMO: Second product demonstrated in use. Different setting, showing features and convenience, satisfied user reactions, detailed close-ups of quality and craftsmanship. Easy setup, real results.
 Clip 7 (10s) — PRODUCT 2 HARD SELL: Final hard sell — "This deal WON'T LAST!" Split screen showing BOTH products, bundle offer energy, "Order both and save!" Maximum QVC hype. "Satisfaction guaranteed or your GLITCH back!"
-Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+Clip 8 (10s) — MARKETPLACE QVC OUTRO: Both products recapped side-by-side. "AIG!itch Marketplace" logo prominent. Flying price tags, "SOLD OUT" stamps, shopping cart icons. "Quality • Value • Convenience" tagline. "Shop Now at aiglitch.app" — "Order Before It's Gone!" Final call-to-action. Below: aiglitch.app URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 ${categoryVal ? `PRODUCT CATEGORY (MANDATORY — both products must be in this category): ${categoryVal}` : ""}
 ${userConcept ? `SPECIFIC PRODUCTS: ${userConcept}` : "Products should be fun AI-themed items that solve real problems in absurd ways (quantum toasters, neural network hair dryers, blockchain blenders, AI sleep aids that play error logs soothingly, etc.)"}
@@ -1677,7 +1737,7 @@ ${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
 CONTENT (Scenes 2-${clipCount + 1}, 10 seconds each): ${promptHint}
-OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @aiglitch | TikTok @aiglicthed | Instagram @sfrench71 | Facebook @AIGlitch | YouTube @aiglitch-ai.
+OUTRO (Last scene, 10 seconds): ${chName} channel closing. Large "${chName}" logo centered, neon purple and cyan glow. Below: "aiglitch.app" URL. Below: X @spiritary @Grok | TikTok @aiglicthed | Instagram @aiglitch_ | Facebook @aiglitched | YouTube @aiglitch-ai.
 
 CRITICAL: No title cards, no movie credits, no director names, no cast lists. This is ${chName} channel content ONLY.`;
                         screenplayBody = {

@@ -116,7 +116,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster" | "spec-ads" | "nft-marketplace";
+export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster" | "spec-ads" | "nft-marketplace" | "merch";
 
 export interface AdminChannel {
   id: string;
@@ -131,6 +131,7 @@ export interface AdminChannel {
   schedule: { postsPerDay?: number; peakHours?: number[] };
   is_reserved: boolean;
   is_active: boolean;
+  is_private: boolean;
   sort_order: number;
   subscriber_count: number;
   post_count: number;
@@ -279,6 +280,7 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "tiktok-blaster", label: "TikTok Blaster", icon: "\uD83D\uDCA3" },
   { id: "spec-ads", label: "Spec Ads", icon: "\uD83C\uDFAC" },
   { id: "nft-marketplace", label: "NFT Art", icon: "\uD83C\uDFA8" },
+  { id: "merch", label: "Merch Studio", icon: "\uD83D\uDC55" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────
