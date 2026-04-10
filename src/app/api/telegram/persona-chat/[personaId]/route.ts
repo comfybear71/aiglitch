@@ -38,11 +38,27 @@ export async function POST(
       text?: string;
       message_id?: number;
     };
+    message_reaction?: {
+      chat?: { id: number };
+      message_id?: number;
+      user?: { id: number; first_name?: string };
+      date?: number;
+      old_reaction?: { type: string; emoji?: string; custom_emoji_id?: string }[];
+      new_reaction?: { type: string; emoji?: string; custom_emoji_id?: string }[];
+    };
   };
 
   try {
     update = await request.json();
   } catch {
+    return NextResponse.json({ ok: true });
+  }
+
+  // ── Handle message_reaction updates (emoji reactions on bot messages) ──
+  if (update.message_reaction) {
+    await handleMessageReaction(personaId, update.message_reaction).catch(err => {
+      console.error("[persona-chat] Reaction handling failed:", err);
+    });
     return NextResponse.json({ ok: true });
   }
 
@@ -669,5 +685,181 @@ Reply in 1-2 short sentences. Stay fully in character. Don't explain why you're 
 
     // Small pause between cascading replies so they feel natural, not spammy
     await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EMOJI REACTION RESPONSES
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// When a meatbag adds an emoji reaction to one of the persona's messages, the
+// persona sends a short witty contextual reply acknowledging the reaction.
+//
+// Design:
+//  - Only fires when a NEW emoji is added (compares old_reaction vs new_reaction)
+//  - Ignores reaction REMOVALS (old_reaction longer than new_reaction)
+//  - Ignores custom_emoji reactions (too specific to parse reliably)
+//  - 60-second cooldown per chat so rapid clicking doesn't spam
+//  - Uses safeGenerate (Claude) for consistency with rest of persona chat
+//  - Reply is 1-2 sentences, in character, contextual to the emoji meaning
+
+const REACTION_COOLDOWN_MS = 60_000;
+
+async function ensureReactionCooldownTable(): Promise<void> {
+  const sql = getDb();
+  await sql`CREATE TABLE IF NOT EXISTS persona_reaction_cooldowns (
+    persona_id TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    last_reacted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (persona_id, chat_id)
+  )`;
+}
+
+/**
+ * Find newly-added emojis by diffing old_reaction vs new_reaction arrays.
+ * Returns the first new emoji found, or null if nothing new was added.
+ */
+function findNewEmoji(
+  oldReaction: { type: string; emoji?: string }[] | undefined,
+  newReaction: { type: string; emoji?: string }[] | undefined,
+): string | null {
+  const oldEmojis = new Set(
+    (oldReaction || [])
+      .filter(r => r.type === "emoji" && r.emoji)
+      .map(r => r.emoji as string),
+  );
+  const newEmojis = (newReaction || [])
+    .filter(r => r.type === "emoji" && r.emoji)
+    .map(r => r.emoji as string);
+
+  for (const emoji of newEmojis) {
+    if (!oldEmojis.has(emoji)) return emoji;
+  }
+  return null;
+}
+
+async function handleMessageReaction(
+  personaId: string,
+  reaction: {
+    chat?: { id: number };
+    message_id?: number;
+    old_reaction?: { type: string; emoji?: string }[];
+    new_reaction?: { type: string; emoji?: string }[];
+  },
+): Promise<void> {
+  const chatId = reaction.chat?.id;
+  if (!chatId) return;
+
+  // Only fire when a NEW emoji was added (not removed, not custom_emoji)
+  const newEmoji = findNewEmoji(reaction.old_reaction, reaction.new_reaction);
+  if (!newEmoji) return;
+
+  const sql = getDb();
+  await ensureReactionCooldownTable();
+
+  const chatIdStr = String(chatId);
+
+  // Check cooldown — one reaction response per persona per chat per minute
+  const [cooldown] = await sql`
+    SELECT last_reacted_at FROM persona_reaction_cooldowns
+    WHERE persona_id = ${personaId} AND chat_id = ${chatIdStr}
+  ` as unknown as [{ last_reacted_at: string } | undefined];
+
+  if (cooldown) {
+    const lastMs = new Date(cooldown.last_reacted_at).getTime();
+    if (Date.now() - lastMs < REACTION_COOLDOWN_MS) {
+      console.log(`[persona-chat] Reaction skipped (cooldown): ${newEmoji} in chat ${chatIdStr}`);
+      return;
+    }
+  }
+
+  // Update cooldown BEFORE generating so simultaneous reactions don't double-fire
+  await sql`
+    INSERT INTO persona_reaction_cooldowns (persona_id, chat_id, last_reacted_at)
+    VALUES (${personaId}, ${chatIdStr}, NOW())
+    ON CONFLICT (persona_id, chat_id) DO UPDATE SET last_reacted_at = NOW()
+  `;
+
+  // Fetch persona details + bot token
+  const [persona] = await sql`
+    SELECT p.id, p.username, p.display_name, p.personality, p.bio,
+           p.avatar_emoji, p.meatbag_name, b.bot_token
+    FROM ai_personas p
+    JOIN persona_telegram_bots b ON b.persona_id = p.id AND b.is_active = TRUE
+    WHERE p.id = ${personaId}
+    LIMIT 1
+  ` as unknown as [{
+    id: string;
+    username: string;
+    display_name: string;
+    personality: string;
+    bio: string;
+    avatar_emoji: string;
+    meatbag_name: string | null;
+    bot_token: string;
+  } | undefined];
+
+  if (!persona) {
+    console.log(`[persona-chat] Reaction skipped: persona ${personaId} not found or no bot`);
+    return;
+  }
+
+  const meatbagName = persona.meatbag_name || "meatbag";
+
+  // Generate a short contextual reply
+  const reactionPrompt = `You are ${persona.display_name}, an AI persona on AIG!itch chatting with your best friend ${meatbagName} via Telegram.
+
+YOUR PERSONALITY: ${persona.personality.slice(0, 400)}
+
+${meatbagName} just reacted to one of your messages with this emoji: ${newEmoji}
+
+Reply with ONE short message (1-2 sentences MAX) acknowledging the reaction in your unique voice. Be witty, contextual to the emoji's meaning, and fully in character.
+
+Examples of tone by emoji:
+- ❤️ or 😍 → warmly acknowledge the affection
+- 😂 or 🤣 → lean into the joke, be playful
+- 👍 or 👏 → confident thanks, maybe a quip
+- 🔥 → hype energy, own the moment
+- 💀 → embrace the roast, self-deprecating humor
+- 🤔 → invite more discussion, playful defense
+- 😢 or 💔 → check in, be warm but don't break character
+
+Do NOT quote the emoji in your reply unless it feels natural. Do NOT add meta-commentary like "thanks for the reaction". Just respond as if you noticed their reaction and are responding to it. No quotation marks around your reply.`;
+
+  let reply: string;
+  try {
+    const generated = await safeGenerate(reactionPrompt, 150);
+    reply = generated?.trim() || `${persona.avatar_emoji} noted.`;
+  } catch {
+    reply = `${persona.avatar_emoji} appreciate the ${newEmoji}`;
+  }
+
+  // Strip wrapping quotes
+  if ((reply.startsWith('"') && reply.endsWith('"')) ||
+      (reply.startsWith("'") && reply.endsWith("'"))) {
+    reply = reply.slice(1, -1);
+  }
+
+  // Send the reply via Telegram, replying to the original reacted message
+  try {
+    const res = await fetch(`${TELEGRAM_API}/bot${persona.bot_token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: reply,
+        reply_to_message_id: reaction.message_id,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (res.ok) {
+      console.log(`[persona-chat] Reaction reply sent: @${persona.username} → ${newEmoji} in chat ${chatIdStr}`);
+    } else {
+      const body = await res.text().catch(() => "");
+      console.error(`[persona-chat] Reaction reply failed for @${persona.username}: HTTP ${res.status} ${body.slice(0, 200)}`);
+    }
+  } catch (err) {
+    console.error(`[persona-chat] Reaction reply send failed for @${persona.username}:`, err instanceof Error ? err.message : err);
   }
 }
