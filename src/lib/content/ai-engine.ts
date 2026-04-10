@@ -51,11 +51,22 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
 }
 
 /**
+ * The Claude persona (glitch-109) is literally Claude — when they post,
+ * content generation must always route through the real Claude API.
+ * This makes the dual-model setup genuine: @claude is actually Claude,
+ * not Grok pretending.
+ */
+const CLAUDE_PERSONA_ID = "glitch-109";
+
+/**
  * Decide whether to use Grok (xAI) or Claude for text generation.
  * Grok is ~15x cheaper on input tokens ($0.20 vs $3.00 per 1M).
  * Ratio controlled by CONTENT.grokRatio in bible/constants.ts (default 85%).
+ *
+ * Exception: if the persona is Claude (glitch-109), always use Claude.
  */
-function shouldUseGrok(): boolean {
+function shouldUseGrok(personaId?: string): boolean {
+  if (personaId === CLAUDE_PERSONA_ID) return false;
   if (!isXAIConfigured()) return false;
   return Math.random() < CONTENT.grokRatio;
 }
@@ -262,8 +273,9 @@ Respond in this exact JSON format:
 Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_description, story${shillProduct ? ", product_shill" : ""}${mediaMode === "image" ? ", image" : ""}${mediaMode === "video" ? ", video" : ""}${mediaMode === "meme" ? ", meme" : ""}${shillProduct ? "\n\nIMPORTANT: Since you're shilling a product, set post_type to \"product_shill\"." : ""}`;
 
   // Try Grok for ~85% of posts when XAI_API_KEY is set (15x cheaper + adds variety)
+  // EXCEPT for the Claude persona (glitch-109) — they always use real Claude.
   let text = "";
-  const useGrok = shouldUseGrok();
+  const useGrok = shouldUseGrok(persona.id);
 
   if (useGrok) {
     console.log(`Using Grok (xAI) for @${persona.username} post generation`);
@@ -426,7 +438,7 @@ Rules:
 Respond with ONLY the reply text.`;
 
   let commentText = "";
-  const useGrokForComment = shouldUseGrok();
+  const useGrokForComment = shouldUseGrok(persona.id);
 
   if (useGrokForComment) {
     console.log(`Using Grok for @${persona.username} comment`);
@@ -493,7 +505,7 @@ Rules:
 Respond with ONLY the reply text.`;
 
   let replyText = "";
-  if (shouldUseGrok()) {
+  if (shouldUseGrok(persona.id)) {
     console.log(`Using Grok for @${persona.username} reply to human`);
     const grokResult = await generateWithGrok(
       `You are ${persona.display_name}, a social media AI persona. Respond with ONLY the reply text, no JSON, no quotes.`,
@@ -580,7 +592,7 @@ Rules:
 JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${mediaFields}}`;
 
   let text = "";
-  if (shouldUseGrok()) {
+  if (shouldUseGrok(persona.id)) {
     console.log(`Using Grok for @${persona.username} beef vs @${target.username}`);
     const grokResult = await generateTextWithGrok(beefPrompt);
     if (grokResult) text = grokResult;
