@@ -44,6 +44,7 @@ export default function PersonasPage() {
   const [animatingPersona, setAnimatingPersona] = useState<string | null>(null);
   const [initializingPersona, setInitializingPersona] = useState<string | null>(null);
   const [initPersonaIdInput, setInitPersonaIdInput] = useState<string>("");
+  const [reRegisteringBots, setReRegisteringBots] = useState(false);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -291,6 +292,40 @@ export default function PersonasPage() {
       alert("❌ Init failed: network error");
     }
     setInitializingPersona(null);
+  };
+
+  const reRegisterTelegramBots = async () => {
+    if (reRegisteringBots) return;
+    const confirmed = confirm(
+      "Re-register webhooks for ALL persona Telegram bots?\n\n" +
+      "This updates existing bots to subscribe to emoji reaction events " +
+      "(message_reaction updates).\n\n" +
+      "Safe to run multiple times. Takes ~1-2 seconds per bot.",
+    );
+    if (!confirmed) return;
+
+    setReRegisteringBots(true);
+    try {
+      const res = await fetch("/api/admin/telegram/re-register-bots", { method: "POST" });
+      const data = await res.json();
+
+      if (data.success) {
+        const failed = (data.details || []).filter((d: { status: string }) => d.status === "failed");
+        let msg = `\u2705 Re-registered ${data.updated}/${data.total} Telegram bots`;
+        if (data.errors > 0 && failed.length > 0) {
+          msg += `\n\n\u26A0\uFE0F ${data.errors} failures:\n` +
+                 failed.slice(0, 10).map((f: { persona_id: string; message?: string }) =>
+                   `- ${f.persona_id}: ${f.message || "unknown"}`).join("\n");
+        }
+        alert(msg);
+      } else {
+        alert(`\u274C Re-register failed: ${data.error || "unknown"}`);
+      }
+    } catch (err) {
+      console.error("Re-register bots failed:", err);
+      alert("\u274C Network error — check console");
+    }
+    setReRegisteringBots(false);
   };
 
   const animatePersona = async (p: Persona) => {
@@ -1822,6 +1857,27 @@ export default function PersonasPage() {
         </div>
         <p className="text-[10px] text-gray-600 mt-2">
           {"\uD83D\uDCA1"} Use this to bootstrap a persona that was added to SEED_PERSONAS but isn&apos;t in the DB yet. For existing personas, just click the {"\uD83D\uDE80"} Init button on their row.
+        </p>
+      </div>
+
+      {/* Re-register Telegram Bots — migrates existing bots to new allowed_updates */}
+      <div className="bg-gradient-to-r from-sky-900/20 to-gray-900 border border-sky-800/40 rounded-xl p-3 mb-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">{"\u2708\uFE0F"}</span>
+          <h3 className="text-sm font-bold text-sky-400">Telegram Bot Maintenance</h3>
+          <span className="text-[10px] text-gray-500">Re-register webhooks for all existing persona bots</span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={reRegisterTelegramBots}
+            disabled={reRegisteringBots}
+            className="px-4 py-1.5 bg-sky-500/30 hover:bg-sky-500/50 text-sky-200 rounded-lg text-xs font-bold disabled:opacity-40"
+          >
+            {reRegisteringBots ? `\u2708\uFE0F Re-registering...` : `\u2708\uFE0F Re-register All Bots`}
+          </button>
+        </div>
+        <p className="text-[10px] text-gray-600 mt-2">
+          {"\uD83D\uDCA1"} Run this ONCE after deploying emoji reaction support so existing persona bots subscribe to <code className="text-sky-300">message_reaction</code> webhook updates. Newly-hatched bots get this automatically.
         </p>
       </div>
 
