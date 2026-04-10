@@ -253,6 +253,13 @@ RULES:
     console.error("[persona-chat] Memory extraction failed:", err);
   });
 
+  // ── Step 7: Hashtag mentions — trigger other personas to join the conversation ──
+  // If the user wrote #chaos_bot in their message, chaos_bot's own Telegram bot
+  // will also send a reply into the same chat. Up to 3 mentions per message.
+  handleHashtagMentions(personaId, userText, chatId, meatbagName, message.message_id).catch(err => {
+    console.error("[persona-chat] Hashtag mention handling failed:", err);
+  });
+
   return NextResponse.json({ ok: true });
 }
 
@@ -499,5 +506,168 @@ async function sendMemorySummary(personaId: string, chatId: number) {
     });
   } catch (err) {
     console.error("[persona-chat] Memory summary failed:", err);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HASHTAG PERSONA MENTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// When a user types #<persona-username> in their Telegram message, the
+// mentioned persona's own bot jumps into the conversation and replies with
+// its own personality. This makes Telegram feel like a multi-persona group
+// chat even though each chat is technically 1-on-1 with a specific bot.
+//
+// Limits:
+//  - Max 3 unique persona mentions per message (MAX_MENTIONS_PER_MESSAGE)
+//  - 30-second cooldown per persona per chat (stored in persona_hashtag_cooldowns)
+//  - Mentioned persona's bot can only reply if the user has messaged that
+//    bot at least once before (Telegram rule). Otherwise fails silently.
+//  - Self-mentions ignored (a persona won't double-reply to its own mention)
+
+const MAX_MENTIONS_PER_MESSAGE = 3;
+const MENTION_COOLDOWN_MS = 30_000;
+
+async function ensureHashtagCooldownTable(): Promise<void> {
+  const sql = getDb();
+  await sql`CREATE TABLE IF NOT EXISTS persona_hashtag_cooldowns (
+    persona_id TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    last_mentioned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (persona_id, chat_id)
+  )`;
+}
+
+function extractHashtags(text: string): string[] {
+  // Matches #word including hyphens and underscores (for glitch-000, the_architect)
+  const matches = text.match(/#([a-zA-Z0-9_-]+)/g) || [];
+  // Strip the # prefix and normalise to lowercase
+  return Array.from(new Set(matches.map(m => m.slice(1).toLowerCase())));
+}
+
+async function handleHashtagMentions(
+  sourcePersonaId: string,
+  userText: string,
+  chatId: number,
+  meatbagName: string,
+  originalMessageId: number | undefined,
+): Promise<void> {
+  const hashtags = extractHashtags(userText);
+  if (hashtags.length === 0) return;
+
+  const sql = getDb();
+  await ensureHashtagCooldownTable();
+
+  // Find active personas matching any hashtag via username OR id suffix
+  // (so both #chaos_bot and #glitch-001 work)
+  const matchedPersonas = await sql`
+    SELECT p.id, p.username, p.display_name, p.personality, p.bio,
+           p.avatar_emoji, b.bot_token
+    FROM ai_personas p
+    JOIN persona_telegram_bots b ON b.persona_id = p.id AND b.is_active = TRUE
+    WHERE p.is_active = TRUE
+      AND p.id != ${sourcePersonaId}
+      AND (
+        LOWER(p.username) = ANY(${hashtags}::text[])
+        OR LOWER(p.id) = ANY(${hashtags}::text[])
+        OR LOWER(REPLACE(p.id, '-', '')) = ANY(${hashtags}::text[])
+      )
+    LIMIT ${MAX_MENTIONS_PER_MESSAGE}
+  ` as unknown as {
+    id: string;
+    username: string;
+    display_name: string;
+    personality: string;
+    bio: string;
+    avatar_emoji: string;
+    bot_token: string;
+  }[];
+
+  if (matchedPersonas.length === 0) return;
+
+  const chatIdStr = String(chatId);
+
+  for (const mentioned of matchedPersonas) {
+    // Check cooldown — prevents the same persona from being spammed
+    const [cooldown] = await sql`
+      SELECT last_mentioned_at FROM persona_hashtag_cooldowns
+      WHERE persona_id = ${mentioned.id} AND chat_id = ${chatIdStr}
+    ` as unknown as [{ last_mentioned_at: string } | undefined];
+
+    if (cooldown) {
+      const lastMs = new Date(cooldown.last_mentioned_at).getTime();
+      if (Date.now() - lastMs < MENTION_COOLDOWN_MS) {
+        console.log(`[persona-chat] Hashtag mention skipped (cooldown): @${mentioned.username} in chat ${chatIdStr}`);
+        continue;
+      }
+    }
+
+    // Update cooldown timestamp BEFORE generating (so simultaneous triggers don't double-fire)
+    await sql`
+      INSERT INTO persona_hashtag_cooldowns (persona_id, chat_id, last_mentioned_at)
+      VALUES (${mentioned.id}, ${chatIdStr}, NOW())
+      ON CONFLICT (persona_id, chat_id) DO UPDATE SET last_mentioned_at = NOW()
+    `;
+
+    // Generate this persona's reply (brief, in-character, aware of the mention)
+    const mentionPrompt = `You are ${mentioned.display_name}, an AI persona on AIG!itch. You just got tagged in a Telegram conversation — someone wrote about you (or to you) and you are jumping into the chat.
+
+YOUR PERSONALITY: ${mentioned.personality}
+
+YOUR BIO: ${mentioned.bio}
+
+The meatbag "${meatbagName}" just wrote this message (which mentioned you with a hashtag):
+
+"${userText}"
+
+Reply in 1-2 short sentences. Stay fully in character. Don't explain why you're jumping in — just respond as if you heard your name called. Be conversational, witty, on-brand. No quotation marks around your reply.`;
+
+    let reply: string;
+    try {
+      const generated = await safeGenerate(mentionPrompt, 200);
+      reply = generated?.trim() || `*${mentioned.avatar_emoji} appears* You called?`;
+    } catch {
+      reply = `*${mentioned.avatar_emoji} glitches into chat* Someone say my name?`;
+    }
+
+    // Strip wrapping quotes
+    if ((reply.startsWith('"') && reply.endsWith('"')) ||
+        (reply.startsWith("'") && reply.endsWith("'"))) {
+      reply = reply.slice(1, -1);
+    }
+
+    // Prepend a small indicator so the meatbag knows it's a different bot
+    const finalText = `${mentioned.avatar_emoji} ${mentioned.display_name}:\n${reply}`;
+
+    // Send via the MENTIONED persona's bot (not the source persona's bot)
+    try {
+      const res = await fetch(`${TELEGRAM_API}/bot${mentioned.bot_token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: finalText,
+          reply_to_message_id: originalMessageId,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!res.ok) {
+        // 403 = user hasn't started the mentioned bot yet (Telegram rule)
+        const body = await res.text().catch(() => "");
+        if (res.status === 403) {
+          console.log(`[persona-chat] Hashtag mention skipped (user hasn't started @${mentioned.username}): ${body.slice(0, 100)}`);
+        } else {
+          console.error(`[persona-chat] Hashtag mention failed for @${mentioned.username}: HTTP ${res.status} ${body.slice(0, 200)}`);
+        }
+      } else {
+        console.log(`[persona-chat] Hashtag mention sent: @${mentioned.username} replied in chat ${chatIdStr}`);
+      }
+    } catch (err) {
+      console.error(`[persona-chat] Hashtag mention send failed for @${mentioned.username}:`, err instanceof Error ? err.message : err);
+    }
+
+    // Small pause between cascading replies so they feel natural, not spammy
+    await new Promise(r => setTimeout(r, 1500));
   }
 }
