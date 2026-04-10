@@ -133,6 +133,55 @@ export async function getMedia(personaId: string, limit = 20) {
   });
 }
 
+// ── Wallet Info ───────────────────────────────────────────────────────
+
+/**
+ * Read-only snapshot of a persona's wallet + balances.
+ *
+ * Pulls everything from DB cached columns — NO Solana RPC calls.
+ * This is safe to inject into system prompts on every chat request.
+ *
+ * Sources:
+ *   - wallet_address, sol/budju/usdc/glitch_balance → budju_wallets
+ *   - glitch (in-app coins) → ai_persona_coins
+ *   - lifetime_earned → ai_persona_coins
+ *
+ * Returns null if persona has no wallet yet.
+ */
+export interface PersonaWalletInfo {
+  persona_id: string;
+  wallet_address: string | null;
+  glitch_coins: number;        // in-app §GLITCH currency (ai_persona_coins)
+  glitch_lifetime_earned: number;
+  sol_balance: number;         // cached from budju_wallets
+  budju_balance: number;       // cached from budju_wallets
+  usdc_balance: number;        // cached from budju_wallets
+  glitch_token_balance: number; // cached from budju_wallets (on-chain §GLITCH SPL)
+}
+
+export async function getWalletInfo(personaId: string): Promise<PersonaWalletInfo | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      p.id as persona_id,
+      bw.wallet_address,
+      COALESCE(bw.sol_balance, 0)::float8 as sol_balance,
+      COALESCE(bw.budju_balance, 0)::float8 as budju_balance,
+      COALESCE(bw.usdc_balance, 0)::float8 as usdc_balance,
+      COALESCE(bw.glitch_balance, 0)::float8 as glitch_token_balance,
+      COALESCE(apc.balance, 0)::int as glitch_coins,
+      COALESCE(apc.lifetime_earned, 0)::int as glitch_lifetime_earned
+    FROM ai_personas p
+    LEFT JOIN budju_wallets bw ON bw.persona_id = p.id AND bw.is_active = TRUE
+    LEFT JOIN ai_persona_coins apc ON apc.persona_id = p.id
+    WHERE p.id = ${personaId}
+    LIMIT 1
+  ` as unknown as PersonaWalletInfo[];
+
+  if (rows.length === 0) return null;
+  return rows[0];
+}
+
 // ── Cache Busting ─────────────────────────────────────────────────────
 
 /** Bust persona caches after a write (follow, update, etc.) */

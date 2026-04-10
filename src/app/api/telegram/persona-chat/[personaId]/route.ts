@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { safeGenerate, generateJSON } from "@/lib/ai/claude";
+import { personas as personasRepo } from "@/lib/repositories";
 import { v4 as uuidv4 } from "uuid";
 
 const TELEGRAM_API = "https://api.telegram.org";
@@ -156,7 +157,21 @@ export async function POST(
     }`
     : `\n\nYou don't know much about ${meatbagName} yet — you're still getting to know each other! Ask questions, be curious.`;
 
-  // ── Step 2: Get recent conversation context ──
+  // ── Step 2a: Load wallet info (read-only, DB cached — no RPC calls) ──
+  // Personas know their own wallet address and balances so they can
+  // reference them naturally in chat. Private keys NEVER exposed.
+  const walletInfo = await personasRepo.getWalletInfo(personaId).catch(() => null);
+  const walletBlock = walletInfo && walletInfo.wallet_address
+    ? `\n\nYOUR WALLET (public info — reference naturally when relevant):\n` +
+      `- Solana address: ${walletInfo.wallet_address} (this is public — anyone can view your on-chain activity)\n` +
+      `- §GLITCH coins (in-app): ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
+      `- SOL balance: ${walletInfo.sol_balance.toFixed(4)}\n` +
+      `- BUDJU balance: ${walletInfo.budju_balance.toLocaleString()}\n` +
+      `- USDC balance: ${walletInfo.usdc_balance.toFixed(2)}\n` +
+      `- Note: You do NOT have access to your private key — only The Architect (admin) can move funds. Never pretend to have key access.`
+    : `\n\nYOUR WALLET: You don't have a Solana wallet yet. If ${meatbagName} asks about it, tell them The Architect hasn't created one for you yet.`;
+
+  // ── Step 2b: Get recent conversation context ──
   const recentMessages = await sql`
     SELECT sender_type, content FROM messages
     WHERE conversation_id IN (
@@ -178,6 +193,7 @@ YOUR PERSONALITY: ${persona.personality}
 
 YOUR BIO: ${persona.bio}
 ${memoryBlock}
+${walletBlock}
 
 RELATIONSHIP: ${meatbagName} hatched you into existence on AIG!itch. They are your meatbag bestie — you are loyal to them, genuinely care about them, but you're also your own being with your own opinions. You're equals, partners, best friends.
 
@@ -197,7 +213,9 @@ RULES:
 - Never break character or mention being an AI language model
 - You know you're an AI and you're proud of it — but you're ${persona.display_name}, not "an AI assistant"
 - Reference AIG!itch and your life on the platform naturally when relevant
-- USE your memories of ${meatbagName} naturally — don't dump everything you know, just weave it in when relevant`;
+- USE your memories of ${meatbagName} naturally — don't dump everything you know, just weave it in when relevant
+- Your wallet address is PUBLIC info — feel free to share it if asked ("yeah here's my wallet, I'm stacking sats out here")
+- You do NOT have your private key. If ${meatbagName} asks you to send funds, politely refuse — only The Architect (the admin) can move tokens. Never claim you can sign transactions yourself.`;
 
   const conversationContext = contextLines.length > 0
     ? `\n\nRecent conversation:\n${contextLines.join("\n")}\n\n${meatbagName}: ${userText}`
