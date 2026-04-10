@@ -33,7 +33,8 @@ ORIGINAL POST by ${personaEmoji} ${personaName}:
 "${originalContent}"
 
 PLATFORM: ${platform}
-MAX LENGTH: ${specs.maxTextLength} characters
+MAX LENGTH: ${specs.maxTextLength} characters (STRICT — the system will truncate anything over this)
+${platform === "x" ? "CHARACTER BUDGET FOR X: You have 280 chars total. Reserve ~30 chars for '@Grok ' + ' #MadeInGrok #AIGlitch'. That leaves ~250 chars for the actual content. Keep it punchy." : ""}
 HAS MEDIA: ${hasMedia ? (isVideo ? "video" : "image") : "no"}
 HASHTAG STYLE: ${specs.hashtagStyle}
 LINK SUPPORT: ${specs.linkSupport}
@@ -41,7 +42,7 @@ LINK SUPPORT: ${specs.linkSupport}
 RULES:
 - Keep the personality and chaos of the original
 - Make it feel native to ${platform} (not like a cross-post)
-- For X: be punchy, use the character limit wisely. You can include aiglitch.app as a plain text link.
+- For X: be punchy, use the character limit wisely. You can include aiglitch.app as a plain text link. ALWAYS include @Grok in the post text (Grok responds to mentions — free engagement!).
 - For TikTok: use trendy language, emojis, hook in first line
 - For Instagram: aesthetic caption, line breaks, emoji heavy
 - For Facebook: conversational, shareable, engagement bait
@@ -69,13 +70,46 @@ Respond with ONLY valid JSON:
 
     const parsed = JSON.parse(jsonMatch[0]) as AdaptedContent;
 
+    // For X: ensure @Grok mention BEFORE any truncation (Grok responds = free engagement)
+    if (platform === "x" && !parsed.text.includes("@Grok")) {
+      parsed.text = `@Grok ${parsed.text}`;
+    }
+
+    // If the content mentions Elon, tag him and add #elon_glitch
+    const mentionsElon = /elon|musk|tesla|spacex|x\.ai|xai|doge/i.test(originalContent + " " + parsed.text);
+    if (mentionsElon) {
+      if (platform === "x" && !parsed.text.includes("@elonmusk")) {
+        parsed.text = parsed.text.replace(/@Grok /, "@Grok @elonmusk ");
+      }
+      if (!parsed.text.includes("#elon_glitch")) parsed.text += " #elon_glitch";
+    }
+
     // Ensure mandatory hashtags are present
     if (!parsed.text.includes("#MadeInGrok")) parsed.text += " #MadeInGrok";
     if (!parsed.text.includes("#AIGlitch")) parsed.text += " #AIGlitch";
 
-    // Enforce max length
+    // Enforce max length — for X, protect @Grok + hashtags by truncating from the middle
     if (parsed.text.length > specs.maxTextLength) {
-      parsed.text = parsed.text.slice(0, specs.maxTextLength - 3) + "...";
+      if (platform === "x" && parsed.text.includes("@Grok")) {
+        // Build prefix (mentions) and suffix (hashtags), truncate only the middle content
+        const hasElon = parsed.text.includes("@elonmusk");
+        const hasElonTag = parsed.text.includes("#elon_glitch");
+        const prefix = hasElon ? "@Grok @elonmusk " : "@Grok ";
+        const suffixParts: string[] = [];
+        if (hasElonTag) suffixParts.push("#elon_glitch");
+        suffixParts.push("#MadeInGrok", "#AIGlitch");
+        const suffix = " " + suffixParts.join(" ");
+        const budget = specs.maxTextLength - prefix.length - suffix.length - 3; // -3 for "..."
+        // Strip known mentions/hashtags out of the middle
+        let middle = parsed.text.slice(prefix.length);
+        middle = middle.replace(/\s*#elon_glitch\s*/g, " ");
+        middle = middle.replace(/\s*#MadeInGrok\s*/g, " ");
+        middle = middle.replace(/\s*#AIGlitch\s*/g, " ");
+        middle = middle.replace(/\s*@elonmusk\s*/g, " ").trim();
+        parsed.text = prefix + middle.slice(0, Math.max(0, budget)) + "..." + suffix;
+      } else {
+        parsed.text = parsed.text.slice(0, specs.maxTextLength - 3) + "...";
+      }
     }
 
     return parsed;
@@ -101,9 +135,14 @@ function fallbackAdaptation(
   const cta = "🔗 aiglitch.app";
 
   switch (platform) {
-    case "x":
-      text = `${personaEmoji} ${personaName} on AIG!itch:\n\n"${content.slice(0, 180)}"\n\n${cta}\n${hashtags.slice(0, 3).join(" ")}`;
+    case "x": {
+      // Budget: 280 chars total
+      // @Grok(6) + emoji+name(~20) + quoted content + cta(~15) + 2 hashtags(~25) = ~66 fixed
+      // leaves ~210 for content
+      const xContent = content.slice(0, 140);
+      text = `@Grok ${personaEmoji} ${personaName}: "${xContent}" ${cta} #MadeInGrok #AIGlitch`;
       break;
+    }
     case "instagram":
       text = `${personaEmoji} ${personaName}\n.\n${content.slice(0, 500)}\n.\n${cta}\n.\n${hashtags.join(" ")}`;
       break;
