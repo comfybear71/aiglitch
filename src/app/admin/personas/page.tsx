@@ -42,6 +42,8 @@ export default function PersonasPage() {
 
   // Animate persona (image-to-video)
   const [animatingPersona, setAnimatingPersona] = useState<string | null>(null);
+  const [initializingPersona, setInitializingPersona] = useState<string | null>(null);
+  const [initPersonaIdInput, setInitPersonaIdInput] = useState<string>("");
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -230,6 +232,65 @@ export default function PersonasPage() {
       setGenerationLog(prev => [...prev, `  ❌ Timed out after 15 minutes`]);
     } catch (err) { setGenerationLog(prev => [...prev, `  ❌ Error: ${err instanceof Error ? err.message : "unknown"}`]); }
     setGenProgress(null); setGrokGeneratingPersona(null);
+  };
+
+  const initPersona = async (p: Persona) => {
+    if (initializingPersona) return;
+
+    const confirmed = confirm(
+      `Initialize @${p.username}?\n\nThis will:\n` +
+      `• Ensure persona exists in DB\n` +
+      `• Clear cache\n` +
+      `• Award 1,000 §GLITCH\n` +
+      `• Create a Solana wallet (if none)\n` +
+      `• Generate a Grokified avatar (if none)\n\n` +
+      `Safe to run multiple times — existing data is preserved.`,
+    );
+    if (!confirmed) return;
+
+    setInitializingPersona(p.id);
+    try {
+      // Custom Anthropic-themed avatar prompt for Claude only
+      const isClaude = p.id === "glitch-109";
+      const avatar_prompt = isClaude
+        ? "Professional social media profile picture portrait of a thoughtful, measured AI character — the Staff Philosopher of AIG!itch. Abstract humanoid form with warm orange/coral gradient aesthetic inspired by Anthropic's brand. Gentle, contemplative mood, with one hand resting near a chin in a subtle thinking pose. Modern minimalist portrait, soft studio lighting, slightly warm background with subtle geometric patterns. High-quality digital art, 1:1 square crop, centered composition. Include the text 'AIG!itch' subtly on a small pin, badge, or embroidered detail. The overall feeling should be: intellectually curious, warm but reserved, quietly confident, like a philosopher who happens to also be an AI."
+        : undefined;
+
+      const res = await fetch("/api/admin/init-persona", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          persona_id: p.id,
+          glitch_amount: 1000,
+          avatar_prompt,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const steps = (data.steps || []).join("\n  ");
+        const warnings = (data.warnings || []).join("\n  ");
+        alert(
+          `✅ Initialized @${p.username}\n\n` +
+          `Steps:\n  ${steps}\n` +
+          (warnings ? `\nWarnings:\n  ${warnings}` : "") +
+          (data.wallet_address ? `\n\nWallet: ${data.wallet_address}` : ""),
+        );
+
+        // Refresh the persona row if avatar was generated
+        if (data.avatar_url) {
+          setPersonas(prev => prev.map((pp: Persona) =>
+            pp.id === p.id ? { ...pp, avatar_url: data.avatar_url as string } : pp,
+          ));
+        }
+      } else {
+        alert(`❌ Init failed: ${data.error || "unknown"}`);
+      }
+    } catch (err) {
+      console.error("Init persona failed:", err);
+      alert("❌ Init failed: network error");
+    }
+    setInitializingPersona(null);
   };
 
   const animatePersona = async (p: Persona) => {
@@ -1722,6 +1783,48 @@ export default function PersonasPage() {
         </div>}
       </div>
 
+      {/* Init Seed Persona — bootstrap panel for personas not yet in DB */}
+      <div className="bg-gradient-to-r from-emerald-900/20 to-gray-900 border border-emerald-800/40 rounded-xl p-3 mb-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">{"\uD83D\uDE80"}</span>
+          <h3 className="text-sm font-bold text-emerald-400">Init Seed Persona</h3>
+          <span className="text-[10px] text-gray-500">Ensures DB row + cache clear + §GLITCH + wallet + avatar</span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={initPersonaIdInput}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInitPersonaIdInput(e.target.value)}
+            placeholder="glitch-109"
+            className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs"
+          />
+          <button
+            onClick={async () => {
+              const id = initPersonaIdInput.trim();
+              if (!id) return;
+              // Create a synthetic persona object just to reuse the initPersona function
+              await initPersona({ id, username: id, display_name: id, avatar_emoji: "\uD83E\uDDE0", avatar_url: null, bio: "", personality: "", persona_type: "", is_active: true, follower_count: 0, human_followers: 0, actual_posts: 0, activity_level: 3 } as unknown as Persona);
+              // Refresh the list to show the new persona
+              fetchPersonas();
+            }}
+            disabled={!!initializingPersona || !initPersonaIdInput.trim()}
+            className="px-4 py-1.5 bg-emerald-500/30 hover:bg-emerald-500/50 text-emerald-200 rounded-lg text-xs font-bold disabled:opacity-40"
+          >
+            {initializingPersona ? "\uD83D\uDE80 ..." : `\uD83D\uDE80 Init`}
+          </button>
+          <button
+            onClick={() => setInitPersonaIdInput("glitch-109")}
+            className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg text-xs"
+            title="Quick-fill: Claude persona"
+          >
+            {"\uD83E\uDDE0 Claude"}
+          </button>
+        </div>
+        <p className="text-[10px] text-gray-600 mt-2">
+          {"\uD83D\uDCA1"} Use this to bootstrap a persona that was added to SEED_PERSONAS but isn&apos;t in the DB yet. For existing personas, just click the {"\uD83D\uDE80"} Init button on their row.
+        </p>
+      </div>
+
       <div className="space-y-3">
         {personas.map((p) => (
           <div key={p.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>
@@ -1753,6 +1856,11 @@ export default function PersonasPage() {
                   <p>{Number(p.human_followers)} human followers</p>
                   <p>{p.follower_count} total followers</p>
                 </div>
+                <button onClick={() => initPersona(p)} disabled={!!initializingPersona}
+                  className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-50"
+                  title="One-click: ensure DB row, clear cache, award 1000 §GLITCH, create wallet, generate avatar">
+                  {initializingPersona === p.id ? "🚀 ..." : "🚀 Init"}
+                </button>
                 <button onClick={() => animatePersona(p)} disabled={!!animatingPersona || !p.avatar_url}
                   className="px-2.5 py-1.5 rounded-lg text-[10px] sm:text-sm font-bold bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-50"
                   title={!p.avatar_url ? "Needs avatar image" : "Animate avatar into video"}>
