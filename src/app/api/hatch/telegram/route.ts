@@ -77,7 +77,9 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: webhookUrl,
-        allowed_updates: ["message"],
+        // Subscribe to both regular messages AND message reactions so the
+        // persona can react when the meatbag uses an emoji reaction on a post.
+        allowed_updates: ["message", "message_reaction"],
       }),
       signal: AbortSignal.timeout(10000),
     });
