@@ -39,6 +39,78 @@ const OUTREACH_KEYWORD_REGEX = /\b(email|emails|send|draft|write to|reach out|re
 const PER_CONTACT_COOLDOWN_DAYS = 14;
 const GLOBAL_DAILY_CEILING = 10;
 
+// ══════════════════════════════════════════════════════════════════════════
+// Schema safety net
+// ══════════════════════════════════════════════════════════════════════════
+//
+// The email_sends + email_drafts tables are declared in src/lib/db.ts via
+// safeMigrate, but that migration runs with FOREIGN KEY references to
+// ai_personas(id) and contacts(id). In production on Neon the email_drafts
+// migration silently failed (probably because contacts didn't exist yet
+// when the label first ran, and the label was marked attempted), which
+// meant every INSERT into email_drafts blew up with
+//   "relation email_drafts does not exist"
+//
+// To make this file self-sufficient, we re-create the tables inline on
+// every call via CREATE TABLE IF NOT EXISTS. These definitions omit the
+// FOREIGN KEY constraints on purpose so the safety net never fails for a
+// resolution reason — the data integrity is still enforced by application
+// code (contact_id and persona_id are only inserted from validated rows).
+// If db.ts's migration ever does run successfully later, CREATE TABLE
+// IF NOT EXISTS will be a no-op.
+//
+// This helper is idempotent and extremely cheap — Postgres treats
+// CREATE TABLE IF NOT EXISTS as a metadata check when the table exists.
+// Called at the top of every function that touches these tables.
+// ══════════════════════════════════════════════════════════════════════════
+let _tablesEnsured = false;
+
+async function ensureOutreachTables(): Promise<void> {
+  // Cache across the lifetime of this lambda instance so hot paths don't
+  // hit the DB twice. Cold starts still run the check once.
+  if (_tablesEnsured) return;
+  const sql = getDb();
+  try {
+    await sql`CREATE TABLE IF NOT EXISTS email_sends (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL,
+      from_email TEXT NOT NULL,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      resend_id TEXT,
+      status TEXT NOT NULL DEFAULT 'sent',
+      error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_email_sends_persona ON email_sends(persona_id, created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_email_sends_created ON email_sends(created_at DESC)`;
+
+    await sql`CREATE TABLE IF NOT EXISTS email_drafts (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      contact_id TEXT,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      sent_email_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_email_drafts_chat_status ON email_drafts(chat_id, status, created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_email_drafts_persona ON email_drafts(persona_id, created_at DESC)`;
+
+    _tablesEnsured = true;
+    console.log("[outreach] ensureOutreachTables: tables verified/created");
+  } catch (err) {
+    // Don't set _tablesEnsured — let the next call retry.
+    console.error("[outreach] ensureOutreachTables failed:", err instanceof Error ? err.message : err);
+    throw err;
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────
 
 export interface OutreachIntent {
@@ -156,6 +228,7 @@ export async function pickContactForOutreach(
   tag: string | null,
   options: { bypassRateLimits?: boolean } = {},
 ): Promise<{ contact: Contact | null; reason: string }> {
+  await ensureOutreachTables();
   const sql = getDb();
   const bypass = !!options.bypassRateLimits;
   console.log(`[outreach] pickContactForOutreach personaId=${personaId} tag=${tag ?? "null"} bypass=${bypass}`);
@@ -421,6 +494,7 @@ export async function saveDraft(params: {
   subject: string;
   body: string;
 }): Promise<string> {
+  await ensureOutreachTables();
   const sql = getDb();
   const id = uuidv4();
   await sql`
@@ -432,6 +506,7 @@ export async function saveDraft(params: {
 
 /** Get the single pending draft for a (chat, persona) pair — or null */
 export async function getPendingDraft(personaId: string, chatId: string): Promise<PendingDraft | null> {
+  await ensureOutreachTables();
   const sql = getDb();
   const rows = await sql`
     SELECT id, persona_id, chat_id, contact_id, to_email, subject, body, status, created_at
@@ -444,6 +519,7 @@ export async function getPendingDraft(personaId: string, chatId: string): Promis
 }
 
 export async function cancelDraft(draftId: string): Promise<void> {
+  await ensureOutreachTables();
   const sql = getDb();
   await sql`UPDATE email_drafts SET status = 'cancelled', updated_at = NOW() WHERE id = ${draftId}`;
 }
@@ -516,6 +592,7 @@ export async function sendApprovedDraft(
     return { success: false, error: "RESEND_API_KEY not configured" };
   }
 
+  await ensureOutreachTables();
   const sql = getDb();
   const fromEmail = `${persona.username}@aiglitch.app`;
   const from = `${persona.display_name} <${fromEmail}>`;
