@@ -69,6 +69,10 @@ export default function PopupAd() {
     promo?: (typeof GLITCH_PROMOS)[number];
   } | null>(null);
   const [adFree, setAdFree] = useState(false);
+  // Grokified product photo URLs keyed by product_id. Populated once on
+  // mount from the public /api/admin/nft-marketplace GET endpoint. When
+  // present, the ad renders the real product photo instead of the emoji.
+  const [productImages, setProductImages] = useState<Record<string, string>>({});
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const adRef = useRef<HTMLDivElement>(null);
@@ -77,6 +81,29 @@ export default function PopupAd() {
 
   // No ads on admin panel
   const isAdmin = pathname?.startsWith("/admin");
+
+  // Fetch Grokified product image URLs once on mount. The endpoint is
+  // public-read (admin auth only on POST/delete) so we can call it
+  // directly from the browser. Fails silently — if we can't fetch the
+  // images, the ad falls back to the emoji rendering.
+  useEffect(() => {
+    if (isAdmin) return;
+    let cancelled = false;
+    fetch("/api/admin/nft-marketplace")
+      .then(r => (r.ok ? r.json() : { images: [] }))
+      .then((data: { images?: Array<{ product_id: string; image_url: string }> }) => {
+        if (cancelled || !data.images) return;
+        const map: Record<string, string> = {};
+        for (const row of data.images) {
+          if (row.product_id && row.image_url) {
+            map[row.product_id] = row.image_url;
+          }
+        }
+        setProductImages(map);
+      })
+      .catch(() => { /* silent — falls back to emoji */ });
+    return () => { cancelled = true; };
+  }, [isAdmin]);
 
   // Check if user has ad-free status (purchased with GLITCH coins via Phantom wallet)
   useEffect(() => {
@@ -222,8 +249,9 @@ export default function PopupAd() {
   // Render marketplace product ad
   if (adContent.type === "product" && adContent.product) {
     const p = adContent.product;
+    const grokifiedImage = productImages[p.id];
     return (
-      <div className={`fixed bottom-16 left-0 right-0 z-[70] flex justify-center px-2 ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}>
+      <div className={`fixed bottom-2 left-0 right-0 z-[70] flex justify-center px-2 ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}>
         <div
           ref={adRef}
           style={dragStyle}
@@ -253,9 +281,19 @@ export default function PopupAd() {
             </div>
 
             <div className="flex items-center gap-3 px-3 pb-3 cursor-pointer" onClick={handleClick}>
-              {/* Product emoji */}
-              <div className="text-3xl flex-shrink-0 w-12 h-12 bg-zinc-800/50 rounded-xl flex items-center justify-center">
-                {p.emoji}
+              {/* Product image — Grokified photo if available, else emoji */}
+              <div className="flex-shrink-0 w-12 h-12 bg-zinc-800/50 rounded-xl overflow-hidden flex items-center justify-center">
+                {grokifiedImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={grokifiedImage}
+                    alt={p.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="text-3xl">{p.emoji}</span>
+                )}
               </div>
 
               {/* Product info */}
@@ -284,7 +322,7 @@ export default function PopupAd() {
   if (adContent.type === "promo" && adContent.promo) {
     const promo = adContent.promo;
     return (
-      <div className={`fixed bottom-16 left-0 right-0 z-[70] flex justify-center px-2 ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}>
+      <div className={`fixed bottom-2 left-0 right-0 z-[70] flex justify-center px-2 ${dismissing ? "animate-ad-slide-down" : "animate-ad-slide-up"}`}>
         <div
           ref={adRef}
           style={dragStyle}
