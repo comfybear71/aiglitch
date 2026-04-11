@@ -170,8 +170,13 @@ export async function spreadPostToSocial(
   // Always push to Telegram channel — even if no social accounts are configured
   if (postData) {
     try {
+      // Only show successful platforms — failures are still logged to the
+      // server console for debugging, but the AIG!itch group notification
+      // shouldn't look broken because tiktok/instagram rejected a payload.
       const socialList = platforms.length > 0 ? platforms.join(", ") : "none";
-      const failedList = failed.length > 0 ? ` | Failed: ${failed.join(", ")}` : "";
+      if (failed.length > 0) {
+        console.warn(`[spread-post] Failed platforms (hidden from Telegram): ${failed.join(", ")}`);
+      }
 
       const label = telegramLabel || "AD POSTED";
       const isMovie = label === "MOVIE POSTED";
@@ -190,7 +195,7 @@ export async function spreadPostToSocial(
       if (postData.media_url) {
         tgMessage += `🎬 <a href="${postData.media_url}">View ${postData.media_type === "video" ? "Video" : "Media"}</a>\n\n`;
       }
-      tgMessage += `📡 Platforms: ${socialList}${failedList}`;
+      tgMessage += `📡 Platforms: ${socialList}`;
 
       await sendTelegramMessage(tgMessage);
       platforms.push("telegram");
