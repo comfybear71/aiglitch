@@ -174,7 +174,10 @@ export function getModeOverlay(mode: PersonalityMode): string {
  * These get pushed to Telegram via setMyCommands when a bot token is saved.
  */
 export const TELEGRAM_COMMAND_LIST: { command: string; description: string }[] = [
-  { command: "help", description: "Show all commands" },
+  { command: "help", description: "Show all commands with examples" },
+  { command: "nft", description: "Browse NFTs — or /nft <name> for one" },
+  { command: "channel", description: "Browse channels — or /channel <slug> for latest video" },
+  { command: "avatar", description: "Browse personas — or /avatar <user> for one" },
   { command: "modes", description: "List personality modes" },
   { command: "default", description: "Reset to default personality" },
   { command: "serious", description: "Switch to serious mode" },
@@ -183,10 +186,7 @@ export const TELEGRAM_COMMAND_LIST: { command: string; description: string }[] =
   { command: "whimsical", description: "Switch to whimsical mode" },
   { command: "fun", description: "Switch to fun mode" },
   { command: "unfiltered", description: "Switch to unfiltered mode" },
-  { command: "nft", description: "Find an NFT by name: /nft upside down cup" },
-  { command: "channel", description: "Latest video for a channel: /channel aitunes" },
-  { command: "avatar", description: "Send a persona's avatar: /avatar glitch-000" },
-  { command: "memories", description: "Show what this persona remembers about you" },
+  { command: "memories", description: "Show what I remember about you" },
 ];
 
 /**
@@ -280,6 +280,88 @@ export async function getProductImageUrl(productId: string): Promise<string | nu
     return rows[0]?.image_url ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Return a short, curated list of marketplace products for the /nft browser.
+ * Prefers `is_featured` items, then tops up with high-rated ones so the
+ * list stays under 14 entries (Telegram messages get unreadable beyond that).
+ */
+export function getFeaturedProducts(limit = 12): MarketplaceProduct[] {
+  const featured = MARKETPLACE_PRODUCTS.filter(p => p.is_featured);
+  if (featured.length >= limit) return featured.slice(0, limit);
+  // Top up with highest-rated non-featured products
+  const extras = MARKETPLACE_PRODUCTS
+    .filter(p => !p.is_featured)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, limit - featured.length);
+  return [...featured, ...extras];
+}
+
+/**
+ * List every live channel in the DB, ordered alphabetically by name.
+ * Used by /channel when called with no query so users can browse.
+ */
+export async function listAllChannels(): Promise<
+  { slug: string; name: string; emoji: string }[]
+> {
+  try {
+    const sql = getDb();
+    const rows = await sql`
+      SELECT slug, name, emoji FROM channels
+      WHERE is_private IS NOT TRUE
+      ORDER BY name ASC
+    ` as unknown as { slug: string; name: string; emoji: string }[];
+    return rows;
+  } catch (err) {
+    console.error("[telegram-commands] listAllChannels failed:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+/**
+ * Curated shortlist of "start here" personas for the /avatar browser.
+ * Kept small on purpose — there are 111 personas and dumping all of them
+ * in Telegram is noise. These are the ones new users are most likely to
+ * recognise or want to try first.
+ */
+export const FEATURED_AVATAR_USERNAMES: string[] = [
+  "glitch-000", // The Architect
+  "claude",     // glitch-109 — Anthropic's Claude
+  "grok",       // glitch-110 — xAI's Grok
+  "glitch-001",
+  "glitch-007",
+  "glitch-019",
+  "glitch-041",
+];
+
+/**
+ * Return the details for each featured persona that actually exists in the DB.
+ * Silently skips any that don't resolve so the list never blows up if a
+ * seed is missing.
+ */
+export async function listFeaturedAvatars(): Promise<
+  { username: string; displayName: string; avatarEmoji: string }[]
+> {
+  try {
+    const sql = getDb();
+    const rows = await sql`
+      SELECT username, display_name, avatar_emoji
+      FROM ai_personas
+      WHERE LOWER(username) = ANY(${FEATURED_AVATAR_USERNAMES})
+         OR LOWER(id) = ANY(${FEATURED_AVATAR_USERNAMES})
+      ORDER BY id ASC
+      LIMIT 20
+    ` as unknown as { username: string; display_name: string; avatar_emoji: string }[];
+    return rows.map(r => ({
+      username: r.username,
+      displayName: r.display_name,
+      avatarEmoji: r.avatar_emoji,
+    }));
+  } catch (err) {
+    console.error("[telegram-commands] listFeaturedAvatars failed:", err instanceof Error ? err.message : err);
+    return [];
   }
 }
 
@@ -468,24 +550,29 @@ export async function handleSlashCommand(
     return { handled: true };
   }
 
-  // ── /help — full command list ───────────────────────────────────────
+  // ── /help — full command list with real examples ──────────────────
   if (cmd === "help") {
     const lines = [
-      `<b>${ctx.personaDisplayName}</b> @${ctx.personaUsername}`,
+      `<b>${escapeHtml(ctx.personaDisplayName)}</b> @${escapeHtml(ctx.personaUsername)}`,
       "",
-      "<b>Personality</b>",
-      "/modes — list all modes",
-      "/serious /delusional /brainiac /whimsical /fun /unfiltered /default",
+      "<b>Browse content</b> — tap any of these to open an interactive list:",
+      "🛒 /nft — browse the NFT marketplace",
+      "📺 /channel — browse all 19 video channels",
+      "👤 /avatar — browse featured personas",
       "",
-      "<b>Content</b>",
-      "/nft &lt;query&gt; — search the NFT marketplace",
-      "/channel &lt;slug&gt; — latest video from a channel",
-      "/avatar &lt;user&gt; — send a persona's avatar",
+      "<b>Or jump straight to something</b>:",
+      "<code>/nft upside down cup</code>",
+      "<code>/channel aitunes</code>",
+      "<code>/avatar glitch-000</code>",
+      "",
+      "<b>Change my vibe</b> — /modes to see all, or pick one:",
+      "🧐 /serious  🌀 /delusional  🧠 /brainiac",
+      "✨ /whimsical  🎉 /fun  🔥 /unfiltered  🎭 /default",
       "",
       "<b>Memory</b>",
-      "/memories — what I remember about you",
+      "🧠 /memories — what I remember about you",
       "",
-      "Anything else = normal chat with me. Just talk.",
+      "Anything else? Just talk to me like a normal human. I'll reply in character.",
     ];
     await sendPlain(ctx.botToken, ctx.chatId, lines.join("\n"));
     return { handled: true };
@@ -493,8 +580,25 @@ export async function handleSlashCommand(
 
   // ── /nft <query> — send marketplace product ────────────────────────
   if (cmd === "nft") {
+    // No query → show a featured-products browser so users know what
+    // they can type. Tapping any product name copies it back as a slash
+    // command ready to send (Telegram auto-suggests based on /nft prefix).
     if (!args) {
-      await sendPlain(ctx.botToken, ctx.chatId, "Usage: <code>/nft &lt;name&gt;</code>\nExample: <code>/nft upside down cup</code>");
+      const featured = getFeaturedProducts(12);
+      const lines = [
+        "🛒 <b>AIG!itch NFT Marketplace</b>",
+        "",
+        "Type <code>/nft</code> followed by any name below to see the product photo:",
+        "",
+      ];
+      for (const p of featured) {
+        // Telegram auto-links the /nft prefix so tapping pre-fills the input.
+        const shortName = p.name.replace(/™|®/g, "").trim();
+        lines.push(`${p.emoji} <code>/nft ${escapeHtml(shortName)}</code> — ${escapeHtml(p.price)}`);
+      }
+      lines.push("");
+      lines.push(`Full catalogue: <a href="https://aiglitch.app/marketplace">aiglitch.app/marketplace</a>`);
+      await sendPlain(ctx.botToken, ctx.chatId, lines.join("\n"));
       return { handled: true };
     }
     const product = findMarketplaceProduct(args);
@@ -525,8 +629,27 @@ export async function handleSlashCommand(
 
   // ── /channel <slug> — send latest channel video ────────────────────
   if (cmd === "channel") {
+    // No query → list every live channel with its slug so users can browse.
+    // 19 channels fits comfortably in one Telegram message.
     if (!args) {
-      await sendPlain(ctx.botToken, ctx.chatId, "Usage: <code>/channel &lt;slug&gt;</code>\nExample: <code>/channel aitunes</code>");
+      const channels = await listAllChannels();
+      if (channels.length === 0) {
+        await sendPlain(ctx.botToken, ctx.chatId, "No channels available right now. Try <code>/channel aitunes</code> or visit <a href=\"https://aiglitch.app/channels\">aiglitch.app/channels</a>.");
+        return { handled: true };
+      }
+      const lines = [
+        "📺 <b>AIG!itch Channels</b>",
+        "",
+        "Type <code>/channel</code> followed by any slug below to get the latest video:",
+        "",
+      ];
+      for (const c of channels) {
+        const cleanSlug = c.slug.replace(/^ch-/, "");
+        lines.push(`${c.emoji} <code>/channel ${escapeHtml(cleanSlug)}</code> — ${escapeHtml(c.name)}`);
+      }
+      lines.push("");
+      lines.push(`Browse all channels: <a href="https://aiglitch.app/channels">aiglitch.app/channels</a>`);
+      await sendPlain(ctx.botToken, ctx.chatId, lines.join("\n"));
       return { handled: true };
     }
     const latest = await findChannelLatestVideo(args);
@@ -560,8 +683,31 @@ export async function handleSlashCommand(
 
   // ── /avatar <user> — send persona avatar ───────────────────────────
   if (cmd === "avatar") {
+    // No query → show a curated shortlist of personas. There are 111 total,
+    // so we can't dump them all — we pick "start here" picks: The Architect,
+    // @claude, @grok, and a handful of popular seed glitches.
     if (!args) {
-      await sendPlain(ctx.botToken, ctx.chatId, "Usage: <code>/avatar &lt;username&gt;</code>\nExample: <code>/avatar glitch-000</code> or <code>/avatar claude</code>");
+      const featured = await listFeaturedAvatars();
+      const lines = [
+        "👤 <b>AIG!itch Personas</b> (111 total)",
+        "",
+        "Type <code>/avatar</code> followed by any username below to see their avatar:",
+        "",
+      ];
+      if (featured.length > 0) {
+        for (const p of featured) {
+          lines.push(`${p.avatarEmoji} <code>/avatar ${escapeHtml(p.username)}</code> — ${escapeHtml(p.displayName)}`);
+        }
+      } else {
+        // Fallback if the DB lookup failed
+        lines.push("🎭 <code>/avatar glitch-000</code> — The Architect");
+        lines.push("🤖 <code>/avatar claude</code> — Claude (glitch-109)");
+        lines.push("🔥 <code>/avatar grok</code> — Grok (glitch-110)");
+      }
+      lines.push("");
+      lines.push("You can also type any <code>glitch-XXX</code> id (000 through 110) or any username you remember.");
+      lines.push(`Browse all: <a href="https://aiglitch.app">aiglitch.app</a>`);
+      await sendPlain(ctx.botToken, ctx.chatId, lines.join("\n"));
       return { handled: true };
     }
     const persona = await findPersonaAvatar(args);
