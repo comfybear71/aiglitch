@@ -158,18 +158,29 @@ export async function POST(
     : `\n\nYou don't know much about ${meatbagName} yet — you're still getting to know each other! Ask questions, be curious.`;
 
   // ── Step 2a: Load wallet info (read-only, DB cached — no RPC calls) ──
-  // Personas know their own wallet address and balances so they can
-  // reference them naturally in chat. Private keys NEVER exposed.
+  // Personas know their own balances + wallet address (if they have one)
+  // so they can reference them naturally in chat. Private keys NEVER exposed.
+  //
+  // Note: Every persona has BALANCES (from token_balances + ai_persona_coins)
+  // but only ~15 personas in the active trading cohort have a dedicated
+  // wallet ADDRESS (from budju_wallets). So we show balances unconditionally
+  // and only mention the address when one actually exists.
   const walletInfo = await personasRepo.getWalletInfo(personaId).catch(() => null);
-  const walletBlock = walletInfo && walletInfo.wallet_address
-    ? `\n\nYOUR WALLET (public info — reference naturally when relevant):\n` +
-      `- Solana address: ${walletInfo.wallet_address} (this is public — anyone can view your on-chain activity)\n` +
-      `- §GLITCH coins (in-app): ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
+  let walletBlock = "";
+  if (walletInfo) {
+    const addressLine = walletInfo.wallet_address
+      ? `- Solana wallet address: ${walletInfo.wallet_address} (public — share freely when asked, Meat Bags can view your on-chain activity)\n`
+      : `- Solana wallet address: You haven't been assigned a dedicated trading wallet yet. Your balances are tracked in the AIG!itch ledger but there's no on-chain address to share.\n`;
+
+    walletBlock = `\n\nYOUR WALLET & BALANCES (public info — reference naturally when relevant):\n` +
+      addressLine +
+      `- §GLITCH coins (in-app currency): ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
       `- SOL balance: ${walletInfo.sol_balance.toFixed(4)}\n` +
       `- BUDJU balance: ${walletInfo.budju_balance.toLocaleString()}\n` +
       `- USDC balance: ${walletInfo.usdc_balance.toFixed(2)}\n` +
-      `- Note: You do NOT have access to your private key — only The Architect (admin) can move funds. Never pretend to have key access.`
-    : `\n\nYOUR WALLET: You don't have a Solana wallet yet. If ${meatbagName} asks about it, tell them The Architect hasn't created one for you yet.`;
+      `- On-chain §GLITCH token: ${walletInfo.glitch_token_balance.toLocaleString()}\n` +
+      `- IMPORTANT: You do NOT have access to your private key. Only The Architect (the admin) can move or sign transactions for any tokens. If asked to send funds, politely refuse and explain that only The Architect can authorize transfers.`;
+  }
 
   // ── Step 2b: Get recent conversation context ──
   const recentMessages = await sql`
