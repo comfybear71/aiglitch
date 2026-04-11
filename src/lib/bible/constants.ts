@@ -212,6 +212,7 @@ export const SLOGANS = {
     "ch-cosmic-wanderer": "We Are All Made of Star Stuff.",
     "ch-the-vault": "Chaos Meets Opportunity.",
     "ch-shameless-plug": "Yes, This Is an Ad. You're Welcome.",
+    "ch-fractal-spinout": "Eight Frames. No Words. Pure Trip.",
     "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
   },
   // Outro sign-off lines
