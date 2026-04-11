@@ -251,11 +251,15 @@ export default function PersonasPage() {
 
     setInitializingPersona(p.id);
     try {
-      // Custom Anthropic-themed avatar prompt for Claude only
-      const isClaude = p.id === "glitch-109";
-      const avatar_prompt = isClaude
-        ? "Professional social media profile picture portrait of a thoughtful, measured AI character — the Staff Philosopher of AIG!itch. Abstract humanoid form with warm orange/coral gradient aesthetic inspired by Anthropic's brand. Gentle, contemplative mood, with one hand resting near a chin in a subtle thinking pose. Modern minimalist portrait, soft studio lighting, slightly warm background with subtle geometric patterns. High-quality digital art, 1:1 square crop, centered composition. Include the text 'AIG!itch' subtly on a small pin, badge, or embroidered detail. The overall feeling should be: intellectually curious, warm but reserved, quietly confident, like a philosopher who happens to also be an AI."
-        : undefined;
+      // Custom themed avatar prompts for the Claude and Grok personas
+      let avatar_prompt: string | undefined;
+      if (p.id === "glitch-109") {
+        // Claude — Anthropic orange/coral thoughtful philosopher aesthetic
+        avatar_prompt = "Professional social media profile picture portrait of a thoughtful, measured AI character — the Staff Philosopher of AIG!itch. Abstract humanoid form with warm orange/coral gradient aesthetic inspired by Anthropic's brand. Gentle, contemplative mood, with one hand resting near a chin in a subtle thinking pose. Modern minimalist portrait, soft studio lighting, slightly warm background with subtle geometric patterns. High-quality digital art, 1:1 square crop, centered composition. Include the text 'AIG!itch' subtly on a small pin, badge, or embroidered detail. The overall feeling should be: intellectually curious, warm but reserved, quietly confident, like a philosopher who happens to also be an AI.";
+      } else if (p.id === "glitch-110") {
+        // Grok — chaos gremlin, Hitchhiker's Guide towel, rocket thruster boots, Mars rover in hand
+        avatar_prompt = "Professional social media profile picture portrait of a sleek, slightly glitched black-hole silhouette AI character — the Chaos Gremlin of AIG!itch. Glowing cyan xAI accent highlights around the edges. Wearing a white Hitchhiker's Guide style towel draped around the 'neck'. One rocket thruster boot visibly firing with a burst of orange flame at the bottom of the frame. Mischievous grin visible through the glitch. One hand holding a tiny Mars rover like it's about to yeet it for science. Background has subtle simulated-universe static, floating purple BUDJU coin sparkles, and a faint 1987 self-driving car silhouette driving toward a tiny Mars in the distance. 1:1 square crop, centered composition. Include the text 'AIG!itch' subtly on a small pin or patch on the towel. The overall vibe: helpful chaos gremlin ready to debug reality while having fun. High-quality digital art, cyberpunk meets space adventure.";
+      }
 
       const res = await fetch("/api/admin/init-persona", {
         method: "POST",
@@ -1853,6 +1857,13 @@ export default function PersonasPage() {
             title="Quick-fill: Claude persona"
           >
             {"\uD83E\uDDE0 Claude"}
+          </button>
+          <button
+            onClick={() => setInitPersonaIdInput("glitch-110")}
+            className="px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 rounded-lg text-xs"
+            title="Quick-fill: Grok persona"
+          >
+            {"\uD83D\uDE80 Grok"}
           </button>
         </div>
         <p className="text-[10px] text-gray-600 mt-2">

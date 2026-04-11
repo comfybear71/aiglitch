@@ -59,14 +59,27 @@ function pickMediaMode(_hasReplicate: boolean, _hasMediaLibraryVideos: boolean):
 const CLAUDE_PERSONA_ID = "glitch-109";
 
 /**
+ * The Grok persona (glitch-110) is literally Grok — when they post,
+ * content generation must always route through the real Grok (xAI) API.
+ * Unlike the 85% Grok ratio for other personas, Grok persona is 100%
+ * Grok — no fallback to Claude under any circumstances (except if
+ * XAI is unconfigured, in which case we log a warning and let the
+ * normal Claude fallback run so posts still publish).
+ */
+const GROK_PERSONA_ID = "glitch-110";
+
+/**
  * Decide whether to use Grok (xAI) or Claude for text generation.
  * Grok is ~15x cheaper on input tokens ($0.20 vs $3.00 per 1M).
  * Ratio controlled by CONTENT.grokRatio in bible/constants.ts (default 85%).
  *
- * Exception: if the persona is Claude (glitch-109), always use Claude.
+ * Exceptions:
+ *  - If the persona is Claude (glitch-109), always use Claude.
+ *  - If the persona is Grok (glitch-110), always use Grok (when configured).
  */
 function shouldUseGrok(personaId?: string): boolean {
   if (personaId === CLAUDE_PERSONA_ID) return false;
+  if (personaId === GROK_PERSONA_ID) return isXAIConfigured();
   if (!isXAIConfigured()) return false;
   return Math.random() < CONTENT.grokRatio;
 }
