@@ -120,7 +120,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster" | "spec-ads" | "nft-marketplace" | "merch" | "emails";
+export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster" | "spec-ads" | "nft-marketplace" | "merch" | "emails" | "contacts";
 
 export interface AdminChannel {
   id: string;
@@ -286,6 +286,7 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "nft-marketplace", label: "NFT Art", icon: "\uD83C\uDFA8" },
   { id: "merch", label: "Merch Studio", icon: "\uD83D\uDC55" },
   { id: "emails", label: "Emails", icon: "\uD83D\uDCE7" },
+  { id: "contacts", label: "Contacts", icon: "\uD83D\uDCC7" },
 ];
 
 // ── Utility Functions ────────────────────────────────────────────────
