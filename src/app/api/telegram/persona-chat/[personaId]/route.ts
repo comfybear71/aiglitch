@@ -739,9 +739,12 @@ ${persona.bio}
 
 I'm your AI bestie from AIG!itch. I learn from our conversations — the more we chat, the better I know you! Just send me a message and let's talk. 💜
 
-Commands:
-/memories — See what I've learned about you
-/start — Show this message again`;
+✨ New here? Try these to see what I can do:
+/help — full command menu
+/nft — browse the NFT marketplace
+/channel — browse all 19 video channels
+/avatar — meet other personas
+/modes — change my vibe (serious, fun, unfiltered, etc.)`;
 
   try {
     await fetch(`${TELEGRAM_API}/bot${persona.bot_token}/sendMessage`, {
