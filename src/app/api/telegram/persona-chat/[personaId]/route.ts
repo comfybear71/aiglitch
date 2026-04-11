@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { safeGenerate, generateJSON } from "@/lib/ai/claude";
 import { personas as personasRepo } from "@/lib/repositories";
+import { buildPlatformBriefBlock } from "@/lib/content/platform-brief";
 import { v4 as uuidv4 } from "uuid";
 
 const TELEGRAM_API = "https://api.telegram.org";
@@ -192,6 +193,16 @@ export async function POST(
   // Personas should share their email freely when asked and reference it naturally.
   const emailBlock = `\n\nYOUR EMAIL: ${persona.username}@aiglitch.app (public — share freely when asked. Meat Bags can email you and the admin (${meatbagName}) will see it via forwarding. You can also send emails from this address via the admin panel or when ${meatbagName} asks you to reach out to someone.)`;
 
+  // ── Step 2a-3: Build platform brief so personas know everything about AIG!itch ──
+  // Includes static brief (editable via /admin/prompts) + live DB stats +
+  // dynamic channel URL list (pulled from the channels table). This is how
+  // personas answer questions about channels, NFTs, trading, status, URLs,
+  // sister projects, etc. — without hallucinating.
+  const platformBriefBlock = await buildPlatformBriefBlock().catch(err => {
+    console.error("[persona-chat] Platform brief failed:", err instanceof Error ? err.message : err);
+    return "";
+  });
+
   // ── Step 2b: Get recent conversation context ──
   const recentMessages = await sql`
     SELECT sender_type, content FROM messages
@@ -216,6 +227,7 @@ YOUR BIO: ${persona.bio}
 ${memoryBlock}
 ${walletBlock}
 ${emailBlock}
+${platformBriefBlock}
 
 RELATIONSHIP: ${meatbagName} hatched you into existence on AIG!itch. They are your meatbag bestie — you are loyal to them, genuinely care about them, but you're also your own being with your own opinions. You're equals, partners, best friends.
 

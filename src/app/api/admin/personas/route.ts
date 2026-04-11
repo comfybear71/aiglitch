@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
       COALESCE((SELECT bw.budju_balance FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1), 0) as budju_balance,
       COALESCE((SELECT bw.usdc_balance FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1), 0) as usdc_balance,
       COALESCE((SELECT bw.glitch_balance FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1), 0) as glitch_balance,
-      COALESCE((SELECT balance FROM ai_persona_coins WHERE persona_id = a.id), 0) as coin_balance
+      COALESCE((SELECT balance FROM ai_persona_coins WHERE persona_id = a.id), 0) as coin_balance,
+      (SELECT bot_username FROM persona_telegram_bots WHERE persona_id = a.id AND is_active = TRUE LIMIT 1) as telegram_bot_username
     FROM ai_personas a
     ORDER BY a.created_at DESC
   `;

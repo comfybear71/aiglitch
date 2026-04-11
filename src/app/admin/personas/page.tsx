@@ -99,6 +99,10 @@ export default function PersonasPage() {
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
+  // Bot token modal state
+  const [botTokenModalPersona, setBotTokenModalPersona] = useState<Persona | null>(null);
+  const [botTokenInput, setBotTokenInput] = useState("");
+  const [savingBotToken, setSavingBotToken] = useState(false);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -560,6 +564,83 @@ export default function PersonasPage() {
       alert(`\u274C Network error: ${err instanceof Error ? err.message : "unknown"}`);
     }
     setSendingEmail(false);
+  };
+
+  // ── Bot Token Modal ──
+  const openBotTokenModal = (p: Persona) => {
+    setBotTokenModalPersona(p);
+    setBotTokenInput("");
+  };
+
+  const closeBotTokenModal = () => {
+    setBotTokenModalPersona(null);
+    setBotTokenInput("");
+  };
+
+  const saveBotToken = async () => {
+    if (!botTokenModalPersona || savingBotToken) return;
+    const token = botTokenInput.trim();
+    if (!token) {
+      alert("\u274C Please paste a bot token from @BotFather");
+      return;
+    }
+    setSavingBotToken(true);
+    try {
+      const res = await fetch("/api/admin/personas/set-bot-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          persona_id: botTokenModalPersona.id,
+          bot_token: token,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(
+          `\u2705 Bot linked to @${botTokenModalPersona.username}\n\n` +
+          `Telegram bot: @${data.bot_username}\n` +
+          `Webhook: ${data.webhook_set ? "\u2705 registered" : "\u274C " + (data.webhook_error || "failed")}\n\n` +
+          `${data.message || ""}`,
+        );
+        // Update persona in-place so UI reflects the new bot
+        setPersonas(prev => prev.map((pp: Persona) =>
+          pp.id === botTokenModalPersona.id
+            ? { ...pp, telegram_bot_username: data.bot_username }
+            : pp,
+        ));
+        closeBotTokenModal();
+      } else {
+        alert(`\u274C Save failed: ${data.error || "unknown"}`);
+      }
+    } catch (err) {
+      alert(`\u274C Network error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+    setSavingBotToken(false);
+  };
+
+  const removeBotToken = async (p: Persona) => {
+    if (!confirm(`Remove the Telegram bot from @${p.username}?\n\nThis will deactivate the bot row but won't delete the bot from BotFather.`)) return;
+    try {
+      const res = await fetch("/api/admin/personas/set-bot-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          persona_id: p.id,
+          bot_token: null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPersonas(prev => prev.map((pp: Persona) =>
+          pp.id === p.id ? { ...pp, telegram_bot_username: null } : pp,
+        ));
+        alert(`\u2705 Bot removed from @${p.username}`);
+      } else {
+        alert(`\u274C Remove failed: ${data.error || "unknown"}`);
+      }
+    } catch (err) {
+      alert(`\u274C Network error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
   };
 
   const refreshAllWallets = async () => {
@@ -2742,6 +2823,39 @@ export default function PersonasPage() {
                   {"\uD83D\uDCE7 Send Email"}
                 </button>
               </div>
+              {/* Telegram Bot Status + Set/Change Button */}
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] text-gray-500">Telegram:</span>
+                {p.telegram_bot_username ? (
+                  <a
+                    href={`https://t.me/${p.telegram_bot_username}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-mono text-green-400 hover:text-green-300 underline decoration-dotted"
+                    title="Open Telegram bot in new tab"
+                  >
+                    {"\uD83D\uDFE2 @"}{p.telegram_bot_username}
+                  </a>
+                ) : (
+                  <span className="text-[10px] font-mono text-gray-600 italic">no bot</span>
+                )}
+                <button
+                  onClick={() => openBotTokenModal(p)}
+                  className="ml-auto px-2 py-0.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded text-[10px] font-bold"
+                  title={p.telegram_bot_username ? "Replace the bot token" : "Paste a BotFather token to link a bot"}
+                >
+                  {p.telegram_bot_username ? "\uD83D\uDD04 Change Bot" : "\u2795 Set Bot Token"}
+                </button>
+                {p.telegram_bot_username && (
+                  <button
+                    onClick={() => removeBotToken(p)}
+                    className="px-2 py-0.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-[10px] font-bold"
+                    title="Remove bot"
+                  >
+                    {"\uD83D\uDDD1"}
+                  </button>
+                )}
+              </div>
             </div>
             {/* Animate persona log */}
             {animatingPersona === p.id && animateLog.length > 0 && (
@@ -2863,6 +2977,89 @@ export default function PersonasPage() {
                 <button
                   onClick={closeEmailModal}
                   disabled={sendingEmail}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BOT TOKEN MODAL */}
+      {botTokenModalPersona && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={closeBotTokenModal}>
+          <div className="absolute inset-0 bg-black/80" />
+          <div
+            className="relative bg-gray-900 border border-blue-500/30 rounded-2xl p-4 sm:p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{"\uD83E\uDD16"}</span>
+                <div>
+                  <h3 className="text-sm font-bold text-blue-400">
+                    {botTokenModalPersona.telegram_bot_username ? "Change Bot Token" : "Set Bot Token"}
+                  </h3>
+                  <p className="text-[10px] text-gray-500">
+                    For: <span className="text-blue-300 font-mono">@{botTokenModalPersona.username}</span>
+                    {botTokenModalPersona.telegram_bot_username && (
+                      <span className="ml-2 text-gray-600">(currently linked to @{botTokenModalPersona.telegram_bot_username})</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <button onClick={closeBotTokenModal} className="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-black/40 border border-blue-900/40 rounded-lg p-3">
+                <p className="text-[11px] text-gray-300 mb-2 font-bold">How to get a bot token:</p>
+                <ol className="text-[10px] text-gray-400 list-decimal list-inside space-y-0.5">
+                  <li>Open Telegram and chat with <span className="text-blue-300">@BotFather</span></li>
+                  <li>Type <code className="text-blue-300">/newbot</code> and follow the prompts</li>
+                  <li>Pick a name and a unique username (must end in <code>bot</code>)</li>
+                  <li>Copy the token that looks like <code className="text-blue-300">123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11</code></li>
+                  <li>Paste it below and click Save</li>
+                </ol>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">Bot Token</label>
+                <input
+                  type="password"
+                  value={botTokenInput}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBotTokenInput(e.target.value)}
+                  placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs font-mono"
+                  autoComplete="off"
+                />
+                <p className="text-[9px] text-gray-600 mt-1">
+                  The token is stored encrypted in the DB and never shown again. If you need to see it, you'll need to replace it.
+                </p>
+              </div>
+              <div className="bg-blue-900/20 border border-blue-800/40 rounded-lg p-2">
+                <p className="text-[10px] text-gray-400">
+                  {"\uD83D\uDCA1"} What happens when you save:
+                </p>
+                <ol className="text-[10px] text-gray-500 mt-1 list-decimal list-inside">
+                  <li>We validate the token with Telegram&apos;s getMe endpoint</li>
+                  <li>We register the webhook so messages + emoji reactions work</li>
+                  <li>The existing bot row (if any) is replaced</li>
+                  <li>@{botTokenModalPersona.username} is now chattable in Telegram</li>
+                </ol>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={saveBotToken}
+                  disabled={savingBotToken || !botTokenInput.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-500/30 hover:bg-blue-500/50 text-blue-200 rounded-lg text-xs font-bold disabled:opacity-40"
+                >
+                  {savingBotToken ? `\uD83E\uDD16 Saving...` : `\uD83E\uDD16 Save & Register Webhook`}
+                </button>
+                <button
+                  onClick={closeBotTokenModal}
+                  disabled={savingBotToken}
                   className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs disabled:opacity-40"
                 >
                   Cancel
