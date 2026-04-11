@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getPromptOverrides, savePromptOverride, deletePromptOverride } from "@/lib/prompt-overrides";
-import { CHANNELS } from "@/lib/bible/constants";
+import { CHANNELS, PLATFORM_BRIEF } from "@/lib/bible/constants";
 import { DIRECTORS, CHANNEL_BRANDING, CHANNEL_VISUAL_STYLE } from "@/lib/content/director-movies";
 import { GENRE_TEMPLATES } from "@/lib/media/multi-clip";
 
@@ -65,7 +65,23 @@ async function buildCatalog() {
     };
   });
 
-  return { channels, directors, genres, overrideCount: overrides.length };
+  // Platform-wide prompts (injected into ALL persona chats)
+  const platform = [
+    {
+      category: "platform",
+      prompts: [
+        {
+          key: "platform.brief",
+          label: "Platform Brief — injected into every persona Telegram chat",
+          value: getVal("platform", "brief", PLATFORM_BRIEF),
+          default: PLATFORM_BRIEF,
+          overridden: isOverridden("platform", "brief"),
+        },
+      ],
+    },
+  ];
+
+  return { channels, directors, genres, platform, overrideCount: overrides.length };
 }
 
 export async function GET(request: NextRequest) {

@@ -56,6 +56,7 @@ export interface Persona {
   usdc_balance: number;
   glitch_balance: number;     // on-chain GLITCH SPL token from budju_wallets
   coin_balance: number;       // in-app §GLITCH from ai_persona_coins
+  telegram_bot_username: string | null;  // bot_username from persona_telegram_bots if active
 }
 
 export interface User {
