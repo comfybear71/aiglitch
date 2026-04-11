@@ -89,6 +89,10 @@ export default function PersonasPage() {
   const [walletGenProgress, setWalletGenProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
   const [walletDiagnostic, setWalletDiagnostic] = useState<WalletDiagnosticReport | null>(null);
   const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
+  const [refreshingWallet, setRefreshingWallet] = useState<string | null>(null);
+  const [bulkRefreshing, setBulkRefreshing] = useState(false);
+  const [bulkRefreshLog, setBulkRefreshLog] = useState<string[]>([]);
+  const [bulkRefreshProgress, setBulkRefreshProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -448,6 +452,147 @@ export default function PersonasPage() {
       alert(`\u274C Diagnostic error: ${err instanceof Error ? err.message : "unknown"}`);
     }
     setLoadingDiagnostic(false);
+  };
+
+  const refreshOneWallet = async (p: Persona) => {
+    if (refreshingWallet) return;
+    setRefreshingWallet(p.id);
+    try {
+      const res = await fetch("/api/admin/personas/refresh-wallet-balances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona_id: p.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.balances) {
+        // Update the persona in-place with new balances
+        setPersonas(prev => prev.map((pp: Persona) =>
+          pp.id === p.id
+            ? { ...pp,
+                sol_balance: data.balances.sol,
+                budju_balance: data.balances.budju,
+                usdc_balance: data.balances.usdc,
+                glitch_balance: data.balances.glitch,
+              }
+            : pp,
+        ));
+        const rpcErrors = data.rpc_errors && data.rpc_errors.length > 0
+          ? `\n\n\u26A0\uFE0F RPC warnings:\n${data.rpc_errors.join("\n")}`
+          : "";
+        alert(
+          `\u2705 Refreshed @${p.username}\n\n` +
+          `SOL: ${data.balances.sol.toFixed(4)}\n` +
+          `BUDJU: ${data.balances.budju.toLocaleString()}\n` +
+          `USDC: ${data.balances.usdc.toFixed(2)}\n` +
+          `\u00A7GLITCH: ${data.balances.glitch.toLocaleString()}` +
+          rpcErrors,
+        );
+      } else {
+        alert(`\u274C Refresh failed: ${data.message || data.error || "unknown"}`);
+      }
+    } catch (err) {
+      alert(`\u274C Network error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+    setRefreshingWallet(null);
+  };
+
+  const refreshAllWallets = async () => {
+    if (bulkRefreshing) return;
+
+    setBulkRefreshLog([]);
+    setBulkRefreshProgress(null);
+
+    // Fetch the list of wallets first
+    let wallets: { id: string; username: string; display_name: string; wallet_address: string }[];
+    try {
+      const listRes = await fetch("/api/admin/personas/refresh-wallet-balances");
+      if (!listRes.ok) {
+        alert("\u274C Failed to fetch wallet list");
+        return;
+      }
+      const listData = await listRes.json();
+      wallets = listData.personas || [];
+    } catch (err) {
+      alert(`\u274C Failed: ${err instanceof Error ? err.message : "unknown"}`);
+      return;
+    }
+
+    if (wallets.length === 0) {
+      alert("No active persona wallets found to refresh.");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Refresh on-chain balances for ${wallets.length} persona wallet${wallets.length === 1 ? "" : "s"}?\n\n` +
+      `Each wallet = 4 Solana RPC calls (SOL + BUDJU + USDC + GLITCH).\n` +
+      `Takes ~1-2 seconds per wallet. Progress will show below the button.\n\n` +
+      `Safe to run multiple times. No writes to Solana — read-only queries.`,
+    );
+    if (!confirmed) return;
+
+    setBulkRefreshing(true);
+    setBulkRefreshProgress({ current: 0, total: wallets.length, done: 0, failed: 0 });
+    setBulkRefreshLog([`\uD83D\uDD04 Refreshing ${wallets.length} wallets from Solana RPC...`]);
+
+    let done = 0;
+    let failed = 0;
+
+    for (let i = 0; i < wallets.length; i++) {
+      const w = wallets[i];
+      const label = `@${w.username}`;
+      setBulkRefreshProgress({ current: i + 1, total: wallets.length, done, failed });
+      setBulkRefreshLog((prev: string[]) => [...prev, `  \u23F3 ${i + 1}/${wallets.length}: ${label}...`]);
+
+      try {
+        const res = await fetch("/api/admin/personas/refresh-wallet-balances", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ persona_id: w.id }),
+        });
+        const data = await res.json();
+
+        if (data.success && data.balances) {
+          done++;
+          const b = data.balances;
+          const summary = `${b.sol.toFixed(3)} SOL \u00B7 ${b.budju.toLocaleString()} BUDJU \u00B7 ${b.usdc.toFixed(2)} USDC \u00B7 ${b.glitch.toLocaleString()} GLITCH`;
+          setBulkRefreshLog((prev: string[]) => {
+            const next = [...prev];
+            next[next.length - 1] = `  \u2705 ${i + 1}/${wallets.length}: ${label} \u2192 ${summary}`;
+            return next;
+          });
+          // Live-update the persona in the list
+          setPersonas(prev => prev.map((pp: Persona) =>
+            pp.id === w.id
+              ? { ...pp, sol_balance: b.sol, budju_balance: b.budju, usdc_balance: b.usdc, glitch_balance: b.glitch }
+              : pp,
+          ));
+        } else {
+          failed++;
+          setBulkRefreshLog((prev: string[]) => {
+            const next = [...prev];
+            next[next.length - 1] = `  \u274C ${i + 1}/${wallets.length}: ${label} \u2014 ${data.message || data.error || "failed"}`;
+            return next;
+          });
+        }
+      } catch (err) {
+        failed++;
+        setBulkRefreshLog((prev: string[]) => {
+          const next = [...prev];
+          next[next.length - 1] = `  \u274C ${i + 1}/${wallets.length}: ${label} \u2014 ${err instanceof Error ? err.message : "network error"}`;
+          return next;
+        });
+      }
+
+      setBulkRefreshProgress({ current: i + 1, total: wallets.length, done, failed });
+
+      if (i < wallets.length - 1) await new Promise(r => setTimeout(r, 300));
+    }
+
+    setBulkRefreshLog((prev: string[]) => [
+      ...prev,
+      `\u2728 Complete: ${done}/${wallets.length} refreshed, ${failed} failed`,
+    ]);
+    setBulkRefreshing(false);
   };
 
   const generateMissingWallets = async () => {
@@ -2322,6 +2467,53 @@ export default function PersonasPage() {
         </p>
       </div>
 
+      {/* Refresh Wallet Balances — queries Solana RPC for real on-chain balances */}
+      <div className="bg-gradient-to-r from-cyan-900/20 to-gray-900 border border-cyan-800/40 rounded-xl p-3 mb-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">{"\uD83D\uDD04"}</span>
+          <h3 className="text-sm font-bold text-cyan-400">Refresh Wallet Balances</h3>
+          <span className="text-[10px] text-gray-500">Query Solana RPC for real on-chain balances (SOL/BUDJU/USDC/GLITCH)</span>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={refreshAllWallets}
+            disabled={bulkRefreshing}
+            className="px-4 py-1.5 bg-cyan-500/30 hover:bg-cyan-500/50 text-cyan-200 rounded-lg text-xs font-bold disabled:opacity-40"
+          >
+            {bulkRefreshing
+              ? (bulkRefreshProgress
+                  ? `\uD83D\uDD04 ${bulkRefreshProgress.current}/${bulkRefreshProgress.total}...`
+                  : `\uD83D\uDD04 Refreshing...`)
+              : `\uD83D\uDD04 Refresh All Wallets`}
+          </button>
+          {bulkRefreshProgress && (
+            <div className="flex-1 min-w-[150px] max-w-xs">
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-400 to-green-400 transition-all"
+                  style={{ width: `${bulkRefreshProgress.total > 0 ? (bulkRefreshProgress.current / bulkRefreshProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                {bulkRefreshProgress.current} / {bulkRefreshProgress.total}
+                {bulkRefreshProgress.done > 0 && ` \u00B7 \u2705 ${bulkRefreshProgress.done}`}
+                {bulkRefreshProgress.failed > 0 && ` \u00B7 \u274C ${bulkRefreshProgress.failed}`}
+              </p>
+            </div>
+          )}
+        </div>
+        {bulkRefreshLog.length > 0 && (
+          <div className="mt-3 bg-black/60 border border-cyan-900/50 rounded-lg p-2 max-h-48 overflow-y-auto font-mono">
+            {bulkRefreshLog.map((line: string, i: number) => (
+              <p key={i} className="text-[10px] text-gray-300 whitespace-pre-wrap">{line}</p>
+            ))}
+          </div>
+        )}
+        <p className="text-[10px] text-gray-600 mt-2">
+          {"\uD83D\uDCA1"} Read-only Solana RPC queries. Updates the cached SOL/BUDJU/USDC/GLITCH columns in <code className="text-cyan-300">budju_wallets</code>. Run this after sending real funds to a persona wallet so they can report the correct balance in chat. You can also refresh individual wallets via the {"\uD83D\uDD04"} button on each persona card.
+        </p>
+      </div>
+
       <div className="space-y-3">
         {personas.map((p) => (
           <div key={p.id} className={`bg-gray-900 border rounded-xl p-3 sm:p-4 ${p.is_active ? "border-gray-800" : "border-red-900/50 opacity-60"}`}>
@@ -2437,6 +2629,16 @@ export default function PersonasPage() {
                 ) : (
                   <span className="text-[10px] font-mono text-gray-600 italic">no wallet</span>
                 )}
+                {p.wallet_address && (
+                  <button
+                    onClick={() => refreshOneWallet(p)}
+                    disabled={refreshingWallet !== null}
+                    className="ml-auto px-2 py-0.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded text-[10px] font-bold disabled:opacity-40"
+                    title="Refresh on-chain balances from Solana RPC"
+                  >
+                    {refreshingWallet === p.id ? "\uD83D\uDD04 ..." : "\uD83D\uDD04 Refresh"}
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-[10px] font-mono text-yellow-400" title="On-chain SOL balance">
@@ -2454,9 +2656,6 @@ export default function PersonasPage() {
                   {Number(p.glitch_balance || 0) >= 1000
                     ? `${(Number(p.glitch_balance || 0) / 1000).toFixed(1)}K`
                     : Math.floor(Number(p.glitch_balance || 0)).toLocaleString()} §GLITCH
-                </span>
-                <span className="text-[10px] font-mono text-purple-400" title="In-app §GLITCH coins (ai_persona_coins)">
-                  {Math.floor(Number(p.coin_balance || 0)).toLocaleString()} coins
                 </span>
               </div>
             </div>
