@@ -167,13 +167,13 @@ export function getModeOverlay(mode: PersonalityMode): string {
 // ══════════════════════════════════════════════════════════════════════════
 
 /**
- * The canonical command list shown in Telegram's autocomplete (the little
- * menu button that appears when you type `/`). Telegram caps descriptions
- * at 256 characters — keep them short.
+ * TELEGRAM_COMMANDS_PRIVATE — full command menu for 1:1 DMs with the bot.
+ * Includes /email because drafting outreach emails is a private task
+ * between Stuart and the persona, not something for a group chat.
  *
- * These get pushed to Telegram via setMyCommands when a bot token is saved.
+ * Telegram caps descriptions at 256 chars — keep them short.
  */
-export const TELEGRAM_COMMAND_LIST: { command: string; description: string }[] = [
+export const TELEGRAM_COMMANDS_PRIVATE: { command: string; description: string }[] = [
   { command: "help", description: "Show all commands with examples" },
   { command: "email", description: "Draft an email to a contact — /email family" },
   { command: "nft", description: "Browse NFTs — or /nft <name> for one" },
@@ -191,28 +191,59 @@ export const TELEGRAM_COMMAND_LIST: { command: string; description: string }[] =
 ];
 
 /**
- * Register the command list with Telegram's setMyCommands API for a given
- * bot token. Returns {ok, error} so the caller can report it in the UI.
+ * TELEGRAM_COMMANDS_GROUP — trimmed menu for group chats and channels.
+ * /email is REMOVED because outreach is a private Stuart-only task and
+ * it shouldn't be visible in the AIG!itch group where multiple members
+ * can see commands. Everything else stays.
+ */
+export const TELEGRAM_COMMANDS_GROUP: { command: string; description: string }[] =
+  TELEGRAM_COMMANDS_PRIVATE.filter(c => c.command !== "email");
+
+/** Legacy alias — some code still imports the old name. */
+export const TELEGRAM_COMMAND_LIST = TELEGRAM_COMMANDS_PRIVATE;
+
+/**
+ * Register the command menu with Telegram's setMyCommands API for a given
+ * bot token. Pushes TWO scoped menus:
+ *   - all_private_chats → full list with /email
+ *   - all_group_chats   → list without /email
+ *
+ * Uses explicit scopes (not "default") so the scopes override each other
+ * cleanly. Returns {ok, error} — success means at least the private scope
+ * succeeded, which is the most important one.
  *
  * Safe to call multiple times — Telegram replaces the list on each call.
  */
 export async function registerTelegramCommands(botToken: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const res = await fetch(`${TELEGRAM_API}/bot${botToken}/setMyCommands`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        commands: TELEGRAM_COMMAND_LIST,
-        scope: { type: "default" },
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-    const data = await res.json() as { ok: boolean; description?: string };
-    if (!data.ok) return { ok: false, error: data.description || "setMyCommands failed" };
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  async function push(commands: typeof TELEGRAM_COMMANDS_PRIVATE, scope: { type: string }): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const res = await fetch(`${TELEGRAM_API}/bot${botToken}/setMyCommands`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commands, scope }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await res.json() as { ok: boolean; description?: string };
+      if (!data.ok) return { ok: false, error: data.description || "setMyCommands failed" };
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   }
+
+  // Private chats get the full menu with /email
+  const privateResult = await push(TELEGRAM_COMMANDS_PRIVATE, { type: "all_private_chats" });
+
+  // Group chats get the trimmed menu without /email
+  const groupResult = await push(TELEGRAM_COMMANDS_GROUP, { type: "all_group_chats" });
+
+  // Private success is the critical one — users primarily DM bots.
+  // Group failure is a soft warning (the message will still be set).
+  if (!privateResult.ok) return privateResult;
+  if (!groupResult.ok) {
+    console.warn("[telegram-commands] group scope setMyCommands failed:", groupResult.error);
+  }
+  return { ok: true };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -489,6 +520,12 @@ export interface CommandContext {
   personaDisplayName: string;
   botToken: string;
   chatId: number;
+  /**
+   * Telegram chat type from the webhook payload: "private", "group",
+   * "supergroup", or "channel". Used to hide Stuart-only commands
+   * (like /email) from the /help output in group chats.
+   */
+  chatType?: "private" | "group" | "supergroup" | "channel";
 }
 
 export interface CommandResult {
@@ -553,14 +590,24 @@ export async function handleSlashCommand(
 
   // ── /help — full command list with real examples ──────────────────
   if (cmd === "help") {
-    const lines = [
+    const isPrivate = !ctx.chatType || ctx.chatType === "private";
+    const lines: string[] = [
       `<b>${escapeHtml(ctx.personaDisplayName)}</b> @${escapeHtml(ctx.personaUsername)}`,
       "",
-      "<b>Email a contact</b> — draft, preview, approve:",
-      "📧 /email — list contacts you can reach",
-      "📧 <code>/email family</code> — draft to first family contact",
-      "📧 <code>/email andrew@icloud.com</code> — draft to specific email",
-      "",
+    ];
+
+    // Email section only shows in 1:1 DMs — it's a Stuart-only private task
+    if (isPrivate) {
+      lines.push(
+        "<b>Email a contact</b> — draft, preview, approve:",
+        "📧 /email — list contacts you can reach",
+        "📧 <code>/email family</code> — draft to first family contact",
+        "📧 <code>/email andrew@icloud.com</code> — draft to specific email",
+        "",
+      );
+    }
+
+    lines.push(
       "<b>Browse content</b> — tap any of these to open an interactive list:",
       "🛒 /nft — browse the NFT marketplace",
       "📺 /channel — browse all 19 video channels",
@@ -579,7 +626,7 @@ export async function handleSlashCommand(
       "🧠 /memories — what I remember about you",
       "",
       "Anything else? Just talk to me like a normal human. I'll reply in character.",
-    ];
+    );
     await sendPlain(ctx.botToken, ctx.chatId, lines.join("\n"));
     return { handled: true };
   }
