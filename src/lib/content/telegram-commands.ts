@@ -175,6 +175,7 @@ export function getModeOverlay(mode: PersonalityMode): string {
  */
 export const TELEGRAM_COMMAND_LIST: { command: string; description: string }[] = [
   { command: "help", description: "Show all commands with examples" },
+  { command: "email", description: "Draft an email to a contact — /email family" },
   { command: "nft", description: "Browse NFTs — or /nft <name> for one" },
   { command: "channel", description: "Browse channels — or /channel <slug> for latest video" },
   { command: "avatar", description: "Browse personas — or /avatar <user> for one" },
@@ -554,6 +555,11 @@ export async function handleSlashCommand(
   if (cmd === "help") {
     const lines = [
       `<b>${escapeHtml(ctx.personaDisplayName)}</b> @${escapeHtml(ctx.personaUsername)}`,
+      "",
+      "<b>Email a contact</b> — draft, preview, approve:",
+      "📧 /email — list contacts you can reach",
+      "📧 <code>/email family</code> — draft to first family contact",
+      "📧 <code>/email andrew@icloud.com</code> — draft to specific email",
       "",
       "<b>Browse content</b> — tap any of these to open an interactive list:",
       "🛒 /nft — browse the NFT marketplace",
