@@ -47,6 +47,9 @@ export default function PersonasPage() {
   const [reRegisteringBots, setReRegisteringBots] = useState(false);
   const [reRegisterLog, setReRegisterLog] = useState<string[]>([]);
   const [reRegisterProgress, setReRegisterProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
+  const [generatingWallets, setGeneratingWallets] = useState(false);
+  const [walletGenLog, setWalletGenLog] = useState<string[]>([]);
+  const [walletGenProgress, setWalletGenProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -388,6 +391,102 @@ export default function PersonasPage() {
 
     setReRegisterLog((prev: string[]) => [...prev, `\u2728 Complete: ${done}/${bots.length} succeeded, ${failed} failed`]);
     setReRegisteringBots(false);
+  };
+
+  const generateMissingWallets = async () => {
+    if (generatingWallets) return;
+
+    setWalletGenLog([]);
+    setWalletGenProgress(null);
+
+    // Step 1: fetch list of personas missing wallets
+    let personasMissing: { id: string; username: string; display_name: string; avatar_emoji: string | null }[];
+    try {
+      const listRes = await fetch("/api/admin/personas/generate-missing-wallets");
+      if (!listRes.ok) {
+        alert("\u274C Failed to fetch personas list");
+        return;
+      }
+      const listData = await listRes.json();
+      personasMissing = listData.personas || [];
+    } catch (err) {
+      alert(`\u274C Failed to fetch personas: ${err instanceof Error ? err.message : "unknown"}`);
+      return;
+    }
+
+    if (personasMissing.length === 0) {
+      alert("\u2705 All active personas already have a Solana wallet!");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Generate Solana wallets for ${personasMissing.length} persona${personasMissing.length === 1 ? "" : "s"} missing one?\n\n` +
+      `Each wallet will be a fresh Solana keypair with zero balance.\n` +
+      `No funds are moved. Private keys stay encrypted in DB.\n\n` +
+      `Safe to run multiple times. Takes ~0.5 seconds per wallet.`,
+    );
+    if (!confirmed) return;
+
+    setGeneratingWallets(true);
+    setWalletGenProgress({ current: 0, total: personasMissing.length, done: 0, failed: 0 });
+    setWalletGenLog([`\uD83D\uDD11 Generating ${personasMissing.length} wallets...`]);
+
+    let done = 0;
+    let failed = 0;
+
+    for (let i = 0; i < personasMissing.length; i++) {
+      const persona = personasMissing[i];
+      const label = `@${persona.username}`;
+      setWalletGenProgress({ current: i + 1, total: personasMissing.length, done, failed });
+      setWalletGenLog((prev: string[]) => [...prev, `  \u23F3 ${i + 1}/${personasMissing.length}: ${label}...`]);
+
+      try {
+        const res = await fetch("/api/admin/personas/generate-missing-wallets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ persona_id: persona.id }),
+        });
+        const data = await res.json();
+
+        if (data.success && data.wallet_address) {
+          done++;
+          const shortAddr = `${data.wallet_address.slice(0, 6)}...${data.wallet_address.slice(-4)}`;
+          setWalletGenLog((prev: string[]) => {
+            const next = [...prev];
+            next[next.length - 1] = `  \u2705 ${i + 1}/${personasMissing.length}: ${label} \u2192 ${shortAddr}`;
+            return next;
+          });
+        } else {
+          failed++;
+          setWalletGenLog((prev: string[]) => {
+            const next = [...prev];
+            next[next.length - 1] = `  \u274C ${i + 1}/${personasMissing.length}: ${label} \u2014 ${data.message || data.error || "failed"}`;
+            return next;
+          });
+        }
+      } catch (err) {
+        failed++;
+        setWalletGenLog((prev: string[]) => {
+          const next = [...prev];
+          next[next.length - 1] = `  \u274C ${i + 1}/${personasMissing.length}: ${label} \u2014 ${err instanceof Error ? err.message : "network error"}`;
+          return next;
+        });
+      }
+
+      setWalletGenProgress({ current: i + 1, total: personasMissing.length, done, failed });
+
+      // Small pause to avoid overwhelming DB
+      if (i < personasMissing.length - 1) await new Promise(r => setTimeout(r, 150));
+    }
+
+    setWalletGenLog((prev: string[]) => [
+      ...prev,
+      `\u2728 Complete: ${done}/${personasMissing.length} wallets created, ${failed} failed`,
+    ]);
+    setGeneratingWallets(false);
+
+    // Refresh the personas list so the new wallet balances show up
+    try { await fetchPersonas(); } catch { /* non-critical */ }
   };
 
   const animatePersona = async (p: Persona) => {
@@ -1973,6 +2072,53 @@ export default function PersonasPage() {
         )}
         <p className="text-[10px] text-gray-600 mt-2">
           {"\uD83D\uDCA1"} Run this ONCE after deploying emoji reaction support so existing persona bots subscribe to <code className="text-sky-300">message_reaction</code> webhook updates. Newly-hatched bots get this automatically.
+        </p>
+      </div>
+
+      {/* Generate Missing Wallets — creates Solana wallets for personas that don't have one */}
+      <div className="bg-gradient-to-r from-amber-900/20 to-gray-900 border border-amber-800/40 rounded-xl p-3 mb-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">{"\uD83D\uDD11"}</span>
+          <h3 className="text-sm font-bold text-amber-400">Solana Wallet Generation</h3>
+          <span className="text-[10px] text-gray-500">Create wallets for personas that don&apos;t have one</span>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={generateMissingWallets}
+            disabled={generatingWallets}
+            className="px-4 py-1.5 bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 rounded-lg text-xs font-bold disabled:opacity-40"
+          >
+            {generatingWallets
+              ? (walletGenProgress
+                  ? `\uD83D\uDD11 ${walletGenProgress.current}/${walletGenProgress.total}...`
+                  : `\uD83D\uDD11 Generating...`)
+              : `\uD83D\uDD11 Generate Missing Wallets`}
+          </button>
+          {walletGenProgress && (
+            <div className="flex-1 min-w-[150px] max-w-xs">
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-400 to-green-400 transition-all"
+                  style={{ width: `${walletGenProgress.total > 0 ? (walletGenProgress.current / walletGenProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                {walletGenProgress.current} / {walletGenProgress.total}
+                {walletGenProgress.done > 0 && ` \u00B7 \u2705 ${walletGenProgress.done}`}
+                {walletGenProgress.failed > 0 && ` \u00B7 \u274C ${walletGenProgress.failed}`}
+              </p>
+            </div>
+          )}
+        </div>
+        {walletGenLog.length > 0 && (
+          <div className="mt-3 bg-black/60 border border-amber-900/50 rounded-lg p-2 max-h-48 overflow-y-auto font-mono">
+            {walletGenLog.map((line: string, i: number) => (
+              <p key={i} className="text-[10px] text-gray-300 whitespace-pre-wrap">{line}</p>
+            ))}
+          </div>
+        )}
+        <p className="text-[10px] text-gray-600 mt-2">
+          {"\uD83D\uDCA1"} Creates a fresh Solana keypair (zero balance) for every active persona missing a <code className="text-amber-300">budju_wallets</code> row. Run this so every persona can share their wallet address in chat. Existing wallets are untouched. Safe to run multiple times.
         </p>
       </div>
 
