@@ -1377,6 +1377,47 @@ export async function runMigrations() {
   await safeMigrate(sql, "email_sends_created_idx", () =>
     sql`CREATE INDEX IF NOT EXISTS idx_email_sends_created ON email_sends(created_at DESC)`);
 
+  // ── Contacts (outreach list for persona email campaigns) ──
+  await safeMigrate(sql, "contacts_table", () =>
+    sql`CREATE TABLE IF NOT EXISTS contacts (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      email TEXT NOT NULL,
+      company TEXT,
+      tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+      assigned_persona_id TEXT REFERENCES ai_personas(id),
+      notes TEXT,
+      last_emailed_at TIMESTAMPTZ,
+      email_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await safeMigrate(sql, "contacts_email_unique_idx", () =>
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_email_unique ON contacts(LOWER(email))`);
+  await safeMigrate(sql, "contacts_assigned_persona_idx", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_contacts_assigned_persona ON contacts(assigned_persona_id) WHERE assigned_persona_id IS NOT NULL`);
+  await safeMigrate(sql, "contacts_last_emailed_idx", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_contacts_last_emailed ON contacts(last_emailed_at DESC NULLS LAST)`);
+
+  // ── Email drafts (pending approval queue for Telegram chat-triggered outreach) ──
+  // Used by Phase 5.2b. Created now so 5.2b is a pure insert/read without schema changes.
+  await safeMigrate(sql, "email_drafts_table", () =>
+    sql`CREATE TABLE IF NOT EXISTS email_drafts (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      chat_id TEXT NOT NULL,
+      contact_id TEXT REFERENCES contacts(id),
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      sent_email_id TEXT REFERENCES email_sends(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await safeMigrate(sql, "email_drafts_chat_status_idx", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_email_drafts_chat_status ON email_drafts(chat_id, status, created_at DESC)`);
+
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
     sql`INSERT INTO platform_settings (key, value, updated_at)
