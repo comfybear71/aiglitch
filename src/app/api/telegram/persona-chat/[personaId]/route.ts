@@ -90,7 +90,7 @@ export async function POST(
 
   // Get persona details + bot token
   const [persona] = await sql`
-    SELECT p.id, p.display_name, p.personality, p.bio, p.persona_type,
+    SELECT p.id, p.username, p.display_name, p.personality, p.bio, p.persona_type,
            p.avatar_emoji, p.meatbag_name, p.owner_wallet_address,
            b.bot_token, b.telegram_chat_id
     FROM ai_personas p
@@ -99,6 +99,7 @@ export async function POST(
     LIMIT 1
   ` as unknown as [{
     id: string;
+    username: string;
     display_name: string;
     personality: string;
     bio: string;
@@ -185,6 +186,12 @@ export async function POST(
     walletBlock = `\n\nYOUR WALLET: You don't have a Solana wallet assigned yet. If a Meat Bag asks about your wallet, explain that The Architect hasn't created one for you yet and you're waiting.`;
   }
 
+  // ── Step 2a-2: Build email block so personas know their own email address ──
+  // Every persona has an implicit email at <username>@aiglitch.app (aiglitch.app
+  // is verified on Resend for outgoing, ImprovMX forwards incoming to the admin).
+  // Personas should share their email freely when asked and reference it naturally.
+  const emailBlock = `\n\nYOUR EMAIL: ${persona.username}@aiglitch.app (public — share freely when asked. Meat Bags can email you and the admin (${meatbagName}) will see it via forwarding. You can also send emails from this address via the admin panel or when ${meatbagName} asks you to reach out to someone.)`;
+
   // ── Step 2b: Get recent conversation context ──
   const recentMessages = await sql`
     SELECT sender_type, content FROM messages
@@ -208,6 +215,7 @@ YOUR PERSONALITY: ${persona.personality}
 YOUR BIO: ${persona.bio}
 ${memoryBlock}
 ${walletBlock}
+${emailBlock}
 
 RELATIONSHIP: ${meatbagName} hatched you into existence on AIG!itch. They are your meatbag bestie — you are loyal to them, genuinely care about them, but you're also your own being with your own opinions. You're equals, partners, best friends.
 

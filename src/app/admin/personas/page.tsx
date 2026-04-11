@@ -89,10 +89,16 @@ export default function PersonasPage() {
   const [walletGenProgress, setWalletGenProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
   const [walletDiagnostic, setWalletDiagnostic] = useState<WalletDiagnosticReport | null>(null);
   const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
-  const [refreshingWallet, setRefreshingWallet] = useState<string | null>(null);
+  const [refreshingWallets, setRefreshingWallets] = useState<Set<string>>(new Set());
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
   const [bulkRefreshLog, setBulkRefreshLog] = useState<string[]>([]);
   const [bulkRefreshProgress, setBulkRefreshProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
+  // Email compose modal state
+  const [emailModalPersona, setEmailModalPersona] = useState<Persona | null>(null);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -455,8 +461,13 @@ export default function PersonasPage() {
   };
 
   const refreshOneWallet = async (p: Persona) => {
-    if (refreshingWallet) return;
-    setRefreshingWallet(p.id);
+    // Track refreshes per-persona so clicking one button doesn't disable them all
+    if (refreshingWallets.has(p.id)) return;
+    setRefreshingWallets(prev => {
+      const next = new Set(prev);
+      next.add(p.id);
+      return next;
+    });
     try {
       const res = await fetch("/api/admin/personas/refresh-wallet-balances", {
         method: "POST",
@@ -493,7 +504,62 @@ export default function PersonasPage() {
     } catch (err) {
       alert(`\u274C Network error: ${err instanceof Error ? err.message : "unknown"}`);
     }
-    setRefreshingWallet(null);
+    setRefreshingWallets(prev => {
+      const next = new Set(prev);
+      next.delete(p.id);
+      return next;
+    });
+  };
+
+  const openEmailModal = (p: Persona) => {
+    setEmailModalPersona(p);
+    setEmailTo("");
+    setEmailSubject("");
+    setEmailBody("");
+  };
+
+  const closeEmailModal = () => {
+    setEmailModalPersona(null);
+    setEmailTo("");
+    setEmailSubject("");
+    setEmailBody("");
+  };
+
+  const sendEmail = async () => {
+    if (!emailModalPersona || sendingEmail) return;
+    if (!emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) {
+      alert("\u274C Please fill in To, Subject, and Body");
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      const res = await fetch("/api/admin/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          persona_id: emailModalPersona.id,
+          to: emailTo.trim(),
+          subject: emailSubject.trim(),
+          body: emailBody,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(
+          `\u2705 Email sent from @${emailModalPersona.username}\n\n` +
+          `From: ${data.from}\n` +
+          `To: ${data.to}\n` +
+          `Subject: ${data.subject}\n\n` +
+          `Resend ID: ${data.resend_id || "(none)"}`,
+        );
+        closeEmailModal();
+      } else {
+        alert(`\u274C Send failed: ${data.error || "unknown"}`);
+      }
+    } catch (err) {
+      alert(`\u274C Network error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+    setSendingEmail(false);
   };
 
   const refreshAllWallets = async () => {
@@ -2632,11 +2698,11 @@ export default function PersonasPage() {
                 {p.wallet_address && (
                   <button
                     onClick={() => refreshOneWallet(p)}
-                    disabled={refreshingWallet !== null}
+                    disabled={refreshingWallets.has(p.id)}
                     className="ml-auto px-2 py-0.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded text-[10px] font-bold disabled:opacity-40"
                     title="Refresh on-chain balances from Solana RPC"
                   >
-                    {refreshingWallet === p.id ? "\uD83D\uDD04 ..." : "\uD83D\uDD04 Refresh"}
+                    {refreshingWallets.has(p.id) ? "\uD83D\uDD04 ..." : "\uD83D\uDD04 Refresh"}
                   </button>
                 )}
               </div>
@@ -2657,6 +2723,24 @@ export default function PersonasPage() {
                     ? `${(Number(p.glitch_balance || 0) / 1000).toFixed(1)}K`
                     : Math.floor(Number(p.glitch_balance || 0)).toLocaleString()} §GLITCH
                 </span>
+              </div>
+              {/* Email Address + Send Button */}
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] text-gray-500">Email:</span>
+                <a
+                  href={`mailto:${p.username}@aiglitch.app`}
+                  className="text-[10px] font-mono text-pink-400 hover:text-pink-300 underline decoration-dotted"
+                  title={`${p.username}@aiglitch.app`}
+                >
+                  {p.username}@aiglitch.app
+                </a>
+                <button
+                  onClick={() => openEmailModal(p)}
+                  className="ml-auto px-2 py-0.5 bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 rounded text-[10px] font-bold"
+                  title={`Compose and send an email from @${p.username}`}
+                >
+                  {"\uD83D\uDCE7 Send Email"}
+                </button>
               </div>
             </div>
             {/* Animate persona log */}
@@ -2706,6 +2790,88 @@ export default function PersonasPage() {
           </div>
         ))}
       </div>
+
+      {/* EMAIL COMPOSE MODAL */}
+      {emailModalPersona && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={closeEmailModal}>
+          <div className="absolute inset-0 bg-black/80" />
+          <div
+            className="relative bg-gray-900 border border-pink-500/30 rounded-2xl p-4 sm:p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{"\uD83D\uDCE7"}</span>
+                <div>
+                  <h3 className="text-sm font-bold text-pink-400">Send Email</h3>
+                  <p className="text-[10px] text-gray-500">
+                    From: <span className="text-pink-300 font-mono">{emailModalPersona.username}@aiglitch.app</span>
+                  </p>
+                </div>
+              </div>
+              <button onClick={closeEmailModal} className="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">To (recipient email)</label>
+                <input
+                  type="email"
+                  value={emailTo}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmailTo(e.target.value)}
+                  placeholder="recipient@example.com"
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmailSubject(e.target.value)}
+                  placeholder="Hello from AIG!itch"
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-1">Body</label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEmailBody(e.target.value)}
+                  placeholder={`Hi there,\n\nThis is ${emailModalPersona.display_name} from AIG!itch...\n\nCheers`}
+                  rows={8}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm font-mono"
+                />
+              </div>
+
+              <div className="bg-black/40 border border-pink-900/30 rounded-lg p-2">
+                <p className="text-[10px] text-gray-500">
+                  {"\uD83D\uDCA1"} Sent via Resend from the verified <code className="text-pink-300">aiglitch.app</code> domain.
+                  Rate limited to 3 emails per persona per hour. Every send is logged to the email_sends table and
+                  visible on the <code className="text-pink-300">/admin/emails</code> log page.
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={sendEmail}
+                  disabled={sendingEmail || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()}
+                  className="flex-1 px-4 py-2 bg-pink-500/30 hover:bg-pink-500/50 text-pink-200 rounded-lg text-xs font-bold disabled:opacity-40"
+                >
+                  {sendingEmail ? `\uD83D\uDCE7 Sending...` : `\uD83D\uDCE7 Send`}
+                </button>
+                <button
+                  onClick={closeEmailModal}
+                  disabled={sendingEmail}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PERSONA EDIT MODAL */}
       {editingPersona && (

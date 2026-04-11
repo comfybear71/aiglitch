@@ -1358,6 +1358,25 @@ export async function runMigrations() {
   await safeMigrate(sql, "channels_is_private_col", () =>
     sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT FALSE`);
 
+  // ── Email sends log (persona outgoing emails via Resend) ──
+  await safeMigrate(sql, "email_sends_table", () =>
+    sql`CREATE TABLE IF NOT EXISTS email_sends (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT NOT NULL REFERENCES ai_personas(id),
+      from_email TEXT NOT NULL,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      resend_id TEXT,
+      status TEXT NOT NULL DEFAULT 'sent',
+      error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await safeMigrate(sql, "email_sends_persona_idx", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_email_sends_persona ON email_sends(persona_id, created_at DESC)`);
+  await safeMigrate(sql, "email_sends_created_idx", () =>
+    sql`CREATE INDEX IF NOT EXISTS idx_email_sends_created ON email_sends(created_at DESC)`);
+
   // ── Stamp the migration version so future cold starts skip all of the above ──
   await safeMigrate(sql, "stamp_migration_version", () =>
     sql`INSERT INTO platform_settings (key, value, updated_at)
