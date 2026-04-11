@@ -78,7 +78,9 @@ export interface PendingDraft {
  * isn't about email. Saves ~95% of intent detection calls.
  */
 export function hasOutreachKeyword(text: string): boolean {
-  return OUTREACH_KEYWORD_REGEX.test(text);
+  const match = OUTREACH_KEYWORD_REGEX.test(text);
+  console.log(`[outreach] hasOutreachKeyword("${text.slice(0, 60)}") → ${match}`);
+  return match;
 }
 
 /**
@@ -94,7 +96,7 @@ USER MESSAGE:
 Is the user asking you to draft or send an email to someone from their contacts list?
 
 If YES, also extract:
-- TAG: which contact tag/group should we email? (e.g. "grants", "sponsors", "media", "darwin", "journalists", or null if they didn't specify)
+- TAG: which contact tag/group should we email? (e.g. "grants", "sponsors", "media", "darwin", "journalists", "family", "architect", or null if they didn't specify)
 - TOPIC: what should the email be about? (1 short sentence summary of the user's request)
 
 Respond with ONLY valid JSON in this exact format (no markdown, no prose):
@@ -103,24 +105,33 @@ Respond with ONLY valid JSON in this exact format (no markdown, no prose):
 Examples:
 - "Email my grants contacts about the new channel" → {"outreach": true, "tag": "grants", "topic": "new channel launch update"}
 - "Hey draft a note to the media list pitching our sponsor packages" → {"outreach": true, "tag": "media", "topic": "pitching sponsor packages"}
+- "Send a test email to my family" → {"outreach": true, "tag": "family", "topic": "test email from AIG!itch"}
 - "What's for breakfast?" → {"outreach": false, "tag": null, "topic": ""}
 - "Reach out to dante about start NT" → {"outreach": true, "tag": null, "topic": "start NT follow-up with dante"}`;
 
   try {
     const result = await safeGenerate(prompt, 200);
-    if (!result) return { outreach: false, tag: null, topic: "" };
+    if (!result) {
+      console.log("[outreach] detectOutreachIntent: safeGenerate returned null (budget cap or API error)");
+      return { outreach: false, tag: null, topic: "" };
+    }
 
-    // Extract first JSON object from the response
     const match = result.match(/\{[\s\S]*?\}/);
-    if (!match) return { outreach: false, tag: null, topic: "" };
+    if (!match) {
+      console.log("[outreach] detectOutreachIntent: no JSON in LLM response:", result.slice(0, 200));
+      return { outreach: false, tag: null, topic: "" };
+    }
 
     const parsed = JSON.parse(match[0]);
-    return {
+    const intent = {
       outreach: Boolean(parsed.outreach),
       tag: typeof parsed.tag === "string" && parsed.tag.toLowerCase() !== "null" ? parsed.tag.toLowerCase() : null,
       topic: typeof parsed.topic === "string" ? parsed.topic : "",
     };
-  } catch {
+    console.log(`[outreach] detectOutreachIntent → outreach=${intent.outreach} tag=${intent.tag ?? "null"} topic="${intent.topic.slice(0, 60)}"`);
+    return intent;
+  } catch (err) {
+    console.error("[outreach] detectOutreachIntent failed:", err instanceof Error ? err.message : err);
     return { outreach: false, tag: null, topic: "" };
   }
 }
@@ -131,42 +142,79 @@ Examples:
  * Find the next contact to email for a given persona + tag.
  * Respects the per-contact cooldown + assigned persona + daily ceiling.
  * Returns null if nothing matches.
+ *
+ * Tag matching is CASE-INSENSITIVE — contacts with tag "Family" will match
+ * a query for "family". This is enforced via jsonb_array_elements_text +
+ * LOWER() because JSONB string containment is case-sensitive by default.
+ *
+ * If `bypassRateLimits` is true, the 14-day per-contact cooldown and the
+ * 10/day global ceiling are skipped. Used by the /email slash command for
+ * testing — Stuart explicitly asked to send, he knows what he's doing.
  */
 export async function pickContactForOutreach(
   personaId: string,
   tag: string | null,
+  options: { bypassRateLimits?: boolean } = {},
 ): Promise<{ contact: Contact | null; reason: string }> {
   const sql = getDb();
+  const bypass = !!options.bypassRateLimits;
+  console.log(`[outreach] pickContactForOutreach personaId=${personaId} tag=${tag ?? "null"} bypass=${bypass}`);
 
-  // Check global daily ceiling first
-  const [dailyRow] = await sql`
-    SELECT COUNT(*)::int as c
-    FROM email_sends
-    WHERE created_at > NOW() - INTERVAL '24 hours'
-  ` as unknown as [{ c: number }];
+  // Check global daily ceiling first (unless bypassed)
+  if (!bypass) {
+    const [dailyRow] = await sql`
+      SELECT COUNT(*)::int as c
+      FROM email_sends
+      WHERE created_at > NOW() - INTERVAL '24 hours'
+    ` as unknown as [{ c: number }];
 
-  if (dailyRow.c >= GLOBAL_DAILY_CEILING) {
-    return {
-      contact: null,
-      reason: `Daily email ceiling hit (${GLOBAL_DAILY_CEILING}/day). Try again tomorrow.`,
-    };
+    if (dailyRow.c >= GLOBAL_DAILY_CEILING) {
+      console.log(`[outreach] blocked by daily ceiling: ${dailyRow.c}/${GLOBAL_DAILY_CEILING}`);
+      return {
+        contact: null,
+        reason: `Daily email ceiling hit (${GLOBAL_DAILY_CEILING}/day). Try again tomorrow.`,
+      };
+    }
   }
 
   // Pick the next eligible contact. A contact is eligible if:
-  // - Not emailed in the last 14 days (or never emailed)
+  // - Not emailed in the last 14 days (or never emailed) — unless bypass
   // - assigned_persona_id matches this persona OR is null (unassigned)
-  // - tag matches (if specified)
+  // - tag matches case-insensitively (if specified)
   // Prefer contacts never emailed, then oldest last_emailed_at.
   let contacts: Contact[];
 
-  if (tag) {
+  if (tag && bypass) {
     contacts = await sql`
       SELECT id, name, email, company, tags, assigned_persona_id, notes, last_emailed_at, email_count
       FROM contacts
       WHERE (assigned_persona_id = ${personaId} OR assigned_persona_id IS NULL)
-        AND tags @> ${JSON.stringify([tag])}::jsonb
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(tags) t
+          WHERE LOWER(t) = LOWER(${tag})
+        )
+      ORDER BY last_emailed_at ASC NULLS FIRST
+      LIMIT 1
+    ` as unknown as Contact[];
+  } else if (tag) {
+    contacts = await sql`
+      SELECT id, name, email, company, tags, assigned_persona_id, notes, last_emailed_at, email_count
+      FROM contacts
+      WHERE (assigned_persona_id = ${personaId} OR assigned_persona_id IS NULL)
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(tags) t
+          WHERE LOWER(t) = LOWER(${tag})
+        )
         AND (last_emailed_at IS NULL
-             OR last_emailed_at < NOW() - INTERVAL '${PER_CONTACT_COOLDOWN_DAYS} days')
+             OR last_emailed_at < NOW() - INTERVAL '14 days')
+      ORDER BY last_emailed_at ASC NULLS FIRST
+      LIMIT 1
+    ` as unknown as Contact[];
+  } else if (bypass) {
+    contacts = await sql`
+      SELECT id, name, email, company, tags, assigned_persona_id, notes, last_emailed_at, email_count
+      FROM contacts
+      WHERE (assigned_persona_id = ${personaId} OR assigned_persona_id IS NULL)
       ORDER BY last_emailed_at ASC NULLS FIRST
       LIMIT 1
     ` as unknown as Contact[];
@@ -176,7 +224,7 @@ export async function pickContactForOutreach(
       FROM contacts
       WHERE (assigned_persona_id = ${personaId} OR assigned_persona_id IS NULL)
         AND (last_emailed_at IS NULL
-             OR last_emailed_at < NOW() - INTERVAL '${PER_CONTACT_COOLDOWN_DAYS} days')
+             OR last_emailed_at < NOW() - INTERVAL '14 days')
       ORDER BY last_emailed_at ASC NULLS FIRST
       LIMIT 1
     ` as unknown as Contact[];
@@ -184,12 +232,90 @@ export async function pickContactForOutreach(
 
   if (contacts.length === 0) {
     const msg = tag
-      ? `No eligible contacts found with tag "${tag}". Either there are no contacts with that tag, or all of them have been emailed within the last ${PER_CONTACT_COOLDOWN_DAYS} days.`
+      ? `No eligible contacts found with tag "${tag}". Check /admin/contacts — either there are no contacts with that tag, or all of them have been emailed within the last ${PER_CONTACT_COOLDOWN_DAYS} days.`
       : `No eligible contacts found. Either your contacts list is empty, or all contacts have been emailed within the last ${PER_CONTACT_COOLDOWN_DAYS} days.`;
+    console.log(`[outreach] no eligible contact: ${msg}`);
     return { contact: null, reason: msg };
   }
 
+  console.log(`[outreach] picked contact: ${contacts[0].name || contacts[0].email} (tags=${JSON.stringify(contacts[0].tags)})`);
   return { contact: contacts[0], reason: "" };
+}
+
+/**
+ * Direct contact lookup for the /email slash command. Bypasses intent
+ * detection and the rate limits — Stuart is explicitly asking to send.
+ *
+ * Lookup strategy (first match wins):
+ *   1. Case-insensitive exact tag match (e.g. "family" matches ["Family"])
+ *   2. Case-insensitive exact email match
+ *   3. Case-insensitive substring match on name
+ *   4. Case-insensitive substring match on email
+ */
+export async function findContactDirect(
+  personaId: string,
+  query: string,
+): Promise<{ contact: Contact | null; reason: string }> {
+  const sql = getDb();
+  const q = query.trim();
+  if (!q) return { contact: null, reason: "No query provided" };
+
+  console.log(`[outreach] findContactDirect personaId=${personaId} query="${q}"`);
+
+  // Strategy 1: tag match (bypasses cooldown via pickContactForOutreach with bypass)
+  const tagResult = await pickContactForOutreach(personaId, q, { bypassRateLimits: true });
+  if (tagResult.contact) {
+    return { contact: tagResult.contact, reason: "" };
+  }
+
+  // Strategy 2-4: email/name match — single query with priority ordering
+  const rows = await sql`
+    SELECT id, name, email, company, tags, assigned_persona_id, notes, last_emailed_at, email_count,
+      CASE
+        WHEN LOWER(email) = LOWER(${q}) THEN 0
+        WHEN LOWER(COALESCE(name, '')) = LOWER(${q}) THEN 1
+        WHEN LOWER(COALESCE(name, '')) LIKE ${`%${q.toLowerCase()}%`} THEN 2
+        WHEN LOWER(email) LIKE ${`%${q.toLowerCase()}%`} THEN 3
+        ELSE 99
+      END as match_rank
+    FROM contacts
+    WHERE (assigned_persona_id = ${personaId} OR assigned_persona_id IS NULL)
+      AND (
+        LOWER(email) = LOWER(${q})
+        OR LOWER(COALESCE(name, '')) = LOWER(${q})
+        OR LOWER(COALESCE(name, '')) LIKE ${`%${q.toLowerCase()}%`}
+        OR LOWER(email) LIKE ${`%${q.toLowerCase()}%`}
+      )
+    ORDER BY match_rank ASC, last_emailed_at ASC NULLS FIRST
+    LIMIT 1
+  ` as unknown as (Contact & { match_rank: number })[];
+
+  if (rows.length === 0) {
+    return {
+      contact: null,
+      reason: `No contact matches "${q}". Try a tag (e.g. family, grants, sponsors), a name, or an email address. See /admin/contacts for the full list.`,
+    };
+  }
+
+  const picked = rows[0];
+  console.log(`[outreach] findContactDirect matched: ${picked.name || picked.email} (rank=${picked.match_rank})`);
+  return { contact: picked, reason: "" };
+}
+
+/**
+ * List all contacts this persona can email (unassigned or assigned to them).
+ * Used by /email with no args to show Stuart what's available.
+ */
+export async function listContactsForPersona(personaId: string): Promise<Contact[]> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT id, name, email, company, tags, assigned_persona_id, notes, last_emailed_at, email_count
+    FROM contacts
+    WHERE (assigned_persona_id = ${personaId} OR assigned_persona_id IS NULL)
+    ORDER BY last_emailed_at ASC NULLS FIRST, name ASC
+    LIMIT 50
+  ` as unknown as Contact[];
+  return rows;
 }
 
 // ── Step 3: Draft the email ──────────────────────────────────────────

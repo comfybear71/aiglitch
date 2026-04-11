@@ -7,6 +7,8 @@ import {
   hasOutreachKeyword,
   detectOutreachIntent,
   pickContactForOutreach,
+  findContactDirect,
+  listContactsForPersona,
   draftOutreachEmail,
   saveDraft,
   getPendingDraft,
@@ -159,6 +161,125 @@ export async function POST(
   const meatbagName = persona.meatbag_name || "meatbag";
 
   // ══════════════════════════════════════════════════════════════════════════
+  // /email — DIRECT EMAIL DRAFT (bypasses intent detection)
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  // Handled inline here (not in handleSlashCommand) because it needs the
+  // full persona context including personality + bio for the draft.
+  //
+  //   /email                — list all contacts this persona can email
+  //   /email <tag>          — draft to first contact with that tag (case-insensitive)
+  //   /email <name>         — fuzzy-match by name or email substring
+  //   /email <email>        — exact email match
+  //
+  // Rate limits (14-day cooldown, 10/day ceiling) are BYPASSED because
+  // this is an explicit manual command. Approve/cancel/edit flow is still
+  // enforced — nothing gets sent without user approval.
+  // ══════════════════════════════════════════════════════════════════════════
+  const emailMatch = /^\/email(?:@\w+)?(?:\s+(.+))?$/i.exec(userText.trim());
+  if (emailMatch) {
+    try {
+      const query = (emailMatch[1] || "").trim();
+      console.log(`[outreach] /email command from chat ${chatId} query="${query}"`);
+
+      // No args → list contacts available to this persona
+      if (!query) {
+        const contacts = await listContactsForPersona(persona.id);
+        if (contacts.length === 0) {
+          await sendTelegramMessage(
+            persona.bot_token,
+            chatId,
+            `\uD83D\uDCC7 No contacts found. Add some at <a href="https://aiglitch.app/admin/contacts">aiglitch.app/admin/contacts</a>, then try again.`,
+          );
+          return NextResponse.json({ ok: true });
+        }
+        const lines = [
+          `\uD83D\uDCE7 <b>Email a contact</b>`,
+          ``,
+          `Type <code>/email</code> followed by a tag, name, or email to draft a message:`,
+          ``,
+        ];
+        for (const c of contacts.slice(0, 20)) {
+          const name = c.name || c.email;
+          const tagStr = c.tags.length > 0 ? ` [${c.tags.join(", ")}]` : "";
+          lines.push(`• <code>/email ${c.email}</code> — ${name}${tagStr}`);
+        }
+        if (contacts.length > 20) {
+          lines.push(``);
+          lines.push(`<i>…and ${contacts.length - 20} more. See /admin/contacts for the full list.</i>`);
+        }
+        lines.push(``);
+        lines.push(`<b>Tip:</b> you can also use a tag like <code>/email family</code> to pick the first matching contact.`);
+        await sendTelegramMessage(persona.bot_token, chatId, lines.join("\n"));
+        return NextResponse.json({ ok: true });
+      }
+
+      // With query → resolve contact directly
+      const { contact, reason } = await findContactDirect(persona.id, query);
+      if (!contact) {
+        await sendTelegramMessage(persona.bot_token, chatId, `\u274C ${reason}`);
+        return NextResponse.json({ ok: true });
+      }
+
+      // Tell the user we're drafting (takes a few seconds)
+      await sendTelegramMessage(
+        persona.bot_token,
+        chatId,
+        `\u270D\uFE0F Drafting an email to ${contact.name || contact.email}${contact.company ? ` at ${contact.company}` : ""}... one moment.`,
+        message.message_id,
+      );
+
+      const draft = await draftOutreachEmail(
+        {
+          id: persona.id,
+          username: persona.username,
+          display_name: persona.display_name,
+          personality: persona.personality,
+          bio: persona.bio,
+        },
+        contact,
+        `Test outreach from Stuart via /email command`,
+      );
+
+      if (!draft) {
+        await sendTelegramMessage(
+          persona.bot_token,
+          chatId,
+          `\u274C Draft generation failed. The AI didn't return a valid draft. Check Vercel logs for [outreach] entries, or try again.`,
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      await saveDraft({
+        persona_id: persona.id,
+        chat_id: String(chatId),
+        contact_id: contact.id,
+        to_email: contact.email,
+        subject: draft.subject,
+        body: draft.body,
+      });
+
+      const preview = formatDraftPreview(
+        persona.display_name,
+        persona.username,
+        contact,
+        draft.subject,
+        draft.body,
+      );
+      await sendTelegramMessage(persona.bot_token, chatId, preview);
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      console.error("[persona-chat] /email command failed:", err instanceof Error ? err.message : err);
+      await sendTelegramMessage(
+        persona.bot_token,
+        chatId,
+        `\u274C /email command errored: ${err instanceof Error ? err.message : String(err)}\n\nCheck Vercel logs for the full stack trace.`,
+      );
+      return NextResponse.json({ ok: true });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // SLASH COMMAND DISPATCH (personality modes + content surfacing)
   // ══════════════════════════════════════════════════════════════════════════
   //
@@ -303,10 +424,16 @@ export async function POST(
       );
       // Fall through to normal chat
     } else if (hasOutreachKeyword(userText)) {
+      console.log(`[outreach] keyword matched for persona ${personaId}, running intent detection`);
       // ── Path 2: No pending draft, but user mentioned email words — check intent ──
       const intent = await detectOutreachIntent(userText);
 
+      if (!intent.outreach) {
+        console.log(`[outreach] intent classifier returned outreach=false — falling through to normal chat`);
+      }
+
       if (intent.outreach) {
+        console.log(`[outreach] classified as outreach — picking contact`);
         // User wants an outreach draft
         const { contact, reason } = await pickContactForOutreach(personaId, intent.tag);
 
