@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { env } from "@/lib/bible/env";
+import { registerTelegramCommands } from "@/lib/content/telegram-commands";
 
 export const maxDuration = 60;
 
@@ -103,11 +104,14 @@ export async function POST(request: NextRequest) {
       const data = await res.json();
 
       if (data.ok) {
+        // Also refresh the slash-command menu while we're here.
+        const cmd = await registerTelegramCommands(bot.bot_token);
         return NextResponse.json({
           success: true,
           persona_id: bot.persona_id,
           bot_username: bot.bot_username,
           status: "ok",
+          commands_set: cmd.ok,
         });
       } else {
         return NextResponse.json({
@@ -162,6 +166,8 @@ export async function POST(request: NextRequest) {
       const data = await res.json();
 
       if (data.ok) {
+        // Refresh slash commands on the bulk path too.
+        await registerTelegramCommands(bot.bot_token);
         updated++;
         details.push({
           persona_id: bot.persona_id,
