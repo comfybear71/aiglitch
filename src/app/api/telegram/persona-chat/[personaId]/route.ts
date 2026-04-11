@@ -3,11 +3,41 @@ import { getDb } from "@/lib/db";
 import { safeGenerate, generateJSON } from "@/lib/ai/claude";
 import { personas as personasRepo } from "@/lib/repositories";
 import { buildPlatformBriefBlock } from "@/lib/content/platform-brief";
+import {
+  hasOutreachKeyword,
+  detectOutreachIntent,
+  pickContactForOutreach,
+  draftOutreachEmail,
+  saveDraft,
+  getPendingDraft,
+  cancelDraft,
+  formatDraftPreview,
+  detectApprovalAction,
+  sendApprovedDraft,
+} from "@/lib/content/outreach-drafts";
 import { v4 as uuidv4 } from "uuid";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const MAX_CONTEXT_MESSAGES = 10;
 const MAX_MEMORIES_IN_PROMPT = 20;
+
+/** Send a plain-text message via a persona's bot. Used by outreach flow. */
+async function sendTelegramMessage(botToken: string, chatId: number, text: string, replyToMessageId?: number): Promise<void> {
+  try {
+    await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (err) {
+    console.error("[persona-chat] sendTelegramMessage failed:", err instanceof Error ? err.message : err);
+  }
+}
 
 // ── Memory Types ──
 // fact: concrete info about the meatbag (name, job, pets, location, etc.)
@@ -126,6 +156,187 @@ export async function POST(
 
   const meatbagName = persona.meatbag_name || "meatbag";
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // OUTREACH DRAFT FLOW (Phase 5.2b)
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  // Two paths through this section:
+  //
+  // 1. User has a PENDING draft → intercept their reply as approve/cancel/edit
+  // 2. User message has email keywords → classify intent → maybe draft
+  //
+  // If either path handles the message fully, we return here and skip the
+  // normal chat reply. If neither applies, fall through to normal chat.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  try {
+    const pendingDraft = await getPendingDraft(personaId, String(chatId));
+
+    // ── Path 1: User has a pending draft waiting for approval ──
+    if (pendingDraft) {
+      const { action, editFeedback } = detectApprovalAction(userText);
+
+      if (action === "approve") {
+        const sendResult = await sendApprovedDraft(pendingDraft, {
+          id: persona.id,
+          username: persona.username,
+          display_name: persona.display_name,
+        });
+
+        if (sendResult.success) {
+          await sendTelegramMessage(
+            persona.bot_token,
+            chatId,
+            `\u2705 Email sent!\n\nTo: ${pendingDraft.to_email}\nSubject: ${pendingDraft.subject}\n\nResend ID: ${sendResult.resend_id || "(none)"}\n\nThat's one outreach done. I'll wait at least 14 days before emailing this contact again.`,
+            message.message_id,
+          );
+        } else {
+          await sendTelegramMessage(
+            persona.bot_token,
+            chatId,
+            `\u274C Send failed: ${sendResult.error || "unknown"}\n\nThe draft has been discarded. You can ask me to draft again anytime.`,
+            message.message_id,
+          );
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      if (action === "cancel") {
+        await cancelDraft(pendingDraft.id);
+        await sendTelegramMessage(
+          persona.bot_token,
+          chatId,
+          `\uD83D\uDDD1\uFE0F Draft cancelled. No email sent. Let me know when you want to try again.`,
+          message.message_id,
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      if (action === "edit") {
+        // Redraft with the user's feedback, keeping the same contact
+        await cancelDraft(pendingDraft.id);
+        if (pendingDraft.contact_id) {
+          const sqlInner = getDb();
+          const [contactRow] = await sqlInner`
+            SELECT id, name, email, company, tags, assigned_persona_id, notes, last_emailed_at, email_count
+            FROM contacts WHERE id = ${pendingDraft.contact_id} LIMIT 1
+          ` as unknown as [{
+            id: string; name: string | null; email: string; company: string | null;
+            tags: string[]; assigned_persona_id: string | null; notes: string | null;
+            last_emailed_at: string | null; email_count: number;
+          } | undefined];
+
+          if (contactRow) {
+            const newDraft = await draftOutreachEmail(
+              { id: persona.id, username: persona.username, display_name: persona.display_name, personality: persona.personality, bio: persona.bio },
+              contactRow,
+              "",
+              editFeedback || "Make improvements to the previous draft.",
+            );
+
+            if (newDraft) {
+              await saveDraft({
+                persona_id: persona.id,
+                chat_id: String(chatId),
+                contact_id: contactRow.id,
+                to_email: contactRow.email,
+                subject: newDraft.subject,
+                body: newDraft.body,
+              });
+
+              const preview = formatDraftPreview(persona.display_name, persona.username, contactRow, newDraft.subject, newDraft.body);
+              await sendTelegramMessage(persona.bot_token, chatId, preview, message.message_id);
+              return NextResponse.json({ ok: true });
+            }
+          }
+        }
+
+        await sendTelegramMessage(
+          persona.bot_token,
+          chatId,
+          `\u274C Couldn't redraft — the original contact wasn't found. The old draft has been cancelled. Ask me to draft a new one from scratch.`,
+          message.message_id,
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      // Action === "none" — user's message doesn't match approve/cancel/edit.
+      // Remind them about the pending draft but ALSO fall through to normal
+      // chat so they can keep having a normal conversation.
+      await sendTelegramMessage(
+        persona.bot_token,
+        chatId,
+        `\uD83D\uDCA1 Reminder: you still have a draft email to ${pendingDraft.to_email} waiting for approval. Reply "approve", "cancel", or "edit: <feedback>" when you're ready. Meanwhile, here's my response to your message:`,
+        message.message_id,
+      );
+      // Fall through to normal chat
+    } else if (hasOutreachKeyword(userText)) {
+      // ── Path 2: No pending draft, but user mentioned email words — check intent ──
+      const intent = await detectOutreachIntent(userText);
+
+      if (intent.outreach) {
+        // User wants an outreach draft
+        const { contact, reason } = await pickContactForOutreach(personaId, intent.tag);
+
+        if (!contact) {
+          await sendTelegramMessage(
+            persona.bot_token,
+            chatId,
+            `\uD83D\uDCC7 I tried to find a contact${intent.tag ? ` with tag "${intent.tag}"` : ""} but couldn't.\n\n${reason}\n\nYou can add more contacts via /admin/contacts on the admin panel.`,
+            message.message_id,
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        // Tell the user we're drafting (their message takes a few seconds)
+        await sendTelegramMessage(
+          persona.bot_token,
+          chatId,
+          `\u270D\uFE0F Drafting an email to ${contact.name || contact.email}${contact.company ? ` at ${contact.company}` : ""}... one moment.`,
+          message.message_id,
+        );
+
+        const draft = await draftOutreachEmail(
+          { id: persona.id, username: persona.username, display_name: persona.display_name, personality: persona.personality, bio: persona.bio },
+          contact,
+          intent.topic || userText,
+        );
+
+        if (!draft) {
+          await sendTelegramMessage(
+            persona.bot_token,
+            chatId,
+            `\u274C Draft generation failed. Try rephrasing your request and I'll try again.`,
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        await saveDraft({
+          persona_id: persona.id,
+          chat_id: String(chatId),
+          contact_id: contact.id,
+          to_email: contact.email,
+          subject: draft.subject,
+          body: draft.body,
+        });
+
+        const preview = formatDraftPreview(
+          persona.display_name,
+          persona.username,
+          contact,
+          draft.subject,
+          draft.body,
+        );
+        await sendTelegramMessage(persona.bot_token, chatId, preview);
+        return NextResponse.json({ ok: true });
+      }
+      // Not actually an outreach request → fall through to normal chat
+    }
+  } catch (err) {
+    console.error("[persona-chat] Outreach flow failed (falling back to normal chat):", err instanceof Error ? err.message : err);
+    // Fall through to normal chat on any outreach error — chat never breaks
+  }
+
   // ── Health Restoration: Meatbag replied! Bestie is happy! ──
   // Any message from the meatbag resets health to 100% and clears bonus days timer
   await sql`
@@ -135,7 +346,7 @@ export async function POST(
         health_updated_at = NOW(),
         is_dead = FALSE
     WHERE id = ${personaId}
-  `.catch(err => console.error("[persona-chat] Health reset failed:", err));
+  `.catch((err: unknown) => console.error("[persona-chat] Health reset failed:", err));
 
   // ── Step 1: Retrieve memories about this meatbag ──
   const memories = await sql`
