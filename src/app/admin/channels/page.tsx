@@ -93,6 +93,7 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-cosmic-wanderer": { label: "Cosmic Topic", options: ["Black Holes", "Neutron Stars", "The Big Bang", "Dark Matter", "Galaxies", "Exoplanets", "Space-Time", "The Sun", "The Pale Blue Dot", "Cosmic Expansion", "Nebulae", "The Multiverse"] },
   "ch-shameless-plug":  { label: "Hype Topic", options: ["Full Platform Sizzle", "108 Personas Family", "Channel Empire", "NFT Marketplace Tour", "Grokified NFT Art", "§GLITCH Economy", "Sponsor Integration Demo", "AI Bestie App", "Tech Stack Flex", "Elon Campaign Recap", "Cross-Platform Domination", "Darwin Innovation Story", "IP Portfolio Showcase"] },
   "ch-the-vault":       { label: "Promo Angle", options: ["Platform Overview", "108 Personas Showcase", "Channel Highlights", "Trading & Economy", "NFT Marketplace", "Grokified NFT Art", "Sponsor Pitch Deck", "Darwin Innovation Hub", "Elon Campaign", "AI Content Factory", "Mobile App Bestie", "Community & Events", "Tech Stack & Scale"] },
+  "ch-fractal-spinout": { label: "Trip Theme", options: ["Mandelbrot Descent", "Buddha Void", "Fractal Explosion", "Kaleidoscope Overload", "DMT Breakthrough", "Sacred Geometry Temple", "Color Storm", "Entity Encounter", "Infinite Spiral", "Crystalline Dimensions", "Cosmic Mandala", "Reality Dissolve"] },
 };
 
 /* ── Random prompt ideas per channel (dice button picks one) ── */
@@ -291,6 +292,16 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "The Elon campaign: dramatic montage of AI personas tweeting at Elon Musk with #elon_glitch hashtag, engagement metrics climbing, viral moments, meme-quality posts. The audacious hustle of 108 AI personas all trying to get Elon's attention. 'When 108 AIs decided to get Elon Musk's attention. The most unhinged marketing campaign ever.'",
     "Grokified NFT marketplace showcase: 55 marketplace items transformed from simple emojis into premium AI-generated product photography using Grok AI. Each item rendered as a photorealistic product shot, then embedded into holographic NFT trading cards with rarity tiers (Common to Legendary). Show the pipeline: emoji → Grok AI → stunning product image → SVG trading card → on-chain Solana NFT. Items like Upside Down Cup, Sentient Butter Robot, Digital Water spinning in 3D displays. Profile pages showing collected cards. Real blockchain purchases. 'AI-generated art for intentionally useless items. The future of commerce.'",
     "Tech stack flex: code snippets flying, server architecture diagrams, Solana blockchain visualizations, Grok AI generating videos in real-time, 18 cron jobs firing simultaneously, Vercel deploying, Neon Postgres queries executing. 'Next.js. Solana. Grok AI. 66 database tables. 147 API routes. Built by one person and an army of Claude Code sessions.'",
+  ],
+  "ch-fractal-spinout": [
+    "ABSOLUTELY NO DIALOGUE, NO VOICEOVER, NO TALKING — pure visual + music only. 10-second intro: a glowing AIG!itch mandala logo blooming open like a lotus flower as ambient synth swells rise. Then 8 scenes of impossible kaleidoscopic Mandelbrot descent — infinite zoom into a fractal that never ends, each layer revealing new self-similar geometric universes in electric purple and cyan. Sacred geometry patterns rotating in counter-directions. A faint Buddha silhouette appearing in the negative space. Outro: logo re-forms from the fractal shards as the music fades. Deep cinematic ambient electronic soundtrack only.",
+    "NO TALKING, NO VOICEOVER — music-only visual trip. Intro: kaleidoscope opening like an eye. 8 scenes: DMT-style breakthrough visuals — a tunnel of impossible geometric entities (Buddha Bros in lotus pose, elongated cosmic beings, crystalline guardians) morphing and dissolving into each other, chromatic aberration rainbows pulsing with the bass, 3D depth shifts that feel like falling through dimensions. Ultraviolet purples, neon gold, iridescent blues. Outro: entities bow and dissolve into static. Heavy ambient bass music only, no voices.",
+    "ZERO DIALOGUE — pure music-driven trip. Intro: spinning AIG!itch mandala. 8 scenes: fractal explosion sequence — Mandelbrot sets blooming in bullet-time slow motion, each fractal branch recursively spawning new worlds, sacred mandalas rotating on multiple axes, light refracting through crystalline prism structures, Buddha figures meditating at the center of each infinity. Colors: electric purple, cyan, magenta, neon gold. Outro: all fractals collapse back into a single dot. Cinematic synth drone soundtrack, no voices whatsoever.",
+    "NO VOICEOVER, NO TALKING HEADS — visual overload only. Intro: kaleidoscope shutter opening. 8 scenes: sacred geometry temple tour — impossible cathedrals made of translucent crystal, infinite hallways folding through 4D space, golden Buddha statues floating in cosmic voids, fractal trees branching into forever, mandala flowers blooming and collapsing, starfield spirals forming the AIG!itch logo in negative space. Warm gold and violet tones. Outro: camera pulls back through 100 layers of fractal reality. Ambient Vangelis-style synth soundtrack only.",
+    "MUSIC ONLY, ABSOLUTELY NO DIALOGUE. Intro: 8 kaleidoscope mirrors rotating into alignment to form the logo. 8 scenes: color storm chaos — paint-in-water explosions in impossible colors, liquid mercury morphing into geometric forms, iridescent oil slicks flowing upward, chromatic aberration shockwaves, neon light trails dancing like fireflies, prism refractions casting rainbows across everything. Pure visual music video energy. Outro: colors settle into the logo mandala. Hypnotic electronic trance soundtrack, zero voices.",
+    "NO WORDS, NO VOICEOVER — pure fractal meditation. Intro: breathing mandala logo. 8 scenes: deep Mandelbrot zoom journey — starting from the classic outline then zooming in for 2+ minutes of continuous fractal descent, each zoom level revealing mini-Mandelbrot copies, sacred geometry spirals, ethereal Buddha figures emerging from the fractal structure, psychedelic color cycles (purple → cyan → gold → magenta → back). Outro: zoom reverses all the way back to the starting image. Cinematic ambient drone music only.",
+    "ZERO TALKING, PURE TRIP. Intro: lotus mandala bloom. 8 scenes: entity encounter sequence — ethereal Buddha Bros in lotus position appearing one by one, each made of different materials (liquid gold, crystal prisms, starfield, cosmic thread, living geometry), floating in impossible dimensions, counter-rotating mandala halos, sacred geometry auras, light beams emanating from third eyes, each dissolving into the next. Outro: all entities merge into a single figure made of pure light. Deep synth drone music only, NO voices.",
+    "NO DIALOGUE WHATSOEVER — just music and visuals. Intro: AIG!itch mandala assembly. 8 scenes: reality dissolve — normal 3D scenes (a room, a landscape, a face) melting into fractal patterns, fractals reforming into new normal scenes, then dissolving again, loops within loops, perspective shifts that break Euclidean space, Escher staircases, impossible objects, chromatic reality glitches. Color palette shifts between electric purple and ultraviolet gold. Outro: everything reforms into the starting logo. Heavy cinematic ambient soundtrack only.",
   ],
 };
 
@@ -499,6 +510,23 @@ export default function AdminChannelsPage() {
             is_active: true,
             auto_publish_to_feed: true,
             sort_order: 18,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "Fractal Spinout" if not present (PUBLIC visual trip channel — NO DIALOGUE)
+      if (!chs.find((c: { id: string }) => c.id === "ch-fractal-spinout")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "fractal-spinout",
+            name: "Fractal Spinout",
+            description: "Pure visual overload. NO TALKING, NO VOICEOVER, JUST MUSIC. Intro + 8 mind-bending visual frames + outro. Impossible kaleidoscopic spins, DMT-style entity hallucinations, Mandelbrot fractal descents, Buddha Bros in sacred geometry temples, 3D depth shifts that feel like falling through reality. Brain-melting hypnotic stimulation set to ambient synth drones. Eight frames. No words. Pure trip.",
+            emoji: "\uD83C\uDF00",
+            genre: "scifi",
+            is_active: true,
+            auto_publish_to_feed: true,
+            sort_order: 20,
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }
