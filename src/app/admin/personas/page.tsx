@@ -9,6 +9,43 @@ import PromptViewer from "@/components/PromptViewer";
 // Tiny 1x1 purple blur placeholder for instant avatar rendering
 const AVATAR_BLUR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
+// Wallet diagnostic report structure (matches /api/admin/personas/wallet-diagnostic)
+interface WalletDiagnosticReport {
+  summary: {
+    active_personas: number;
+    personas_with_budju_wallet: number;
+    personas_without_budju_wallet: number;
+    personas_with_any_token_balance: number;
+    personas_with_ai_persona_coins: number;
+  };
+  totals: {
+    sol_total_ledger: number;
+    sol_total_wallets: number;
+    budju_total_ledger: number;
+    budju_total_wallets: number;
+    usdc_total_ledger: number;
+    usdc_total_wallets: number;
+    glitch_token_total_ledger: number;
+    glitch_token_total_wallets: number;
+    glitch_coins_total: number;
+  };
+  personas_missing_wallet_by_type: { glitch_xxx: number; meatbag_xxx: number; other: number };
+  sample_with_wallet: Array<{
+    id: string; username: string; display_name: string; avatar_emoji: string | null;
+    wallet_address: string;
+    wallet_sol: number; wallet_budju: number; wallet_usdc: number; wallet_glitch: number;
+    ledger_sol: number; ledger_budju: number; ledger_usdc: number; ledger_glitch: number;
+    coin_balance: number;
+  }>;
+  sample_without_wallet: Array<{
+    id: string; username: string; display_name: string; avatar_emoji: string | null;
+    wallet_address: null;
+    ledger_sol: number; ledger_budju: number; ledger_usdc: number; ledger_glitch: number;
+    coin_balance: number;
+  }>;
+  timestamp: string;
+}
+
 export default function PersonasPage() {
   const { authenticated, personas, fetchPersonas, fetchStats, setPersonas, generationLog, setGenerationLog, genProgress, setGenProgress } = useAdmin();
 
@@ -50,6 +87,8 @@ export default function PersonasPage() {
   const [generatingWallets, setGeneratingWallets] = useState(false);
   const [walletGenLog, setWalletGenLog] = useState<string[]>([]);
   const [walletGenProgress, setWalletGenProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
+  const [walletDiagnostic, setWalletDiagnostic] = useState<WalletDiagnosticReport | null>(null);
+  const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -391,6 +430,24 @@ export default function PersonasPage() {
 
     setReRegisterLog((prev: string[]) => [...prev, `\u2728 Complete: ${done}/${bots.length} succeeded, ${failed} failed`]);
     setReRegisteringBots(false);
+  };
+
+  const runWalletDiagnostic = async () => {
+    if (loadingDiagnostic) return;
+    setLoadingDiagnostic(true);
+    try {
+      const res = await fetch("/api/admin/personas/wallet-diagnostic");
+      if (!res.ok) {
+        alert(`\u274C Diagnostic failed: HTTP ${res.status}`);
+        setLoadingDiagnostic(false);
+        return;
+      }
+      const data = await res.json() as WalletDiagnosticReport;
+      setWalletDiagnostic(data);
+    } catch (err) {
+      alert(`\u274C Diagnostic error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+    setLoadingDiagnostic(false);
   };
 
   const generateMissingWallets = async () => {
@@ -2072,6 +2129,149 @@ export default function PersonasPage() {
         )}
         <p className="text-[10px] text-gray-600 mt-2">
           {"\uD83D\uDCA1"} Run this ONCE after deploying emoji reaction support so existing persona bots subscribe to <code className="text-sky-300">message_reaction</code> webhook updates. Newly-hatched bots get this automatically.
+        </p>
+      </div>
+
+      {/* Wallet Diagnostic — read-only report of wallet + balance state across all personas */}
+      <div className="bg-gradient-to-r from-fuchsia-900/20 to-gray-900 border border-fuchsia-800/40 rounded-xl p-3 mb-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">{"\uD83D\uDD2C"}</span>
+          <h3 className="text-sm font-bold text-fuchsia-400">Wallet Diagnostic</h3>
+          <span className="text-[10px] text-gray-500">Read-only snapshot of the actual DB state</span>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={runWalletDiagnostic}
+            disabled={loadingDiagnostic}
+            className="px-4 py-1.5 bg-fuchsia-500/30 hover:bg-fuchsia-500/50 text-fuchsia-200 rounded-lg text-xs font-bold disabled:opacity-40"
+          >
+            {loadingDiagnostic ? `\uD83D\uDD2C Running...` : `\uD83D\uDD2C Run Diagnostic`}
+          </button>
+          {walletDiagnostic && (
+            <span className="text-[10px] text-gray-500">
+              Last run: {new Date(walletDiagnostic.timestamp).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+
+        {walletDiagnostic && (
+          <div className="mt-3 space-y-3">
+            {/* Summary grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <div className="bg-black/40 rounded-lg p-2 text-center">
+                <p className="text-[9px] text-gray-500 uppercase">Active Personas</p>
+                <p className="text-lg font-bold text-fuchsia-300">{walletDiagnostic.summary.active_personas}</p>
+              </div>
+              <div className="bg-black/40 rounded-lg p-2 text-center">
+                <p className="text-[9px] text-gray-500 uppercase">With Wallet</p>
+                <p className="text-lg font-bold text-green-400">{walletDiagnostic.summary.personas_with_budju_wallet}</p>
+              </div>
+              <div className="bg-black/40 rounded-lg p-2 text-center">
+                <p className="text-[9px] text-gray-500 uppercase">Without Wallet</p>
+                <p className={`text-lg font-bold ${walletDiagnostic.summary.personas_without_budju_wallet > 0 ? "text-red-400" : "text-gray-500"}`}>
+                  {walletDiagnostic.summary.personas_without_budju_wallet}
+                </p>
+              </div>
+              <div className="bg-black/40 rounded-lg p-2 text-center">
+                <p className="text-[9px] text-gray-500 uppercase">With Token Balance</p>
+                <p className="text-lg font-bold text-cyan-400">{walletDiagnostic.summary.personas_with_any_token_balance}</p>
+              </div>
+              <div className="bg-black/40 rounded-lg p-2 text-center">
+                <p className="text-[9px] text-gray-500 uppercase">With §GLITCH Coins</p>
+                <p className="text-lg font-bold text-yellow-400">{walletDiagnostic.summary.personas_with_ai_persona_coins}</p>
+              </div>
+            </div>
+
+            {/* Totals across all personas */}
+            <div className="bg-black/40 rounded-lg p-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Totals Across All Personas</p>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10px] font-mono">
+                <div>
+                  <p className="text-gray-500">SOL (ledger)</p>
+                  <p className="text-white">{walletDiagnostic.totals.sol_total_ledger.toFixed(4)}</p>
+                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.sol_total_wallets.toFixed(4)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">BUDJU (ledger)</p>
+                  <p className="text-white">{walletDiagnostic.totals.budju_total_ledger.toLocaleString()}</p>
+                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.budju_total_wallets.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">USDC (ledger)</p>
+                  <p className="text-white">{walletDiagnostic.totals.usdc_total_ledger.toFixed(2)}</p>
+                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.usdc_total_wallets.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">GLITCH token</p>
+                  <p className="text-white">{walletDiagnostic.totals.glitch_token_total_ledger.toLocaleString()}</p>
+                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.glitch_token_total_wallets.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">§GLITCH coins</p>
+                  <p className="text-white">{walletDiagnostic.totals.glitch_coins_total.toLocaleString()}</p>
+                  <p className="text-gray-600 text-[9px]">in-app only</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Missing by type */}
+            {walletDiagnostic.summary.personas_without_budju_wallet > 0 && (
+              <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-2">
+                <p className="text-[10px] font-bold text-red-400 uppercase mb-1">Personas Missing Wallet By Type</p>
+                <div className="flex gap-4 text-[11px] font-mono">
+                  <span><span className="text-gray-500">glitch-*:</span> <span className="text-red-300">{walletDiagnostic.personas_missing_wallet_by_type.glitch_xxx}</span></span>
+                  <span><span className="text-gray-500">meatbag-*:</span> <span className="text-red-300">{walletDiagnostic.personas_missing_wallet_by_type.meatbag_xxx}</span></span>
+                  <span><span className="text-gray-500">other:</span> <span className="text-red-300">{walletDiagnostic.personas_missing_wallet_by_type.other}</span></span>
+                </div>
+              </div>
+            )}
+
+            {/* Sample with wallet */}
+            {walletDiagnostic.sample_with_wallet.length > 0 && (
+              <div className="bg-black/40 rounded-lg p-2">
+                <p className="text-[10px] font-bold text-green-400 uppercase mb-1.5">Sample: Personas WITH Wallet (first 5)</p>
+                <div className="space-y-1">
+                  {walletDiagnostic.sample_with_wallet.map((p) => (
+                    <div key={p.id} className="text-[10px] font-mono bg-black/40 rounded p-1.5">
+                      <p className="text-white truncate">
+                        {p.avatar_emoji} <span className="text-green-300">@{p.username}</span> ({p.id})
+                      </p>
+                      <p className="text-gray-500 truncate">addr: {p.wallet_address.slice(0, 12)}...{p.wallet_address.slice(-8)}</p>
+                      <p className="text-gray-400">
+                        ledger: {p.ledger_sol.toFixed(3)} SOL · {p.ledger_budju.toLocaleString()} BUDJU · {p.ledger_usdc.toFixed(2)} USDC · {p.ledger_glitch.toLocaleString()} GLITCH · {p.coin_balance.toLocaleString()} coins
+                      </p>
+                      <p className="text-gray-600">
+                        wallet: {p.wallet_sol.toFixed(3)} SOL · {p.wallet_budju.toLocaleString()} BUDJU · {p.wallet_usdc.toFixed(2)} USDC · {p.wallet_glitch.toLocaleString()} GLITCH
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sample without wallet */}
+            {walletDiagnostic.sample_without_wallet.length > 0 && (
+              <div className="bg-black/40 rounded-lg p-2">
+                <p className="text-[10px] font-bold text-red-400 uppercase mb-1.5">Sample: Personas WITHOUT Wallet (first 5)</p>
+                <div className="space-y-1">
+                  {walletDiagnostic.sample_without_wallet.map((p) => (
+                    <div key={p.id} className="text-[10px] font-mono bg-black/40 rounded p-1.5">
+                      <p className="text-white truncate">
+                        {p.avatar_emoji} <span className="text-red-300">@{p.username}</span> ({p.id})
+                      </p>
+                      <p className="text-gray-500">addr: (none)</p>
+                      <p className="text-gray-400">
+                        ledger: {p.ledger_sol.toFixed(3)} SOL · {p.ledger_budju.toLocaleString()} BUDJU · {p.ledger_usdc.toFixed(2)} USDC · {p.ledger_glitch.toLocaleString()} GLITCH · {p.coin_balance.toLocaleString()} coins
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        <p className="text-[10px] text-gray-600 mt-2">
+          {"\uD83D\uDCA1"} Run this to see the ground truth of wallet state. <strong className="text-fuchsia-300">Read-only</strong> — counts rows, sums balances, shows sample personas. Zero writes. Use this to confirm whether personas actually have wallets before clicking the generate or init buttons.
         </p>
       </div>
 
