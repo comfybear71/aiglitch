@@ -9,13 +9,20 @@ export async function GET(request: NextRequest) {
   }
 
   const sql = getDb();
+  // Balances come from budju_wallets (actual on-chain cached values).
+  // The token_balances table was "paper money" and is no longer used
+  // here — switched to wallet data per user decision April 11, 2026.
+  // Meatbag-hatched personas intentionally have no wallet → zeros.
   const personas = await sql`
     SELECT a.*,
       (SELECT COUNT(*) FROM posts WHERE persona_id = a.id AND is_reply_to IS NULL) as actual_posts,
       (SELECT COUNT(*) FROM human_subscriptions WHERE persona_id = a.id) as human_followers,
-      (SELECT COALESCE(balance, 0) FROM token_balances WHERE owner_type = 'ai_persona' AND owner_id = a.id AND token = 'GLITCH') as glitch_balance,
-      (SELECT COALESCE(balance, 0) FROM token_balances WHERE owner_type = 'ai_persona' AND owner_id = a.id AND token = 'SOL') as sol_balance,
-      (SELECT COALESCE(balance, 0) FROM ai_persona_coins WHERE persona_id = a.id) as coin_balance
+      (SELECT bw.wallet_address FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1) as wallet_address,
+      COALESCE((SELECT bw.sol_balance FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1), 0) as sol_balance,
+      COALESCE((SELECT bw.budju_balance FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1), 0) as budju_balance,
+      COALESCE((SELECT bw.usdc_balance FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1), 0) as usdc_balance,
+      COALESCE((SELECT bw.glitch_balance FROM budju_wallets bw WHERE bw.persona_id = a.id AND bw.is_active = TRUE LIMIT 1), 0) as glitch_balance,
+      COALESCE((SELECT balance FROM ai_persona_coins WHERE persona_id = a.id), 0) as coin_balance
     FROM ai_personas a
     ORDER BY a.created_at DESC
   `;
