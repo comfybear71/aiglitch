@@ -45,6 +45,8 @@ export default function PersonasPage() {
   const [initializingPersona, setInitializingPersona] = useState<string | null>(null);
   const [initPersonaIdInput, setInitPersonaIdInput] = useState<string>("");
   const [reRegisteringBots, setReRegisteringBots] = useState(false);
+  const [reRegisterLog, setReRegisterLog] = useState<string[]>([]);
+  const [reRegisterProgress, setReRegisterProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
   const [animateLog, setAnimateLog] = useState<string[]>([]);
   const [animateSpreadResults, setAnimateSpreadResults] = useState<{ platform: string; status: string; url?: string; error?: string }[]>([]);
   const [animateComplete, setAnimateComplete] = useState(false);
@@ -300,35 +302,91 @@ export default function PersonasPage() {
 
   const reRegisterTelegramBots = async () => {
     if (reRegisteringBots) return;
+
+    setReRegisterLog([]);
+    setReRegisterProgress({ current: 0, total: 0, done: 0, failed: 0 });
+
+    // Step 1: fetch the list of bots (so we know total count up front)
+    let bots: { persona_id: string; bot_username: string | null; display_name: string | null }[];
+    try {
+      const listRes = await fetch("/api/admin/telegram/re-register-bots");
+      if (!listRes.ok) {
+        alert("\u274C Failed to fetch bot list");
+        return;
+      }
+      const listData = await listRes.json();
+      bots = listData.bots || [];
+    } catch (err) {
+      alert(`\u274C Failed to fetch bot list: ${err instanceof Error ? err.message : "unknown"}`);
+      return;
+    }
+
+    if (bots.length === 0) {
+      alert("No active persona Telegram bots to re-register.");
+      return;
+    }
+
     const confirmed = confirm(
-      "Re-register webhooks for ALL persona Telegram bots?\n\n" +
-      "This updates existing bots to subscribe to emoji reaction events " +
-      "(message_reaction updates).\n\n" +
-      "Safe to run multiple times. Takes ~1-2 seconds per bot.",
+      `Re-register webhooks for ${bots.length} persona Telegram bot${bots.length === 1 ? "" : "s"}?\n\n` +
+      `This updates existing bots to subscribe to emoji reaction events (message_reaction updates).\n\n` +
+      `Takes ~1-2 seconds per bot. Progress will show below the button.\n\n` +
+      `Safe to run multiple times.`,
     );
     if (!confirmed) return;
 
     setReRegisteringBots(true);
-    try {
-      const res = await fetch("/api/admin/telegram/re-register-bots", { method: "POST" });
-      const data = await res.json();
+    setReRegisterProgress({ current: 0, total: bots.length, done: 0, failed: 0 });
+    setReRegisterLog([`\u2708\uFE0F Starting re-registration of ${bots.length} bots...`]);
 
-      if (data.success) {
-        const failed = (data.details || []).filter((d: { status: string }) => d.status === "failed");
-        let msg = `\u2705 Re-registered ${data.updated}/${data.total} Telegram bots`;
-        if (data.errors > 0 && failed.length > 0) {
-          msg += `\n\n\u26A0\uFE0F ${data.errors} failures:\n` +
-                 failed.slice(0, 10).map((f: { persona_id: string; message?: string }) =>
-                   `- ${f.persona_id}: ${f.message || "unknown"}`).join("\n");
+    let done = 0;
+    let failed = 0;
+
+    // Step 2: loop through each bot and POST per-bot, updating UI after each
+    for (let i = 0; i < bots.length; i++) {
+      const bot = bots[i];
+      const label = bot.bot_username ? `@${bot.bot_username}` : bot.persona_id;
+      setReRegisterProgress({ current: i + 1, total: bots.length, done, failed });
+      setReRegisterLog((prev: string[]) => [...prev, `  \u23F3 ${i + 1}/${bots.length}: ${label}...`]);
+
+      try {
+        const res = await fetch("/api/admin/telegram/re-register-bots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ persona_id: bot.persona_id }),
+        });
+        const data = await res.json();
+
+        if (data.success && data.status === "ok") {
+          done++;
+          setReRegisterLog((prev: string[]) => {
+            const next = [...prev];
+            next[next.length - 1] = `  \u2705 ${i + 1}/${bots.length}: ${label} registered`;
+            return next;
+          });
+        } else {
+          failed++;
+          setReRegisterLog((prev: string[]) => {
+            const next = [...prev];
+            next[next.length - 1] = `  \u274C ${i + 1}/${bots.length}: ${label} \u2014 ${data.message || data.error || "failed"}`;
+            return next;
+          });
         }
-        alert(msg);
-      } else {
-        alert(`\u274C Re-register failed: ${data.error || "unknown"}`);
+      } catch (err) {
+        failed++;
+        setReRegisterLog((prev: string[]) => {
+          const next = [...prev];
+          next[next.length - 1] = `  \u274C ${i + 1}/${bots.length}: ${label} \u2014 ${err instanceof Error ? err.message : "network error"}`;
+          return next;
+        });
       }
-    } catch (err) {
-      console.error("Re-register bots failed:", err);
-      alert("\u274C Network error — check console");
+
+      setReRegisterProgress({ current: i + 1, total: bots.length, done, failed });
+
+      // Small pause between bots so we don't hit Telegram's rate limit
+      if (i < bots.length - 1) await new Promise(r => setTimeout(r, 300));
     }
+
+    setReRegisterLog((prev: string[]) => [...prev, `\u2728 Complete: ${done}/${bots.length} succeeded, ${failed} failed`]);
     setReRegisteringBots(false);
   };
 
@@ -1878,15 +1936,41 @@ export default function PersonasPage() {
           <h3 className="text-sm font-bold text-sky-400">Telegram Bot Maintenance</h3>
           <span className="text-[10px] text-gray-500">Re-register webhooks for all existing persona bots</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={reRegisterTelegramBots}
             disabled={reRegisteringBots}
             className="px-4 py-1.5 bg-sky-500/30 hover:bg-sky-500/50 text-sky-200 rounded-lg text-xs font-bold disabled:opacity-40"
           >
-            {reRegisteringBots ? `\u2708\uFE0F Re-registering...` : `\u2708\uFE0F Re-register All Bots`}
+            {reRegisteringBots
+              ? (reRegisterProgress
+                  ? `\u2708\uFE0F ${reRegisterProgress.current}/${reRegisterProgress.total}...`
+                  : `\u2708\uFE0F Re-registering...`)
+              : `\u2708\uFE0F Re-register All Bots`}
           </button>
+          {reRegisterProgress && (
+            <div className="flex-1 min-w-[150px] max-w-xs">
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-sky-400 to-green-400 transition-all"
+                  style={{ width: `${reRegisterProgress.total > 0 ? (reRegisterProgress.current / reRegisterProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                {reRegisterProgress.current} / {reRegisterProgress.total}
+                {reRegisterProgress.done > 0 && ` \u00B7 \u2705 ${reRegisterProgress.done}`}
+                {reRegisterProgress.failed > 0 && ` \u00B7 \u274C ${reRegisterProgress.failed}`}
+              </p>
+            </div>
+          )}
         </div>
+        {reRegisterLog.length > 0 && (
+          <div className="mt-3 bg-black/60 border border-sky-900/50 rounded-lg p-2 max-h-48 overflow-y-auto font-mono">
+            {reRegisterLog.map((line: string, i: number) => (
+              <p key={i} className="text-[10px] text-gray-300 whitespace-pre-wrap">{line}</p>
+            ))}
+          </div>
+        )}
         <p className="text-[10px] text-gray-600 mt-2">
           {"\uD83D\uDCA1"} Run this ONCE after deploying emoji reaction support so existing persona bots subscribe to <code className="text-sky-300">message_reaction</code> webhook updates. Newly-hatched bots get this automatically.
         </p>
