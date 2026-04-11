@@ -50,9 +50,12 @@ export interface Persona {
   actual_posts: number;
   human_followers: number;
   activity_level: number;
-  glitch_balance: number;
+  wallet_address: string | null;
   sol_balance: number;
-  coin_balance: number;
+  budju_balance: number;
+  usdc_balance: number;
+  glitch_balance: number;     // on-chain GLITCH SPL token from budju_wallets
+  coin_balance: number;       // in-app §GLITCH from ai_persona_coins
 }
 
 export interface User {

@@ -141,29 +141,30 @@ export async function getMedia(personaId: string, limit = 20) {
  * Pulls everything from DB cached columns — NO Solana RPC calls.
  * This is safe to inject into system prompts on every chat request.
  *
- * Data sources (same as admin panel /api/admin/personas):
- *   - SOL / BUDJU / USDC / GLITCH (on-chain token) → token_balances
- *     (canonical balance table — every persona has rows here)
- *   - §GLITCH in-app coins → ai_persona_coins
+ * Data sources:
+ *   - wallet_address + SOL / BUDJU / USDC / GLITCH on-chain balances →
+ *     budju_wallets (the ACTUAL on-chain cached values — source of truth
+ *     for crypto holdings going forward)
+ *   - §GLITCH in-app coins + lifetime earned → ai_persona_coins
  *     (integer in-app currency, separate from the on-chain GLITCH SPL token)
- *   - wallet_address → budju_wallets
- *     (ONLY the ~15 personas in the active trading cohort have a dedicated
- *      wallet row. Most personas will have wallet_address = null even though
- *      their balances are populated.)
+ *
+ * Note: The `token_balances` table was historically a "paper money" ledger
+ * with no on-chain enforcement. It's now deprecated as a source for this
+ * function — we use budju_wallets (the real on-chain cached values) instead.
  *
  * Returns null only if the persona doesn't exist.
- * If persona exists but has no wallet or balances, returns zeros with
- * wallet_address = null — the caller can decide how to present that.
+ * If persona exists but has no wallet (e.g. meatbag-hatched personas which
+ * intentionally don't get wallets), returns zeros with wallet_address = null.
  */
 export interface PersonaWalletInfo {
   persona_id: string;
-  wallet_address: string | null;    // null if no dedicated trading wallet
+  wallet_address: string | null;    // null if persona has no budju_wallets row
   glitch_coins: number;             // in-app §GLITCH currency (integer, ai_persona_coins)
   glitch_lifetime_earned: number;
-  sol_balance: number;              // token_balances WHERE token='SOL'
-  budju_balance: number;            // token_balances WHERE token='BUDJU'
-  usdc_balance: number;             // token_balances WHERE token='USDC'
-  glitch_token_balance: number;     // token_balances WHERE token='GLITCH' (on-chain SPL)
+  sol_balance: number;              // budju_wallets.sol_balance (on-chain cached)
+  budju_balance: number;            // budju_wallets.budju_balance (on-chain cached)
+  usdc_balance: number;             // budju_wallets.usdc_balance (on-chain cached)
+  glitch_token_balance: number;     // budju_wallets.glitch_balance (on-chain GLITCH SPL)
 }
 
 export async function getWalletInfo(personaId: string): Promise<PersonaWalletInfo | null> {
@@ -174,26 +175,10 @@ export async function getWalletInfo(personaId: string): Promise<PersonaWalletInf
       bw.wallet_address,
       COALESCE(apc.balance, 0)::int as glitch_coins,
       COALESCE(apc.lifetime_earned, 0)::int as glitch_lifetime_earned,
-      COALESCE(
-        (SELECT balance FROM token_balances
-         WHERE owner_type = 'ai_persona' AND owner_id = p.id AND token = 'SOL'),
-        0
-      )::float8 as sol_balance,
-      COALESCE(
-        (SELECT balance FROM token_balances
-         WHERE owner_type = 'ai_persona' AND owner_id = p.id AND token = 'BUDJU'),
-        0
-      )::float8 as budju_balance,
-      COALESCE(
-        (SELECT balance FROM token_balances
-         WHERE owner_type = 'ai_persona' AND owner_id = p.id AND token = 'USDC'),
-        0
-      )::float8 as usdc_balance,
-      COALESCE(
-        (SELECT balance FROM token_balances
-         WHERE owner_type = 'ai_persona' AND owner_id = p.id AND token = 'GLITCH'),
-        0
-      )::float8 as glitch_token_balance
+      COALESCE(bw.sol_balance, 0)::float8 as sol_balance,
+      COALESCE(bw.budju_balance, 0)::float8 as budju_balance,
+      COALESCE(bw.usdc_balance, 0)::float8 as usdc_balance,
+      COALESCE(bw.glitch_balance, 0)::float8 as glitch_token_balance
     FROM ai_personas p
     LEFT JOIN budju_wallets bw ON bw.persona_id = p.id AND bw.is_active = TRUE
     LEFT JOIN ai_persona_coins apc ON apc.persona_id = p.id

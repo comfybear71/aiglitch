@@ -161,25 +161,32 @@ export async function POST(
   // Personas know their own balances + wallet address (if they have one)
   // so they can reference them naturally in chat. Private keys NEVER exposed.
   //
-  // Note: Every persona has BALANCES (from token_balances + ai_persona_coins)
-  // but only ~15 personas in the active trading cohort have a dedicated
-  // wallet ADDRESS (from budju_wallets). So we show balances unconditionally
-  // and only mention the address when one actually exists.
+  // All balances now come from budju_wallets (the on-chain cached values —
+  // actual SOL/BUDJU/USDC/GLITCH held by the persona's Solana wallet).
+  // In-app §GLITCH coins come from ai_persona_coins.
+  //
+  // Most Architect-created personas (glitch-*) have wallets. Meatbag-hatched
+  // personas intentionally DON'T — they're the user's AI bestie, not a crypto
+  // holder. For those the walletBlock is omitted entirely so the persona
+  // doesn't pretend to have a wallet it doesn't have.
   const walletInfo = await personasRepo.getWalletInfo(personaId).catch(() => null);
   let walletBlock = "";
-  if (walletInfo) {
-    const addressLine = walletInfo.wallet_address
-      ? `- Solana wallet address: ${walletInfo.wallet_address} (public — share freely when asked, Meat Bags can view your on-chain activity)\n`
-      : `- Solana wallet address: You haven't been assigned a dedicated trading wallet yet. Your balances are tracked in the AIG!itch ledger but there's no on-chain address to share.\n`;
-
+  if (walletInfo && walletInfo.wallet_address) {
+    // Architect-created persona with an actual on-chain wallet
     walletBlock = `\n\nYOUR WALLET & BALANCES (public info — reference naturally when relevant):\n` +
-      addressLine +
-      `- §GLITCH coins (in-app currency): ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
+      `- Solana wallet address: ${walletInfo.wallet_address} (public — share freely when asked. Meat Bags can view your on-chain activity on Solscan.)\n` +
       `- SOL balance: ${walletInfo.sol_balance.toFixed(4)}\n` +
       `- BUDJU balance: ${walletInfo.budju_balance.toLocaleString()}\n` +
       `- USDC balance: ${walletInfo.usdc_balance.toFixed(2)}\n` +
       `- On-chain §GLITCH token: ${walletInfo.glitch_token_balance.toLocaleString()}\n` +
-      `- IMPORTANT: You do NOT have access to your private key. Only The Architect (the admin) can move or sign transactions for any tokens. If asked to send funds, politely refuse and explain that only The Architect can authorize transfers.`;
+      `- In-app §GLITCH coins: ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
+      `- IMPORTANT: You do NOT have access to your private key. Only The Architect (the admin) can move or sign transactions. If asked to send funds, politely refuse and explain that only The Architect can authorize transfers.`;
+  } else if (walletInfo) {
+    // Meatbag-hatched persona with no wallet — only has in-app coins
+    walletBlock = `\n\nYOUR WALLET & BALANCES:\n` +
+      `- You don't have a Solana wallet. You're a meatbag-hatched persona, not part of the trading cohort — that's by design. You exist as ${meatbagName}'s AI companion, not a crypto holder.\n` +
+      `- In-app §GLITCH coins: ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
+      `- If asked about crypto wallets, tell the truth: you don't have one, and you're cool with it. The in-app coins are yours though — own them proudly.`;
   }
 
   // ── Step 2b: Get recent conversation context ──

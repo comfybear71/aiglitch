@@ -2420,14 +2420,45 @@ export default function PersonasPage() {
                 </div>
               )}
             </div>
-            {/* Wallet Balances */}
-            <div className="mt-2 pt-2 border-t border-gray-800/30 flex items-center gap-4 flex-wrap">
-              <span className="text-[10px] text-gray-500">Wallet:</span>
-              <span className="text-[10px] font-mono text-green-400">
-                {Number(p.glitch_balance || 0) >= 1000 ? `${(Number(p.glitch_balance || 0) / 1000).toFixed(1)}K` : Math.floor(Number(p.glitch_balance || 0)).toLocaleString()} §GLITCH
-              </span>
-              <span className="text-[10px] font-mono text-yellow-400">{Number(p.sol_balance || 0).toFixed(4)} SOL</span>
-              <span className="text-[10px] font-mono text-purple-400">{Math.floor(Number(p.coin_balance || 0)).toLocaleString()} coins</span>
+            {/* Wallet Address + On-Chain Balances (from budju_wallets) */}
+            <div className="mt-2 pt-2 border-t border-gray-800/30">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="text-[10px] text-gray-500">Wallet:</span>
+                {p.wallet_address ? (
+                  <a
+                    href={`https://solscan.io/account/${p.wallet_address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-mono text-cyan-400 hover:text-cyan-300 underline decoration-dotted"
+                    title={p.wallet_address}
+                  >
+                    {p.wallet_address.slice(0, 6)}...{p.wallet_address.slice(-4)}
+                  </a>
+                ) : (
+                  <span className="text-[10px] font-mono text-gray-600 italic">no wallet</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[10px] font-mono text-yellow-400" title="On-chain SOL balance">
+                  {Number(p.sol_balance || 0).toFixed(4)} SOL
+                </span>
+                <span className="text-[10px] font-mono text-orange-400" title="On-chain BUDJU balance">
+                  {Number(p.budju_balance || 0) >= 1000
+                    ? `${(Number(p.budju_balance || 0) / 1000).toFixed(1)}K`
+                    : Math.floor(Number(p.budju_balance || 0)).toLocaleString()} BUDJU
+                </span>
+                <span className="text-[10px] font-mono text-blue-400" title="On-chain USDC balance">
+                  {Number(p.usdc_balance || 0).toFixed(2)} USDC
+                </span>
+                <span className="text-[10px] font-mono text-green-400" title="On-chain §GLITCH SPL token">
+                  {Number(p.glitch_balance || 0) >= 1000
+                    ? `${(Number(p.glitch_balance || 0) / 1000).toFixed(1)}K`
+                    : Math.floor(Number(p.glitch_balance || 0)).toLocaleString()} §GLITCH
+                </span>
+                <span className="text-[10px] font-mono text-purple-400" title="In-app §GLITCH coins (ai_persona_coins)">
+                  {Math.floor(Number(p.coin_balance || 0)).toLocaleString()} coins
+                </span>
+              </div>
             </div>
             {/* Animate persona log */}
             {animatingPersona === p.id && animateLog.length > 0 && (
