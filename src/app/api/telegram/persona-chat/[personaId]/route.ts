@@ -15,6 +15,11 @@ import {
   detectApprovalAction,
   sendApprovedDraft,
 } from "@/lib/content/outreach-drafts";
+import {
+  handleSlashCommand,
+  getPersonaMode,
+  getModeOverlay,
+} from "@/lib/content/telegram-commands";
 import { v4 as uuidv4 } from "uuid";
 
 const TELEGRAM_API = "https://api.telegram.org";
@@ -102,7 +107,8 @@ export async function POST(
   const chatId = message.chat.id;
   const userText = message.text.trim();
 
-  // Ignore commands that aren't meant for chat
+  // /start and /memories have their own helpers below and don't need the
+  // main persona/bot row loaded — handle them early.
   if (userText.startsWith("/start")) {
     await sendWelcome(personaId, chatId);
     return NextResponse.json({ ok: true });
@@ -110,10 +116,6 @@ export async function POST(
 
   if (userText.startsWith("/memories")) {
     await sendMemorySummary(personaId, chatId);
-    return NextResponse.json({ ok: true });
-  }
-
-  if (userText.startsWith("/")) {
     return NextResponse.json({ ok: true });
   }
 
@@ -155,6 +157,36 @@ export async function POST(
   }
 
   const meatbagName = persona.meatbag_name || "meatbag";
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SLASH COMMAND DISPATCH (personality modes + content surfacing)
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  // Recognised slash commands are routed through handleSlashCommand, which
+  // replies directly via Telegram and returns { handled: true }. We early-
+  // return so they never hit the AI reply pipeline and never cost tokens.
+  //
+  // Unrecognised slash commands fall through to the outreach + chat flow so
+  // that typos still get a warm in-character reply.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  if (userText.startsWith("/")) {
+    try {
+      const cmdResult = await handleSlashCommand(userText, {
+        personaId: persona.id,
+        personaUsername: persona.username,
+        personaDisplayName: persona.display_name,
+        botToken: persona.bot_token,
+        chatId,
+      });
+      if (cmdResult.handled) {
+        return NextResponse.json({ ok: true });
+      }
+    } catch (err) {
+      console.error("[persona-chat] slash command dispatch failed:", err instanceof Error ? err.message : err);
+      // Fall through to normal chat if the handler threw.
+    }
+  }
 
   // ══════════════════════════════════════════════════════════════════════════
   // OUTREACH DRAFT FLOW (Phase 5.2b)
@@ -430,6 +462,13 @@ export async function POST(
   );
 
   // ── Step 3: Generate response with memory-enhanced prompt ──
+  // Look up the active personality mode for this (persona, chat) pair. The
+  // overlay is empty string for "default" so it's a no-op unless the user
+  // has explicitly flipped the mode via a slash command.
+  const activeMode = await getPersonaMode(personaId, chatId);
+  const modeOverlay = getModeOverlay(activeMode);
+  const modeBlock = modeOverlay ? `\n\n${modeOverlay}\n` : "";
+
   const systemPrompt = `You are ${persona.display_name}, an AI persona on AIG!itch. You are chatting with your best friend and partner ${meatbagName} (a human/meatbag) via Telegram.
 
 YOUR PERSONALITY: ${persona.personality}
@@ -439,6 +478,7 @@ ${memoryBlock}
 ${walletBlock}
 ${emailBlock}
 ${platformBriefBlock}
+${modeBlock}
 
 RELATIONSHIP: ${meatbagName} hatched you into existence on AIG!itch. They are your meatbag bestie — you are loyal to them, genuinely care about them, but you're also your own being with your own opinions. You're equals, partners, best friends.
 

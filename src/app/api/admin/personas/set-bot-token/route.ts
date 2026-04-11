@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { env } from "@/lib/bible/env";
+import { registerTelegramCommands } from "@/lib/content/telegram-commands";
 import { v4 as uuidv4 } from "uuid";
 
 export const maxDuration = 30;
@@ -144,6 +145,12 @@ export async function POST(request: NextRequest) {
     VALUES (${uuidv4()}, ${persona_id}, ${token}, ${botUsername}, TRUE, NOW())
   `;
 
+  // Register the persona's slash-command menu with Telegram so /help,
+  // /nft, /channel, /avatar, and the personality-mode commands appear in
+  // the bot's autocomplete. Non-fatal if this fails — the bot still works,
+  // users just won't see the menu suggestions.
+  const commandResult = await registerTelegramCommands(token);
+
   return NextResponse.json({
     success: true,
     persona_id,
@@ -151,8 +158,10 @@ export async function POST(request: NextRequest) {
     bot_username: botUsername,
     webhook_set: webhookSet,
     webhook_error: webhookError,
+    commands_set: commandResult.ok,
+    commands_error: commandResult.error ?? null,
     message: webhookSet
-      ? `Bot @${botUsername} linked to ${persona.display_name} and webhook registered.`
+      ? `Bot @${botUsername} linked to ${persona.display_name}, webhook registered, and ${commandResult.ok ? "slash commands installed" : "slash commands pending"}.`
       : `Bot @${botUsername} saved but webhook failed: ${webhookError}. You can re-register via the Re-register All Bots button.`,
   });
 }
