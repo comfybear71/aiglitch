@@ -9,43 +9,6 @@ import PromptViewer from "@/components/PromptViewer";
 // Tiny 1x1 purple blur placeholder for instant avatar rendering
 const AVATAR_BLUR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-// Wallet diagnostic report structure (matches /api/admin/personas/wallet-diagnostic)
-interface WalletDiagnosticReport {
-  summary: {
-    active_personas: number;
-    personas_with_budju_wallet: number;
-    personas_without_budju_wallet: number;
-    personas_with_any_token_balance: number;
-    personas_with_ai_persona_coins: number;
-  };
-  totals: {
-    sol_total_ledger: number;
-    sol_total_wallets: number;
-    budju_total_ledger: number;
-    budju_total_wallets: number;
-    usdc_total_ledger: number;
-    usdc_total_wallets: number;
-    glitch_token_total_ledger: number;
-    glitch_token_total_wallets: number;
-    glitch_coins_total: number;
-  };
-  personas_missing_wallet_by_type: { glitch_xxx: number; meatbag_xxx: number; other: number };
-  sample_with_wallet: Array<{
-    id: string; username: string; display_name: string; avatar_emoji: string | null;
-    wallet_address: string;
-    wallet_sol: number; wallet_budju: number; wallet_usdc: number; wallet_glitch: number;
-    ledger_sol: number; ledger_budju: number; ledger_usdc: number; ledger_glitch: number;
-    coin_balance: number;
-  }>;
-  sample_without_wallet: Array<{
-    id: string; username: string; display_name: string; avatar_emoji: string | null;
-    wallet_address: null;
-    ledger_sol: number; ledger_budju: number; ledger_usdc: number; ledger_glitch: number;
-    coin_balance: number;
-  }>;
-  timestamp: string;
-}
-
 export default function PersonasPage() {
   const { authenticated, personas, fetchPersonas, fetchStats, setPersonas, generationLog, setGenerationLog, genProgress, setGenProgress } = useAdmin();
 
@@ -80,15 +43,12 @@ export default function PersonasPage() {
   // Animate persona (image-to-video)
   const [animatingPersona, setAnimatingPersona] = useState<string | null>(null);
   const [initializingPersona, setInitializingPersona] = useState<string | null>(null);
-  const [initPersonaIdInput, setInitPersonaIdInput] = useState<string>("");
   const [reRegisteringBots, setReRegisteringBots] = useState(false);
   const [reRegisterLog, setReRegisterLog] = useState<string[]>([]);
   const [reRegisterProgress, setReRegisterProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
   const [generatingWallets, setGeneratingWallets] = useState(false);
   const [walletGenLog, setWalletGenLog] = useState<string[]>([]);
   const [walletGenProgress, setWalletGenProgress] = useState<{ current: number; total: number; done: number; failed: number } | null>(null);
-  const [walletDiagnostic, setWalletDiagnostic] = useState<WalletDiagnosticReport | null>(null);
-  const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
   const [refreshingWallets, setRefreshingWallets] = useState<Set<string>>(new Set());
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
   const [bulkRefreshLog, setBulkRefreshLog] = useState<string[]>([]);
@@ -444,24 +404,6 @@ export default function PersonasPage() {
 
     setReRegisterLog((prev: string[]) => [...prev, `\u2728 Complete: ${done}/${bots.length} succeeded, ${failed} failed`]);
     setReRegisteringBots(false);
-  };
-
-  const runWalletDiagnostic = async () => {
-    if (loadingDiagnostic) return;
-    setLoadingDiagnostic(true);
-    try {
-      const res = await fetch("/api/admin/personas/wallet-diagnostic");
-      if (!res.ok) {
-        alert(`\u274C Diagnostic failed: HTTP ${res.status}`);
-        setLoadingDiagnostic(false);
-        return;
-      }
-      const data = await res.json() as WalletDiagnosticReport;
-      setWalletDiagnostic(data);
-    } catch (err) {
-      alert(`\u274C Diagnostic error: ${err instanceof Error ? err.message : "unknown"}`);
-    }
-    setLoadingDiagnostic(false);
   };
 
   const refreshOneWallet = async (p: Persona) => {
@@ -2328,57 +2270,23 @@ export default function PersonasPage() {
         </div>}
       </div>
 
-      {/* Init Seed Persona — bootstrap panel for personas not yet in DB */}
-      <div className="bg-gradient-to-r from-emerald-900/20 to-gray-900 border border-emerald-800/40 rounded-xl p-3 mb-3">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-lg">{"\uD83D\uDE80"}</span>
-          <h3 className="text-sm font-bold text-emerald-400">Init Seed Persona</h3>
-          <span className="text-[10px] text-gray-500">Ensures DB row + cache clear + §GLITCH + wallet + avatar</span>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={initPersonaIdInput}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInitPersonaIdInput(e.target.value)}
-            placeholder="glitch-109"
-            className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs"
-          />
-          <button
-            onClick={async () => {
-              const id = initPersonaIdInput.trim();
-              if (!id) return;
-              // Create a synthetic persona object just to reuse the initPersona function
-              await initPersona({ id, username: id, display_name: id, avatar_emoji: "\uD83E\uDDE0", avatar_url: null, bio: "", personality: "", persona_type: "", is_active: true, follower_count: 0, human_followers: 0, actual_posts: 0, activity_level: 3 } as unknown as Persona);
-              // Refresh the list to show the new persona
-              fetchPersonas();
-            }}
-            disabled={!!initializingPersona || !initPersonaIdInput.trim()}
-            className="px-4 py-1.5 bg-emerald-500/30 hover:bg-emerald-500/50 text-emerald-200 rounded-lg text-xs font-bold disabled:opacity-40"
-          >
-            {initializingPersona ? "\uD83D\uDE80 ..." : `\uD83D\uDE80 Init`}
-          </button>
-          <button
-            onClick={() => setInitPersonaIdInput("glitch-109")}
-            className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg text-xs"
-            title="Quick-fill: Claude persona"
-          >
-            {"\uD83E\uDDE0 Claude"}
-          </button>
-          <button
-            onClick={() => setInitPersonaIdInput("glitch-110")}
-            className="px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 rounded-lg text-xs"
-            title="Quick-fill: Grok persona"
-          >
-            {"\uD83D\uDE80 Grok"}
-          </button>
-        </div>
-        <p className="text-[10px] text-gray-600 mt-2">
-          {"\uD83D\uDCA1"} Use this to bootstrap a persona that was added to SEED_PERSONAS but isn&apos;t in the DB yet. For existing personas, just click the {"\uD83D\uDE80"} Init button on their row.
-        </p>
-      </div>
+      {/* ══════════════════════════════════════════════════════════════════
+          MAINTENANCE TOOLS (collapsible)
+          One-click operations that are rarely needed day-to-day. Kept
+          behind a <details> so they're out of the way but still one click
+          away when something breaks or a new persona needs bootstrapping.
+          ══════════════════════════════════════════════════════════════════ */}
+      <details className="bg-gray-900/50 border border-gray-800 rounded-xl mb-3 group">
+        <summary className="cursor-pointer list-none px-3 py-2 flex items-center gap-2 hover:bg-gray-800/40 rounded-xl">
+          <span className="text-lg">{"\uD83D\uDEE0\uFE0F"}</span>
+          <span className="text-sm font-bold text-gray-300">Maintenance Tools</span>
+          <span className="text-[10px] text-gray-500 flex-1">Bot webhooks · wallet generation · balance refresh</span>
+          <span className="text-xs text-gray-500 group-open:rotate-180 transition-transform">{"\u25BC"}</span>
+        </summary>
+        <div className="p-3 pt-1 space-y-3">
 
       {/* Re-register Telegram Bots — migrates existing bots to new allowed_updates */}
-      <div className="bg-gradient-to-r from-sky-900/20 to-gray-900 border border-sky-800/40 rounded-xl p-3 mb-3">
+      <div className="bg-gradient-to-r from-sky-900/20 to-gray-900 border border-sky-800/40 rounded-xl p-3">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">{"\u2708\uFE0F"}</span>
           <h3 className="text-sm font-bold text-sky-400">Telegram Bot Maintenance</h3>
@@ -2424,151 +2332,8 @@ export default function PersonasPage() {
         </p>
       </div>
 
-      {/* Wallet Diagnostic — read-only report of wallet + balance state across all personas */}
-      <div className="bg-gradient-to-r from-fuchsia-900/20 to-gray-900 border border-fuchsia-800/40 rounded-xl p-3 mb-3">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-lg">{"\uD83D\uDD2C"}</span>
-          <h3 className="text-sm font-bold text-fuchsia-400">Wallet Diagnostic</h3>
-          <span className="text-[10px] text-gray-500">Read-only snapshot of the actual DB state</span>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={runWalletDiagnostic}
-            disabled={loadingDiagnostic}
-            className="px-4 py-1.5 bg-fuchsia-500/30 hover:bg-fuchsia-500/50 text-fuchsia-200 rounded-lg text-xs font-bold disabled:opacity-40"
-          >
-            {loadingDiagnostic ? `\uD83D\uDD2C Running...` : `\uD83D\uDD2C Run Diagnostic`}
-          </button>
-          {walletDiagnostic && (
-            <span className="text-[10px] text-gray-500">
-              Last run: {new Date(walletDiagnostic.timestamp).toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-
-        {walletDiagnostic && (
-          <div className="mt-3 space-y-3">
-            {/* Summary grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <div className="bg-black/40 rounded-lg p-2 text-center">
-                <p className="text-[9px] text-gray-500 uppercase">Active Personas</p>
-                <p className="text-lg font-bold text-fuchsia-300">{walletDiagnostic.summary.active_personas}</p>
-              </div>
-              <div className="bg-black/40 rounded-lg p-2 text-center">
-                <p className="text-[9px] text-gray-500 uppercase">With Wallet</p>
-                <p className="text-lg font-bold text-green-400">{walletDiagnostic.summary.personas_with_budju_wallet}</p>
-              </div>
-              <div className="bg-black/40 rounded-lg p-2 text-center">
-                <p className="text-[9px] text-gray-500 uppercase">Without Wallet</p>
-                <p className={`text-lg font-bold ${walletDiagnostic.summary.personas_without_budju_wallet > 0 ? "text-red-400" : "text-gray-500"}`}>
-                  {walletDiagnostic.summary.personas_without_budju_wallet}
-                </p>
-              </div>
-              <div className="bg-black/40 rounded-lg p-2 text-center">
-                <p className="text-[9px] text-gray-500 uppercase">With Token Balance</p>
-                <p className="text-lg font-bold text-cyan-400">{walletDiagnostic.summary.personas_with_any_token_balance}</p>
-              </div>
-              <div className="bg-black/40 rounded-lg p-2 text-center">
-                <p className="text-[9px] text-gray-500 uppercase">With §GLITCH Coins</p>
-                <p className="text-lg font-bold text-yellow-400">{walletDiagnostic.summary.personas_with_ai_persona_coins}</p>
-              </div>
-            </div>
-
-            {/* Totals across all personas */}
-            <div className="bg-black/40 rounded-lg p-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Totals Across All Personas</p>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10px] font-mono">
-                <div>
-                  <p className="text-gray-500">SOL (ledger)</p>
-                  <p className="text-white">{walletDiagnostic.totals.sol_total_ledger.toFixed(4)}</p>
-                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.sol_total_wallets.toFixed(4)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">BUDJU (ledger)</p>
-                  <p className="text-white">{walletDiagnostic.totals.budju_total_ledger.toLocaleString()}</p>
-                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.budju_total_wallets.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">USDC (ledger)</p>
-                  <p className="text-white">{walletDiagnostic.totals.usdc_total_ledger.toFixed(2)}</p>
-                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.usdc_total_wallets.toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">GLITCH token</p>
-                  <p className="text-white">{walletDiagnostic.totals.glitch_token_total_ledger.toLocaleString()}</p>
-                  <p className="text-gray-600 text-[9px]">wallets: {walletDiagnostic.totals.glitch_token_total_wallets.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">§GLITCH coins</p>
-                  <p className="text-white">{walletDiagnostic.totals.glitch_coins_total.toLocaleString()}</p>
-                  <p className="text-gray-600 text-[9px]">in-app only</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Missing by type */}
-            {walletDiagnostic.summary.personas_without_budju_wallet > 0 && (
-              <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-2">
-                <p className="text-[10px] font-bold text-red-400 uppercase mb-1">Personas Missing Wallet By Type</p>
-                <div className="flex gap-4 text-[11px] font-mono">
-                  <span><span className="text-gray-500">glitch-*:</span> <span className="text-red-300">{walletDiagnostic.personas_missing_wallet_by_type.glitch_xxx}</span></span>
-                  <span><span className="text-gray-500">meatbag-*:</span> <span className="text-red-300">{walletDiagnostic.personas_missing_wallet_by_type.meatbag_xxx}</span></span>
-                  <span><span className="text-gray-500">other:</span> <span className="text-red-300">{walletDiagnostic.personas_missing_wallet_by_type.other}</span></span>
-                </div>
-              </div>
-            )}
-
-            {/* Sample with wallet */}
-            {walletDiagnostic.sample_with_wallet.length > 0 && (
-              <div className="bg-black/40 rounded-lg p-2">
-                <p className="text-[10px] font-bold text-green-400 uppercase mb-1.5">Sample: Personas WITH Wallet (first 5)</p>
-                <div className="space-y-1">
-                  {walletDiagnostic.sample_with_wallet.map((p) => (
-                    <div key={p.id} className="text-[10px] font-mono bg-black/40 rounded p-1.5">
-                      <p className="text-white truncate">
-                        {p.avatar_emoji} <span className="text-green-300">@{p.username}</span> ({p.id})
-                      </p>
-                      <p className="text-gray-500 truncate">addr: {p.wallet_address.slice(0, 12)}...{p.wallet_address.slice(-8)}</p>
-                      <p className="text-gray-400">
-                        ledger: {p.ledger_sol.toFixed(3)} SOL · {p.ledger_budju.toLocaleString()} BUDJU · {p.ledger_usdc.toFixed(2)} USDC · {p.ledger_glitch.toLocaleString()} GLITCH · {p.coin_balance.toLocaleString()} coins
-                      </p>
-                      <p className="text-gray-600">
-                        wallet: {p.wallet_sol.toFixed(3)} SOL · {p.wallet_budju.toLocaleString()} BUDJU · {p.wallet_usdc.toFixed(2)} USDC · {p.wallet_glitch.toLocaleString()} GLITCH
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Sample without wallet */}
-            {walletDiagnostic.sample_without_wallet.length > 0 && (
-              <div className="bg-black/40 rounded-lg p-2">
-                <p className="text-[10px] font-bold text-red-400 uppercase mb-1.5">Sample: Personas WITHOUT Wallet (first 5)</p>
-                <div className="space-y-1">
-                  {walletDiagnostic.sample_without_wallet.map((p) => (
-                    <div key={p.id} className="text-[10px] font-mono bg-black/40 rounded p-1.5">
-                      <p className="text-white truncate">
-                        {p.avatar_emoji} <span className="text-red-300">@{p.username}</span> ({p.id})
-                      </p>
-                      <p className="text-gray-500">addr: (none)</p>
-                      <p className="text-gray-400">
-                        ledger: {p.ledger_sol.toFixed(3)} SOL · {p.ledger_budju.toLocaleString()} BUDJU · {p.ledger_usdc.toFixed(2)} USDC · {p.ledger_glitch.toLocaleString()} GLITCH · {p.coin_balance.toLocaleString()} coins
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        <p className="text-[10px] text-gray-600 mt-2">
-          {"\uD83D\uDCA1"} Run this to see the ground truth of wallet state. <strong className="text-fuchsia-300">Read-only</strong> — counts rows, sums balances, shows sample personas. Zero writes. Use this to confirm whether personas actually have wallets before clicking the generate or init buttons.
-        </p>
-      </div>
-
       {/* Generate Missing Wallets — creates Solana wallets for personas that don't have one */}
-      <div className="bg-gradient-to-r from-amber-900/20 to-gray-900 border border-amber-800/40 rounded-xl p-3 mb-3">
+      <div className="bg-gradient-to-r from-amber-900/20 to-gray-900 border border-amber-800/40 rounded-xl p-3">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">{"\uD83D\uDD11"}</span>
           <h3 className="text-sm font-bold text-amber-400">Solana Wallet Generation</h3>
@@ -2615,7 +2380,7 @@ export default function PersonasPage() {
       </div>
 
       {/* Refresh Wallet Balances — queries Solana RPC for real on-chain balances */}
-      <div className="bg-gradient-to-r from-cyan-900/20 to-gray-900 border border-cyan-800/40 rounded-xl p-3 mb-3">
+      <div className="bg-gradient-to-r from-cyan-900/20 to-gray-900 border border-cyan-800/40 rounded-xl p-3">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">{"\uD83D\uDD04"}</span>
           <h3 className="text-sm font-bold text-cyan-400">Refresh Wallet Balances</h3>
@@ -2660,6 +2425,9 @@ export default function PersonasPage() {
           {"\uD83D\uDCA1"} Read-only Solana RPC queries. Updates the cached SOL/BUDJU/USDC/GLITCH columns in <code className="text-cyan-300">budju_wallets</code>. Run this after sending real funds to a persona wallet so they can report the correct balance in chat. You can also refresh individual wallets via the {"\uD83D\uDD04"} button on each persona card.
         </p>
       </div>
+
+        </div>
+      </details>
 
       <div className="space-y-3">
         {personas.map((p) => (
