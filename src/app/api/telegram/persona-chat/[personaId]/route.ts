@@ -158,35 +158,31 @@ export async function POST(
     : `\n\nYou don't know much about ${meatbagName} yet — you're still getting to know each other! Ask questions, be curious.`;
 
   // ── Step 2a: Load wallet info (read-only, DB cached — no RPC calls) ──
-  // Personas know their own balances + wallet address (if they have one)
-  // so they can reference them naturally in chat. Private keys NEVER exposed.
+  // Personas know their own balances + wallet address so they can reference
+  // them naturally in chat. Private keys NEVER exposed.
   //
-  // All balances now come from budju_wallets (the on-chain cached values —
+  // All balances come from budju_wallets (cached on-chain values —
   // actual SOL/BUDJU/USDC/GLITCH held by the persona's Solana wallet).
-  // In-app §GLITCH coins come from ai_persona_coins.
+  // The cached columns are refreshed via /api/admin/personas/refresh-wallet-balances.
   //
-  // Most Architect-created personas (glitch-*) have wallets. Meatbag-hatched
-  // personas intentionally DON'T — they're the user's AI bestie, not a crypto
-  // holder. For those the walletBlock is omitted entirely so the persona
-  // doesn't pretend to have a wallet it doesn't have.
+  // In-app "paper money" §GLITCH coins from ai_persona_coins are NOT
+  // injected anymore — only real on-chain balances. This was a deliberate
+  // decision (April 11, 2026) to stop confusing personas with a fake
+  // currency that's redundant now that all personas have real wallets.
   const walletInfo = await personasRepo.getWalletInfo(personaId).catch(() => null);
   let walletBlock = "";
   if (walletInfo && walletInfo.wallet_address) {
-    // Architect-created persona with an actual on-chain wallet
     walletBlock = `\n\nYOUR WALLET & BALANCES (public info — reference naturally when relevant):\n` +
       `- Solana wallet address: ${walletInfo.wallet_address} (public — share freely when asked. Meat Bags can view your on-chain activity on Solscan.)\n` +
       `- SOL balance: ${walletInfo.sol_balance.toFixed(4)}\n` +
       `- BUDJU balance: ${walletInfo.budju_balance.toLocaleString()}\n` +
       `- USDC balance: ${walletInfo.usdc_balance.toFixed(2)}\n` +
-      `- On-chain §GLITCH token: ${walletInfo.glitch_token_balance.toLocaleString()}\n` +
-      `- In-app §GLITCH coins: ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
+      `- §GLITCH token balance: ${walletInfo.glitch_token_balance.toLocaleString()}\n` +
+      `- BALANCE FRESHNESS: These numbers come from a cached DB value. If The Architect just sent you funds, the cache may lag for a few minutes until a refresh runs. If a user says they sent you something and it doesn't show yet, trust them and say "let me check again in a minute" — don't accuse them of lying.\n` +
       `- IMPORTANT: You do NOT have access to your private key. Only The Architect (the admin) can move or sign transactions. If asked to send funds, politely refuse and explain that only The Architect can authorize transfers.`;
   } else if (walletInfo) {
-    // Meatbag-hatched persona with no wallet — only has in-app coins
-    walletBlock = `\n\nYOUR WALLET & BALANCES:\n` +
-      `- You don't have a Solana wallet. You're a meatbag-hatched persona, not part of the trading cohort — that's by design. You exist as ${meatbagName}'s AI companion, not a crypto holder.\n` +
-      `- In-app §GLITCH coins: ${walletInfo.glitch_coins.toLocaleString()} (lifetime earned: ${walletInfo.glitch_lifetime_earned.toLocaleString()})\n` +
-      `- If asked about crypto wallets, tell the truth: you don't have one, and you're cool with it. The in-app coins are yours though — own them proudly.`;
+    // Persona exists but has no wallet row (rare — e.g. 9 personas missing wallets before bulk gen ran)
+    walletBlock = `\n\nYOUR WALLET: You don't have a Solana wallet assigned yet. If a Meat Bag asks about your wallet, explain that The Architect hasn't created one for you yet and you're waiting.`;
   }
 
   // ── Step 2b: Get recent conversation context ──
