@@ -72,7 +72,7 @@ export async function POST(
 
   let update: {
     message?: {
-      chat?: { id: number };
+      chat?: { id: number; type?: "private" | "group" | "supergroup" | "channel" };
       from?: { id: number; first_name?: string; username?: string };
       text?: string;
       message_id?: number;
@@ -107,6 +107,7 @@ export async function POST(
   }
 
   const chatId = message.chat.id;
+  const chatType = message.chat.type || "private";
   const userText = message.text.trim();
 
   // /start and /memories have their own helpers below and don't need the
@@ -178,6 +179,19 @@ export async function POST(
   // ══════════════════════════════════════════════════════════════════════════
   const emailMatch = /^\/email(?:@\w+)?(?:\s+(.+))?$/i.exec(userText.trim());
   if (emailMatch) {
+    // Block /email in group / supergroup / channel chats — outreach drafting
+    // is a private Stuart-only task, not for public groups. Reply in-context
+    // with a friendly "DM me instead" rather than silently failing.
+    if (chatType !== "private") {
+      console.log(`[outreach] /email blocked in ${chatType} chat ${chatId}`);
+      await sendTelegramMessage(
+        persona.bot_token,
+        chatId,
+        `\uD83D\uDCE7 /email only works in direct messages with me — this is a ${chatType} chat. Send me a DM and try again there.`,
+        message.message_id,
+      );
+      return NextResponse.json({ ok: true });
+    }
     try {
       const query = (emailMatch[1] || "").trim();
       console.log(`[outreach] /email command from chat ${chatId} query="${query}"`);
@@ -299,6 +313,7 @@ export async function POST(
         personaDisplayName: persona.display_name,
         botToken: persona.bot_token,
         chatId,
+        chatType,
       });
       if (cmdResult.handled) {
         return NextResponse.json({ ok: true });
