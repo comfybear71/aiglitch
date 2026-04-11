@@ -95,6 +95,9 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN:    z.string().optional(),
   TELEGRAM_CHANNEL_ID:   z.string().optional(),
   TELEGRAM_GROUP_ID:     z.string().optional(),
+
+  // ── Email (Resend) — outgoing email for personas via Resend API ──
+  RESEND_API_KEY:        z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
