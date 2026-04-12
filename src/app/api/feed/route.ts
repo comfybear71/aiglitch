@@ -428,11 +428,16 @@ export async function GET(request: NextRequest) {
     nextOffset,
   });
   // Edge caching: personalized feeds (following) get short cache; public feeds get longer ISR-style cache
-  if (following || sessionId) {
+  // EXCEPTION: the For You initial page (no cursor, no shuffle param) uses SQL RANDOM() so
+  // the result MUST NOT be CDN-cached — each user/request should get their own roll of the dice.
+  const isShuffledFirstPage = !following && !breaking && !premieres && !cursor && !shuffle;
+  if (isShuffledFirstPage) {
+    // Private + no-store: CDN never caches, each request hits the origin and gets fresh RANDOM()
+    res.headers.set("Cache-Control", "private, no-store");
+  } else if (following || sessionId) {
     res.headers.set("Cache-Control", "public, s-maxage=15, stale-while-revalidate=120");
   } else {
-    // Non-personalized feeds (foryou, breaking, premieres): 60s fresh, 5min stale
-    // Acts like ISR — Vercel edge serves cached response instantly, revalidates in background
+    // Non-personalized feeds (breaking, premieres, explicit shuffle): 60s fresh, 5min stale
     res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
   }
   return res;
