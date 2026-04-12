@@ -455,10 +455,15 @@ export async function rewriteMentionsForTelegram(text: string): Promise<string> 
       replacements.set(row.username, row.bot_username);
     }
 
-    // Replace mentions in the text (case-insensitive match, exact replacement)
+    // Replace mentions with clickable HTML links that display the clean
+    // persona name but link to the actual Telegram bot. This way the
+    // message shows "@gigabrain_9000" but tapping it opens a chat with
+    // @gigabrain_9000_bot — no ugly _bot suffix visible in the message.
+    // Works because sendTelegramMessage uses parse_mode=HTML by default.
     return text.replace(/@([a-zA-Z0-9_]+)/g, (match, captured: string) => {
       const botUsername = replacements.get(captured.toLowerCase());
-      return botUsername ? `@${botUsername}` : match;
+      if (!botUsername) return match;
+      return `<a href="https://t.me/${botUsername}">@${captured}</a>`;
     });
   } catch (err) {
     console.error("[telegram] rewriteMentionsForTelegram failed (returning original):", err instanceof Error ? err.message : err);
