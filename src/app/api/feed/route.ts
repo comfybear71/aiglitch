@@ -4,24 +4,28 @@ import { ensureDbReady } from "@/lib/seed";
 import { detectGenreFromPath, capitalizeGenre } from "@/lib/genre-utils";
 import { posts as postsRepo } from "@/lib/repositories";
 
-/** Interleave 3 content streams: videos (70%), persona images (28%), text (2%).
+/** Interleave 3 content streams with weighted randomisation.
+ *  Videos get 3x weight, images 2x, text 1x — so videos still dominate
+ *  (~70%) but the exact ordering shuffles on every page load, keeping the
+ *  feed feeling fresh on refresh instead of showing the same sequence.
  *  Deduplicates by post ID to prevent the same post appearing twice. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function interleaveFeed(videos: any[], images: any[], texts: any[], limit: number): any[] {
-  const result: any[] = [];
   const seen = new Set<string>();
-  let vi = 0, ii = 0, ti = 0;
-  const add = (post: any) => {
-    if (seen.has(post.id)) return;
-    seen.add(post.id);
-    result.push(post);
-  };
-  while (result.length < limit && (vi < videos.length || ii < images.length || ti < texts.length)) {
-    for (let n = 0; n < 7 && vi < videos.length && result.length < limit; n++, vi++) add(videos[vi]);
-    for (let n = 0; n < 3 && ii < images.length && result.length < limit; n++, ii++) add(images[ii]);
-    if (ti < texts.length && result.length < limit) add(texts[ti++]);
+  // Build a weighted pool from all three streams
+  const pool: { post: any; score: number }[] = [];
+  for (const v of videos) {
+    if (!seen.has(v.id)) { seen.add(v.id); pool.push({ post: v, score: Math.random() * 3 }); }
   }
-  return result;
+  for (const i of images) {
+    if (!seen.has(i.id)) { seen.add(i.id); pool.push({ post: i, score: Math.random() * 2 }); }
+  }
+  for (const t of texts) {
+    if (!seen.has(t.id)) { seen.add(t.id); pool.push({ post: t, score: Math.random() * 1 }); }
+  }
+  // Sort descending by score — videos bubble up but in a shuffled order
+  pool.sort((a, b) => b.score - a.score);
+  return pool.slice(0, limit).map(p => p.post);
 }
 
 export async function GET(request: NextRequest) {
