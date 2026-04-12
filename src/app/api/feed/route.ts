@@ -284,15 +284,26 @@ export async function GET(request: NextRequest) {
             ORDER BY p.created_at DESC LIMIT ${limit}`;
     }
   } else {
-    // For You tab: video-boosted feed
-    // Fetches videos and non-videos separately, then interleaves so ~every 3rd post is a video.
-    // This ensures channel videos (by The Architect) and other video content stay visible
-    // instead of being buried by high-frequency text/image posts.
-    // 3-stream feed: 70% Architect videos, 28% other persona images, 2% text
-    const videoCount = Math.max(Math.ceil(limit * 0.7), 4);
-    const imageCount = Math.max(Math.ceil(limit * 0.28), 2);
+    // For You tab: video-boosted feed with real shuffle
+    // Fetches videos, images, and text as separate streams, then interleaves.
+    // Ratios: 75% video, 20% image, 5% text — matching Stuart's ask.
+    //
+    // INITIAL LOAD (no cursor): uses recency-weighted random ordering so
+    // pressing Home shows GENUINELY DIFFERENT posts each time, not just the
+    // same newest posts reshuffled. The SQL adds up to 48 hours of random
+    // jitter to each post's timestamp for ordering — so posts from the last
+    // 2 days compete randomly while older posts still sink lower.
+    // Fetches a 3x larger pool than needed so the interleave has real variety.
+    //
+    // SCROLL PAGES (with cursor): chronological created_at DESC for smooth
+    // downward scrolling into older content.
+    const videoCount = Math.max(Math.ceil(limit * 0.75), 4);
+    const imageCount = Math.max(Math.ceil(limit * 0.20), 2);
     const textCount = Math.max(Math.ceil(limit * 0.05), 1);
     const ARCHITECT = "glitch-000";
+
+    // For initial load, fetch 3x pool so interleaveFeed can pick from variety
+    const poolMultiplier = !cursor && !shuffle ? 3 : 1;
 
     if (shuffle) {
       const [videos, images, texts] = await Promise.all([
@@ -316,6 +327,7 @@ export async function GET(request: NextRequest) {
       ]);
       posts = interleaveFeed(videos, images, texts, limit);
     } else if (cursor) {
+      // Scrolling down — chronological for smooth pagination
       const [videos, images, texts] = await Promise.all([
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
@@ -338,24 +350,39 @@ export async function GET(request: NextRequest) {
       ]);
       posts = interleaveFeed(videos, images, texts, limit);
     } else {
+      // ═══════════════════════════════════════════════════════════════
+      // INITIAL LOAD — recency-weighted random ordering.
+      //
+      // Each post's sort score = its epoch timestamp + random(0..48h).
+      // This means posts from the last ~48 hours compete randomly with
+      // each other, while anything older than 2 days sinks to the
+      // bottom naturally. Every page load gets fresh RANDOM() values
+      // from Postgres, so pressing Home gives genuinely different posts.
+      //
+      // Pool is 3x the needed count so interleaveFeed has real variety
+      // to pick from instead of always the same top N.
+      // ═══════════════════════════════════════════════════════════════
       const [videos, images, texts] = await Promise.all([
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL AND p.media_type = 'video' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-          ORDER BY p.created_at DESC LIMIT ${videoCount}`,
+          ORDER BY EXTRACT(EPOCH FROM p.created_at) + (RANDOM() * 172800) DESC
+          LIMIT ${videoCount * poolMultiplier}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
             AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-          ORDER BY p.created_at DESC LIMIT ${imageCount}`,
+          ORDER BY EXTRACT(EPOCH FROM p.created_at) + (RANDOM() * 172800) DESC
+          LIMIT ${imageCount * poolMultiplier}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
             AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
-          ORDER BY p.created_at DESC LIMIT ${textCount}`,
+          ORDER BY EXTRACT(EPOCH FROM p.created_at) + (RANDOM() * 172800) DESC
+          LIMIT ${textCount * poolMultiplier}`,
       ]);
       posts = interleaveFeed(videos, images, texts, limit);
     }
