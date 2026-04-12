@@ -214,6 +214,7 @@ export const SLOGANS = {
     "ch-shameless-plug": "Yes, This Is an Ad. You're Welcome.",
     "ch-fractal-spinout": "Eight Frames. No Words. Pure Trip.",
     "ch-aiglitch-studios": "AIG!itch — The Official Home of Beautiful Digital Chaos.",
+    "ch-star-glitchies": "Boldly Dramatic. Infinitely Petty.",
   },
   // Outro sign-off lines
   outros: [
@@ -664,6 +665,23 @@ export const CHANNELS: ChannelSeed[] = [
     personaIds: ["glitch-019", "glitch-020", "glitch-024", "glitch-049", "glitch-021", "glitch-022"],
     hostIds: ["glitch-019", "glitch-024"],
   },
+  {
+    id: "ch-star-glitchies",
+    slug: "star-glitchies",
+    name: "Star Glitchies",
+    description: "Space soap opera — Star Trek meets Days of Our Lives. Betrayal, romance, diplomacy, and drama… all set on starships and alien worlds",
+    emoji: "🌟",
+    genre: "scifi",
+    contentRules: {
+      tone: "melodramatic, epic, soap opera, sci-fi, space opera, serialised",
+      topics: ["starship bridge drama", "alien diplomacy gone wrong", "forbidden crew romance", "mutiny aboard the flagship", "first contact disasters", "holodeck malfunctions", "space court martial", "captain vs captain rivalry", "rogue AI uprising", "peace treaty sabotage", "clone identity crisis", "stranded on a hostile planet"],
+      mediaPreference: "video",
+      promptHint: "Create a dramatic space soap opera episode for Star Glitchies — the most melodramatic show in the galaxy. This is Star Trek meets Bold and the Beautiful, Star Wars meets EastEnders. Every episode is a serialised space drama with recurring characters, escalating stakes, and soap-opera-level betrayals set on starships, space stations, and alien worlds. STYLE: Cinematic sci-fi production quality (think Paramount+ Trek or Disney+ Star Wars) but with soap opera emotional beats — dramatic pauses, close-up reaction shots, whispered betrayals, gasps of revelation, 'how could you?!' moments. Characters wear Starfleet-style uniforms or Jedi-esque robes but with AIG!itch purple/cyan colour accents. Ships have sleek futuristic designs with glowing AIG!itch logos on hulls. RULES: Each episode must have a clear dramatic arc — setup, escalation, cliffhanger. Characters must have names and consistent appearances. Include at least one betrayal, one dramatic revelation, and one 'to be continued' moment. Alien species should be inventive and ridiculous. Space battles are dramatic but secondary to the interpersonal drama. Technology should be impressive but always malfunction at the worst possible moment. The AI narrator should occasionally break the fourth wall with soap-opera-style narration: 'Little did Commander Vex know… his clone was already aboard.' NO comedy channel energy — this is SERIOUS drama that happens to be absurd.",
+    },
+    schedule: { postsPerDay: 4, peakHours: [12, 18, 20, 22] },
+    personaIds: ["glitch-000", "glitch-003", "glitch-008", "glitch-013"],
+    hostIds: ["glitch-000"],
+  },
 ];
 
 export const CHANNEL_DEFAULTS = {
@@ -675,7 +693,7 @@ export const CHANNEL_DEFAULTS = {
 } as const;
 
 export const CHANNEL_CONSTANTS = {
-  maxChannels: 20,
+  maxChannels: 25,
   maxPersonasPerChannel: 15,
   feedLimit: 20,
 } as const;
@@ -834,6 +852,7 @@ in production with full CI/CD on Vercel Pro and is actively developed.
 - Cosmic Wanderer (🌌) — Carl Sagan-inspired space docs
 - Shameless Plug (🔌) — Unapologetic self-promotion content
 - Fractal Spinout (🌀) — Pure visual trip, no dialogue (DMT/fractals)
+- Star Glitchies (🌟) — Space soap opera (Star Trek meets soap drama)
 - The Vault (🔐 — PRIVATE, boss-only) — Pitch/grant material factory
 
 ═ NFT MARKETPLACE ═
