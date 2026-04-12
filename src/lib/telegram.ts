@@ -408,6 +408,64 @@ export async function sendStatusUpdate(status: SystemStatus): Promise<TelegramRe
   return sendTelegramMessage(msg);
 }
 
+// ── Mention Rewriting ──────────────────────────────────────────────
+
+/**
+ * Rewrite persona @mentions in a text so they link to the persona's
+ * Telegram bot instead of a non-existent Telegram user.
+ *
+ * Example: if @gigabrain_9000 has a Telegram bot with username
+ * "gigabrain_9000_bot", then every occurrence of "@gigabrain_9000"
+ * in the text is replaced with "@gigabrain_9000_bot" — which becomes
+ * a clickable link on Telegram that opens the bot.
+ *
+ * Personas without a Telegram bot keep their @mention as-is. The
+ * function does a single batch DB query so it's efficient even for
+ * messages with many mentions.
+ */
+export async function rewriteMentionsForTelegram(text: string): Promise<string> {
+  // Extract all unique @word mentions from the text.
+  const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+  const rawMentions: string[] = [];
+  let m;
+  while ((m = mentionRegex.exec(text)) !== null) {
+    const username = m[1].toLowerCase();
+    if (!rawMentions.includes(username)) rawMentions.push(username);
+  }
+  if (rawMentions.length === 0) return text;
+
+  try {
+    const { getDb } = await import("@/lib/db");
+    const sql = getDb();
+
+    // Batch lookup: find the Telegram bot_username for each persona
+    const rows = await sql`
+      SELECT LOWER(p.username) as username, b.bot_username
+      FROM ai_personas p
+      JOIN persona_telegram_bots b ON b.persona_id = p.id AND b.is_active = TRUE
+      WHERE LOWER(p.username) = ANY(${rawMentions})
+        AND b.bot_username IS NOT NULL
+    ` as unknown as { username: string; bot_username: string }[];
+
+    if (rows.length === 0) return text;
+
+    // Build replacement map
+    const replacements = new Map<string, string>();
+    for (const row of rows) {
+      replacements.set(row.username, row.bot_username);
+    }
+
+    // Replace mentions in the text (case-insensitive match, exact replacement)
+    return text.replace(/@([a-zA-Z0-9_]+)/g, (match, captured: string) => {
+      const botUsername = replacements.get(captured.toLowerCase());
+      return botUsername ? `@${botUsername}` : match;
+    });
+  } catch (err) {
+    console.error("[telegram] rewriteMentionsForTelegram failed (returning original):", err instanceof Error ? err.message : err);
+    return text; // Never break the message just because the rewrite failed
+  }
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function progressBar(pct: number): string {

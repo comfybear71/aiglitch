@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getActiveAccounts, postToPlatform } from "./platforms";
 import { adaptContentForPlatform } from "./content-adapter";
 import { MarketingPlatform } from "./types";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { sendTelegramMessage, rewriteMentionsForTelegram } from "@/lib/telegram";
 
 /**
  * Pick a fallback media URL when a post has no media of its own.
@@ -178,6 +178,11 @@ export async function spreadPostToSocial(
         console.warn(`[spread-post] Failed platforms (hidden from Telegram): ${failed.join(", ")}`);
       }
 
+      // Rewrite @persona_username mentions to @bot_username so they become
+      // clickable links to the actual Telegram bot (e.g. @gigabrain_9000 →
+      // @gigabrain_9000_bot). Personas without a bot keep their @mention as-is.
+      const tgContent = await rewriteMentionsForTelegram(postData.content || "");
+
       const label = telegramLabel || "AD POSTED";
       const isMovie = label === "MOVIE POSTED";
 
@@ -186,11 +191,11 @@ export async function spreadPostToSocial(
       tgMessage += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
       if (isMovie) {
         // Extract just the first line (movie title) from content
-        const titleLine = postData.content?.split("\n").find(l => l.trim()) || "New Movie";
+        const titleLine = tgContent.split("\n").find(l => l.trim()) || "New Movie";
         tgMessage += `${titleLine}\n\n`;
       } else {
         tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
-        tgMessage += `${postData.content}\n\n`;
+        tgMessage += `${tgContent}\n\n`;
       }
       if (postData.media_url) {
         tgMessage += `🎬 <a href="${postData.media_url}">View ${postData.media_type === "video" ? "Video" : "Media"}</a>\n\n`;
