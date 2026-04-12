@@ -23,6 +23,27 @@
 - NEVER batch-delete files to "start fresh" — that destroys work
 - Small, atomic commits only — one logical change per commit
 
+## Fix Spiral Counter
+- Track every failed attempt at the SAME problem (not just the same file)
+- "Bumping a migration label" and "adding inline sync" and "moving try/catch"
+  are all attempts at the SAME problem: "get Star Glitchies into the DB"
+- At attempt 3: STOP CODING. Tell the user:
+  1. What you tried
+  2. What you still don't know
+  3. What diagnostic info you need (logs, DB query, etc.)
+  4. Do NOT offer to "quickly try one more thing"
+- The user decides what happens next, not you
+- "I'm confident this will work" is NOT a reason to exceed 3 attempts
+- Saying "sorry" and trying again is a fix spiral — the rule exists
+  because every attempt costs real money
+
+## GitHub PR Creation
+- NEVER tell the user to "scroll up" for a button you can't see
+- If the user says a button isn't there, BELIEVE THEM
+- Check screenshots for "Sign in" / "Sign up" text — if present,
+  the user is logged out and no PR button will appear
+- Say so immediately instead of repeating the same instruction
+
 ## Database Safety
 - NEVER run DROP TABLE / DROP COLUMN without explicit user confirmation
 - ALTER TABLE ADD COLUMN is safe (additive)
