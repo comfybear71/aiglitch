@@ -15,6 +15,9 @@ import { v4 as uuidv4 } from "uuid";
  */
 async function syncChannelsFromConstants(): Promise<void> {
   const sql = getDb();
+  console.log(`[admin/channels] syncChannelsFromConstants starting — ${CHANNELS.length} channels in CHANNELS array`);
+  let synced = 0;
+  let failed = 0;
   for (const ch of CHANNELS) {
     try {
       await sql`
@@ -33,11 +36,13 @@ async function syncChannelsFromConstants(): Promise<void> {
           schedule = EXCLUDED.schedule,
           sort_order = EXCLUDED.sort_order
       `;
+      synced++;
     } catch (err) {
-      // Log per-channel so one failure doesn't block the rest
-      console.error(`[admin/channels] sync failed for ${ch.id}:`, err instanceof Error ? err.message : err);
+      failed++;
+      console.error(`[admin/channels] sync FAILED for ${ch.id} (slug=${ch.slug}):`, err instanceof Error ? err.message : err);
     }
   }
+  console.log(`[admin/channels] syncChannelsFromConstants done — synced=${synced} failed=${failed}`);
 }
 
 /**
