@@ -14,9 +14,9 @@ import { v4 as uuidv4 } from "uuid";
  * just get their name/description/rules refreshed from the latest constants.
  */
 async function syncChannelsFromConstants(): Promise<void> {
-  try {
-    const sql = getDb();
-    for (const ch of CHANNELS) {
+  const sql = getDb();
+  for (const ch of CHANNELS) {
+    try {
       await sql`
         INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, is_music_channel, content_rules, schedule, is_active, sort_order)
         VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
@@ -33,9 +33,10 @@ async function syncChannelsFromConstants(): Promise<void> {
           schedule = EXCLUDED.schedule,
           sort_order = EXCLUDED.sort_order
       `;
+    } catch (err) {
+      // Log per-channel so one failure doesn't block the rest
+      console.error(`[admin/channels] sync failed for ${ch.id}:`, err instanceof Error ? err.message : err);
     }
-  } catch (err) {
-    console.error("[admin/channels] syncChannelsFromConstants failed:", err instanceof Error ? err.message : err);
   }
 }
 
