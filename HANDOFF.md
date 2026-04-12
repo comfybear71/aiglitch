@@ -769,6 +769,50 @@ The QR wallet LOGIN works perfectly. The QR transaction SIGNING (for buying §GL
 
 ---
 
+## Session 2026-04-12 — Errors & Pending Fixes
+
+### What was accomplished (PRs #181-#196, all merged)
+- Phase 5.2b: Telegram chat-triggered email drafts with approval workflow
+- Telegram slash commands: personality modes + content surfacing (/nft /channel /avatar /help /modes)
+- Discoverability: empty-args browsers for /nft /channel /avatar
+- Outreach fix: /email slash command + case-insensitive tag matching + logging
+- Hotfix: inline CREATE TABLE for email_drafts + email_sends
+- Admin cleanup: removed Wallet Diagnostic + Init Seed Persona cards, grouped maintenance tools
+- Telegram: hide /email from group chats (scoped setMyCommands)
+- Telegram: hide "Failed: ..." from spread notifications
+- PopupAd: lower position + real Grokified NFT images
+- Telegram: clickable @persona mentions (clean display, links to bot)
+- Feed: weighted-random interleave + recency-weighted RANDOM() ordering + CDN cache disabled for shuffle
+- Star Glitchies channel definition added to constants (BUT NOT APPEARING — see below)
+
+### CRITICAL BUG: Star Glitchies channel not appearing on /admin/channels
+
+**Status:** STILL BROKEN after 4 fix attempts. Next session must fix this FIRST.
+
+**What happened:** Added Star Glitchies (ch-star-glitchies) to the CHANNELS array in constants.ts. The channel definition, visual style, branding, video options, random prompts, slogan, and PLATFORM_BRIEF reference are all correct and deployed. But the channel does NOT appear on the admin channels page because it was never INSERT'd into the `channels` database table.
+
+**Why previous channels worked:** Channels like Shameless Plug, Fractal Spinout, Cosmic Wanderer were added BEFORE the `safeMigrate("seed_channels_v3")` migration first ran on production. They got seeded in one batch. Star Glitchies was added AFTER that migration completed — the label was already in `_migrations`, so it never re-ran.
+
+**Fix attempts that failed:**
+1. Bumped migration label to `seed_channels_v4` (PR #195) — Failed because `ensureDbReady()` caches its resolved promise per Lambda instance. Warm instances from the old deployment never re-ran it.
+2. Added `syncChannelsFromConstants()` to admin channels GET handler (PR #196) — Failed because the `try/catch` wrapped the ENTIRE `for` loop. If any earlier channel's INSERT hit a constraint error, ALL remaining channels (including Star Glitchies, which is last) were skipped silently.
+3. Moved `try/catch` inside the `for` loop (branch `claude/channel-sync-per-item`, pushed) — PR was created but the user couldn't find the "Create pull request" button on GitHub (likely logged out or UI confusion). NOT YET MERGED.
+
+**What the next session should do:**
+1. Check if branch `claude/channel-sync-per-item` exists and merge it. If not, recreate the fix.
+2. If it still doesn't work, check Vercel logs for `[admin/channels] sync failed for ch-star-glitchies:` — that will show the exact SQL constraint error.
+3. Nuclear option if sync keeps failing: just INSERT the channel directly via a one-shot API call or admin UI "Create Channel" form. The channel definition in constants.ts is correct — it just needs a DB row.
+
+**Root cause lesson:** `safeMigrate` labels are one-shot and cached. Never rely on them for adding new seed data after the initial run. The inline sync approach (with per-item error handling) is the right pattern going forward.
+
+### Unmerged branch
+- `claude/channel-sync-per-item` — per-channel try/catch fix for syncChannelsFromConstants. 1 file changed, +6/-5. Ready to merge if the user can create the PR.
+
+### GitHub PR creation issue
+The user had difficulty finding the "Create pull request" button on GitHub's compare page. Future sessions: check if the user is logged in to GitHub (look for "Sign in" in the top-right of screenshots). The button only appears when logged in. Use the `/pull/new/<branch>` URL format which goes directly to the PR creation form.
+
+---
+
 # Appendix: Full Project Context (for new Claude sessions)
 
 This section was previously in a separate `HANDOFF_PROMPT.md` file. It provides the full context needed for a new Claude Code session to continue development.

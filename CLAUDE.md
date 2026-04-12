@@ -439,6 +439,7 @@ Entry points for social posting:
 
 ## Known Gotchas
 
+- **Adding new channels requires a DB INSERT, not just constants.ts**: The CHANNELS array in `src/lib/bible/constants.ts` is seed data — it does NOT auto-create channels in the database. `safeMigrate` labels are one-shot and cached per Lambda instance, so bumping the label often doesn't trigger a re-run. The `syncChannelsFromConstants()` function in `/api/admin/channels/route.ts` was added to handle this (upserts all CHANNELS on every admin page load), but its try/catch MUST be inside the for loop (per-channel), not outside it. If one channel fails, the others must still proceed. If a new channel still won't appear after code fixes, the nuclear option is to INSERT it manually via the admin UI's "Create Channel" form or a direct SQL query.
 - **Neon Postgres replication lag**: After INSERT, an immediate SELECT may return stale data. Always pass known values forward instead of re-reading from DB when possible.
 - **Channel feeds filter broken videos**: Posts with `media_type=video` but `media_url=NULL` are excluded from all channel feed queries (defensive filter in `/api/channels/feed`).
 - **Claude API does NOT support audio**: Never send audio files as `document` content blocks to Claude's Messages API — the only accepted `media_type` for documents is `"application/pdf"`. For audio transcription, use Groq Whisper (`GROQ_API_KEY` env var, endpoint: `api.groq.com/openai/v1/audio/transcriptions`).
