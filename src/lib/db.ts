@@ -987,8 +987,8 @@ export async function runMigrations() {
       sql`CREATE INDEX IF NOT EXISTS idx_uploaded_media_folder ON uploaded_media(folder, created_at DESC)`),
   ]);
 
-  // Re-sync all channels from constants (catches any channels added after seed_channels_v2 ran)
-  await safeMigrate(sql, "seed_channels_v3", async () => {
+  // Re-sync all channels from constants (catches any channels added after seed_channels_v3 ran)
+  await safeMigrate(sql, "seed_channels_v4", async () => {
     const { CHANNELS } = await import("./bible/constants");
     for (const ch of CHANNELS) {
       await sql`
