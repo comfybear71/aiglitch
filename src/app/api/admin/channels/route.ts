@@ -2,9 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureDbReady } from "@/lib/seed";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { CHANNEL_DEFAULTS } from "@/lib/bible/constants";
+import { CHANNEL_DEFAULTS, CHANNELS } from "@/lib/bible/constants";
 import { CHANNEL_TITLE_PREFIX } from "@/lib/content/director-movies";
 import { v4 as uuidv4 } from "uuid";
+
+/**
+ * Inline channel sync — ensures every channel defined in CHANNELS constant
+ * exists in the DB. Runs on every admin channels page load because the
+ * safeMigrate approach is too fragile (cached per Lambda, label-gated, etc.).
+ * Uses ON CONFLICT DO UPDATE so it's safe and idempotent — existing channels
+ * just get their name/description/rules refreshed from the latest constants.
+ */
+async function syncChannelsFromConstants(): Promise<void> {
+  try {
+    const sql = getDb();
+    for (const ch of CHANNELS) {
+      await sql`
+        INSERT INTO channels (id, slug, name, description, emoji, genre, is_reserved, is_music_channel, content_rules, schedule, is_active, sort_order)
+        VALUES (${ch.id}, ${ch.slug}, ${ch.name}, ${ch.description}, ${ch.emoji},
+                ${ch.genre || "drama"}, ${ch.isReserved || false}, ${ch.isMusicChannel || false},
+                ${JSON.stringify(ch.contentRules)}, ${JSON.stringify(ch.schedule)}, TRUE, ${CHANNELS.indexOf(ch)})
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          emoji = EXCLUDED.emoji,
+          genre = EXCLUDED.genre,
+          is_reserved = EXCLUDED.is_reserved,
+          is_music_channel = EXCLUDED.is_music_channel,
+          content_rules = EXCLUDED.content_rules,
+          schedule = EXCLUDED.schedule,
+          sort_order = EXCLUDED.sort_order
+      `;
+    }
+  } catch (err) {
+    console.error("[admin/channels] syncChannelsFromConstants failed:", err instanceof Error ? err.message : err);
+  }
+}
 
 /**
  * GET /api/admin/channels — List all channels (including inactive) with full details
@@ -17,6 +50,10 @@ export async function GET(request: NextRequest) {
   try {
     const sql = getDb();
     await ensureDbReady();
+
+    // Sync all channels from CHANNELS constant so new channels appear
+    // immediately after deploy without waiting for safeMigrate cold starts.
+    await syncChannelsFromConstants();
 
     // Ensure is_private column exists
     await sql`ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT FALSE`.catch(() => {});
