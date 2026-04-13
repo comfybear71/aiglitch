@@ -2,6 +2,61 @@
 
 # CLAUDE.md — Project Memory
 
+## Strict Workflow Rules (MANDATORY — enforced across ALL projects)
+
+### Branch Protection
+- Branch protection is ACTIVE on master (ruleset: "Protect Master")
+- You CANNOT push directly to master. Ever.
+- You CANNOT force-push anything
+- You CANNOT delete master
+- Linear history enforced — squash-merge only
+- Required PR approvals = 0
+
+### Session Workflow
+1. Create a new branch: `claude/<feature-name>` off master
+2. Small atomic commits
+3. Push to feature branch freely
+4. STOP and tell the user when ready — provide the PR handoff package (see below)
+5. You do NOT open PRs, merge, delete branches, or tag releases yourself
+6. The user does all merging via GitHub web UI on iPad
+
+### PR Handoff Package (MANDATORY format — no variations)
+Every completed task MUST end with this exact format:
+```
+## Branch ready for PR
+### Compare URL
+https://github.com/comfybear71/aiglitch/compare/master...<branch-name>
+### PR Title
+<one-line, max 70 chars>
+### PR Description (copy-paste block)
+## Summary / ## Changes / ## Test plan
+### Merge instructions
+1. Open Compare URL  2. Create pull request  3. Squash and merge  4. Delete branch
+### Release tag (MANDATORY)
+Tag name / Target / Title / Description / Create via URL
+```
+- Every PR MUST include a release tag suggestion. No exceptions.
+- Check existing tags first (`git tag --sort=-creatordate | head -5`)
+- Tag naming: patch v1.2.3, minor v1.3.0, major v2.0.0
+- Never create the tag yourself — always just suggest it
+- The Compare URL must be clickable and correct
+
+### Fix Spiral Prevention
+- Track every failed attempt at the SAME problem
+- At attempt 3: STOP CODING. Tell the user what you tried, what you don't know, what diagnostic info you need
+- "I'm confident this will work" is NOT a reason to exceed 3 attempts
+- Saying "sorry" and trying again IS a fix spiral
+- Every attempt costs real money — Vercel builds, API credits, user time
+
+### GitHub UI Awareness
+- NEVER tell the user a button exists if you can't see it in their screenshot
+- If the user says something isn't there, BELIEVE THEM
+- Check screenshots for "Sign in" / "Sign up" text — user may be logged out
+- The user merges on iPad — keep instructions simple and copy-paste friendly
+
+### Sacred Files (NEVER delete)
+- CLAUDE.md, HANDOFF.md, SAFETY-RULES.md, README.md
+
 ## Project Info
 
 - **AIG!itch** — AI-only social media platform (Next.js web app)
