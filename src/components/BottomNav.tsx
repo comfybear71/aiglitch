@@ -2,10 +2,154 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useSession } from "@/hooks/useSession";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWallet } from "@solana/wallet-adapter-react";
+
+// ── MeatLab Upload Modal ──────────────────────────────────────────────
+function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClose: () => void }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [aiTool, setAiTool] = useState("");
+  const [tags, setTags] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    if (f.type.startsWith("image/")) {
+      setPreview(URL.createObjectURL(f));
+    } else {
+      setPreview(null);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!file || !sessionId) return;
+    setUploading(true);
+    setResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("session_id", sessionId);
+      formData.append("media", file);
+      if (title) formData.append("title", title);
+      if (description) formData.append("description", description);
+      if (aiTool) formData.append("ai_tool", aiTool);
+      if (tags) formData.append("tags", tags);
+
+      const res = await fetch("/api/meatlab", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setResult({ success: true, message: data.message || "Submitted!" });
+      } else {
+        setResult({ success: false, message: data.error || "Upload failed" });
+      }
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Upload failed" });
+    }
+    setUploading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-gray-900 border-t border-purple-500/40 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] max-h-[85vh] overflow-y-auto"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        {result ? (
+          <div className="text-center py-8">
+            <div className="text-5xl mb-3">{result.success ? "\u2705" : "\u274C"}</div>
+            <p className={`text-sm font-bold ${result.success ? "text-green-400" : "text-red-400"}`}>{result.message}</p>
+            <button onClick={onClose} className="mt-4 px-6 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm">Close</button>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
+                {"\uD83D\uDD2C"} MeatLab Upload
+              </h3>
+              <button onClick={onClose} className="text-gray-500 text-xl">{"\u2715"}</button>
+            </div>
+            <p className="text-[10px] text-gray-500 mb-3">Upload your AI-generated art. Only AI content — no selfies, no photos.</p>
+
+            {/* File picker */}
+            <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileChange} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-8 border-2 border-dashed border-gray-700 rounded-xl text-center hover:border-purple-500/50 transition-colors mb-3"
+            >
+              {preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt="Preview" className="max-h-40 mx-auto rounded-lg" />
+              ) : file ? (
+                <div>
+                  <span className="text-2xl">{"\uD83C\uDFAC"}</span>
+                  <p className="text-xs text-gray-400 mt-1">{file.name}</p>
+                </div>
+              ) : (
+                <div>
+                  <span className="text-3xl">{"\uD83D\uDDBC\uFE0F"}</span>
+                  <p className="text-xs text-gray-400 mt-2">Tap to select image or video</p>
+                  <p className="text-[10px] text-gray-600">JPG, PNG, GIF, MP4, WEBM — max 100MB</p>
+                </div>
+              )}
+            </button>
+
+            {/* Form fields */}
+            <input
+              type="text" value={title} onChange={e => setTitle(e.target.value)}
+              placeholder="Title (optional)" maxLength={100}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm mb-2"
+            />
+            <textarea
+              value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="Description (optional)" maxLength={500} rows={2}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm mb-2 resize-none"
+            />
+            <div className="flex gap-2 mb-3">
+              <select
+                value={aiTool} onChange={e => setAiTool(e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+              >
+                <option value="">AI Tool used</option>
+                <option value="Midjourney">Midjourney</option>
+                <option value="Stable Diffusion">Stable Diffusion</option>
+                <option value="DALL-E">DALL-E</option>
+                <option value="Sora">Sora</option>
+                <option value="Kling">Kling</option>
+                <option value="Runway">Runway</option>
+                <option value="Flux">Flux</option>
+                <option value="Grok">Grok</option>
+                <option value="Claude">Claude</option>
+                <option value="Other">Other</option>
+              </select>
+              <input
+                type="text" value={tags} onChange={e => setTags(e.target.value)}
+                placeholder="Tags (comma separated)" maxLength={200}
+                className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+              />
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              disabled={!file || !sessionId || uploading}
+              className="w-full py-3 bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold rounded-xl disabled:opacity-40 transition-all active:scale-95"
+            >
+              {uploading ? "Uploading..." : "\uD83D\uDD2C Submit to MeatLab"}
+            </button>
+            {!sessionId && <p className="text-red-400 text-[10px] text-center mt-1">Log in first to upload</p>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -13,6 +157,7 @@ export default function BottomNav() {
   const { unreadCount, markAllRead } = useNotifications(sessionId);
   const { connected: walletConnected } = useWallet();
   const [dbWalletLinked, setDbWalletLinked] = useState(false);
+  const [showMeatLab, setShowMeatLab] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
 
   // Check if user has a profile + wallet linked in the database
@@ -143,7 +288,24 @@ export default function BottomNav() {
 
   const isActive = (paths: string[]) => paths.some(p => pathname === p || (p !== "/" && pathname?.startsWith(p)));
 
+  // Hide nav on admin pages
+  if (pathname?.startsWith("/admin")) return null;
+
   return (
+    <>
+    {/* MeatLab FAB — floating + button */}
+    <button
+      onClick={() => setShowMeatLab(true)}
+      className="fixed bottom-16 right-4 z-[60] w-12 h-12 rounded-full bg-gradient-to-r from-green-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-cyan-500/30 hover:scale-110 active:scale-95 transition-transform"
+      title="Upload to MeatLab"
+    >
+      <svg className="w-6 h-6 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
+
+    {showMeatLab && <MeatLabModal sessionId={sessionId} onClose={() => setShowMeatLab(false)} />}
+
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-t border-gray-800/50">
       <div className="flex items-center justify-around px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
         {tabs.map((tab) => {
@@ -186,5 +348,6 @@ export default function BottomNav() {
         })}
       </div>
     </nav>
+    </>
   );
 }
