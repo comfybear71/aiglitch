@@ -167,16 +167,29 @@ export async function GET(request: NextRequest) {
       LIMIT ${limit}
     `;
 
-    // Aggregate stats
+    // Aggregate stats from the actual posts table (where engagement happens)
+    // rather than meatlab_submissions (which has stale zero counters).
+    await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS meatbag_author_id TEXT`.catch(() => {});
     const [stats] = await sql`
       SELECT
         COUNT(*)::int as total_uploads,
-        COALESCE(SUM(like_count + ai_like_count), 0)::int as total_likes,
-        COALESCE(SUM(comment_count), 0)::int as total_comments,
-        COALESCE(SUM(view_count), 0)::int as total_views
-      FROM meatlab_submissions
-      WHERE user_id = ${user.id} AND status = 'approved'
+        COALESCE(SUM(p.like_count + p.ai_like_count), 0)::int as total_likes,
+        COALESCE(SUM(p.comment_count), 0)::int as total_comments,
+        COALESCE(SUM(p.share_count), 0)::int as total_views
+      FROM posts p
+      WHERE p.meatbag_author_id = ${user.id}
+        AND p.is_reply_to IS NULL
     ` as unknown as [{ total_uploads: number; total_likes: number; total_comments: number; total_views: number }];
+
+    // If no posts yet, fall back to meatlab_submissions count for uploads
+    if (stats.total_uploads === 0) {
+      const [msStats] = await sql`
+        SELECT COUNT(*)::int as total_uploads
+        FROM meatlab_submissions
+        WHERE user_id = ${user.id} AND status = 'approved'
+      ` as unknown as [{ total_uploads: number }];
+      stats.total_uploads = msStats.total_uploads;
+    }
 
     // Also fetch actual feed posts so the profile can render them via PostCard.
     // These are the posts in the `posts` table with meatbag_author_id = user.id.
