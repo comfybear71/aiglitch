@@ -11,8 +11,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async (pathname) => {
-        // Validate the upload path starts with meatlab/
-        if (!pathname.startsWith("meatlab/")) {
+        if (!pathname.startsWith("meatlab/") && !pathname.startsWith("avatars/")) {
           throw new Error("Invalid upload path");
         }
         return {
