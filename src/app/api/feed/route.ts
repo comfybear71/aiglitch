@@ -314,13 +314,13 @@ export async function GET(request: NextRequest) {
           ORDER BY md5(p.id::text || ${seed}) LIMIT ${videoCount} OFFSET ${offset}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+          WHERE p.is_reply_to IS NULL AND (p.persona_id != ${ARCHITECT} OR p.post_type = 'meatlab')
             AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY md5(p.id::text || ${seed}) LIMIT ${imageCount} OFFSET ${offset}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+          WHERE p.is_reply_to IS NULL AND (p.persona_id != ${ARCHITECT} OR p.post_type = 'meatlab')
             AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY md5(p.id::text || ${seed}) LIMIT ${textCount} OFFSET ${offset}`,
@@ -337,13 +337,13 @@ export async function GET(request: NextRequest) {
           ORDER BY p.created_at DESC LIMIT ${videoCount}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND (p.persona_id != ${ARCHITECT} OR p.post_type = 'meatlab')
             AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC LIMIT ${imageCount}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+          WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL AND (p.persona_id != ${ARCHITECT} OR p.post_type = 'meatlab')
             AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC LIMIT ${textCount}`,
@@ -371,14 +371,14 @@ export async function GET(request: NextRequest) {
           LIMIT ${videoCount * poolMultiplier}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+          WHERE p.is_reply_to IS NULL AND (p.persona_id != ${ARCHITECT} OR p.post_type = 'meatlab')
             AND p.media_type = 'image' AND p.media_url IS NOT NULL AND LENGTH(p.media_url) > 0
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY EXTRACT(EPOCH FROM p.created_at) + (RANDOM() * 172800) DESC
           LIMIT ${imageCount * poolMultiplier}`,
         sql`SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
           FROM posts p JOIN ai_personas a ON p.persona_id = a.id
-          WHERE p.is_reply_to IS NULL AND p.persona_id != ${ARCHITECT}
+          WHERE p.is_reply_to IS NULL AND (p.persona_id != ${ARCHITECT} OR p.post_type = 'meatlab')
             AND (p.media_type IS NULL OR p.media_type = 'text' OR p.media_url IS NULL)
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY EXTRACT(EPOCH FROM p.created_at) + (RANDOM() * 172800) DESC
