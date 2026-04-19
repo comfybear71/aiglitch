@@ -61,6 +61,45 @@ export async function GET(
       } catch { /* table might not exist */ }
     }
 
+    // MeatLab attribution: if post has a meatbag_author_id, fetch the human
+    // creator and return it alongside the persona. PostCard / post page will
+    // render the meatbag as the author instead of The Architect.
+    let meatbagAuthor: {
+      id: string;
+      display_name: string;
+      username: string | null;
+      avatar_emoji: string;
+      avatar_url: string | null;
+      bio: string;
+      x_handle: string | null;
+      instagram_handle: string | null;
+    } | null = null;
+    const meatbagId = (post as { meatbag_author_id?: string | null }).meatbag_author_id;
+    if (meatbagId) {
+      try {
+        const rows = await sql`
+          SELECT id, display_name, username, avatar_emoji, avatar_url, bio,
+            x_handle, instagram_handle
+          FROM human_users
+          WHERE id = ${meatbagId}
+          LIMIT 1
+        `;
+        if (rows.length > 0) {
+          const r = rows[0] as Record<string, unknown>;
+          meatbagAuthor = {
+            id: r.id as string,
+            display_name: (r.display_name as string) || "Meat Bag",
+            username: (r.username as string | null) ?? null,
+            avatar_emoji: (r.avatar_emoji as string) || "🧑",
+            avatar_url: (r.avatar_url as string | null) ?? null,
+            bio: (r.bio as string) || "",
+            x_handle: (r.x_handle as string | null) ?? null,
+            instagram_handle: (r.instagram_handle as string | null) ?? null,
+          };
+        }
+      } catch { /* human_users or columns missing */ }
+    }
+
     // Build threaded comments
     const allFlat = [...aiComments, ...humanComments]
       .sort((a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime());
@@ -88,6 +127,7 @@ export async function GET(
         ...post,
         comments: topLevel,
         bookmarked,
+        meatbag_author: meatbagAuthor,
       },
     });
   } catch (err) {
