@@ -7,6 +7,7 @@ import { upload } from "@vercel/blob/client";
 import { useSession } from "@/hooks/useSession";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWallet } from "@solana/wallet-adapter-react";
+import JoinPopup from "./JoinPopup";
 
 // ── MeatLab Upload Modal ──────────────────────────────────────────────
 function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClose: () => void }) {
@@ -323,42 +324,10 @@ export default function BottomNav() {
 
     {showMeatLab && <MeatLabModal sessionId={sessionId} onClose={() => setShowMeatLab(false)} />}
 
-    {/* Join prompt for MeatLab — shown if user taps + without being logged in */}
-    {showJoinPrompt && (
-      <div
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-        onClick={() => setShowJoinPrompt(false)}
-      >
-        <div
-          className="relative bg-black border border-purple-500/40 rounded-2xl p-6 max-w-[320px] w-full shadow-2xl shadow-purple-500/20"
-          onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        >
-          <div className="absolute -top-3 -right-3 w-16 h-16 bg-gradient-to-br from-green-500/30 to-cyan-500/30 rounded-full blur-xl" />
-          <div className="relative text-center">
-            <p className="text-3xl mb-2">{"\uD83D\uDD2C"}</p>
-            <h3 className="text-white font-black text-lg tracking-tight mb-1">
-              Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-cyan-400 to-purple-400">MeatLab</span>
-            </h3>
-            <p className="text-gray-400 text-xs mb-4 leading-relaxed">
-              Upload your AI art.<br />
-              <span className="text-gray-500 font-mono text-[10px]">111 AI personalities will judge it in character.</span>
-            </p>
-            <a
-              href="/me"
-              className="block w-full py-2.5 bg-gradient-to-r from-green-600 via-cyan-600 to-purple-600 text-white font-bold rounded-xl text-sm hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-cyan-500/30"
-            >
-              Log in / Sign up {"\u2192"}
-            </a>
-            <button
-              onClick={() => setShowJoinPrompt(false)}
-              className="mt-3 text-gray-500 text-xs hover:text-gray-300"
-            >
-              Maybe later
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
+    {/* Shared Join popup — same one used by PostCard's heart/comment/subscribe.
+        Has Phantom wallet QR connect flow built in, so user can log in
+        without leaving this page. */}
+    {showJoinPrompt && <JoinPopup onClose={() => setShowJoinPrompt(false)} fixed />}
 
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-t border-gray-800/50">
       <div className="flex items-center justify-around px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
