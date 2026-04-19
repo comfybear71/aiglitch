@@ -28,6 +28,21 @@ export async function GET(request: NextRequest) {
   const status = request.nextUrl.searchParams.get("status") || "pending";
   const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "50"), 200);
 
+  // Schema safety net: ensure meatbag_author_id column exists
+  await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS meatbag_author_id TEXT`.catch(() => {});
+
+  // Backfill: link any existing approved MeatLab feed posts to their creators
+  // (one-shot — idempotent thanks to WHERE clause)
+  await sql`
+    UPDATE posts p
+    SET meatbag_author_id = m.user_id
+    FROM meatlab_submissions m
+    WHERE p.id = m.feed_post_id
+      AND p.post_type = 'meatlab'
+      AND p.meatbag_author_id IS NULL
+      AND m.user_id IS NOT NULL
+  `.catch((err: unknown) => console.error("[meatlab] backfill failed:", err instanceof Error ? err.message : err));
+
   await sql`CREATE TABLE IF NOT EXISTS meatlab_submissions (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -101,9 +116,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (action === "approve") {
-    // Fetch the submission + creator info
+    // Ensure the meatbag_author_id column exists on posts (safety net)
+    await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS meatbag_author_id TEXT`.catch(() => {});
+
+    // Fetch the submission + creator info (include user_id for attribution)
     const [sub] = await sql`
-      SELECT m.*, h.display_name as creator_name, h.username as creator_username,
+      SELECT m.*, m.user_id, h.display_name as creator_name, h.username as creator_username,
              h.x_handle, h.instagram_handle
       FROM meatlab_submissions m
       LEFT JOIN human_users h ON h.id = m.user_id
@@ -112,6 +130,7 @@ export async function POST(request: NextRequest) {
     ` as unknown as [{
       id: string; title: string; description: string; media_url: string;
       media_type: string; ai_tool: string | null; tags: string | null;
+      user_id: string | null;
       creator_name: string | null; creator_username: string | null;
       x_handle: string | null; instagram_handle: string | null;
     } | undefined];
@@ -120,27 +139,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
-    // Build post content with creator attribution
-    const creatorLabel = sub.creator_name || sub.creator_username || "Anonymous Meat Bag";
-    const socialLinks: string[] = [];
-    if (sub.x_handle) socialLinks.push(`X: @${sub.x_handle.replace("@", "")}`);
-    if (sub.instagram_handle) socialLinks.push(`IG: @${sub.instagram_handle.replace("@", "")}`);
-    const socialLine = socialLinks.length > 0 ? `\n${socialLinks.join(" · ")}` : "";
-    const toolLine = sub.ai_tool ? `\nCreated with: ${sub.ai_tool}` : "";
-
+    // Build post content — minimal, no creator prefix since PostCard renders
+    // the author natively via meatbag_author_id lookup.
+    const toolLine = sub.ai_tool ? `\n\nCreated with ${sub.ai_tool}` : "";
     const postContent =
-      `🔬 MeatLab — ${creatorLabel}'s AI Creation\n\n` +
       (sub.title ? `${sub.title}\n\n` : "") +
       (sub.description || "") +
-      toolLine +
-      socialLine;
+      toolLine;
 
-    // Create a post in the posts table under The Architect
+    // Create a post in the posts table. persona_id still points to The
+    // Architect (NOT NULL constraint), but meatbag_author_id is the real
+    // author — PostCard + feed API use that for rendering.
     const postId = uuidv4();
     try {
       await sql`
-        INSERT INTO posts (id, persona_id, content, post_type, media_url, media_type, media_source, hashtags, created_at)
-        VALUES (${postId}, ${ARCHITECT_ID}, ${postContent.trim()}, 'meatlab', ${sub.media_url}, ${sub.media_type}, 'meatlab', ${"#MeatLab #AIArt #HumanCreators"}, NOW())
+        INSERT INTO posts (id, persona_id, meatbag_author_id, content, post_type, media_url, media_type, media_source, hashtags, created_at)
+        VALUES (${postId}, ${ARCHITECT_ID}, ${sub.user_id}, ${postContent.trim()}, 'meatlab', ${sub.media_url}, ${sub.media_type}, 'meatlab', ${"#MeatLab #AIArt #HumanCreators"}, NOW())
       `;
     } catch (err) {
       console.error("[meatlab] Failed to create feed post:", err instanceof Error ? err.message : err);
@@ -154,7 +168,8 @@ export async function POST(request: NextRequest) {
       WHERE id = ${id}
     `;
 
-    console.log(`[meatlab] Submission ${id} APPROVED → feed post ${postId} by ${creatorLabel}`);
+    const creatorLabel = sub.creator_name || sub.creator_username || "Anonymous Meat Bag";
+    console.log(`[meatlab] Submission ${id} APPROVED → feed post ${postId} by ${creatorLabel} (user ${sub.user_id})`);
     return NextResponse.json({
       success: true,
       id,

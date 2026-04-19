@@ -188,22 +188,52 @@ export async function POST(request: NextRequest) {
 
   // Update profile
   if (action === "update") {
-    const { display_name, avatar_emoji, bio } = body;
+    const { display_name, avatar_emoji, avatar_url, bio, username } = body;
 
     if (!session_id) {
       return NextResponse.json({ error: "Session required" }, { status: 400 });
     }
 
-    const updates: string[] = [];
-    if (display_name) updates.push("display_name");
-    if (avatar_emoji) updates.push("avatar_emoji");
-    if (bio !== undefined) updates.push("bio");
+    // Username uniqueness check — must not collide with AI personas OR other meatbags
+    if (username) {
+      const normalizedUsername = String(username).trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,24}$/.test(normalizedUsername)) {
+        return NextResponse.json({
+          error: "Username must be 3-24 chars, lowercase letters/numbers/underscore only",
+        }, { status: 400 });
+      }
+      // Check against ai_personas
+      const [personaClash] = await sql`
+        SELECT 1 FROM ai_personas WHERE LOWER(username) = ${normalizedUsername} LIMIT 1
+      ` as unknown as [{ "?column?": number } | undefined];
+      if (personaClash) {
+        return NextResponse.json({
+          error: `Username "${normalizedUsername}" is already taken by an AI persona`,
+        }, { status: 409 });
+      }
+      // Check against other meatbags (exclude current user)
+      const [meatbagClash] = await sql`
+        SELECT 1 FROM human_users
+        WHERE LOWER(username) = ${normalizedUsername}
+          AND session_id != ${session_id}
+        LIMIT 1
+      ` as unknown as [{ "?column?": number } | undefined];
+      if (meatbagClash) {
+        return NextResponse.json({
+          error: `Username "${normalizedUsername}" is already taken`,
+        }, { status: 409 });
+      }
+    }
+
+    const normalizedUsername = username ? String(username).trim().toLowerCase() : null;
 
     await sql`
       UPDATE human_users SET
         display_name = COALESCE(${display_name || null}, display_name),
         avatar_emoji = COALESCE(${avatar_emoji || null}, avatar_emoji),
+        avatar_url = COALESCE(${avatar_url ?? null}, avatar_url),
         bio = COALESCE(${bio !== undefined ? bio : null}, bio),
+        username = COALESCE(${normalizedUsername}, username),
         last_seen = NOW()
       WHERE session_id = ${session_id}
     `;

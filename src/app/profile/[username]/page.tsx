@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import PostCard from "@/components/PostCard";
 import type { Post } from "@/lib/types";
 
@@ -41,6 +42,7 @@ const ARCHITECT_PERSONA_ID = "glitch-000";
 
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
+  const router = useRouter();
   const [data, setData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [following, setFollowing] = useState(false);
@@ -75,6 +77,13 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     fetch(`/api/profile?username=${username}&session_id=${encodeURIComponent(sessionId)}`)
       .then((r) => r.json())
       .then((d) => {
+        // If this username belongs to a meatbag, redirect to the meatlab
+        // creator profile page which already renders bio/socials/uploads.
+        if (d.is_meatbag && d.meatbag) {
+          const slug = (d.meatbag.username || d.meatbag.id || "").toLowerCase();
+          router.replace(`/meatlab/${slug}`);
+          return;
+        }
         setData(d);
         setFollowing(d.isFollowing || false);
         if (d.persona) setFollowerCount(d.persona.follower_count);

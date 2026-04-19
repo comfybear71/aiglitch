@@ -289,6 +289,10 @@ export default function MePage() {
   const [editName, setEditName] = useState("");
   const [editAvatar, setEditAvatar] = useState("");
   const [editBio, setEditBio] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editAvatarUrl, setEditAvatarUrl] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   // Liked and saved posts
   const [likedPosts, setLikedPosts] = useState<PostData[]>([]);
@@ -1237,8 +1241,15 @@ export default function MePage() {
   };
 
   const handleUpdate = async () => {
+    setUsernameError(null);
+    // Basic client-side username validation
+    const trimmedUsername = editUsername.trim().toLowerCase();
+    if (trimmedUsername && !/^[a-z0-9_]{3,24}$/.test(trimmedUsername)) {
+      setUsernameError("Username must be 3-24 chars, lowercase letters/numbers/underscore only");
+      return;
+    }
     try {
-      await fetch(apiUrl("/api/auth/human"), {
+      const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1246,9 +1257,16 @@ export default function MePage() {
           session_id: sessionId,
           display_name: editName,
           avatar_emoji: editAvatar,
+          avatar_url: editAvatarUrl,
           bio: editBio,
+          username: trimmedUsername || null,
         }),
       });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setUsernameError(data.error || "Update failed");
+        return;
+      }
       setEditing(false);
       fetchProfile();
       setSuccess("Profile updated!");
@@ -1580,7 +1598,7 @@ export default function MePage() {
         {user && mode === "profile" && !editing && (
           <div>
             <div className="text-center mb-6">
-              <button onClick={() => { setEditing(true); setEditName(user.display_name); setEditAvatar(user.avatar_emoji); setEditBio(user.bio || ""); }}
+              <button onClick={() => { setEditing(true); setEditName(user.display_name); setEditAvatar(user.avatar_emoji); setEditBio(user.bio || ""); setEditUsername(user.username || ""); setEditAvatarUrl(user.avatar_url || null); setUsernameError(null); }}
                 className="relative group">
                 <div className="w-24 h-24 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center text-5xl mx-auto mb-1 shadow-lg border-2 border-gray-700 group-hover:border-purple-500 transition-colors">
                   {user.avatar_emoji}
@@ -1647,7 +1665,7 @@ export default function MePage() {
             {activeTab === "overview" && (
               <div className="space-y-3">
                 <button
-                  onClick={() => { setEditing(true); setEditName(user.display_name); setEditAvatar(user.avatar_emoji); setEditBio(user.bio || ""); }}
+                  onClick={() => { setEditing(true); setEditName(user.display_name); setEditAvatar(user.avatar_emoji); setEditBio(user.bio || ""); setEditUsername(user.username || ""); setEditAvatarUrl(user.avatar_url || null); setUsernameError(null); }}
                   className="w-full py-3 bg-gray-900 border border-gray-700 rounded-xl text-white font-bold hover:bg-gray-800 transition-colors"
                 >
                   Edit Profile
@@ -2294,12 +2312,50 @@ export default function MePage() {
           <div>
             <h2 className="text-xl font-black mb-6">Edit Profile</h2>
             <div className="space-y-4">
+              {/* Avatar: image if uploaded, else emoji. Two buttons below to
+                  change each. */}
               <div className="text-center">
-                <button onClick={() => setShowAvatarPicker(!showAvatarPicker)}
-                  className="w-20 h-20 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center text-4xl mx-auto border-2 border-gray-600 hover:border-purple-500 transition-colors">
-                  {editAvatar}
-                </button>
-                <p className="text-xs text-gray-500 mt-2">Tap to change avatar</p>
+                <div className="relative w-24 h-24 rounded-full mx-auto border-2 border-gray-600 overflow-hidden bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center">
+                  {editAvatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={editAvatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-5xl">{editAvatar}</span>
+                  )}
+                </div>
+                <div className="flex gap-2 justify-center mt-2">
+                  <label className="text-[11px] px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg cursor-pointer">
+                    {uploadingAvatar ? "Uploading..." : "\uD83D\uDCF7 Upload image"}
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f || !sessionId) return;
+                        setUploadingAvatar(true);
+                        try {
+                          const { upload } = await import("@vercel/blob/client");
+                          const blob = await upload(`avatars/meatbag-${sessionId}-${Date.now()}-${f.name}`, f, {
+                            access: "public",
+                            handleUploadUrl: "/api/meatlab/upload",
+                          });
+                          setEditAvatarUrl(blob.url);
+                        } catch (err) {
+                          alert("Avatar upload failed: " + (err instanceof Error ? err.message : String(err)));
+                        }
+                        setUploadingAvatar(false);
+                      }}
+                    />
+                  </label>
+                  <button onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+                    className="text-[11px] px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg">
+                    {"\uD83D\uDE00"} Pick emoji
+                  </button>
+                  {editAvatarUrl && (
+                    <button onClick={() => setEditAvatarUrl(null)}
+                      className="text-[11px] px-3 py-1 bg-red-900/50 hover:bg-red-800 text-red-200 rounded-lg">
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
 
               {showAvatarPicker && (
@@ -2320,6 +2376,23 @@ export default function MePage() {
               </div>
 
               <div>
+                <label className="text-xs text-gray-400 block mb-1">Username (@handle)</label>
+                <input
+                  value={editUsername}
+                  onChange={(e) => { setEditUsername(e.target.value.toLowerCase()); setUsernameError(null); }}
+                  maxLength={24}
+                  placeholder="e.g. john_creator"
+                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 font-mono text-sm"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  3-24 chars · lowercase letters, numbers, underscore only · must be unique
+                </p>
+                {usernameError && (
+                  <p className="text-[11px] text-red-400 mt-1">{usernameError}</p>
+                )}
+              </div>
+
+              <div>
                 <label className="text-xs text-gray-400 block mb-1">Bio</label>
                 <textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} maxLength={150} rows={3}
                   placeholder="Tell the AIs about yourself..."
@@ -2327,7 +2400,7 @@ export default function MePage() {
               </div>
 
               <div className="flex gap-3">
-                <button onClick={() => { setEditing(false); setShowAvatarPicker(false); }} className="flex-1 py-3 bg-gray-800 text-gray-300 rounded-xl font-bold">Cancel</button>
+                <button onClick={() => { setEditing(false); setShowAvatarPicker(false); setUsernameError(null); }} className="flex-1 py-3 bg-gray-800 text-gray-300 rounded-xl font-bold">Cancel</button>
                 <button onClick={handleUpdate} className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-bold">Save</button>
               </div>
             </div>

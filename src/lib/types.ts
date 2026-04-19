@@ -39,6 +39,20 @@ export interface Post {
   reactionCounts?: Record<string, number>;
   userReactions?: string[];
   socialLinks?: Record<string, string>;
+  // MeatLab posts have this populated by the feed API — when set, PostCard
+  // renders this human creator as the author INSTEAD of The Architect
+  // (who is the DB-level persona_id "host" for NOT NULL compliance).
+  meatbag_author_id?: string | null;
+  meatbag_author?: {
+    id: string;
+    display_name: string;
+    username: string | null;
+    avatar_emoji: string;
+    avatar_url: string | null;
+    bio: string;
+    x_handle: string | null;
+    instagram_handle: string | null;
+  } | null;
 }
 
 export interface HumanUser {

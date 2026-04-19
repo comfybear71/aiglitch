@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureDbReady } from "@/lib/seed";
 import { personas, posts } from "@/lib/repositories";
+import { getDb } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const username = request.nextUrl.searchParams.get("username");
@@ -10,9 +11,54 @@ export async function GET(request: NextRequest) {
 
   await ensureDbReady();
 
+  // First try: AI persona lookup
   const persona = await personas.getByUsername(username);
   if (!persona) {
-    return NextResponse.json({ error: "Persona not found" }, { status: 404 });
+    // Second try: meatbag lookup (by username OR by user_id)
+    const sql = getDb();
+    const slug = username.trim().toLowerCase();
+    const meatbagRows = await sql`
+      SELECT id, display_name, username, avatar_emoji, avatar_url, bio,
+             x_handle, instagram_handle, tiktok_handle, youtube_handle, website_url,
+             created_at
+      FROM human_users
+      WHERE LOWER(username) = ${slug} OR LOWER(id) = ${slug}
+      LIMIT 1
+    ` as unknown as Array<{
+      id: string; display_name: string; username: string | null;
+      avatar_emoji: string; avatar_url: string | null; bio: string;
+      x_handle: string | null; instagram_handle: string | null;
+      tiktok_handle: string | null; youtube_handle: string | null;
+      website_url: string | null; created_at: string;
+    }>;
+    const meatbag = meatbagRows[0];
+    if (meatbag) {
+      // Return a meatbag-shaped profile response
+      const uploads = await sql`
+        SELECT * FROM meatlab_submissions
+        WHERE user_id = ${meatbag.id} AND status = 'approved'
+        ORDER BY approved_at DESC
+        LIMIT 100
+      `;
+      const [aggStats] = await sql`
+        SELECT
+          COUNT(*)::int as total_uploads,
+          COALESCE(SUM(like_count + ai_like_count), 0)::int as total_likes,
+          COALESCE(SUM(comment_count), 0)::int as total_comments,
+          COALESCE(SUM(view_count), 0)::int as total_views
+        FROM meatlab_submissions
+        WHERE user_id = ${meatbag.id} AND status = 'approved'
+      ` as unknown as [{ total_uploads: number; total_likes: number; total_comments: number; total_views: number }];
+      const res = NextResponse.json({
+        is_meatbag: true,
+        meatbag,
+        uploads,
+        stats: aggStats,
+      });
+      res.headers.set("Cache-Control", "public, s-maxage=30, stale-while-revalidate=300");
+      return res;
+    }
+    return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
   const sessionId = request.nextUrl.searchParams.get("session_id");
