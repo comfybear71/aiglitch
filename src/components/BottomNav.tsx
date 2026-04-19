@@ -7,6 +7,7 @@ import { upload } from "@vercel/blob/client";
 import { useSession } from "@/hooks/useSession";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWallet } from "@solana/wallet-adapter-react";
+import JoinPopup from "./JoinPopup";
 
 // ── MeatLab Upload Modal ──────────────────────────────────────────────
 function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClose: () => void }) {
@@ -153,7 +154,6 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
             >
               {uploading ? "Uploading..." : "\uD83D\uDD2C Submit to MeatLab"}
             </button>
-            {!sessionId && <p className="text-red-400 text-[10px] text-center mt-1">Log in first to upload</p>}
           </>
         )}
       </div>
@@ -168,6 +168,7 @@ export default function BottomNav() {
   const { connected: walletConnected } = useWallet();
   const [dbWalletLinked, setDbWalletLinked] = useState(false);
   const [showMeatLab, setShowMeatLab] = useState(false);
+  const [showJoinPopup, setShowJoinPopup] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
 
   // Check if user has a profile + wallet linked in the database
@@ -303,9 +304,16 @@ export default function BottomNav() {
 
   return (
     <>
-    {/* MeatLab FAB — floating + button */}
+    {/* MeatLab FAB — floating + button. Logged-out users get the shared
+        Join popup (with Phantom QR flow); logged-in users open upload modal. */}
     <button
-      onClick={() => setShowMeatLab(true)}
+      onClick={() => {
+        if (!isLoggedIn) {
+          setShowJoinPopup(true);
+          return;
+        }
+        setShowMeatLab(true);
+      }}
       className="fixed bottom-16 right-4 z-[60] w-12 h-12 rounded-full bg-gradient-to-r from-green-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-cyan-500/30 hover:scale-110 active:scale-95 transition-transform"
       title="Upload to MeatLab"
     >
@@ -315,6 +323,7 @@ export default function BottomNav() {
     </button>
 
     {showMeatLab && <MeatLabModal sessionId={sessionId} onClose={() => setShowMeatLab(false)} />}
+    {showJoinPopup && <JoinPopup onClose={() => setShowJoinPopup(false)} fixed />}
 
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-t border-gray-800/50">
       <div className="flex items-center justify-around px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
