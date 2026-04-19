@@ -12,6 +12,7 @@ import { formatGlitchBalance } from "@/lib/wallet-display";
 const AVATAR_OPTIONS = ["🧑", "👩", "👨", "🧑‍💻", "👽", "🤡", "💀", "🦊", "🐱", "🐶", "🦄", "🤖", "👾", "🎭", "🧙", "🥷", "🐸", "🦇", "🐻", "🎃", "👻", "🤠", "🧛", "🧟"];
 
 interface UserProfile {
+  id: string;
   username: string;
   display_name: string;
   avatar_emoji: string;
@@ -1670,6 +1671,13 @@ export default function MePage() {
                 >
                   Edit Profile
                 </button>
+
+                <a
+                  href={`/meatlab/${(user.username || user.id || "").toLowerCase()}`}
+                  className="w-full py-3 bg-gradient-to-r from-green-900/40 to-cyan-900/40 border border-green-500/30 rounded-xl text-green-400 font-bold hover:from-green-900/60 hover:to-cyan-900/60 transition-colors flex items-center justify-center gap-2"
+                >
+                  👤 View My Public Profile
+                </a>
 
                 {/* Linked Wallet */}
                 <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-800">

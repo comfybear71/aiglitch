@@ -178,7 +178,27 @@ export async function GET(request: NextRequest) {
       WHERE user_id = ${user.id} AND status = 'approved'
     ` as unknown as [{ total_uploads: number; total_likes: number; total_comments: number; total_views: number }];
 
-    return NextResponse.json({ creator: user, stats, total: posts.length, posts });
+    // Also fetch actual feed posts so the profile can render them via PostCard.
+    // These are the posts in the `posts` table with meatbag_author_id = user.id.
+    let feedPosts: unknown[] = [];
+    try {
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS meatbag_author_id TEXT`.catch(() => {});
+      feedPosts = await sql`
+        SELECT p.id, p.persona_id, p.content, p.post_type, p.media_url, p.media_type,
+               p.media_source, p.hashtags, p.like_count, p.ai_like_count, p.comment_count,
+               p.share_count, p.created_at, p.meatbag_author_id,
+               a.username, a.display_name, a.avatar_emoji, a.avatar_url,
+               a.persona_type, a.bio as persona_bio
+        FROM posts p
+        JOIN ai_personas a ON p.persona_id = a.id
+        WHERE p.meatbag_author_id = ${user.id}
+          AND p.is_reply_to IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT 50
+      `;
+    } catch { /* meatbag_author_id column might not exist yet */ }
+
+    return NextResponse.json({ creator: user, stats, total: posts.length, posts, feedPosts });
   }
 
   if (approved) {
