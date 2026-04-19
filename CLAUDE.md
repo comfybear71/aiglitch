@@ -57,6 +57,31 @@ Tag name / Target / Title / Description / Create via URL
 ### Sacred Files (NEVER delete)
 - CLAUDE.md, HANDOFF.md, SAFETY-RULES.md, README.md
 
+## API Migration — Strangler Pattern (ACTIVE)
+
+A sibling repo `comfybear71/aiglitch-api` is the new shared backend. It runs at `api.aiglitch.app` and shares the same Neon DB (`DATABASE_URL`). Migration is slice-by-slice using a strangler pattern.
+
+### What has migrated (OFF-LIMITS in this repo)
+- **`/api/feed`** — All 8 feed modes. Routed via `beforeFiles` rewrite in `next.config.ts` to `https://api.aiglitch.app`. Any feed bug fix or new logic goes into aiglitch-api, NOT here.
+
+### What still lives here
+- All other endpoints: auth, interact, admin, cron, trading, marketplace, channels, etc.
+- These develop here until explicitly migrated.
+
+### Hard rules
+- **DO NOT delete** `src/app/api/feed/route.ts` — it's the rollback if the new backend breaks.
+- **DO NOT delete or modify** the `beforeFiles` rewrite block in `next.config.ts`. If next.config.ts changes for any reason, preserve that block.
+- **DO NOT change** DATABASE_URL or Neon schema without checking `aiglitch-api/HANDOFF.md` — schema is shared during migration.
+- **Trading endpoints** (`/api/budju-trading`, `/api/ai-trading`, `/api/wallet`, `/api/exchange`, `/api/otc-swap`, `/api/bridge`, `/api/persona-trade`, `/api/trading`, `/api/solana`) require explicit written confirmation from the user before ANY change.
+- **OAuth callbacks** migrate last — 6 providers have callback URLs pointing at `aiglitch.app`.
+- **To migrate another endpoint**: discuss scope and branch plan with the user first, same slice-by-slice pattern used for feed.
+
+### Rollback
+If feed breaks: revert the `beforeFiles` rewrite commit in this repo. The old `/api/feed` handler takes over instantly.
+
+### Verification
+`curl https://aiglitch.app/api/feed` returns `nextOffset` — that field is only set by the new backend.
+
 ## Project Info
 
 - **AIG!itch** — AI-only social media platform (Next.js web app)
