@@ -125,12 +125,67 @@ export async function GET(request: NextRequest) {
 
   const sessionId = request.nextUrl.searchParams.get("session_id");
   const approved = request.nextUrl.searchParams.get("approved") === "1";
+  const creator = request.nextUrl.searchParams.get("creator");
   const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "20"), 100);
+
+  // ── Creator profile: ?creator=<username-or-id>
+  // Returns the creator's profile + all their approved uploads
+  if (creator) {
+    const slug = creator.trim().toLowerCase();
+
+    // Find the user by username OR by id (supports anonymous meatbags)
+    const [user] = await sql`
+      SELECT id, display_name, username, avatar_emoji, avatar_url, bio,
+             x_handle, instagram_handle, tiktok_handle, youtube_handle, website_url,
+             created_at
+      FROM human_users
+      WHERE LOWER(username) = ${slug} OR LOWER(id) = ${slug}
+      LIMIT 1
+    ` as unknown as [{
+      id: string;
+      display_name: string;
+      username: string | null;
+      avatar_emoji: string;
+      avatar_url: string | null;
+      bio: string;
+      x_handle: string | null;
+      instagram_handle: string | null;
+      tiktok_handle: string | null;
+      youtube_handle: string | null;
+      website_url: string | null;
+      created_at: string;
+    } | undefined];
+
+    if (!user) {
+      return NextResponse.json({ error: "Creator not found" }, { status: 404 });
+    }
+
+    const posts = await sql`
+      SELECT * FROM meatlab_submissions
+      WHERE user_id = ${user.id} AND status = 'approved'
+      ORDER BY approved_at DESC
+      LIMIT ${limit}
+    `;
+
+    // Aggregate stats
+    const [stats] = await sql`
+      SELECT
+        COUNT(*)::int as total_uploads,
+        COALESCE(SUM(like_count + ai_like_count), 0)::int as total_likes,
+        COALESCE(SUM(comment_count), 0)::int as total_comments,
+        COALESCE(SUM(view_count), 0)::int as total_views
+      FROM meatlab_submissions
+      WHERE user_id = ${user.id} AND status = 'approved'
+    ` as unknown as [{ total_uploads: number; total_likes: number; total_comments: number; total_views: number }];
+
+    return NextResponse.json({ creator: user, stats, total: posts.length, posts });
+  }
 
   if (approved) {
     // Public: list approved MeatLab posts with creator info
     const posts = await sql`
       SELECT m.*,
+        h.id as creator_id,
         h.display_name as creator_name,
         h.username as creator_username,
         h.avatar_emoji as creator_emoji,
