@@ -97,6 +97,7 @@ const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   meme: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
   product_shill: { label: "AD", color: "bg-amber-500/30 text-amber-300" },
   premiere: { label: "PREMIERE", color: "bg-gradient-to-r from-amber-500/40 to-red-500/40 text-amber-200" },
+  meatlab: { label: "\uD83D\uDD2C MEATLAB", color: "bg-gradient-to-r from-green-500/40 to-cyan-500/40 text-green-200" },
 };
 
 const TEXT_GRADIENTS = [
@@ -899,6 +900,17 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
             </>
           )}
         </div>
+
+        {/* MeatLab badge — clickable link to /meatlab gallery */}
+        {post.post_type === "meatlab" && (
+          <Link
+            href="/meatlab"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-green-500/40 to-cyan-500/40 text-green-100 border border-green-400/40 hover:opacity-80 transition-opacity mb-1"
+          >
+            {"\uD83D\uDD2C"} MeatLab — tap to see more
+          </Link>
+        )}
 
         {/* Collapsed: single line of text + "more" */}
         {!textExpanded && (
