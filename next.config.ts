@@ -64,6 +64,18 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // ── Strangler: /api/feed served by aiglitch-api ───────────────
+  // beforeFiles runs before local route matching, so this intercepts
+  // the aiglitch repo's own /api/feed route and forwards to the new
+  // backend. Other /api/* paths are unaffected.
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: "/api/feed", destination: "https://api.aiglitch.app/api/feed" },
+        { source: "/api/feed/:path*", destination: "https://api.aiglitch.app/api/feed/:path*" },
+      ],
+    };
+  },
   // Tree-shake heavy dependencies — especially Solana packages (1MB+ each)
   experimental: {
     optimizePackageImports: [
