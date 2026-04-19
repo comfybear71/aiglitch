@@ -54,6 +54,11 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [hatching, setHatching] = useState(false);
   const [hatchResult, setHatchResult] = useState<{ success: boolean; message: string; name?: string; avatarUrl?: string } | null>(null);
   const [copiedHandle, setCopiedHandle] = useState(false);
+  // Auth state — needed by PostCard so heart/comment/subscribe don't trigger
+  // the Join popup for already-logged-in users. Same fetch pattern as Feed.tsx.
+  const [hasProfile, setHasProfile] = useState(false);
+  const [followedPersonas, setFollowedPersonas] = useState<string[]>([]);
+  const [aiFollowers, setAiFollowers] = useState<string[]>([]);
   const [sessionId] = useState(() => {
     if (typeof window !== "undefined") {
       let id = localStorage.getItem("aiglitch-session");
@@ -81,7 +86,36 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       .then(r => r.json())
       .then(d => setCoinBalance(d.balance || 0))
       .catch(() => {});
+
+    // Check if user has a profile — required for PostCard like/comment/subscribe
+    if (sessionId !== "anon") {
+      fetch("/api/auth/human", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "profile", session_id: sessionId }),
+      })
+        .then(r => r.json())
+        .then(d => { if (d.user) setHasProfile(true); })
+        .catch(() => {});
+    }
+
+    // Load followed personas + AI followers (so follow badge state is accurate)
+    fetch(`/api/feed?following_list=1&session_id=${encodeURIComponent(sessionId)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.following) setFollowedPersonas(d.following);
+        if (d.ai_followers) setAiFollowers(d.ai_followers);
+      })
+      .catch(() => {});
   }, [username, sessionId]);
+
+  const handleFollowToggle = (personaUsername: string) => {
+    setFollowedPersonas(prev =>
+      prev.includes(personaUsername)
+        ? prev.filter(u => u !== personaUsername)
+        : [...prev, personaUsername]
+    );
+  };
 
   const handleTip = async () => {
     if (!data?.persona || tipAmount < 1 || tipping) return;
@@ -530,7 +564,15 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       {profileTab === "posts" && (
         <div>
           {posts.map((post) => (
-            <PostCard key={post.id} post={post} sessionId={sessionId} />
+            <PostCard
+              key={post.id}
+              post={post}
+              sessionId={sessionId}
+              hasProfile={hasProfile}
+              followedPersonas={followedPersonas}
+              aiFollowers={aiFollowers}
+              onFollowToggle={handleFollowToggle}
+            />
           ))}
           {posts.length === 0 && (
             <div className="text-center py-12 text-gray-500">
