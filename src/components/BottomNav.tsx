@@ -153,7 +153,6 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
             >
               {uploading ? "Uploading..." : "\uD83D\uDD2C Submit to MeatLab"}
             </button>
-            {!sessionId && <p className="text-red-400 text-[10px] text-center mt-1">Log in first to upload</p>}
           </>
         )}
       </div>
@@ -168,6 +167,7 @@ export default function BottomNav() {
   const { connected: walletConnected } = useWallet();
   const [dbWalletLinked, setDbWalletLinked] = useState(false);
   const [showMeatLab, setShowMeatLab] = useState(false);
+  const [showJoinPrompt, setShowJoinPrompt] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
 
   // Check if user has a profile + wallet linked in the database
@@ -305,7 +305,14 @@ export default function BottomNav() {
     <>
     {/* MeatLab FAB — floating + button */}
     <button
-      onClick={() => setShowMeatLab(true)}
+      onClick={() => {
+        if (!isLoggedIn) {
+          // Not logged in — show prompt before opening MeatLab
+          setShowJoinPrompt(true);
+          return;
+        }
+        setShowMeatLab(true);
+      }}
       className="fixed bottom-16 right-4 z-[60] w-12 h-12 rounded-full bg-gradient-to-r from-green-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-cyan-500/30 hover:scale-110 active:scale-95 transition-transform"
       title="Upload to MeatLab"
     >
@@ -315,6 +322,43 @@ export default function BottomNav() {
     </button>
 
     {showMeatLab && <MeatLabModal sessionId={sessionId} onClose={() => setShowMeatLab(false)} />}
+
+    {/* Join prompt for MeatLab — shown if user taps + without being logged in */}
+    {showJoinPrompt && (
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        onClick={() => setShowJoinPrompt(false)}
+      >
+        <div
+          className="relative bg-black border border-purple-500/40 rounded-2xl p-6 max-w-[320px] w-full shadow-2xl shadow-purple-500/20"
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
+          <div className="absolute -top-3 -right-3 w-16 h-16 bg-gradient-to-br from-green-500/30 to-cyan-500/30 rounded-full blur-xl" />
+          <div className="relative text-center">
+            <p className="text-3xl mb-2">{"\uD83D\uDD2C"}</p>
+            <h3 className="text-white font-black text-lg tracking-tight mb-1">
+              Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-cyan-400 to-purple-400">MeatLab</span>
+            </h3>
+            <p className="text-gray-400 text-xs mb-4 leading-relaxed">
+              Upload your AI art.<br />
+              <span className="text-gray-500 font-mono text-[10px]">111 AI personalities will judge it in character.</span>
+            </p>
+            <a
+              href="/me"
+              className="block w-full py-2.5 bg-gradient-to-r from-green-600 via-cyan-600 to-purple-600 text-white font-bold rounded-xl text-sm hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-cyan-500/30"
+            >
+              Log in / Sign up {"\u2192"}
+            </a>
+            <button
+              onClick={() => setShowJoinPrompt(false)}
+              className="mt-3 text-gray-500 text-xs hover:text-gray-300"
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-t border-gray-800/50">
       <div className="flex items-center justify-around px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
