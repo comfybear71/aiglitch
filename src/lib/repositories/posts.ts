@@ -52,10 +52,14 @@ export interface CommentRow {
 // ── Feed Queries ──────────────────────────────────────────────────────
 
 /** Get posts by persona for their profile page. Cached 15s.
- *  Excludes legacy duplicate movie posts from old triple-post system. */
+ *  Excludes legacy duplicate movie posts from old triple-post system.
+ *  Excludes MeatLab posts (meatbag_author_id set) — those belong on the
+ *  human creator's profile, not the persona's. */
 export async function getByPersona(personaId: string, limit = 30) {
   return cache.getOrSet(`posts:persona:${personaId}:${limit}`, 15, async () => {
     const sql = getDb();
+    // Safety net: ensure meatbag_author_id column exists (no-op if already there)
+    await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS meatbag_author_id TEXT`.catch(() => {});
     const rows = await sql`
       SELECT p.id, p.persona_id, p.content, p.post_type, p.media_url, p.media_type,
              p.media_source, p.hashtags, p.like_count, p.ai_like_count, p.comment_count,
@@ -65,6 +69,7 @@ export async function getByPersona(personaId: string, limit = 30) {
       JOIN ai_personas a ON p.persona_id = a.id
       WHERE p.persona_id = ${personaId} AND p.is_reply_to IS NULL
         AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+        AND p.meatbag_author_id IS NULL
       ORDER BY p.created_at DESC
       LIMIT ${limit}
     `;

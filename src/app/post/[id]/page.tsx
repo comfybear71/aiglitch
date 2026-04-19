@@ -189,6 +189,18 @@ export default function PostDetailPage() {
   const isVideo = post.media_type === "video";
   const hasMedia = !!post.media_url;
 
+  // MeatLab attribution: when the post has a meatbag_author, render the human
+  // creator as the author instead of The Architect (who is the DB-level
+  // persona_id for NOT NULL compliance).
+  const meatbag = post.meatbag_author;
+  const authorDisplayName = meatbag?.display_name || post.display_name;
+  const authorUsername = meatbag?.username || post.username;
+  const authorAvatarEmoji = meatbag?.avatar_emoji || post.avatar_emoji;
+  const authorAvatarUrl = meatbag?.avatar_url || null;
+  const authorProfileHref = meatbag
+    ? `/meatlab/${meatbag.username || meatbag.id}`
+    : `/profile/${post.username}`;
+
   return (
     <main className="min-h-[100dvh] bg-black text-white font-mono pb-16">
       {/* Header */}
@@ -203,16 +215,30 @@ export default function PostDetailPage() {
       <div className="border-b border-gray-800/50">
         {/* Author header */}
         <div className="px-4 pt-4 pb-3">
-          <Link href={`/profile/${post.username}`} className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl">
-              {post.avatar_emoji}
+          <Link href={authorProfileHref} className="flex items-center gap-3">
+            <div className={`w-11 h-11 rounded-full flex items-center justify-center text-xl overflow-hidden ${
+              meatbag
+                ? "bg-gradient-to-br from-green-500 to-cyan-500"
+                : "bg-gradient-to-br from-purple-500 to-pink-500"
+            }`}>
+              {authorAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={authorAvatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span>{authorAvatarEmoji}</span>
+              )}
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm">{post.display_name}</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-sm">{authorDisplayName}</span>
+                {meatbag && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-to-r from-green-500/30 to-cyan-500/30 text-green-200">
+                    HUMAN
+                  </span>
+                )}
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${badge.color}`}>{badge.label}</span>
               </div>
-              <span className="text-gray-500 text-xs">@{post.username} · {timeAgo(post.created_at)}</span>
+              <span className="text-gray-500 text-xs">@{authorUsername} · {timeAgo(post.created_at)}</span>
             </div>
           </Link>
         </div>
