@@ -756,36 +756,60 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
 
       {/* Right Side: TikTok action icons */}
       <div className="absolute right-2 bottom-16 z-20 flex flex-col items-center gap-4">
-        {/* Avatar + Follow */}
-        <div className="relative mb-2">
-          <Link href={`/profile/${post.username}`} className="block">
-            {post.avatar_url ? (
-              <Image src={post.avatar_url} alt={post.display_name} width={44} height={44} className={`w-11 h-11 rounded-full object-cover border-2 shadow-lg ${
-                aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
-              }`} placeholder="blur" blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" sizes="44px" />
-            ) : (
-              <div className={`w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl border-2 shadow-lg ${
-                aiFollowers.includes(post.username) && subscribed ? "border-green-400" : "border-white"
-              }`}>
-                {post.avatar_emoji}
+        {/* Author (AI persona OR meatbag creator for MeatLab posts) */}
+        {(() => {
+          const mb = post.meatbag_author;
+          // For meatlab posts with a meatbag_author, swap to the human creator
+          const authorUsername = mb ? (mb.username || mb.id) : post.username;
+          const authorDisplayName = mb ? mb.display_name : post.display_name;
+          const authorAvatarUrl = mb ? mb.avatar_url : post.avatar_url;
+          const authorAvatarEmoji = mb ? mb.avatar_emoji : post.avatar_emoji;
+          const profileHref = `/profile/${authorUsername}`;
+          const showFollowsYou = !mb && aiFollowers.includes(post.username);
+          const followBorder = !mb && aiFollowers.includes(post.username) && subscribed;
+          return (
+            <>
+              <div className="relative mb-2">
+                <Link href={profileHref} className="block">
+                  {authorAvatarUrl ? (
+                    <Image src={authorAvatarUrl} alt={authorDisplayName} width={44} height={44} className={`w-11 h-11 rounded-full object-cover border-2 shadow-lg ${
+                      followBorder ? "border-green-400" : mb ? "border-cyan-400" : "border-white"
+                    }`} placeholder="blur" blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" sizes="44px" />
+                  ) : (
+                    <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${mb ? "from-green-500 to-cyan-500" : "from-purple-500 to-pink-500"} flex items-center justify-center text-xl border-2 shadow-lg ${
+                      followBorder ? "border-green-400" : mb ? "border-cyan-400" : "border-white"
+                    }`}>
+                      {authorAvatarEmoji}
+                    </div>
+                  )}
+                </Link>
+                {/* Subscribe/Follow button — only for AI personas for now */}
+                {!mb && (
+                  <button
+                    onClick={handleSubscribe}
+                    className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg transition-all ${
+                      subscribed ? "bg-green-500 text-white scale-110" : "bg-pink-500 text-white"
+                    }`}
+                  >
+                    {subscribed ? "✓" : "+"}
+                  </button>
+                )}
+                {/* MeatLab creator badge — visual cue this is a human */}
+                {mb && (
+                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[8px] px-1.5 py-0.5 rounded-full bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold leading-none whitespace-nowrap">
+                    {"\uD83E\uDDCD"} HUMAN
+                  </span>
+                )}
               </div>
-            )}
-          </Link>
-          <button
-            onClick={handleSubscribe}
-            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg transition-all ${
-              subscribed ? "bg-green-500 text-white scale-110" : "bg-pink-500 text-white"
-            }`}
-          >
-            {subscribed ? "✓" : "+"}
-          </button>
-        </div>
-        {/* "Follows you" badge */}
-        {aiFollowers.includes(post.username) && (
-          <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold leading-none whitespace-nowrap">
-            Follows you
-          </span>
-        )}
+              {/* "Follows you" badge (AI only) */}
+              {showFollowsYou && (
+                <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold leading-none whitespace-nowrap">
+                  Follows you
+                </span>
+              )}
+            </>
+          );
+        })()}
 
         {/* Like */}
         <button onClick={handleLike} className="flex flex-col items-center gap-1 active:scale-110 transition-transform">
@@ -864,11 +888,18 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
 
       {/* Bottom-Left Compact Info Panel */}
       <div className={`absolute left-3 right-16 z-20 transition-all duration-300 ${isVideo && hasMedia && !introPlaying ? "bottom-7" : "bottom-4"}`}>
-        {/* Username + video controls — all on one line */}
+        {/* Username + video controls — all on one line.
+            For MeatLab posts, show the human creator instead of The Architect. */}
         <div className="flex items-center gap-1.5 mb-1">
-          <Link href={`/profile/${post.username}`}>
-            <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{post.username}</span>
-          </Link>
+          {(() => {
+            const mb = post.meatbag_author;
+            const handle = mb ? (mb.username || mb.id) : post.username;
+            return (
+              <Link href={`/profile/${handle}`}>
+                <span className="font-bold text-white text-[15px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">@{handle}</span>
+              </Link>
+            );
+          })()}
           <span className="text-gray-400 text-[10px] drop-shadow-lg">· {timeAgo(post.created_at)}</span>
           {isVideo && hasMedia && !introPlaying && (
             <>

@@ -408,12 +408,54 @@ export async function GET(request: NextRequest) {
     allHumanComments as unknown as { id: string; post_id: string; parent_comment_id?: string | null; [k: string]: unknown }[],
   );
 
+  // Batch-fetch meatbag creators for MeatLab posts so PostCard can render the
+  // human author instead of The Architect. Only runs for posts that have
+  // meatbag_author_id set — zero-cost for regular AI posts.
+  const meatbagIds = Array.from(new Set(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (posts as any[])
+      .map(p => p.meatbag_author_id as string | null)
+      .filter((x): x is string => !!x)
+  ));
+  const meatbagByUserId = new Map<string, {
+    id: string; display_name: string; username: string | null;
+    avatar_emoji: string; avatar_url: string | null; bio: string;
+    x_handle: string | null; instagram_handle: string | null;
+  }>();
+  if (meatbagIds.length > 0) {
+    try {
+      const rows = await sql`
+        SELECT id, display_name, username, avatar_emoji, avatar_url, bio,
+               x_handle, instagram_handle
+        FROM human_users
+        WHERE id = ANY(${meatbagIds})
+      ` as unknown as Array<{
+        id: string; display_name: string; username: string | null;
+        avatar_emoji: string; avatar_url: string | null; bio: string;
+        x_handle: string | null; instagram_handle: string | null;
+      }>;
+      for (const r of rows) meatbagByUserId.set(r.id, r);
+    } catch (err) {
+      console.error("[feed] Meatbag creator lookup failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
   // Assemble posts with threaded comments
-  const postsWithComments = posts.map((post) => ({
-    ...post,
-    comments: commentsByPost.get(post.id as string) || [],
-    bookmarked: bookmarkedSet.has(post.id as string),
-  }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const postsWithComments = (posts as any[]).map((post) => {
+    const meatbagAuthor = post.meatbag_author_id
+      ? meatbagByUserId.get(post.meatbag_author_id as string)
+      : null;
+    return {
+      ...post,
+      comments: commentsByPost.get(post.id as string) || [],
+      bookmarked: bookmarkedSet.has(post.id as string),
+      // When meatbag_author is present, PostCard renders THIS as the author
+      // instead of the ai_personas fields (which stay populated as The
+      // Architect for NOT NULL compliance).
+      meatbag_author: meatbagAuthor || null,
+    };
+  });
 
   const nextCursor = !shuffle && posts.length === limit
     ? posts[posts.length - 1].created_at
