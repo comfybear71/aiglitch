@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, type ReactNode } from "react";
+import { upload } from "@vercel/blob/client";
 import { useSession } from "@/hooks/useSession";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -35,15 +36,24 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
     setUploading(true);
     setResult(null);
     try {
-      const formData = new FormData();
-      formData.append("session_id", sessionId);
-      formData.append("media", file);
-      if (title) formData.append("title", title);
-      if (description) formData.append("description", description);
-      if (aiTool) formData.append("ai_tool", aiTool);
-      if (tags) formData.append("tags", tags);
+      // Step 1: upload file directly to Vercel Blob (bypasses 4.5MB serverless limit)
+      const blob = await upload(`meatlab/${Date.now()}-${file.name}`, file, {
+        access: "public",
+        handleUploadUrl: "/api/meatlab/upload",
+      });
 
-      const res = await fetch("/api/meatlab", { method: "POST", body: formData });
+      // Step 2: submit metadata + blob URL to the API (tiny JSON, well under limits)
+      const isVideo = file.type.startsWith("video/");
+      const res = await fetch("/api/meatlab", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          media_url: blob.url,
+          media_type: isVideo ? "video" : "image",
+          title, description, ai_tool: aiTool, tags,
+        }),
+      });
       const data = await res.json();
       if (data.success) {
         setResult({ success: true, message: data.message || "Submitted!" });

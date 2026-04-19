@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 // ══════════════════════════════════════════════════════════════════════════
 // MeatLab — Human creators upload AI-generated content to AIG!itch
@@ -63,82 +62,46 @@ async function ensureMeatLabTables(): Promise<void> {
   _tableReady = true;
 }
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
-
-// ── POST: upload submission ───────────────────────────────────────────
+// ── POST: create submission (media already uploaded via client-side Blob) ──
 export async function POST(request: NextRequest) {
   await ensureMeatLabTables();
   const sql = getDb();
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return NextResponse.json({ error: "Invalid form data" }, { status: 400 });
+  const body = await request.json().catch(() => ({}));
+  const { session_id, media_url, media_type, title, description, ai_tool, tags } = body as {
+    session_id?: string;
+    media_url?: string;
+    media_type?: string;
+    title?: string;
+    description?: string;
+    ai_tool?: string;
+    tags?: string;
+  };
+
+  if (!session_id) {
+    return NextResponse.json({ error: "session_id required" }, { status: 401 });
   }
 
-  const sessionId = formData.get("session_id")?.toString();
-  if (!sessionId) {
-    return NextResponse.json({ error: "session_id required" }, { status: 401 });
+  if (!media_url) {
+    return NextResponse.json({ error: "media_url required — upload file first via /api/meatlab/upload" }, { status: 400 });
   }
 
   // Verify session exists
   const [user] = await sql`
-    SELECT id, display_name, username FROM human_users WHERE session_id = ${sessionId} LIMIT 1
+    SELECT id, display_name, username FROM human_users WHERE session_id = ${session_id} LIMIT 1
   ` as unknown as [{ id: string; display_name: string; username: string | null } | undefined];
 
   if (!user) {
-    return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+    return NextResponse.json({ error: "Invalid session — please log in first" }, { status: 401 });
   }
 
-  const file = formData.get("media") as File | null;
-  if (!file) {
-    return NextResponse.json({ error: "media file required" }, { status: 400 });
-  }
-
-  if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: `File too large. Max ${MAX_FILE_SIZE / (1024 * 1024)}MB` }, { status: 400 });
-  }
-
-  const contentType = file.type;
-  const isImage = ALLOWED_IMAGE_TYPES.includes(contentType);
-  const isVideo = ALLOWED_VIDEO_TYPES.includes(contentType);
-
-  if (!isImage && !isVideo) {
-    return NextResponse.json({
-      error: `Unsupported file type: ${contentType}. Allowed: JPG, PNG, WEBP, GIF, MP4, WEBM, MOV`,
-    }, { status: 400 });
-  }
-
-  const title = formData.get("title")?.toString() || "";
-  const description = formData.get("description")?.toString() || "";
-  const aiTool = formData.get("ai_tool")?.toString() || "";
-  const tags = formData.get("tags")?.toString() || "";
-
-  // Upload to Vercel Blob
+  const isVideo = media_type === "video" || media_url.includes(".mp4") || media_url.includes(".webm") || media_url.includes(".mov");
   const id = uuidv4();
-  const ext = file.name?.split(".").pop() || (isImage ? "jpg" : "mp4");
-  const blobPath = `meatlab/${id}/media.${ext}`;
 
-  let mediaUrl: string;
-  try {
-    const blob = await put(blobPath, file, {
-      access: "public",
-      contentType,
-    });
-    mediaUrl = blob.url;
-  } catch (err) {
-    console.error("[meatlab] Blob upload failed:", err instanceof Error ? err.message : err);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
-  }
-
-  // Insert submission into moderation queue
   try {
     await sql`
       INSERT INTO meatlab_submissions (id, session_id, user_id, title, description, media_url, media_type, ai_tool, tags, status, created_at, updated_at)
-      VALUES (${id}, ${sessionId}, ${user.id}, ${title}, ${description}, ${mediaUrl}, ${isVideo ? "video" : "image"}, ${aiTool}, ${tags}, 'pending', NOW(), NOW())
+      VALUES (${id}, ${session_id}, ${user.id}, ${title || ""}, ${description || ""}, ${media_url}, ${isVideo ? "video" : "image"}, ${ai_tool || ""}, ${tags || ""}, 'pending', NOW(), NOW())
     `;
   } catch (err) {
     console.error("[meatlab] DB insert failed:", err instanceof Error ? err.message : err);
