@@ -148,16 +148,19 @@ export async function POST(request: NextRequest) {
     }
 
     const inhouse = !!is_inhouse;
+    const { product_images } = body;
     const id = uuidv4();
     await sql`
       INSERT INTO ad_campaigns (
         id, brand_name, product_name, product_emoji, visual_prompt, text_prompt,
-        logo_url, product_image_url, website_url, target_channels, target_persona_types,
+        logo_url, product_image_url, product_images, website_url, target_channels, target_persona_types,
         status, duration_days, price_glitch, frequency, notes, is_inhouse, created_by, created_at, updated_at
       ) VALUES (
         ${id}, ${brand_name}, ${product_name}, ${product_emoji || "📦"},
         ${visual_prompt}, ${text_prompt || null},
-        ${logo_url || null}, ${product_image_url || null}, ${website_url || null},
+        ${logo_url || null}, ${product_image_url || null},
+        ${product_images ? JSON.stringify(product_images) : (product_image_url ? JSON.stringify([product_image_url]) : null)},
+        ${website_url || null},
         ${target_channels ? JSON.stringify(target_channels) : null},
         ${target_persona_types ? JSON.stringify(target_persona_types) : null},
         ${inhouse ? "active" : "pending_payment"}, ${inhouse ? 9999 : (duration_days || 7)}, ${inhouse ? 0 : (price_glitch || 10000)},
