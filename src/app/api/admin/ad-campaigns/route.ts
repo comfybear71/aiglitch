@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     const {
       brand_name, product_name, product_emoji, visual_prompt, text_prompt,
       logo_url, product_image_url, website_url, target_channels, target_persona_types,
-      duration_days, price_glitch, frequency, notes,
+      duration_days, price_glitch, frequency, notes, is_inhouse,
     } = body;
 
     if (!brand_name || !product_name || !visual_prompt) {
@@ -147,24 +147,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const inhouse = !!is_inhouse;
     const id = uuidv4();
     await sql`
       INSERT INTO ad_campaigns (
         id, brand_name, product_name, product_emoji, visual_prompt, text_prompt,
         logo_url, product_image_url, website_url, target_channels, target_persona_types,
-        status, duration_days, price_glitch, frequency, notes, created_by, created_at, updated_at
+        status, duration_days, price_glitch, frequency, notes, is_inhouse, created_by, created_at, updated_at
       ) VALUES (
         ${id}, ${brand_name}, ${product_name}, ${product_emoji || "📦"},
         ${visual_prompt}, ${text_prompt || null},
         ${logo_url || null}, ${product_image_url || null}, ${website_url || null},
         ${target_channels ? JSON.stringify(target_channels) : null},
         ${target_persona_types ? JSON.stringify(target_persona_types) : null},
-        'pending_payment', ${duration_days || 7}, ${price_glitch || 10000},
-        ${frequency || 0.3}, ${notes || null}, 'admin', NOW(), NOW()
+        ${inhouse ? "active" : "pending_payment"}, ${inhouse ? 9999 : (duration_days || 7)}, ${inhouse ? 0 : (price_glitch || 10000)},
+        ${frequency || 0.3}, ${notes || null}, ${inhouse}, 'admin', NOW(), NOW()
       )
     `;
 
-    return NextResponse.json({ success: true, campaign_id: id, status: "pending_payment" });
+    return NextResponse.json({ success: true, campaign_id: id, status: inhouse ? "active" : "pending_payment" });
   }
 
   // ── Activate campaign (mark as paid + set start/end dates) ──

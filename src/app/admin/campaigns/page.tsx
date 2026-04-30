@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAdmin } from "../AdminContext";
 import { SPONSOR_PACKAGES } from "@/lib/sponsor-packages";
+import { MARKETPLACE_PRODUCTS } from "@/lib/marketplace";
 
 // Safe JSON parsing — prevents crash on empty/non-JSON responses
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,6 +66,8 @@ export default function CampaignsPage() {
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showMarketplacePicker, setShowMarketplacePicker] = useState(false);
+  const [marketplaceSearch, setMarketplaceSearch] = useState("");
   const [actionLog, setActionLog] = useState("");
 
   // Sponsored ads state
@@ -380,12 +383,20 @@ export default function CampaignsPage() {
           </h2>
           <p className="text-gray-500 text-sm mt-1">Product placement in AI-generated content</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:opacity-90 transition"
-        >
-          {showForm ? "Cancel" : "+ New Campaign"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setShowMarketplacePicker(!showMarketplacePicker); setShowForm(false); }}
+            className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-xl hover:opacity-90 transition text-sm"
+          >
+            {showMarketplacePicker ? "Cancel" : "🛒 From Marketplace"}
+          </button>
+          <button
+            onClick={() => { setShowForm(!showForm); setShowMarketplacePicker(false); }}
+            className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:opacity-90 transition text-sm"
+          >
+            {showForm ? "Cancel" : "+ New Campaign"}
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -406,6 +417,70 @@ export default function CampaignsPage() {
           <div className="bg-gray-900 border border-yellow-500/30 rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-yellow-400">{"\u00A7"}{stats.totalRevenueGlitch.toLocaleString()}</div>
             <div className="text-gray-500 text-xs">GLITCH Revenue</div>
+          </div>
+        </div>
+      )}
+
+      {/* Marketplace Product Picker */}
+      {showMarketplacePicker && (
+        <div className="bg-gray-900 border border-green-500/30 rounded-xl p-4 space-y-3">
+          <h3 className="text-lg font-bold text-white">🛒 Create In-House Campaign from Marketplace</h3>
+          <p className="text-gray-400 text-xs">Pick a product — it auto-creates an in-house campaign (no cost, runs forever).</p>
+          <input
+            value={marketplaceSearch}
+            onChange={e => setMarketplaceSearch(e.target.value)}
+            placeholder="Search products..."
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 text-sm"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-[60vh] overflow-y-auto">
+            {MARKETPLACE_PRODUCTS
+              .filter(p => {
+                const q = marketplaceSearch.toLowerCase();
+                return !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || p.tagline.toLowerCase().includes(q);
+              })
+              .map(product => (
+                <button
+                  key={product.id}
+                  onClick={async () => {
+                    setActionLog(`Creating in-house campaign for ${product.name}...`);
+                    try {
+                      const res = await fetch("/api/admin/ad-campaigns", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          action: "create",
+                          brand_name: "AIG!itch Marketplace",
+                          product_name: product.name,
+                          product_emoji: product.emoji,
+                          visual_prompt: `A ${product.name} prominently displayed — ${product.tagline}. The product looks premium and desirable. ${product.price} price tag visible.`,
+                          text_prompt: `Casually mention ${product.name} from the AIG!itch Marketplace. ${product.tagline} Available for ${product.price}. Perfect for any meat bag or AI persona.`,
+                          website_url: "https://aiglitch.app/marketplace",
+                          frequency: 0.2,
+                          is_inhouse: true,
+                          notes: `Marketplace product: ${product.id} | ${product.category}`,
+                        }),
+                      });
+                      const data = await safeJson(res);
+                      if (data.success) {
+                        setActionLog(`✅ Created in-house campaign for ${product.name}`);
+                        fetchCampaigns();
+                      } else {
+                        setActionLog(`Error: ${data.error}`);
+                      }
+                    } catch (err) {
+                      setActionLog(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  }}
+                  className="flex items-start gap-2 p-3 bg-gray-800 border border-gray-700 rounded-lg hover:border-green-500/50 hover:bg-gray-700 transition text-left group"
+                >
+                  <span className="text-2xl flex-shrink-0">{product.emoji}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-white truncate group-hover:text-green-400 transition-colors">{product.name}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{product.tagline}</p>
+                    <p className="text-[10px] text-green-400 mt-0.5">{product.price}</p>
+                  </div>
+                </button>
+              ))}
           </div>
         </div>
       )}
