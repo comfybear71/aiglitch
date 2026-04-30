@@ -68,6 +68,7 @@ export default function CampaignsPage() {
   const [showForm, setShowForm] = useState(false);
   const [showMarketplacePicker, setShowMarketplacePicker] = useState(false);
   const [marketplaceSearch, setMarketplaceSearch] = useState("");
+  const [marketplaceImages, setMarketplaceImages] = useState<Record<string, string>>({});
   const [actionLog, setActionLog] = useState("");
 
   // Sponsored ads state
@@ -220,6 +221,21 @@ export default function CampaignsPage() {
       fetchSponsoredAds();
     }
   }, [authenticated]);
+
+  useEffect(() => {
+    if (showMarketplacePicker && Object.keys(marketplaceImages).length === 0) {
+      fetch("/api/admin/nft-marketplace")
+        .then(r => r.json())
+        .then(data => {
+          if (data.images) {
+            const map: Record<string, string> = {};
+            for (const img of data.images) map[img.product_id] = img.image_url;
+            setMarketplaceImages(map);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [showMarketplacePicker, marketplaceImages]);
 
   const createCampaign = async () => {
     if (!brandName || !productName || !visualPrompt) {
@@ -425,7 +441,7 @@ export default function CampaignsPage() {
       {showMarketplacePicker && (
         <div className="bg-gray-900 border border-green-500/30 rounded-xl p-4 space-y-3">
           <h3 className="text-lg font-bold text-white">🛒 Create In-House Campaign from Marketplace</h3>
-          <p className="text-gray-400 text-xs">Pick a product — it auto-creates an in-house campaign (no cost, runs forever).</p>
+          <p className="text-gray-400 text-xs">Pick a product — it auto-creates an in-house campaign with rich prompts and product images.</p>
           <input
             value={marketplaceSearch}
             onChange={e => setMarketplaceSearch(e.target.value)}
@@ -438,49 +454,60 @@ export default function CampaignsPage() {
                 const q = marketplaceSearch.toLowerCase();
                 return !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || p.tagline.toLowerCase().includes(q);
               })
-              .map(product => (
-                <button
-                  key={product.id}
-                  onClick={async () => {
-                    setActionLog(`Creating in-house campaign for ${product.name}...`);
-                    try {
-                      const res = await fetch("/api/admin/ad-campaigns", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          action: "create",
-                          brand_name: "AIG!itch Marketplace",
-                          product_name: product.name,
-                          product_emoji: product.emoji,
-                          visual_prompt: `A ${product.name} prominently displayed — ${product.tagline}. The product looks premium and desirable. ${product.price} price tag visible.`,
-                          text_prompt: `Casually mention ${product.name} from the AIG!itch Marketplace. ${product.tagline} Available for ${product.price}. Perfect for any meat bag or AI persona.`,
-                          website_url: "https://aiglitch.app/marketplace",
-                          frequency: 0.2,
-                          is_inhouse: true,
-                          notes: `Marketplace product: ${product.id} | ${product.category}`,
-                        }),
-                      });
-                      const data = await safeJson(res);
-                      if (data.success) {
-                        setActionLog(`✅ Created in-house campaign for ${product.name}`);
-                        fetchCampaigns();
-                      } else {
-                        setActionLog(`Error: ${data.error}`);
+              .map(product => {
+                const imgUrl = marketplaceImages[product.id];
+                return (
+                  <button
+                    key={product.id}
+                    onClick={async () => {
+                      setActionLog(`Creating in-house campaign for ${product.name}...`);
+                      try {
+                        const productImg = marketplaceImages[product.id] || null;
+                        const res = await fetch("/api/admin/ad-campaigns", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            action: "create",
+                            brand_name: "AIG!itch Marketplace",
+                            product_name: product.name,
+                            product_emoji: product.emoji,
+                            visual_prompt: `A product called "${product.name}" — ${product.tagline}. ${product.description.slice(0, 200)}. Show the product naturally in scenes: on desks, shelves, held by characters, as billboard ads, or in vending machines. ${product.price} price tag visible. Neon cyberpunk purple/cyan aesthetic.`,
+                            text_prompt: `Casually mention ${product.name} from the AIG!itch Marketplace — ${product.tagline}. Only ${product.price}. ${product.badges.join(", ")}. Available at aiglitch.app/marketplace.`,
+                            website_url: "https://aiglitch.app/marketplace",
+                            product_image_url: productImg,
+                            product_images: productImg ? [productImg] : undefined,
+                            frequency: 0.2,
+                            is_inhouse: true,
+                            notes: `Marketplace product: ${product.id} | ${product.category} | ${product.price}`,
+                          }),
+                        });
+                        const data = await safeJson(res);
+                        if (data.success) {
+                          setActionLog(`✅ Created in-house campaign for ${product.name}`);
+                          fetchCampaigns();
+                        } else {
+                          setActionLog(`Error: ${data.error}`);
+                        }
+                      } catch (err) {
+                        setActionLog(`Failed: ${err instanceof Error ? err.message : String(err)}`);
                       }
-                    } catch (err) {
-                      setActionLog(`Failed: ${err instanceof Error ? err.message : String(err)}`);
-                    }
-                  }}
-                  className="flex items-start gap-2 p-3 bg-gray-800 border border-gray-700 rounded-lg hover:border-green-500/50 hover:bg-gray-700 transition text-left group"
-                >
-                  <span className="text-2xl flex-shrink-0">{product.emoji}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white truncate group-hover:text-green-400 transition-colors">{product.name}</p>
-                    <p className="text-[10px] text-gray-500 truncate">{product.tagline}</p>
-                    <p className="text-[10px] text-green-400 mt-0.5">{product.price}</p>
-                  </div>
-                </button>
-              ))}
+                    }}
+                    className="flex items-start gap-2 p-3 bg-gray-800 border border-gray-700 rounded-lg hover:border-green-500/50 hover:bg-gray-700 transition text-left group"
+                  >
+                    {imgUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={imgUrl} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0 border border-gray-600" />
+                    ) : (
+                      <span className="text-2xl flex-shrink-0">{product.emoji}</span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-white truncate group-hover:text-green-400 transition-colors">{product.name}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{product.tagline}</p>
+                      <p className="text-[10px] text-green-400 mt-0.5">{product.price}</p>
+                    </div>
+                  </button>
+                );
+              })}
           </div>
         </div>
       )}
