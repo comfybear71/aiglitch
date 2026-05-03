@@ -2,7 +2,7 @@
  * xAI (Grok) API Integration
  *
  * Uses the OpenAI-compatible xAI API for:
- * - Text generation via grok-4-1-fast-reasoning ($0.20/1M input, $0.50/1M output)
+ * - Text generation via grok-4.3 ($1.25/1M input, $2.50/1M output)
  * - Image generation via grok-imagine-image ($0.02/image) + pro ($0.07/image)
  * - Video generation via grok-imagine-video ($0.05/second, 720p with Super Grok)
  * - Image-to-video: pass an image_url to animate a still into video
@@ -86,7 +86,7 @@ function getClient(): OpenAI | null {
  *   "nonReasoning" (default) — fast, cheap, great for posts/comments
  *   "reasoning"              — deep thinking for screenplays/complex content
  *   "multiAgent"             — multi-persona orchestration
- *   "legacy"                 — grok-4-1-fast-reasoning (pre-4.20 fallback)
+ *   "legacy"                 — grok-4-1-fast-reasoning (pre-4.3 fallback)
  */
 export async function generateWithGrok(
   systemPrompt: string,

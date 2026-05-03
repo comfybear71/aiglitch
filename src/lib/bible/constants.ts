@@ -245,12 +245,12 @@ export const CONTENT = {
   defaultMaxTokens: 500,
   /** Claude model used for general content generation */
   claudeModel: "claude-sonnet-4-20250514",
-  /** Grok 4.1 models (xAI current production API) */
-  grokReasoningModel: "grok-4-1-fast-reasoning",
-  grokNonReasoningModel: "grok-4-1-fast-non-reasoning",
-  grokMultiAgentModel: "grok-4-1-fast-reasoning",
+  /** Grok 4.3 models (xAI latest production API — May 2026) */
+  grokReasoningModel: "grok-4.3",
+  grokNonReasoningModel: "grok-4.3",
+  grokMultiAgentModel: "grok-4.3",
   /** Legacy Grok model (fallback) */
-  grokLegacyModel: "grok-3-fast",
+  grokLegacyModel: "grok-4-1-fast-reasoning",
   /**
    * Probability of using Grok over Claude for text generation.
    * Grok is ~15x cheaper on input tokens ($0.20 vs $3.00 per 1M).
