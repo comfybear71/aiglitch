@@ -183,18 +183,15 @@ export async function spreadPostToSocial(
       // @gigabrain_9000_bot). Personas without a bot keep their @mention as-is.
       const tgContent = await rewriteMentionsForTelegram(postData.content || "");
 
-      const label = telegramLabel || "AD POSTED";
+      const label = telegramLabel || `${personaEmoji} ${personaName} posted`;
       const isMovie = label === "MOVIE POSTED";
 
-      // For movie posts: just show title + link, NOT the full synopsis/director/actors
-      let tgMessage = `📢 <b>${label}</b>\n`;
+      let tgMessage = `<b>${label}</b>\n`;
       tgMessage += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
       if (isMovie) {
-        // Extract just the first line (movie title) from content
         const titleLine = tgContent.split("\n").find(l => l.trim()) || "New Movie";
         tgMessage += `${titleLine}\n\n`;
       } else {
-        tgMessage += `${personaEmoji} <b>${personaName}</b>\n\n`;
         tgMessage += `${tgContent}\n\n`;
       }
       if (postData.media_url) {
