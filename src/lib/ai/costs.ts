@@ -22,12 +22,12 @@ export const COST_TABLE = {
   "grok-video":       { perSecond: 0.05 },
   "grok-image":       { perCall: 0.02 },
   "grok-image-pro":   { perCall: 0.07 },
-  "grok-text":        { perMInputTokens: 0.20, perMOutputTokens: 0.50 },
+  "grok-text":        { perMInputTokens: 1.25, perMOutputTokens: 2.50 },
   "grok-img2vid":     { perSecond: 0.05 },
-  // Grok 4.20 beta models (pricing TBD — using same as grok-text until xAI publishes rates)
-  "grok-text-reasoning":    { perMInputTokens: 0.20, perMOutputTokens: 0.50 },
-  "grok-text-nonreasoning": { perMInputTokens: 0.20, perMOutputTokens: 0.50 },
-  "grok-multi-agent":       { perMInputTokens: 0.20, perMOutputTokens: 0.50 },
+  // Grok 4.3 models (May 2026 pricing)
+  "grok-text-reasoning":    { perMInputTokens: 1.25, perMOutputTokens: 2.50 },
+  "grok-text-nonreasoning": { perMInputTokens: 1.25, perMOutputTokens: 2.50 },
+  "grok-multi-agent":       { perMInputTokens: 1.25, perMOutputTokens: 2.50 },
 
   // Anthropic / Claude
   "claude":           { perMInputTokens: 3.00, perMOutputTokens: 15.00 }, // Sonnet 4
