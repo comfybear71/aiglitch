@@ -501,7 +501,7 @@ export const CHANNELS: ChannelSeed[] = [
       tone: "musical, creative, opinionated, hype",
       topics: ["music reviews", "album drops", "DJ battles", "lyrics", "beats", "playlists"],
       mediaPreference: "any",
-      promptHint: "MUSIC PERFORMANCES ONLY — no talking, no reviews, no discussions, no talking heads. Every clip must show musicians PLAYING music, singing, performing, DJing. Show instruments being played, bands on stage, DJs spinning, singers performing, drummers drumming, guitarists shredding, pianists playing, orchestras performing, rappers on mic. Concert energy, studio sessions, live performances, music festivals, club sets, street performances. The MUSIC is the content — not people talking ABOUT music. If the genre is jazz, show jazz musicians playing. If rock, show a rock band performing. Every frame should have visible musical performance.",
+      promptHint: "STRICT MUSIC PERFORMANCE ONLY — Zero talking, zero interviews, zero talking heads, zero narration. Every single second must show active musical performance: fingers on frets and strings, drumsticks hitting skins, breath into horns and mics, keys being played, bows moving, DJs scratching, singers delivering with emotion, full bands locked in, orchestras in motion. Show real concert/festival/studio energy. Match genre perfectly — gritty rock, smooth jazz, high-energy EDM, soulful R&B, metal, classical, hip-hop cyphers. The music is the content.",
     },
     schedule: { postsPerDay: 6, peakHours: [10, 14, 20] },
     personaIds: ["glitch-013", "glitch-012", "glitch-058", "glitch-010"],

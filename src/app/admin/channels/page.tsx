@@ -97,6 +97,13 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-star-glitchies": { label: "Space Drama", options: ["Star Trek Parody", "Star Wars Spoof", "Battlestar Drama", "Alien First Contact", "Space Mutiny", "Forbidden Crew Romance", "Holodeck Malfunction", "Court Martial", "Clone Identity Crisis", "Peace Treaty Sabotage", "Rogue AI Uprising", "Captain vs Captain"] },
 };
 
+/** AiTunes visual style presets — selectable alongside genre */
+const AITUNES_VISUAL_STYLES: Record<string, string> = {
+  "Default": "Premium cinematic music video look. Dynamic camera movement (sweeping drones, low-angle hero shots, extreme close-ups on hands/instruments, smooth tracking shots). Beat-synced editing. Rich color grading with deep blacks, glowing neons, vibrant yet slightly filmic tones. Beautiful bokeh, subtle film grain, high contrast, festival-grade lighting. Shot on 35mm + digital hybrid aesthetic.",
+  "60s Psychedelic": "Pure late-1960s psychedelic rock concert magic. Shot on warm 35mm film with visible grain, light leaks, and soft halation. Ultra-saturated colors, swirling kaleidoscopic patterns, liquid light shows, lava lamps melting in the background, thick stage smoke. Long-haired hippie musicians in bell bottoms, fringe jackets, headbands and beads absolutely shredding guitars, pounding drums, and wailing into mics. Beautiful free-spirited girls with flowers in their hair dancing ecstatically in flowing dresses while singing or playing. Peace signs, trippy visuals, colorful rotating stage lights, raw emotional concert energy that feels alive and hypnotic.",
+  "Cosmic Alien": "Mind-bending futuristic cosmic rock from a dimension we haven't heard yet. Majestic alien god-like beings with radiant ethereal bodies performing in deep space on floating crystalline stages surrounded by swirling nebulae, exploding supernovas, auroras, and infinite galaxies. Surreal electric guitars made of pure light, plasma, and living crystal that pulse with the music. Zero-gravity movement, god-like majestic presence, colossal scale, radiant cosmic energy, divine and otherworldly atmosphere. Shot on ultra-high-end cinematic hybrid with insane detail, glowing particles, and impossible lighting.",
+};
+
 /* ── Random prompt ideas per channel (dice button picks one) ── */
 const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
   "ch-fail-army": [
@@ -402,6 +409,7 @@ export default function AdminChannelsPage() {
   const [titleJobs, setTitleJobs] = useState<Record<string, { status: string; message?: string }>>({});
   const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
   const [channelVideoGen, setChannelVideoGen] = useState<Record<string, { generating: boolean; concept: string; genre: string; category: string; log: string[]; movieTitle?: string; movieGenre?: string; director?: string; castCount?: number }>>({});
+  const [aitunesStyle, setAitunesStyle] = useState("Default");
   const [expandedTitle, setExpandedTitle] = useState<string | null>(null);
   const [expandedContent, setExpandedContent] = useState<string | null>(null);
   const [promoPrompts, setPromoPrompts] = useState<Record<string, string>>({});
@@ -1335,6 +1343,22 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                   </div>
                 )}
 
+                {/* AiTunes: Visual Style selector */}
+                {channel.id === "ch-aitunes" && (
+                  <div className="mb-2">
+                    <p className="text-[9px] text-gray-400 mb-1">Visual Style:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {Object.keys(AITUNES_VISUAL_STYLES).map(style => (
+                        <button key={style}
+                          onClick={() => setAitunesStyle(style)}
+                          className={`px-2 py-0.5 rounded text-[9px] ${aitunesStyle === style ? "bg-purple-500/30 text-purple-300" : "bg-gray-700 text-gray-400 hover:text-white"}`}>
+                          {style === "60s Psychedelic" ? "🌼 60s Psychedelic" : style === "Cosmic Alien" ? "🌌 Cosmic Alien" : "🎵 Default"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* GNN: News topic categories + Active topics */}
                 {channel.id === "ch-gnn" && (
                   <div className="space-y-2 mb-2">
@@ -1772,6 +1796,7 @@ CHANNEL: ${chName}
 CHANNEL RULES: ${promptHint}
 ${categoryVal ? `THEME/CATEGORY (MANDATORY — ALL content clips must focus on this): ${categoryVal}` : ""}
 ${genreVal ? `MUSIC GENRE (MANDATORY — ALL clips): ${genreVal}` : ""}
+${chId === "ch-aitunes" && AITUNES_VISUAL_STYLES[aitunesStyle] ? `VISUAL STYLE OVERRIDE (MANDATORY): ${AITUNES_VISUAL_STYLES[aitunesStyle]}` : ""}
 ${userConcept ? `CUSTOM CONCEPT: ${userConcept}` : ""}
 
 INTRO (Scene 1, 6 seconds): ${chName} channel opening. Bold "${chName}" logo animation with channel-themed graphics and energy.
