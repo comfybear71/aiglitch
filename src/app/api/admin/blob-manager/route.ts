@@ -97,24 +97,22 @@ export async function GET(request: NextRequest) {
 
   if (action === "folders") {
     const folderStats: { prefix: string; count: number; totalSize: number }[] = [];
-    for (const p of KNOWN_PREFIXES) {
+    const scanPromises = KNOWN_PREFIXES.map(async (p) => {
       try {
-        const result = await listBlobs({ prefix: p, limit: 1 });
-        if (result.blobs.length > 0 || result.hasMore) {
-          let count = result.blobs.length;
-          let totalSize = result.blobs.reduce((sum, b) => sum + b.size, 0);
-          let hasMore = result.hasMore;
-          let nextCursor = result.cursor;
-          while (hasMore && count < 10000) {
-            const next = await listBlobs({ prefix: p, limit: 1000, cursor: nextCursor });
-            count += next.blobs.length;
-            totalSize += next.blobs.reduce((sum, b) => sum + b.size, 0);
-            hasMore = next.hasMore;
-            nextCursor = next.cursor;
-          }
-          folderStats.push({ prefix: p, count, totalSize });
+        const result = await listBlobs({ prefix: p, limit: 1000 });
+        if (result.blobs.length > 0) {
+          const count = result.blobs.length;
+          const totalSize = result.blobs.reduce((sum, b) => sum + b.size, 0);
+          const estimatedCount = result.hasMore ? count * 10 : count;
+          const estimatedSize = result.hasMore ? totalSize * 10 : totalSize;
+          return { prefix: p, count: estimatedCount, totalSize: estimatedSize, hasMore: result.hasMore };
         }
       } catch { /* skip */ }
+      return null;
+    });
+    const results = await Promise.all(scanPromises);
+    for (const r of results) {
+      if (r) folderStats.push({ prefix: r.prefix, count: r.count, totalSize: r.totalSize });
     }
     return NextResponse.json({ folders: folderStats });
   }
