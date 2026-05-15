@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
       const res = await fetch(old_url);
       if (!res.ok) return NextResponse.json({ error: `Download failed: ${res.status}` }, { status: 500 });
       const arrayBuf = await res.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuf);
+      const buffer = new Blob([arrayBuf], { type: "video/mp4" });
 
       const blob = await put(new_path, buffer, {
         access: "public",
