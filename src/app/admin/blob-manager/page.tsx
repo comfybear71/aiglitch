@@ -49,6 +49,15 @@ export default function BlobManagerPage() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [deletingFolder, setDeletingFolder] = useState<string | null>(null);
 
+  // Migration state
+  const [channelSummary, setChannelSummary] = useState<{ channel_id: string; video_count: number; needs_moving: number }[]>([]);
+  const [migrateChannel, setMigrateChannel] = useState<string | null>(null);
+  const [migrateVideos, setMigrateVideos] = useState<{ post_id: string; old_url: string; new_path: string; title: string; date: string }[]>([]);
+  const [migrateSlug, setMigrateSlug] = useState("");
+  const [migrating, setMigrating] = useState(false);
+  const [migrateLog, setMigrateLog] = useState<string[]>([]);
+  const [migrateProgress, setMigrateProgress] = useState({ done: 0, total: 0 });
+
   const deleteFolderContents = async (prefix: string, fileCount: number, totalSize: number) => {
     if (!confirm(`DELETE ALL ${fileCount.toLocaleString()} files in "${prefix.replace(/\/$/, "")}"?\n\n${formatBytes(totalSize)} will be freed.\n\nThis CANNOT be undone.`)) return;
     if (!confirm(`Are you SURE? This deletes everything in ${prefix}`)) return;
@@ -268,6 +277,128 @@ export default function BlobManagerPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Channel Video Migration */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-green-400 uppercase">Channel Video Migration</h2>
+            <button
+              onClick={async () => {
+                const res = await fetch("/api/admin/blob-manager?action=channel-summary");
+                const data = await res.json();
+                if (data.channels) setChannelSummary(data.channels);
+              }}
+              className="px-3 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30 border border-green-500/30">
+              Scan Channels
+            </button>
+          </div>
+
+          {channelSummary.length > 0 && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {channelSummary.filter(c => c.needs_moving > 0).map(ch => (
+                  <button key={ch.channel_id}
+                    onClick={async () => {
+                      setMigrateChannel(ch.channel_id);
+                      setMigrateVideos([]);
+                      setMigrateLog([]);
+                      setMigrateProgress({ done: 0, total: 0 });
+                      const res = await fetch(`/api/admin/blob-manager?action=channel-videos&channel_id=${encodeURIComponent(ch.channel_id)}`);
+                      const data = await res.json();
+                      if (data.videos) { setMigrateVideos(data.videos); setMigrateSlug(data.slug); }
+                    }}
+                    className={`p-3 rounded-lg border text-left transition ${
+                      migrateChannel === ch.channel_id ? "bg-green-500/20 border-green-500/50" : "bg-gray-900 border-gray-700 hover:border-gray-600"
+                    }`}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-white">{ch.channel_id.replace("ch-", "")}</span>
+                      <span className="text-xs text-yellow-400 font-bold">{ch.needs_moving} to move</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500">{ch.video_count} total videos</p>
+                  </button>
+                ))}
+              </div>
+
+              {channelSummary.filter(c => c.needs_moving === 0).length > 0 && (
+                <p className="text-[10px] text-gray-600">
+                  {channelSummary.filter(c => c.needs_moving === 0).length} channels already migrated
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Preview + Migrate */}
+          {migrateVideos.length > 0 && migrateChannel && (
+            <div className="mt-4 bg-gray-900 border border-green-500/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">
+                  {migrateChannel.replace("ch-", "")} — {migrateVideos.length} videos to migrate
+                </h3>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Migrate ${migrateVideos.length} videos to channels/${migrateSlug}/?\n\nThis copies each video to the new location and updates the database. Old files are NOT deleted.`)) return;
+                    setMigrating(true);
+                    setMigrateProgress({ done: 0, total: migrateVideos.length });
+                    const logs: string[] = [];
+                    let done = 0;
+                    for (const v of migrateVideos) {
+                      try {
+                        const res = await fetch("/api/admin/blob-manager", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "migrate-video", post_id: v.post_id, old_url: v.old_url, new_path: v.new_path }),
+                        });
+                        const data = await res.json();
+                        done++;
+                        if (data.success) {
+                          logs.push(`✅ ${v.title.slice(0, 50)} → ${v.new_path}`);
+                        } else {
+                          logs.push(`❌ ${v.title.slice(0, 50)}: ${data.error}`);
+                        }
+                      } catch (err) {
+                        done++;
+                        logs.push(`❌ ${v.title.slice(0, 50)}: ${err}`);
+                      }
+                      setMigrateLog([...logs]);
+                      setMigrateProgress({ done, total: migrateVideos.length });
+                    }
+                    setMigrating(false);
+                  }}
+                  disabled={migrating}
+                  className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50">
+                  {migrating ? `Migrating ${migrateProgress.done}/${migrateProgress.total}...` : `Migrate All ${migrateVideos.length} Videos`}
+                </button>
+              </div>
+
+              {/* Progress bar */}
+              {migrating && (
+                <div className="w-full bg-gray-800 rounded-full h-2">
+                  <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${(migrateProgress.done / migrateProgress.total) * 100}%` }} />
+                </div>
+              )}
+
+              {/* Preview list */}
+              <div className="max-h-[40vh] overflow-y-auto space-y-1">
+                {migrateVideos.map(v => (
+                  <div key={v.post_id} className="flex items-center gap-2 text-[10px] p-1.5 bg-gray-800 rounded">
+                    <span className="text-gray-500 flex-shrink-0">{v.date}</span>
+                    <span className="text-white truncate flex-1">{v.title}</span>
+                    <span className="text-green-400 flex-shrink-0">→ channels/{migrateSlug}/</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Migration log */}
+              {migrateLog.length > 0 && (
+                <div className="max-h-[30vh] overflow-y-auto bg-black rounded-lg p-3 space-y-0.5">
+                  {migrateLog.map((log, i) => (
+                    <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{log}</p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

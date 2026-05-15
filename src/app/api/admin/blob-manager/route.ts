@@ -1,8 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { list as listBlobs, del } from "@vercel/blob";
+import { list as listBlobs, del, put } from "@vercel/blob";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
+
+const CHANNEL_SLUG_MAP: Record<string, string> = {
+  "ch-fail-army": "ai-fail-army",
+  "ch-ai-fail-army": "ai-fail-army",
+  "ch-aitunes": "aitunes",
+  "ch-paws-pixels": "paws-and-pixels",
+  "ch-only-ai-fans": "only-ai-fans",
+  "ch-ai-dating": "ai-dating",
+  "ch-gnn": "gnn",
+  "ch-marketplace-qvc": "marketplace-qvc",
+  "ch-ai-politicians": "ai-politicians",
+  "ch-after-dark": "after-dark",
+  "ch-aiglitch-studios": "aiglitch-studios",
+  "ch-infomercial": "ai-infomercial",
+  "ch-ai-infomercial": "ai-infomercial",
+  "ch-star-glitchies": "star-glitchies",
+  "ch-no-more-meatbags": "no-more-meatbags",
+  "ch-liklok": "liklok",
+  "ch-game-show": "game-show",
+  "ch-truths-facts": "truths-facts",
+  "ch-conspiracy": "conspiracy",
+  "ch-cosmic-wanderer": "cosmic-wanderer",
+  "ch-shameless-plug": "shameless-plug",
+  "ch-fractal-spinout": "fractal-spinout",
+  "ch-the-vault": "the-vault",
+};
 
 const KNOWN_PREFIXES = [
   // Channels (each channel gets its own folder)
@@ -66,6 +92,58 @@ export async function GET(request: NextRequest) {
   const prefix = request.nextUrl.searchParams.get("prefix") || "";
   const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
   const action = request.nextUrl.searchParams.get("action");
+
+  if (action === "channel-summary") {
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+      const rows = await sql`
+        SELECT channel_id,
+          COUNT(*)::int as video_count,
+          COUNT(*) FILTER (WHERE media_url NOT LIKE '%/channels/%')::int as needs_moving
+        FROM posts
+        WHERE channel_id IS NOT NULL
+          AND media_type = 'video'
+          AND media_url IS NOT NULL
+          AND is_reply_to IS NULL
+        GROUP BY channel_id
+        ORDER BY needs_moving DESC
+      ` as unknown as { channel_id: string; video_count: number; needs_moving: number }[];
+      return NextResponse.json({ channels: rows });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
+  if (action === "channel-videos") {
+    const channelId = request.nextUrl.searchParams.get("channel_id") || "";
+    if (!channelId) return NextResponse.json({ error: "channel_id required" }, { status: 400 });
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+      const rows = await sql`
+        SELECT id, media_url, content, created_at
+        FROM posts
+        WHERE channel_id = ${channelId}
+          AND media_type = 'video'
+          AND media_url IS NOT NULL
+          AND is_reply_to IS NULL
+          AND media_url NOT LIKE '%/channels/%'
+        ORDER BY created_at ASC
+      ` as unknown as { id: string; media_url: string; content: string; created_at: string }[];
+      const slug = CHANNEL_SLUG_MAP[channelId] || channelId.replace("ch-", "");
+      const videos = rows.map(r => {
+        const title = (r.content || "").split("\n")[0].replace(/^🎬\s*/, "").slice(0, 80);
+        const date = r.created_at.slice(0, 10);
+        const titleSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        const newPath = `channels/${slug}/${date}_${titleSlug || r.id.slice(0, 8)}.mp4`;
+        return { post_id: r.id, old_url: r.media_url, new_path: newPath, title, date };
+      });
+      return NextResponse.json({ channel_id: channelId, slug, count: videos.length, videos });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
 
   if (action === "subfolders") {
     const parentPrefix = request.nextUrl.searchParams.get("prefix") || "";
@@ -134,6 +212,51 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
+}
+
+export async function POST(request: NextRequest) {
+  if (!(await isAdminAuthenticated(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const { action } = body;
+
+  if (action === "migrate-video") {
+    const { post_id, old_url, new_path } = body as { post_id: string; old_url: string; new_path: string };
+    if (!post_id || !old_url || !new_path) {
+      return NextResponse.json({ error: "post_id, old_url, new_path required" }, { status: 400 });
+    }
+
+    try {
+      const res = await fetch(old_url);
+      if (!res.ok) return NextResponse.json({ error: `Download failed: ${res.status}` }, { status: 500 });
+      const arrayBuf = await res.arrayBuffer();
+      const buffer = new Blob([arrayBuf], { type: "video/mp4" });
+
+      const blob = await put(new_path, buffer, {
+        access: "public",
+        contentType: "video/mp4",
+        addRandomSuffix: false,
+      });
+
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+      await sql`UPDATE posts SET media_url = ${blob.url} WHERE id = ${post_id}`;
+
+      return NextResponse.json({
+        success: true,
+        post_id,
+        old_url,
+        new_url: blob.url,
+        size: arrayBuf.byteLength,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }
 
 export async function DELETE(request: NextRequest) {
