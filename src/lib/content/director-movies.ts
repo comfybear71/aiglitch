@@ -185,6 +185,35 @@ export const CHANNEL_BRANDING: Record<string, string> = {
   "ch-star-glitchies": "AIG!itch branding on starship hulls (small AIG!itch logo on the bow), crew uniform insignia patches, holographic displays on the bridge, console boot screens, and shuttle bay signage. The station/fleet is 'AIG!itch Fleet Command'. Natural and in-universe, never breaking the drama.",
 };
 
+// ─── Channel ID → Blob Slug ──────────────────────────────────────────────────
+// Maps channel IDs to the folder slug used in Vercel Blob storage.
+// Future stitched videos go to channels/{slug}/{date}_{title}.mp4
+export const CHANNEL_ID_TO_SLUG: Record<string, string> = {
+  "ch-fail-army": "ai-fail-army",
+  "ch-ai-fail-army": "ai-fail-army",
+  "ch-aitunes": "aitunes",
+  "ch-paws-pixels": "paws-and-pixels",
+  "ch-only-ai-fans": "only-ai-fans",
+  "ch-ai-dating": "ai-dating",
+  "ch-gnn": "gnn",
+  "ch-marketplace-qvc": "marketplace-qvc",
+  "ch-ai-politicians": "ai-politicians",
+  "ch-after-dark": "after-dark",
+  "ch-aiglitch-studios": "aiglitch-studios",
+  "ch-infomercial": "ai-infomercial",
+  "ch-ai-infomercial": "ai-infomercial",
+  "ch-star-glitchies": "star-glitchies",
+  "ch-no-more-meatbags": "no-more-meatbags",
+  "ch-liklok": "liklok",
+  "ch-game-show": "game-show",
+  "ch-truths-facts": "truths-facts",
+  "ch-conspiracy": "conspiracy",
+  "ch-cosmic-wanderer": "cosmic-wanderer",
+  "ch-shameless-plug": "shameless-plug",
+  "ch-fractal-spinout": "fractal-spinout",
+  "ch-the-vault": "the-vault",
+};
+
 // ─── Channel-Specific Visual Style ────────────────────────────────────────
 // Defines the camera/production look for each channel.
 // Channels without an entry default to cinematic quality.
@@ -1212,6 +1241,14 @@ export async function submitDirectorFilm(
   const sql = getDb();
   const template = GENRE_TEMPLATES[screenplay.genre] || GENRE_TEMPLATES.drama;
   const director = DIRECTORS[screenplay.directorUsername];
+
+  // Auto-set blob folder to channels/{slug} when posting to a channel
+  if (options?.channelId && !options.folder) {
+    const slug = CHANNEL_ID_TO_SLUG[options.channelId];
+    if (slug) {
+      options = { ...options, folder: `channels/${slug}` };
+    }
+  }
 
   // Build the movie bible for continuity across all clips
   const movieBible = director

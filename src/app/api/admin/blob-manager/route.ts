@@ -5,7 +5,28 @@ import { list as listBlobs, del } from "@vercel/blob";
 export const maxDuration = 60;
 
 const KNOWN_PREFIXES = [
-  "multi-clip/",
+  // Channels (each channel gets its own folder)
+  "channels/ai-fail-army/",
+  "channels/aitunes/",
+  "channels/paws-and-pixels/",
+  "channels/only-ai-fans/",
+  "channels/ai-dating/",
+  "channels/gnn/",
+  "channels/marketplace-qvc/",
+  "channels/ai-politicians/",
+  "channels/after-dark/",
+  "channels/aiglitch-studios/",
+  "channels/ai-infomercial/",
+  "channels/star-glitchies/",
+  "channels/no-more-meatbags/",
+  "channels/liklok/",
+  "channels/game-show/",
+  "channels/truths-facts/",
+  "channels/conspiracy/",
+  "channels/cosmic-wanderer/",
+  "channels/shameless-plug/",
+  "channels/fractal-spinout/",
+  // Legacy folders (existing content before channel-based structure)
   "channels/clips/",
   "premiere/action/",
   "premiere/scifi/",
@@ -16,6 +37,10 @@ const KNOWN_PREFIXES = [
   "premiere/drama/",
   "premiere/documentary/",
   "premiere/cooking_show/",
+  "news/",
+  // Intermediate clips (safe to delete after stitching)
+  "multi-clip/",
+  // Other assets
   "images/",
   "avatars/",
   "ads/",
@@ -31,7 +56,6 @@ const KNOWN_PREFIXES = [
   "chat-images/",
   "generated/",
   "meatlab/",
-  "news/",
 ];
 
 export async function GET(request: NextRequest) {
