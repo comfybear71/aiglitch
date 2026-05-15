@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
       const slug = CHANNEL_SLUG_MAP[channelId] || channelId.replace("ch-", "");
       const videos = rows.map(r => {
         const title = (r.content || "").split("\n")[0].replace(/^🎬\s*/, "").slice(0, 80);
-        const date = r.created_at.slice(0, 10);
+        const date = new Date(r.created_at).toISOString().slice(0, 10);
         const titleSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
         const newPath = `channels/${slug}/${date}_${titleSlug || r.id.slice(0, 8)}.mp4`;
         return { post_id: r.id, old_url: r.media_url, new_path: newPath, title, date };
