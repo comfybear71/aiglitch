@@ -20,6 +20,16 @@
 import { claude } from "@/lib/ai";
 import { v4 as uuidv4 } from "uuid";
 import { put } from "@vercel/blob";
+
+function toBlobFilename(title: string, fallbackId?: string): string {
+  const date = new Date().toISOString().slice(0, 10);
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+  return `${date}_${slug || fallbackId || uuidv4().slice(0, 8)}.mp4`;
+}
 import { getDb } from "../db";
 import { concatMP4Clips } from "./mp4-concat";
 import { getGenreBlobFolder } from "../genre-utils";
@@ -627,7 +637,8 @@ async function stitchAndPost(
     : caption;
 
   const blobFolder = getGenreBlobFolder(genre);
-  const blob = await put(`${blobFolder}/${uuidv4()}.mp4`, stitched, {
+  const filename = toBlobFilename(title || caption.slice(0, 40), jobId);
+  const blob = await put(`${blobFolder}/${filename}`, stitched, {
     access: "public",
     contentType: "video/mp4",
     addRandomSuffix: false,

@@ -6,8 +6,16 @@ export const maxDuration = 60;
 
 const KNOWN_PREFIXES = [
   "multi-clip/",
-  "channels/",
-  "premiere/",
+  "channels/clips/",
+  "premiere/action/",
+  "premiere/scifi/",
+  "premiere/romance/",
+  "premiere/family/",
+  "premiere/horror/",
+  "premiere/comedy/",
+  "premiere/drama/",
+  "premiere/documentary/",
+  "premiere/cooking_show/",
   "images/",
   "avatars/",
   "ads/",
@@ -23,6 +31,7 @@ const KNOWN_PREFIXES = [
   "chat-images/",
   "generated/",
   "meatlab/",
+  "news/",
 ];
 
 export async function GET(request: NextRequest) {
@@ -33,6 +42,34 @@ export async function GET(request: NextRequest) {
   const prefix = request.nextUrl.searchParams.get("prefix") || "";
   const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
   const action = request.nextUrl.searchParams.get("action");
+
+  if (action === "subfolders") {
+    const parentPrefix = request.nextUrl.searchParams.get("prefix") || "";
+    try {
+      const result = await listBlobs({ prefix: parentPrefix, limit: 1000 });
+      const subfolderSet = new Set<string>();
+      for (const b of result.blobs) {
+        const relPath = b.pathname.slice(parentPrefix.length);
+        const slashIdx = relPath.indexOf("/");
+        if (slashIdx > 0) subfolderSet.add(relPath.slice(0, slashIdx));
+      }
+      let more = result.hasMore;
+      let nextC = result.cursor;
+      while (more) {
+        const next = await listBlobs({ prefix: parentPrefix, limit: 1000, cursor: nextC });
+        for (const b of next.blobs) {
+          const relPath = b.pathname.slice(parentPrefix.length);
+          const slashIdx = relPath.indexOf("/");
+          if (slashIdx > 0) subfolderSet.add(relPath.slice(0, slashIdx));
+        }
+        more = next.hasMore;
+        nextC = next.cursor;
+      }
+      return NextResponse.json({ subfolders: Array.from(subfolderSet).sort() });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
 
   if (action === "folders") {
     const folderStats: { prefix: string; count: number; totalSize: number }[] = [];

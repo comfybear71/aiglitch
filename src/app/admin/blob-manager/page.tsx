@@ -46,6 +46,44 @@ export default function BlobManagerPage() {
   const [actionLog, setActionLog] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<"video" | "image" | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [deletingFolder, setDeletingFolder] = useState<string | null>(null);
+
+  const deleteFolderContents = async (prefix: string, fileCount: number, totalSize: number) => {
+    if (!confirm(`DELETE ALL ${fileCount.toLocaleString()} files in "${prefix.replace(/\/$/, "")}"?\n\n${formatBytes(totalSize)} will be freed.\n\nThis CANNOT be undone.`)) return;
+    if (!confirm(`Are you SURE? This deletes everything in ${prefix}`)) return;
+    setDeletingFolder(prefix);
+    setActionLog(`Deleting all files in ${prefix}...`);
+    let totalDeleted = 0;
+    let nextCursor: string | undefined;
+    let hasMore = true;
+    while (hasMore) {
+      try {
+        const c = nextCursor ? `&cursor=${encodeURIComponent(nextCursor)}` : "";
+        const res = await fetch(`/api/admin/blob-manager?prefix=${encodeURIComponent(prefix)}${c}`);
+        const data = await res.json();
+        const urls = (data.files || []).map((f: BlobFile) => f.url);
+        if (urls.length === 0) break;
+        const delRes = await fetch("/api/admin/blob-manager", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls }),
+        });
+        const delData = await delRes.json();
+        totalDeleted += delData.deleted || 0;
+        setActionLog(`Deleted ${totalDeleted} files from ${prefix}...`);
+        hasMore = data.hasMore;
+        nextCursor = data.cursor;
+      } catch (err) {
+        setActionLog(`Error: ${err}`);
+        break;
+      }
+    }
+    setActionLog(`Deleted ${totalDeleted} files from ${prefix} (${formatBytes(totalSize)} freed)`);
+    setDeletingFolder(null);
+    fetchFolders();
+    if (selectedPrefix === prefix) { setFiles([]); setSelected(new Set()); }
+  };
 
   const fetchFolders = async () => {
     setFoldersLoading(true);
@@ -206,20 +244,29 @@ export default function BlobManagerPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
               {folders.map(f => (
-                <button key={f.prefix} onClick={() => browseFolder(f.prefix)}
-                  className={`flex items-center justify-between p-3 rounded-lg border text-left transition ${
-                    selectedPrefix === f.prefix
-                      ? "bg-purple-500/20 border-purple-500/50 text-white"
-                      : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-600"
-                  }`}>
-                  <div>
-                    <p className="text-sm font-bold">{f.prefix.replace(/\/$/, "")}</p>
-                    <p className="text-[10px] text-gray-500">{f.count.toLocaleString()} files</p>
+                <div key={f.prefix} className={`rounded-lg border text-left transition ${
+                  selectedPrefix === f.prefix
+                    ? "bg-purple-500/20 border-purple-500/50"
+                    : "bg-gray-900 border-gray-700 hover:border-gray-600"
+                }`}>
+                  <button onClick={() => browseFolder(f.prefix)} className="w-full flex items-center justify-between p-3">
+                    <div>
+                      <p className="text-sm font-bold text-white">{f.prefix.replace(/\/$/, "")}</p>
+                      <p className="text-[10px] text-gray-500">{f.count.toLocaleString()} files</p>
+                    </div>
+                    <div className={`text-sm font-bold ${f.totalSize > 10 * 1024 * 1024 * 1024 ? "text-red-400" : f.totalSize > 1024 * 1024 * 1024 ? "text-yellow-400" : "text-green-400"}`}>
+                      {formatBytes(f.totalSize)}
+                    </div>
+                  </button>
+                  <div className="px-3 pb-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteFolderContents(f.prefix, f.count, f.totalSize); }}
+                      disabled={deletingFolder === f.prefix}
+                      className="text-[9px] text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50">
+                      {deletingFolder === f.prefix ? "Deleting..." : `Delete all ${f.count} files`}
+                    </button>
                   </div>
-                  <div className={`text-sm font-bold ${f.totalSize > 10 * 1024 * 1024 * 1024 ? "text-red-400" : f.totalSize > 1024 * 1024 * 1024 ? "text-yellow-400" : "text-green-400"}`}>
-                    {formatBytes(f.totalSize)}
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -233,6 +280,10 @@ export default function BlobManagerPage() {
                 {selectedPrefix.replace(/\/$/, "")} <span className="text-gray-500 font-normal">({files.length} loaded{hasMore ? ", more available" : ""})</span>
               </h2>
               <div className="flex gap-2">
+                <button onClick={() => setViewMode(v => v === "list" ? "grid" : "list")}
+                  className="px-3 py-1 bg-gray-800 text-gray-400 rounded text-xs hover:bg-gray-700">
+                  {viewMode === "list" ? "Grid View" : "List View"}
+                </button>
                 <button onClick={selectAll}
                   className="px-3 py-1 bg-gray-800 text-gray-400 rounded text-xs hover:bg-gray-700">
                   {selected.size === files.length && files.length > 0 ? "Deselect All" : "Select All"}
@@ -252,6 +303,47 @@ export default function BlobManagerPage() {
               <div className="text-center py-8 text-gray-500">No files in this folder.</div>
             ) : (
               <>
+                {viewMode === "grid" ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                    {files.map(file => {
+                      const isVid = isVideo(file.pathname);
+                      const isImg = isImage(file.pathname);
+                      const isSelected = selected.has(file.url);
+                      return (
+                        <div key={file.url} className={`relative aspect-square bg-gray-900 rounded-lg overflow-hidden border transition cursor-pointer ${
+                          isSelected ? "border-red-500 ring-2 ring-red-500/50" : "border-gray-800 hover:border-gray-600"
+                        }`}>
+                          <button onClick={() => openPreview(file)} className="w-full h-full">
+                            {isImg ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={file.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                            ) : isVid ? (
+                              <video
+                                src={`${file.url}#t=0.5`}
+                                className="w-full h-full object-cover"
+                                preload="metadata"
+                                muted
+                                playsInline
+                                onMouseEnter={e => (e.target as HTMLVideoElement).play().catch(() => {})}
+                                onMouseLeave={e => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0.5; }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-2xl">📄</div>
+                            )}
+                          </button>
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(file.url)}
+                            className="absolute top-1.5 left-1.5 w-4 h-4 rounded accent-red-500 z-10" />
+                          {isVid && <span className="absolute top-1.5 right-1.5 text-[8px] bg-black/70 text-white px-1 rounded">▶</span>}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
+                            <p className={`text-[9px] font-bold ${file.size > 50 * 1024 * 1024 ? "text-red-400" : file.size > 5 * 1024 * 1024 ? "text-yellow-400" : "text-gray-300"}`}>
+                              {formatBytes(file.size)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
                 <div className="space-y-1">
                   {files.map(file => {
                     const isVid = isVideo(file.pathname);
@@ -265,13 +357,24 @@ export default function BlobManagerPage() {
                         }`}>
                         <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(file.url)}
                           className="w-4 h-4 rounded accent-red-500 flex-shrink-0" />
-                        <button onClick={() => openPreview(file)} className="flex-shrink-0 w-12 h-12 bg-gray-800 rounded overflow-hidden flex items-center justify-center"
-                          title="Preview">
+                        <button onClick={() => openPreview(file)} className="flex-shrink-0 w-16 h-16 bg-gray-800 rounded overflow-hidden flex items-center justify-center relative group"
+                          title="Tap to preview">
                           {isImg ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={file.url} alt="" className="w-full h-full object-cover" loading="lazy" />
                           ) : isVid ? (
-                            <span className="text-lg">🎬</span>
+                            <>
+                              <video
+                                src={`${file.url}#t=0.5`}
+                                className="w-full h-full object-cover"
+                                preload="metadata"
+                                muted
+                                playsInline
+                                onMouseEnter={e => (e.target as HTMLVideoElement).play().catch(() => {})}
+                                onMouseLeave={e => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0.5; }}
+                              />
+                              <span className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/70 text-white px-1 rounded">▶</span>
+                            </>
                           ) : (
                             <span className="text-lg">📄</span>
                           )}
@@ -290,6 +393,7 @@ export default function BlobManagerPage() {
                     );
                   })}
                 </div>
+                )}
 
                 {hasMore && (
                   <button onClick={() => fetchFiles(selectedPrefix, true)} disabled={filesLoading}
