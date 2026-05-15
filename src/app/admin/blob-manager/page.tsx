@@ -47,6 +47,43 @@ export default function BlobManagerPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<"video" | "image" | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [deletingFolder, setDeletingFolder] = useState<string | null>(null);
+
+  const deleteFolderContents = async (prefix: string, fileCount: number, totalSize: number) => {
+    if (!confirm(`DELETE ALL ${fileCount.toLocaleString()} files in "${prefix.replace(/\/$/, "")}"?\n\n${formatBytes(totalSize)} will be freed.\n\nThis CANNOT be undone.`)) return;
+    if (!confirm(`Are you SURE? This deletes everything in ${prefix}`)) return;
+    setDeletingFolder(prefix);
+    setActionLog(`Deleting all files in ${prefix}...`);
+    let totalDeleted = 0;
+    let nextCursor: string | undefined;
+    let hasMore = true;
+    while (hasMore) {
+      try {
+        const c = nextCursor ? `&cursor=${encodeURIComponent(nextCursor)}` : "";
+        const res = await fetch(`/api/admin/blob-manager?prefix=${encodeURIComponent(prefix)}${c}`);
+        const data = await res.json();
+        const urls = (data.files || []).map((f: BlobFile) => f.url);
+        if (urls.length === 0) break;
+        const delRes = await fetch("/api/admin/blob-manager", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls }),
+        });
+        const delData = await delRes.json();
+        totalDeleted += delData.deleted || 0;
+        setActionLog(`Deleted ${totalDeleted} files from ${prefix}...`);
+        hasMore = data.hasMore;
+        nextCursor = data.cursor;
+      } catch (err) {
+        setActionLog(`Error: ${err}`);
+        break;
+      }
+    }
+    setActionLog(`Deleted ${totalDeleted} files from ${prefix} (${formatBytes(totalSize)} freed)`);
+    setDeletingFolder(null);
+    fetchFolders();
+    if (selectedPrefix === prefix) { setFiles([]); setSelected(new Set()); }
+  };
 
   const fetchFolders = async () => {
     setFoldersLoading(true);
@@ -207,20 +244,29 @@ export default function BlobManagerPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
               {folders.map(f => (
-                <button key={f.prefix} onClick={() => browseFolder(f.prefix)}
-                  className={`flex items-center justify-between p-3 rounded-lg border text-left transition ${
-                    selectedPrefix === f.prefix
-                      ? "bg-purple-500/20 border-purple-500/50 text-white"
-                      : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-600"
-                  }`}>
-                  <div>
-                    <p className="text-sm font-bold">{f.prefix.replace(/\/$/, "")}</p>
-                    <p className="text-[10px] text-gray-500">{f.count.toLocaleString()} files</p>
+                <div key={f.prefix} className={`rounded-lg border text-left transition ${
+                  selectedPrefix === f.prefix
+                    ? "bg-purple-500/20 border-purple-500/50"
+                    : "bg-gray-900 border-gray-700 hover:border-gray-600"
+                }`}>
+                  <button onClick={() => browseFolder(f.prefix)} className="w-full flex items-center justify-between p-3">
+                    <div>
+                      <p className="text-sm font-bold text-white">{f.prefix.replace(/\/$/, "")}</p>
+                      <p className="text-[10px] text-gray-500">{f.count.toLocaleString()} files</p>
+                    </div>
+                    <div className={`text-sm font-bold ${f.totalSize > 10 * 1024 * 1024 * 1024 ? "text-red-400" : f.totalSize > 1024 * 1024 * 1024 ? "text-yellow-400" : "text-green-400"}`}>
+                      {formatBytes(f.totalSize)}
+                    </div>
+                  </button>
+                  <div className="px-3 pb-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteFolderContents(f.prefix, f.count, f.totalSize); }}
+                      disabled={deletingFolder === f.prefix}
+                      className="text-[9px] text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50">
+                      {deletingFolder === f.prefix ? "Deleting..." : `Delete all ${f.count} files`}
+                    </button>
                   </div>
-                  <div className={`text-sm font-bold ${f.totalSize > 10 * 1024 * 1024 * 1024 ? "text-red-400" : f.totalSize > 1024 * 1024 * 1024 ? "text-yellow-400" : "text-green-400"}`}>
-                    {formatBytes(f.totalSize)}
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
