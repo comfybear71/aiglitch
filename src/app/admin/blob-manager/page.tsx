@@ -47,6 +47,18 @@ export default function BlobManagerPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<"video" | "image" | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [sortBy, setSortBy] = useState<"name" | "size-asc" | "size-desc">("name");
+
+  const sortedFiles = [...files].sort((a, b) => {
+    if (sortBy === "size-asc") return a.size - b.size;
+    if (sortBy === "size-desc") return b.size - a.size;
+    return a.pathname.localeCompare(b.pathname);
+  });
+
+  const selectUnderSize = (maxBytes: number) => {
+    const urls = files.filter(f => f.size < maxBytes).map(f => f.url);
+    setSelected(new Set(urls));
+  };
   const [deletingFolder, setDeletingFolder] = useState<string | null>(null);
 
   // Migration state
@@ -410,7 +422,19 @@ export default function BlobManagerPage() {
               <h2 className="text-sm font-bold text-white">
                 {selectedPrefix.replace(/\/$/, "")} <span className="text-gray-500 font-normal">({files.length} loaded{hasMore ? ", more available" : ""})</span>
               </h2>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => setSortBy(s => s === "size-asc" ? "size-desc" : s === "size-desc" ? "name" : "size-asc")}
+                  className="px-3 py-1 bg-gray-800 text-gray-400 rounded text-xs hover:bg-gray-700">
+                  Sort: {sortBy === "size-asc" ? "Smallest ↑" : sortBy === "size-desc" ? "Largest ↓" : "Name"}
+                </button>
+                <button onClick={() => selectUnderSize(15 * 1024 * 1024)}
+                  className="px-3 py-1 bg-yellow-600/20 text-yellow-400 rounded text-xs hover:bg-yellow-600/30 border border-yellow-500/30">
+                  Select &lt;15MB
+                </button>
+                <button onClick={() => selectUnderSize(20 * 1024 * 1024)}
+                  className="px-3 py-1 bg-yellow-600/20 text-yellow-400 rounded text-xs hover:bg-yellow-600/30 border border-yellow-500/30">
+                  Select &lt;20MB
+                </button>
                 <button onClick={() => setViewMode(v => v === "list" ? "grid" : "list")}
                   className="px-3 py-1 bg-gray-800 text-gray-400 rounded text-xs hover:bg-gray-700">
                   {viewMode === "list" ? "Grid View" : "List View"}
@@ -436,7 +460,7 @@ export default function BlobManagerPage() {
               <>
                 {viewMode === "grid" ? (
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                    {files.map(file => {
+                    {sortedFiles.map(file => {
                       const isVid = isVideo(file.pathname);
                       const isImg = isImage(file.pathname);
                       const isSelected = selected.has(file.url);
@@ -476,7 +500,7 @@ export default function BlobManagerPage() {
                   </div>
                 ) : (
                 <div className="space-y-1">
-                  {files.map(file => {
+                  {sortedFiles.map(file => {
                     const isVid = isVideo(file.pathname);
                     const isImg = isImage(file.pathname);
                     const isSelected = selected.has(file.url);
