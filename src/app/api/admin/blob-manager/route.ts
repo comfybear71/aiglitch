@@ -238,6 +238,7 @@ export async function POST(request: NextRequest) {
         access: "public",
         contentType: "video/mp4",
         addRandomSuffix: false,
+        allowOverwrite: true,
       });
 
       const { getDb } = await import("@/lib/db");
