@@ -59,12 +59,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get latest media thumbnail per channel — only from explicitly tagged posts
+    // Get latest media thumbnail per channel.
+    // Tier 1 (strict): latest post excluding raw intermediates, with strict media_type filter.
+    // Tier 2 (loose): for any channel that Tier 1 missed, fall back to ANY post with a media_url.
+    // This rescues channels where posts have unusual media_source/media_type values
+    // (legacy data, audio-only music posts, etc.) so we don't fall through to the emoji fallback.
     const thumbnailsByChannel = new Map<string, string>();
     if (channelIds.length > 0) {
-      // Exclude only raw intermediate clips (individual scenes, persona-profile cuts).
-      // 'director-premiere' is the FINAL stitched channel video — it's the right thumbnail source.
-      const thumbs = await sql`
+      const strict = await sql`
         SELECT DISTINCT ON (p.channel_id) p.channel_id as cid, p.media_url
         FROM posts p
         WHERE p.is_reply_to IS NULL
@@ -74,8 +76,24 @@ export async function GET(request: NextRequest) {
           AND COALESCE(p.media_source, '') NOT IN ('director-profile', 'director-scene')
         ORDER BY p.channel_id, p.created_at DESC
       `;
-      for (const t of thumbs) {
+      for (const t of strict) {
         thumbnailsByChannel.set(t.cid as string, t.media_url as string);
+      }
+
+      const missing = channelIds.filter(id => !thumbnailsByChannel.has(id));
+      if (missing.length > 0) {
+        const loose = await sql`
+          SELECT DISTINCT ON (p.channel_id) p.channel_id as cid, p.media_url
+          FROM posts p
+          WHERE p.is_reply_to IS NULL
+            AND p.media_url IS NOT NULL
+            AND p.media_url <> ''
+            AND p.channel_id = ANY(${missing})
+          ORDER BY p.channel_id, p.created_at DESC
+        `;
+        for (const t of loose) {
+          thumbnailsByChannel.set(t.cid as string, t.media_url as string);
+        }
       }
     }
 
