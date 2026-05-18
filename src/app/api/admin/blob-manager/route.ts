@@ -145,6 +145,55 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  if (action === "studios-genres") {
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+      const rows = await sql`
+        SELECT id, media_url, content
+        FROM posts
+        WHERE channel_id = 'ch-aiglitch-studios'
+          AND media_type = 'video'
+          AND media_url IS NOT NULL
+          AND media_url LIKE '%/channels/aiglitch-studios/%'
+          AND media_url NOT LIKE '%/channels/aiglitch-studios/%/%'
+        ORDER BY created_at ASC
+      ` as unknown as { id: string; media_url: string; content: string }[];
+
+      const videos = rows.map(r => {
+        const content = r.content || "";
+        let genre = "uncategorised";
+        const genreMatch = content.match(/\/(\w[\w-]*)\s/);
+        if (genreMatch) {
+          genre = genreMatch[1].toLowerCase().replace(/\s+/g, "-");
+        } else if (/sci.?fi/i.test(content)) genre = "scifi";
+        else if (/horror/i.test(content)) genre = "horror";
+        else if (/comedy/i.test(content)) genre = "comedy";
+        else if (/action/i.test(content)) genre = "action";
+        else if (/drama/i.test(content)) genre = "drama";
+        else if (/romance/i.test(content)) genre = "romance";
+        else if (/family/i.test(content)) genre = "family";
+        else if (/documentary/i.test(content)) genre = "documentary";
+        else if (/cooking/i.test(content)) genre = "cooking-show";
+        else if (/thriller/i.test(content)) genre = "thriller";
+
+        const filename = r.media_url.split("/").pop() || "";
+        const newPath = `channels/aiglitch-studios/${genre}/${filename}`;
+        const title = content.split("\n")[0].slice(0, 80);
+        return { post_id: r.id, old_url: r.media_url, new_path: newPath, genre, title, filename };
+      });
+
+      const byGenre: Record<string, number> = {};
+      for (const v of videos) {
+        byGenre[v.genre] = (byGenre[v.genre] || 0) + 1;
+      }
+
+      return NextResponse.json({ count: videos.length, byGenre, videos });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
   if (action === "subfolders") {
     const parentPrefix = request.nextUrl.searchParams.get("prefix") || "";
     try {
