@@ -61,6 +61,13 @@ export default function BlobManagerPage() {
   };
   const [deletingFolder, setDeletingFolder] = useState<string | null>(null);
 
+  // Studios genre reorganisation
+  const [studiosVideos, setStudiosVideos] = useState<{ post_id: string; old_url: string; new_path: string; genre: string; title: string }[]>([]);
+  const [studiosByGenre, setStudiosByGenre] = useState<Record<string, number>>({});
+  const [studiosReorg, setStudiosReorg] = useState(false);
+  const [studiosLog, setStudiosLog] = useState<string[]>([]);
+  const [studiosProgress, setStudiosProgress] = useState({ done: 0, total: 0 });
+
   // Migration state
   const [channelSummary, setChannelSummary] = useState<{ channel_id: string; video_count: number; needs_moving: number }[]>([]);
   const [migrateChannel, setMigrateChannel] = useState<string | null>(null);
@@ -407,6 +414,85 @@ export default function BlobManagerPage() {
               {migrateLog.length > 0 && (
                 <div className="max-h-[30vh] overflow-y-auto bg-black rounded-lg p-3 space-y-0.5">
                   {migrateLog.map((log, i) => (
+                    <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{log}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Studios Genre Reorganisation */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-amber-400 uppercase">Studios Genre Reorganisation</h2>
+            <button
+              onClick={async () => {
+                const res = await fetch("/api/admin/blob-manager?action=studios-genres");
+                const data = await res.json();
+                if (data.videos) { setStudiosVideos(data.videos); setStudiosByGenre(data.byGenre || {}); }
+                else if (data.error) setActionLog(`Error: ${data.error}`);
+              }}
+              className="px-3 py-1 bg-amber-600/20 text-amber-400 rounded text-xs hover:bg-amber-600/30 border border-amber-500/30">
+              Scan Studios Videos
+            </button>
+          </div>
+
+          {Object.keys(studiosByGenre).length > 0 && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(studiosByGenre).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([genre, count]) => (
+                  <span key={genre} className="px-2 py-1 bg-gray-800 border border-amber-500/30 rounded text-xs text-amber-300">
+                    {genre}: {count}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-500">{studiosVideos.length} videos to reorganise into genre subfolders</p>
+
+              <button
+                onClick={async () => {
+                  if (!confirm(`Reorganise ${studiosVideos.length} videos into genre subfolders?\n\nThis moves files within channels/aiglitch-studios/ into genre subfolders and updates the DB.`)) return;
+                  setStudiosReorg(true);
+                  setStudiosProgress({ done: 0, total: studiosVideos.length });
+                  const logs: string[] = [];
+                  let done = 0;
+                  for (const v of studiosVideos) {
+                    try {
+                      const res = await fetch("/api/admin/blob-manager", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "migrate-video", post_id: v.post_id, old_url: v.old_url, new_path: v.new_path }),
+                      });
+                      const data = await res.json();
+                      done++;
+                      if (data.success) {
+                        logs.push(`✅ [${v.genre}] ${v.title.slice(0, 50)}`);
+                      } else {
+                        logs.push(`❌ [${v.genre}] ${v.title.slice(0, 50)}: ${data.error}`);
+                      }
+                    } catch (err) {
+                      done++;
+                      logs.push(`❌ ${v.title.slice(0, 50)}: ${err}`);
+                    }
+                    setStudiosLog([...logs]);
+                    setStudiosProgress({ done, total: studiosVideos.length });
+                  }
+                  setStudiosReorg(false);
+                }}
+                disabled={studiosReorg}
+                className="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg text-xs hover:bg-amber-500 disabled:opacity-50">
+                {studiosReorg ? `Reorganising ${studiosProgress.done}/${studiosProgress.total}...` : `Reorganise All ${studiosVideos.length} Videos`}
+              </button>
+
+              {studiosReorg && (
+                <div className="w-full bg-gray-800 rounded-full h-2">
+                  <div className="bg-amber-500 h-2 rounded-full transition-all" style={{ width: `${(studiosProgress.done / studiosProgress.total) * 100}%` }} />
+                </div>
+              )}
+
+              {studiosLog.length > 0 && (
+                <div className="max-h-[30vh] overflow-y-auto bg-black rounded-lg p-3 space-y-0.5">
+                  {studiosLog.map((log, i) => (
                     <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{log}</p>
                   ))}
                 </div>
