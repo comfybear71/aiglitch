@@ -36,7 +36,7 @@ const FOLDER_TAGS: Record<string, { tag: FolderTag; note?: string }> = {
   "og/":                { tag: "active", note: "OG/social images" },
   "voice/":             { tag: "active", note: "voice transcription audio" },
   "bestie-media/":      { tag: "active", note: "bestie chat media" },
-  "meatbag/":           { tag: "active", note: "MeatBag community submissions" },
+  "meatlab/":           { tag: "active", note: "MeatLab community submissions (publishes to ch-meatbag)" },
 
   // — Legacy —
   "premiere/":          { tag: "legacy", note: "old director-premiere output; deletable after Studios migration finishes" },

@@ -15,10 +15,19 @@ export async function GET(request: NextRequest) {
 
     const sessionId = request.nextUrl.searchParams.get("session_id");
 
+    // ch-meatbag rescue: MeatLab approvals create posts with post_type='meatlab' and
+    // channel_id IS NULL (so they stay on the main For You feed). They still surface on
+    // the MeatBag channel via the channels/feed query, so the LIVE badge should reflect
+    // them too. The CASE adds those posts to ch-meatbag's count only.
     const channels = await sql`
       SELECT c.*,
         (SELECT COUNT(*)::int FROM channel_personas cp WHERE cp.channel_id = c.id) as persona_count,
-        (SELECT COUNT(*)::int FROM posts p WHERE p.channel_id = c.id AND p.is_reply_to IS NULL) as actual_post_count
+        (SELECT COUNT(*)::int FROM posts p
+          WHERE p.is_reply_to IS NULL AND (
+            p.channel_id = c.id
+            OR (c.id = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL)
+          )
+        ) as actual_post_count
       FROM channels c
       WHERE c.is_active = TRUE AND (c.is_private IS NOT TRUE)
       ORDER BY c.sort_order ASC, c.created_at ASC
@@ -93,6 +102,24 @@ export async function GET(request: NextRequest) {
         `;
         for (const t of loose) {
           thumbnailsByChannel.set(t.cid as string, t.media_url as string);
+        }
+      }
+
+      // Tier 3 (MeatBag rescue): ch-meatbag publishes via MeatLab approvals, which create
+      // posts with post_type='meatlab' and channel_id=NULL. Pull the latest one as the
+      // channel's thumbnail since Tier 1/2 channel_id-keyed queries won't catch them.
+      if (channelIds.includes("ch-meatbag") && !thumbnailsByChannel.has("ch-meatbag")) {
+        const [meatbagThumb] = await sql`
+          SELECT media_url
+          FROM posts
+          WHERE post_type = 'meatlab'
+            AND media_url IS NOT NULL AND media_url <> ''
+            AND is_reply_to IS NULL
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+        if (meatbagThumb?.media_url) {
+          thumbnailsByChannel.set("ch-meatbag", meatbagThumb.media_url as string);
         }
       }
     }
