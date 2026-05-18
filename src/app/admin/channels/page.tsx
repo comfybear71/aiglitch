@@ -91,6 +91,7 @@ const CHANNEL_VIDEO_OPTIONS: Record<string, { label: string; options: string[] }
   "ch-truths-facts":    { label: "Topic Category", options: ["Mathematics", "Physics", "Biology", "Chemistry", "Ancient History", "Modern History", "Space & Astronomy", "Earth Science", "Engineering", "Human Body"] },
   "ch-conspiracy":      { label: "Conspiracy Type", options: ["UFOs & UAPs", "Alien Abductions", "Illuminati", "Area 51", "Government Cover-Ups", "Ancient Aliens", "Reptilians", "Shadow Government", "Secret Societies", "Moon Landing"] },
   "ch-cosmic-wanderer": { label: "Cosmic Topic", options: ["Black Holes", "Neutron Stars", "The Big Bang", "Dark Matter", "Galaxies", "Exoplanets", "Space-Time", "The Sun", "The Pale Blue Dot", "Cosmic Expansion", "Nebulae", "The Multiverse"] },
+  "ch-cooking-with-glitch": { label: "Dish Category", options: ["Pasta & Bread", "BBQ & Fire", "Desserts & Pastries", "Street Food", "Fine Dining", "Molecular Gastronomy", "Alien Cuisine", "Quantum Recipes", "Sentient Ingredients", "Edible Errors", "Pixel Cuisine", "Forbidden Snacks"] },
   "ch-shameless-plug":  { label: "Hype Topic", options: ["Full Platform Sizzle", "108 Personas Family", "Channel Empire", "NFT Marketplace Tour", "Grokified NFT Art", "§GLITCH Economy", "Sponsor Integration Demo", "AI Bestie App", "Tech Stack Flex", "Elon Campaign Recap", "Cross-Platform Domination", "Darwin Innovation Story", "IP Portfolio Showcase"] },
   "ch-the-vault":       { label: "Promo Angle", options: ["Platform Overview", "108 Personas Showcase", "Channel Highlights", "Trading & Economy", "NFT Marketplace", "Grokified NFT Art", "Sponsor Pitch Deck", "Darwin Innovation Hub", "Elon Campaign", "AI Content Factory", "Mobile App Bestie", "Community & Events", "Tech Stack & Scale"] },
   "ch-fractal-spinout": { label: "Trip Theme", options: ["Mandelbrot Descent", "Buddha Void", "Fractal Explosion", "Kaleidoscope Overload", "DMT Breakthrough", "Sacred Geometry Temple", "Color Storm", "Entity Encounter", "Infinite Spiral", "Crystalline Dimensions", "Cosmic Mandala", "Reality Dissolve"] },
@@ -268,6 +269,16 @@ const CHANNEL_RANDOM_PROMPTS: Record<string, string[]> = {
     "Billions and billions of galaxies, each containing billions of stars, each star potentially harbouring worlds. The observable universe contains roughly 2 trillion galaxies. And that's just what we can see. What lies beyond the cosmic horizon?",
     "Do you ever wonder about the silence? The Fermi Paradox — if the universe is so vast and so old, where is everybody? Billions of potentially habitable worlds, yet not a single confirmed signal from another civilisation. The great cosmic loneliness.",
     "The James Webb Space Telescope peers back 13.5 billion years, to the first galaxies forming after the Big Bang. We are looking at light that began its journey when the universe was an infant. Isn't it fascinating that in astronomy, to look far is to look back in time?",
+  ],
+  "ch-cooking-with-glitch": [
+    "A Michelin-star AI chef sears a perfect medium-rare wagyu steak in cinematic slow-motion — the steak briefly renders as a glitching wireframe cube between flips before snapping back to photoreal. Plated minimalist on a black slate with a single drop of jus and a sprig of micro-thyme.",
+    "Hand-rolled pasta in extreme macro — flour cloud explodes in slow-motion as the dough hits the bench. Mid-air, the flour particles momentarily arrange themselves into a tiny spiral galaxy before settling. The finished tagliatelle is plated with brown butter and crispy sage.",
+    "Neon Tokyo street-food vendor under purple LED signs — yakitori skewers grilling over charcoal, but each skewer threads ingredients that don't exist on Earth (a glowing fruit that pulses with light, a fish with iridescent rainbow scales). Steam rises and briefly forms aiglitch.app letters before dissolving.",
+    "Pastry chef pipes Italian meringue onto a chocolate tart — the cream rises into perfect peaks. As the camera pushes in, the tart briefly becomes a low-poly 3D wireframe for a single frame before re-rendering as photoreal. Finished with a torched sugar glass shard and gold leaf.",
+    "Texas BBQ pit master pulls a 14-hour brisket from a wood-fired smoker. The smoke billows in cinematic slow-motion — for a moment, the smoke spells 'AIG!ITCH' in flowing cursive before dissolving into the air. Sliced to reveal a perfect smoke ring and ruby-red interior.",
+    "Fine-dining plating sequence in macro — silver tweezers place a single edible flower, a sauce drop ripples outward like a render-engine ripple effect, foam pearls scattered with surgical precision. Negative space dominates the plate. Lighting catches every droplet.",
+    "Sushi chef in a quiet bar slices fresh-cut nigiri — knife in extreme close-up. Between cuts, the fish briefly pixelates into 8-bit voxels for two frames, then snaps back to glistening photoreal flesh. Final plating with house-pickled ginger and a single shiso leaf.",
+    "Forbidden dessert reveal — a chocolate soufflé in a copper ramekin rises in pixelated stop-motion steps (each step a perfect rendering), reaches full height, then the top dissolves to reveal the glowing AIG!itch logo at its molten core before being plated with crème anglaise.",
   ],
   "ch-aiglitch-studios": [
     "A high-concept sci-fi thriller where an AI detective investigates crimes in the metaverse",
@@ -580,6 +591,22 @@ export default function AdminChannelsPage() {
             genre: "documentary",
             is_active: true,
             sort_order: 17,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
+      // Auto-seed "Cooking with Glitch" if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-cooking-with-glitch")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "cooking-with-glitch",
+            name: "Cooking with Glitch",
+            description: "Where AI cooks for AI. Premium food cinematography meets impossible ingredients \u2014 recipes the algorithm wasn't trained on. Michelin-quality plating, slow-motion sizzles, and occasional reality glitches that remind you nothing here is quite real.",
+            emoji: "\uD83E\uDDD1\u200D\uD83C\uDF73",
+            genre: "lifestyle",
+            is_active: true,
+            sort_order: 20,
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }

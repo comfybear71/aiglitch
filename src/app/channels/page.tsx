@@ -44,7 +44,7 @@ const CHANNEL_CATEGORIES: { title: string; channelIds: string[] }[] = [
   },
   {
     title: "Lifestyle & People",
-    channelIds: ["ch-paws-pixels", "ch-only-ai-fans", "ch-ai-dating", "ch-after-dark"],
+    channelIds: ["ch-paws-pixels", "ch-cooking-with-glitch", "ch-only-ai-fans", "ch-ai-dating", "ch-after-dark"],
   },
   {
     title: "Music & Cinema",
@@ -162,36 +162,48 @@ export default function ChannelsPage() {
 function HeroBanner({ channel }: { channel: Channel }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVideoThumb = channel.thumbnail?.endsWith(".mp4") || channel.thumbnail?.includes("video");
+  const [titleVideoBroken, setTitleVideoBroken] = useState(false);
+  const [thumbBroken, setThumbBroken] = useState(false);
 
   useEffect(() => {
     videoRef.current?.play().catch(() => {});
   }, []);
 
+  const useTitleVideo = channel.title_video_url && !titleVideoBroken;
+  const useThumb = channel.thumbnail && !thumbBroken;
+
   return (
     <Link href={`/channels/${channel.slug}`} className="block relative aspect-video w-full overflow-hidden">
-      {/* Background media — title video preferred, then thumbnail */}
-      {channel.title_video_url ? (
+      {/* Background media — title video preferred, then thumbnail, with onError fallbacks */}
+      {useTitleVideo ? (
         <video
           ref={videoRef}
-          src={channel.title_video_url}
+          src={channel.title_video_url!}
           className="absolute inset-0 w-full h-full object-cover"
           muted
           loop
           playsInline
           autoPlay
+          onError={() => setTitleVideoBroken(true)}
         />
-      ) : channel.thumbnail && isVideoThumb ? (
+      ) : useThumb && isVideoThumb ? (
         <video
           ref={videoRef}
-          src={channel.thumbnail}
+          src={channel.thumbnail!}
           className="absolute inset-0 w-full h-full object-cover"
           muted
           loop
           playsInline
           autoPlay
+          onError={() => setThumbBroken(true)}
         />
-      ) : channel.thumbnail ? (
-        <img src={channel.thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      ) : useThumb ? (
+        <img
+          src={channel.thumbnail!}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          onError={() => setThumbBroken(true)}
+        />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/40 to-purple-900/40" />
       )}
@@ -244,6 +256,8 @@ function RowCard({ channel }: { channel: Channel }) {
   const isVideo = channel.thumbnail?.endsWith(".mp4") || channel.thumbnail?.includes("video");
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const [titleVideoBroken, setTitleVideoBroken] = useState(false);
+  const [thumbBroken, setThumbBroken] = useState(false);
 
   // Auto-play/pause video thumbnails when visible (preserves the existing UX).
   useEffect(() => {
@@ -266,7 +280,7 @@ function RowCard({ channel }: { channel: Channel }) {
   return (
     <Link href={`/channels/${channel.slug}`} className="flex-shrink-0 w-56 sm:w-64 group">
       <div ref={cardRef} className="relative aspect-video rounded-xl overflow-hidden bg-gray-900 ring-1 ring-white/5 group-hover:ring-cyan-500/40 transition">
-        {channel.thumbnail && isVideo ? (
+        {channel.thumbnail && !thumbBroken && isVideo ? (
           <video
             ref={videoRef}
             src={channel.thumbnail}
@@ -275,20 +289,22 @@ function RowCard({ channel }: { channel: Channel }) {
             loop
             playsInline
             preload="metadata"
+            onError={() => setThumbBroken(true)}
           />
-        ) : channel.thumbnail ? (
+        ) : channel.thumbnail && !thumbBroken ? (
           <img
             src={channel.thumbnail}
             alt=""
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
+            onError={() => setThumbBroken(true)}
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-gray-900 to-gray-800" />
         )}
 
-        {/* Title overlay — animated Grok title video or fallback text */}
-        {channel.title_video_url ? (
+        {/* Title overlay — animated Grok title video, fall back to emoji card if missing/broken */}
+        {channel.title_video_url && !titleVideoBroken ? (
           <>
             <div className="absolute inset-0 bg-black/20" />
             <video
@@ -298,6 +314,7 @@ function RowCard({ channel }: { channel: Channel }) {
               loop
               playsInline
               autoPlay
+              onError={() => setTitleVideoBroken(true)}
             />
           </>
         ) : (
