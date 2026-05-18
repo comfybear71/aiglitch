@@ -311,9 +311,20 @@ export async function POST(request: NextRequest) {
         placedCampaignsForLog = activeCampaigns.filter(c => sponsorPlacements.includes(c.brand_name));
         console.log(`[generate-director-movie] Matched for thanks: ${placedCampaignsForLog.map(c => `${c.brand_name}(url=${c.website_url || "NONE"})`).join(", ")}`);
         if (placedCampaignsForLog.length > 0) {
-          const sponsorCredits = placedCampaignsForLog.map(c =>
-            c.website_url ? `${c.brand_name} ${c.website_url}` : c.brand_name
-          ).join(" | ");
+          // Prefer product_name over brand_name (in-house campaigns share one brand) and dedupe by label.
+          const seen = new Set<string>();
+          const sponsorCredits = placedCampaignsForLog
+            .map(c => {
+              const label = c.product_name || c.brand_name;
+              return { label, url: c.website_url };
+            })
+            .filter(({ label }) => {
+              if (seen.has(label)) return false;
+              seen.add(label);
+              return true;
+            })
+            .map(({ label, url }) => (url ? `${label} ${url}` : label))
+            .join(" | ");
           sponsorThanksLine = `\n\n🤝 Thanks to our sponsors: ${sponsorCredits}`;
           console.log(`[generate-director-movie] THANKS LINE: "${sponsorThanksLine}"`);
         }
@@ -647,7 +658,17 @@ export async function PUT(request: NextRequest) {
     const { getActiveCampaigns } = await import("@/lib/ad-campaigns");
     const activePut = await getActiveCampaigns(channelId);
     if (activePut.length > 0) {
-      const credits = activePut.map(c => c.website_url ? `${c.brand_name} ${c.website_url}` : c.brand_name).join(" | ");
+      // Prefer product_name over brand_name (in-house campaigns share one brand) and dedupe by label.
+      const seenPut = new Set<string>();
+      const credits = activePut
+        .map(c => ({ label: c.product_name || c.brand_name, url: c.website_url }))
+        .filter(({ label }) => {
+          if (seenPut.has(label)) return false;
+          seenPut.add(label);
+          return true;
+        })
+        .map(({ label, url }) => (url ? `${label} ${url}` : label))
+        .join(" | ");
       sponsorThanksPut = `\n\n🤝 Thanks to our sponsors: ${credits}`;
     }
   } catch { /* non-fatal */ }
