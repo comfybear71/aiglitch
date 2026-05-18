@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { list as listBlobs, del, put } from "@vercel/blob";
+import { list as listBlobs, del, put, copy } from "@vercel/blob";
 
 export const maxDuration = 120;
 
@@ -278,17 +278,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const res = await fetch(old_url);
-      if (!res.ok) return NextResponse.json({ error: `Download failed: ${res.status}` }, { status: 500 });
-      const arrayBuf = await res.arrayBuffer();
-      const buffer = new Blob([arrayBuf], { type: "video/mp4" });
-
-      const blob = await put(new_path, buffer, {
-        access: "public",
-        contentType: "video/mp4",
-        addRandomSuffix: false,
-        allowOverwrite: true,
-      });
+      const blob = await copy(old_url, new_path, { access: "public" });
 
       const { getDb } = await import("@/lib/db");
       const sql = getDb();
@@ -299,7 +289,6 @@ export async function POST(request: NextRequest) {
         post_id,
         old_url,
         new_url: blob.url,
-        size: arrayBuf.byteLength,
       });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
