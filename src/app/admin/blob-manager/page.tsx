@@ -77,6 +77,13 @@ export default function BlobManagerPage() {
   const [migrateLog, setMigrateLog] = useState<string[]>([]);
   const [migrateProgress, setMigrateProgress] = useState({ done: 0, total: 0 });
 
+  // Sponsor credit backfill
+  type CreditFix = { post_id: string; created_at: string; old_line: string; new_line: string; mode: "product_names" | "dedupe_only" | "skip" };
+  const [creditScan, setCreditScan] = useState<{ scanned: number; broken: number; all: CreditFix[] } | null>(null);
+  const [creditFixing, setCreditFixing] = useState(false);
+  const [creditLog, setCreditLog] = useState<string[]>([]);
+  const [creditProgress, setCreditProgress] = useState({ done: 0, total: 0 });
+
   const deleteFolderContents = async (prefix: string, fileCount: number, totalSize: number) => {
     if (!confirm(`DELETE ALL ${fileCount.toLocaleString()} files in "${prefix.replace(/\/$/, "")}"?\n\n${formatBytes(totalSize)} will be freed.\n\nThis CANNOT be undone.`)) return;
     if (!confirm(`Are you SURE? This deletes everything in ${prefix}`)) return;
@@ -494,6 +501,105 @@ export default function BlobManagerPage() {
                 <div className="max-h-[30vh] overflow-y-auto bg-black rounded-lg p-3 space-y-0.5">
                   {studiosLog.map((log, i) => (
                     <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{log}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Sponsor Credit Backfill */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-pink-400 uppercase">Sponsor Credit Backfill</h2>
+            <button
+              onClick={async () => {
+                setCreditScan(null);
+                setCreditLog([]);
+                const res = await fetch("/api/admin/blob-manager?action=scan-broken-credits");
+                const data = await res.json();
+                if (data.error) { setCreditLog([`❌ ${data.error}`]); return; }
+                setCreditScan({ scanned: data.scanned, broken: data.broken, all: data.all || [] });
+              }}
+              className="px-3 py-1 bg-pink-600/20 text-pink-400 rounded text-xs hover:bg-pink-600/30 border border-pink-500/30">
+              Scan Broken Credits
+            </button>
+          </div>
+
+          <p className="text-[10px] text-gray-500 mb-3">
+            Finds past posts whose &ldquo;Thanks to our sponsors&rdquo; line has duplicate brand names
+            (e.g. &ldquo;AIG!itch Marketplace&rdquo; ×5). Rewrites captions using <code className="text-pink-400">product_name</code> from
+            <code className="text-pink-400"> ad_impressions</code> where available, or just dedupes the duplicates if no impression record exists.
+          </p>
+
+          {creditScan && (
+            <div className="bg-gray-900 border border-pink-500/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="text-xs text-white">
+                  Scanned <span className="font-bold text-pink-400">{creditScan.scanned}</span> recent posts,
+                  found <span className="font-bold text-yellow-400">{creditScan.broken}</span> with broken credits
+                </div>
+                {creditScan.broken > 0 && (
+                  <button
+                    disabled={creditFixing}
+                    onClick={async () => {
+                      if (!confirm(`Fix ${creditScan.broken} broken sponsor credit lines?\n\nUpdates posts.content for each — old captions cannot be recovered.`)) return;
+                      setCreditFixing(true);
+                      setCreditProgress({ done: 0, total: creditScan.all.length });
+                      const logs: string[] = [];
+                      let done = 0;
+                      for (const item of creditScan.all) {
+                        try {
+                          const res = await fetch("/api/admin/blob-manager", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "fix-credit", post_id: item.post_id }),
+                          });
+                          const data = await res.json();
+                          done++;
+                          if (data.success) {
+                            logs.push(`✅ [${data.mode}] ${item.post_id.slice(0, 8)} ${item.new_line.slice(0, 80)}`);
+                          } else {
+                            logs.push(`⏭️ ${item.post_id.slice(0, 8)}: ${data.reason || data.error || "skipped"}`);
+                          }
+                        } catch (err) {
+                          done++;
+                          logs.push(`❌ ${item.post_id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`);
+                        }
+                        setCreditLog([...logs]);
+                        setCreditProgress({ done, total: creditScan.all.length });
+                      }
+                      setCreditFixing(false);
+                    }}
+                    className="px-4 py-2 bg-pink-600 text-white font-bold rounded-lg text-xs hover:bg-pink-500 disabled:opacity-50">
+                    {creditFixing ? `Fixing ${creditProgress.done}/${creditProgress.total}...` : `Fix All ${creditScan.broken}`}
+                  </button>
+                )}
+              </div>
+
+              {creditFixing && (
+                <div className="w-full bg-gray-800 rounded-full h-2">
+                  <div className="bg-pink-500 h-2 rounded-full transition-all" style={{ width: `${(creditProgress.done / Math.max(1, creditProgress.total)) * 100}%` }} />
+                </div>
+              )}
+
+              {creditScan.all.length > 0 && !creditFixing && (
+                <div className="max-h-[40vh] overflow-y-auto bg-black rounded-lg p-3 space-y-2">
+                  <p className="text-[10px] text-gray-500 mb-2">Preview (first {Math.min(20, creditScan.all.length)} of {creditScan.all.length}):</p>
+                  {creditScan.all.slice(0, 20).map((item) => (
+                    <div key={item.post_id} className="border-l-2 border-pink-500/40 pl-2 text-[10px]">
+                      <p className="text-gray-500">{item.post_id.slice(0, 8)} · {new Date(item.created_at).toLocaleDateString()} · <span className="text-pink-400">{item.mode}</span></p>
+                      <p className="text-red-400 line-through truncate">{item.old_line}</p>
+                      <p className="text-green-400 truncate">{item.new_line}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {creditLog.length > 0 && (
+                <div className="max-h-[30vh] overflow-y-auto bg-black rounded-lg p-3 space-y-0.5">
+                  {creditLog.map((log, i) => (
+                    <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : log.startsWith("⏭️") ? "text-gray-500" : "text-red-400"}`}>{log}</p>
                   ))}
                 </div>
               )}

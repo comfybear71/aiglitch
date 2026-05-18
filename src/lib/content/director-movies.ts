@@ -1154,9 +1154,13 @@ ${jsonFormat}`;
         const outroStyle = outro?.style || genreOutro.style;
         const outroLastFrame = outro?.lastFrame || genreOutro.lastFrame;
 
-        // Add sponsor thanks if product placements were in this video
-        const sponsorThanks = placementCampaigns.length > 0
-          ? ` Thanks to our sponsors: ${placementCampaigns.map(c => c.brand_name).join(", ")}.`
+        // Add sponsor thanks if product placements were in this video.
+        // Prefer product_name over brand_name (in-house campaigns share one brand) and dedupe.
+        const sponsorLabels = Array.from(
+          new Set(placementCampaigns.map(c => c.product_name || c.brand_name))
+        );
+        const sponsorThanks = sponsorLabels.length > 0
+          ? ` Thanks to our sponsors: ${sponsorLabels.join(", ")}.`
           : "";
 
         suffix.push({

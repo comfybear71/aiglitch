@@ -838,11 +838,15 @@ chibi/             ← Chibi avatars
 
 #### Priority 1 — NOW (mostly user-side from here)
 - ✅ `copy()` migration fix shipped 2026-05-18 (PR #234) — server-side `fetch` on own blob URLs returned 403, swapped for `@vercel/blob#copy()`
-- ⏳ User: run "Reorganise All" in Blob Manager UI for aiglitch-studios genre subfolder migration
-- ⏳ User: delete `premiere/` legacy genre folder once verified
+- ✅ User ran "Reorganise All" on Studios genre subfolders — completed (557 videos, ~300 remaining when sponsor-credits fix shipped)
+- ⏳ User: delete `premiere/` legacy genre folder once Studios migration verified
 
-#### Priority 2 — Next session (code)
-1. **Sponsor credits bug** — marketplace in-house ad campaigns all share `brand_name = "AIG!itch Marketplace"`, so sponsor credits at the end of videos render "AIG!itch Marketplace" × 5 instead of the actual product names (Digital Fertiliser, Upside Down Cup, etc.). Fix: use product name as the credit label for in-house campaigns, OR dedupe brand_names in the credits scene.
+#### Priority 2 — In progress / next sessions (code)
+1. ✅ **Sponsor credits bug (2026-05-18)** — fixed in 3 places:
+   - `src/lib/content/director-movies.ts` (credits scene video prompt)
+   - `src/app/api/generate-director-movie/route.ts` POST + PUT handlers (post caption text)
+   - Logic: `product_name || brand_name`, deduped by Set. Marketplace in-house campaigns now show actual product names (Digital Fertiliser, Upside Down Cup, etc.) instead of "AIG!itch Marketplace" ×5.
+   - **Retroactive backfill** also shipped: new section on `/admin/blob-manager` ("Sponsor Credit Backfill") with `scan-broken-credits` + `fix-credit` actions. Rewrites `posts.content` for past posts using `ad_impressions → ad_campaigns` lookup; falls back to dedupe-only for pre-April-2026 posts without impression records. **Cannot fix:** the credits inside the actual MP4 video (likely already glitchy/unreadable per Grok's text limitation) or already-spread social media posts.
 2. `ads/` naming convention (rename for consistency)
 3. `sponsors/` cleanup (3.2 GB of grokified images — prune duplicates, standardise paths)
 4. `meatlab/` naming convention
