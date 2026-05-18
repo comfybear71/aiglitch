@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
           ORDER BY md5(p.id::text || ${seed})
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type = 'video'
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY md5(p.id::text || ${seed})
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
           ORDER BY p.created_at DESC
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type = 'video'
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
           ORDER BY p.created_at DESC
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type = 'video'
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
           FROM posts p
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
-            AND p.channel_id = ${channelId}
+            AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
