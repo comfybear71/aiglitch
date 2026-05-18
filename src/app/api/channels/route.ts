@@ -68,81 +68,115 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get latest media thumbnail per channel.
-    // Tier 1 (strict): latest post excluding raw intermediates, with strict media_type filter.
-    // Tier 2 (loose): for any channel that Tier 1 missed, fall back to ANY post with a media_url.
-    // This rescues channels where posts have unusual media_source/media_type values
-    // (legacy data, audio-only music posts, etc.) so we don't fall through to the emoji fallback.
-    const thumbnailsByChannel = new Map<string, string>();
+    // Build a thumbnail CANDIDATE LIST per channel — up to MAX_CANDIDATES URLs.
+    // The client tries each in order; on each onError it falls through to the
+    // next. This is the only reliable way to handle stale blob URLs (post still
+    // exists in the DB but the underlying blob was deleted/moved during the
+    // storage reorg). AiTunes and AI Fail Army hit this every time because
+    // their latest few posts happen to point at dead blobs.
+    //
+    // Ordering per channel:
+    //   1. Strict: latest 5 posts with image/video media, excluding raw intermediates
+    //   2. Loose: any remaining slots filled from posts with non-empty media_url
+    //   3. MeatBag-only special: post_type='meatlab' posts (channel_id IS NULL)
+    const MAX_CANDIDATES = 5;
+    const candidatesByChannel = new Map<string, string[]>();
+    const addCandidate = (channelId: string, url: string) => {
+      const list = candidatesByChannel.get(channelId) ?? [];
+      if (list.length < MAX_CANDIDATES && !list.includes(url)) {
+        list.push(url);
+        candidatesByChannel.set(channelId, list);
+      }
+    };
+
     if (channelIds.length > 0) {
       const strict = await sql`
-        SELECT DISTINCT ON (p.channel_id) p.channel_id as cid, p.media_url
-        FROM posts p
-        WHERE p.is_reply_to IS NULL
-          AND p.media_url IS NOT NULL
-          AND p.media_type IN ('image', 'video')
-          AND p.channel_id = ANY(${channelIds})
-          AND COALESCE(p.media_source, '') NOT IN ('director-profile', 'director-scene')
-        ORDER BY p.channel_id, p.created_at DESC
+        SELECT p.channel_id as cid, p.media_url, p.created_at
+        FROM (
+          SELECT channel_id, media_url, created_at,
+            ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC) as rn
+          FROM posts
+          WHERE is_reply_to IS NULL
+            AND media_url IS NOT NULL AND media_url <> ''
+            AND media_type IN ('image', 'video')
+            AND channel_id = ANY(${channelIds})
+            AND COALESCE(media_source, '') NOT IN ('director-profile', 'director-scene')
+        ) p
+        WHERE p.rn <= ${MAX_CANDIDATES}
+        ORDER BY p.cid, p.created_at DESC
       `;
       for (const t of strict) {
-        thumbnailsByChannel.set(t.cid as string, t.media_url as string);
+        addCandidate(t.cid as string, t.media_url as string);
       }
 
-      const missing = channelIds.filter(id => !thumbnailsByChannel.has(id));
-      if (missing.length > 0) {
+      // Loose pass — fill empty slots from posts with any non-empty media_url
+      const needLoose = channelIds.filter(id => (candidatesByChannel.get(id)?.length ?? 0) < MAX_CANDIDATES);
+      if (needLoose.length > 0) {
         const loose = await sql`
-          SELECT DISTINCT ON (p.channel_id) p.channel_id as cid, p.media_url
-          FROM posts p
-          WHERE p.is_reply_to IS NULL
-            AND p.media_url IS NOT NULL
-            AND p.media_url <> ''
-            AND p.channel_id = ANY(${missing})
-          ORDER BY p.channel_id, p.created_at DESC
+          SELECT p.channel_id as cid, p.media_url, p.created_at
+          FROM (
+            SELECT channel_id, media_url, created_at,
+              ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC) as rn
+            FROM posts
+            WHERE is_reply_to IS NULL
+              AND media_url IS NOT NULL AND media_url <> ''
+              AND channel_id = ANY(${needLoose})
+          ) p
+          WHERE p.rn <= ${MAX_CANDIDATES}
+          ORDER BY p.cid, p.created_at DESC
         `;
         for (const t of loose) {
-          thumbnailsByChannel.set(t.cid as string, t.media_url as string);
+          addCandidate(t.cid as string, t.media_url as string);
         }
       }
 
-      // Tier 3 (MeatBag rescue): ch-meatbag publishes via MeatLab approvals, which create
-      // posts with post_type='meatlab' and channel_id=NULL. Pull the latest one as the
-      // channel's thumbnail since Tier 1/2 channel_id-keyed queries won't catch them.
-      if (channelIds.includes("ch-meatbag") && !thumbnailsByChannel.has("ch-meatbag")) {
-        const [meatbagThumb] = await sql`
+      // MeatBag-only: fill any remaining slots from meatlab posts (channel_id IS NULL)
+      if (channelIds.includes("ch-meatbag") && (candidatesByChannel.get("ch-meatbag")?.length ?? 0) < MAX_CANDIDATES) {
+        const meatbag = await sql`
           SELECT media_url
           FROM posts
           WHERE post_type = 'meatlab'
             AND media_url IS NOT NULL AND media_url <> ''
             AND is_reply_to IS NULL
           ORDER BY created_at DESC
-          LIMIT 1
+          LIMIT ${MAX_CANDIDATES}
         `;
-        if (meatbagThumb?.media_url) {
-          thumbnailsByChannel.set("ch-meatbag", meatbagThumb.media_url as string);
+        for (const t of meatbag) {
+          addCandidate("ch-meatbag", t.media_url as string);
         }
       }
     }
 
-    const result = channels.map(c => ({
-      ...c,
-      content_rules: typeof c.content_rules === "string" ? JSON.parse(c.content_rules as string) : c.content_rules,
-      schedule: typeof c.schedule === "string" ? JSON.parse(c.schedule as string) : c.schedule,
-      // Generation config fields — explicit defaults so they're always present in the response
-      show_title_page: c.show_title_page ?? CHANNEL_DEFAULTS.showTitlePage,
-      show_director: c.show_director ?? CHANNEL_DEFAULTS.showDirector,
-      show_credits: c.show_credits ?? CHANNEL_DEFAULTS.showCredits,
-      scene_count: c.scene_count ?? null,
-      scene_duration: c.scene_duration ?? CHANNEL_DEFAULTS.sceneDuration,
-      default_director: c.default_director ?? null,
-      generation_genre: c.generation_genre ?? null,
-      short_clip_mode: c.short_clip_mode ?? false,
-      is_music_channel: c.is_music_channel ?? false,
-      auto_publish_to_feed: c.auto_publish_to_feed ?? CHANNEL_DEFAULTS.autoPublishToFeed,
-      subscribed: subscribedSet.has(c.id as string),
-      personas: hostsByChannel.get(c.id as string) || [],
-      thumbnail: (c.banner_url as string | null) || thumbnailsByChannel.get(c.id as string) || null,
-    }));
+    const result = channels.map(c => {
+      const channelId = c.id as string;
+      const banner = c.banner_url as string | null;
+      const autoCandidates = candidatesByChannel.get(channelId) ?? [];
+      // banner_url is admin-set so it gets first crack; auto-discovered candidates
+      // fall in after, deduped.
+      const thumbnail_candidates = banner
+        ? [banner, ...autoCandidates.filter(u => u !== banner)]
+        : autoCandidates;
+      return {
+        ...c,
+        content_rules: typeof c.content_rules === "string" ? JSON.parse(c.content_rules as string) : c.content_rules,
+        schedule: typeof c.schedule === "string" ? JSON.parse(c.schedule as string) : c.schedule,
+        // Generation config fields — explicit defaults so they're always present in the response
+        show_title_page: c.show_title_page ?? CHANNEL_DEFAULTS.showTitlePage,
+        show_director: c.show_director ?? CHANNEL_DEFAULTS.showDirector,
+        show_credits: c.show_credits ?? CHANNEL_DEFAULTS.showCredits,
+        scene_count: c.scene_count ?? null,
+        scene_duration: c.scene_duration ?? CHANNEL_DEFAULTS.sceneDuration,
+        default_director: c.default_director ?? null,
+        generation_genre: c.generation_genre ?? null,
+        short_clip_mode: c.short_clip_mode ?? false,
+        is_music_channel: c.is_music_channel ?? false,
+        auto_publish_to_feed: c.auto_publish_to_feed ?? CHANNEL_DEFAULTS.autoPublishToFeed,
+        subscribed: subscribedSet.has(channelId),
+        personas: hostsByChannel.get(channelId) || [],
+        thumbnail: thumbnail_candidates[0] ?? null,
+        thumbnail_candidates,
+      };
+    });
 
     const res = NextResponse.json({ channels: result });
     res.headers.set("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");

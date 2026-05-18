@@ -26,9 +26,20 @@ interface Channel {
   subscribed: boolean;
   personas: ChannelPersona[];
   thumbnail: string | null;
+  thumbnail_candidates?: string[];
   title_video_url: string | null;
   content_rules: { tone?: string; topics?: string[]; mediaPreference?: string };
   schedule: { postsPerDay?: number };
+}
+
+// Returns the candidate list with sensible fallbacks. Older API responses
+// (or routes that don't return thumbnail_candidates) still work via the
+// single-string `thumbnail` field.
+function getThumbCandidates(channel: Channel): string[] {
+  if (channel.thumbnail_candidates && channel.thumbnail_candidates.length > 0) {
+    return channel.thumbnail_candidates;
+  }
+  return channel.thumbnail ? [channel.thumbnail] : [];
 }
 
 // Netflix-style category rows. Order here = display order on the page.
@@ -100,7 +111,7 @@ export default function ChannelsPage() {
   const subscribedChannels = visibleChannels.filter(c => c.subscribed);
 
   // Hero pick: rotates by day-of-year across channels that have a thumbnail and ≥1 post.
-  const heroPool = visibleChannels.filter(c => c.actual_post_count > 0 && (c.thumbnail || c.title_video_url));
+  const heroPool = visibleChannels.filter(c => c.actual_post_count > 0 && (getThumbCandidates(c).length > 0 || c.title_video_url));
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
   const heroChannel: Channel | undefined = heroPool.length > 0 ? heroPool[dayOfYear % heroPool.length] : undefined;
 
@@ -165,16 +176,19 @@ export default function ChannelsPage() {
 
 function HeroBanner({ channel }: { channel: Channel }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const isVideoThumb = channel.thumbnail?.endsWith(".mp4") || channel.thumbnail?.includes("video");
+  const candidates = getThumbCandidates(channel);
   const [titleVideoBroken, setTitleVideoBroken] = useState(false);
-  const [thumbBroken, setThumbBroken] = useState(false);
+  const [thumbIdx, setThumbIdx] = useState(0);
+  const currentThumb = candidates[thumbIdx] ?? null;
+  const isVideoThumb = currentThumb?.endsWith(".mp4") || currentThumb?.includes("video");
+  const advanceThumb = () => setThumbIdx(i => i + 1);
 
   useEffect(() => {
     videoRef.current?.play().catch(() => {});
   }, []);
 
   const useTitleVideo = channel.title_video_url && !titleVideoBroken;
-  const useThumb = channel.thumbnail && !thumbBroken;
+  const useThumb = !!currentThumb;
 
   return (
     <Link href={`/channels/${channel.slug}`} className="block relative aspect-video w-full overflow-hidden">
@@ -193,20 +207,22 @@ function HeroBanner({ channel }: { channel: Channel }) {
       ) : useThumb && isVideoThumb ? (
         <video
           ref={videoRef}
-          src={channel.thumbnail!}
+          key={currentThumb}
+          src={currentThumb!}
           className="absolute inset-0 w-full h-full object-cover"
           muted
           loop
           playsInline
           autoPlay
-          onError={() => setThumbBroken(true)}
+          onError={advanceThumb}
         />
       ) : useThumb ? (
         <img
-          src={channel.thumbnail!}
+          key={currentThumb}
+          src={currentThumb!}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
-          onError={() => setThumbBroken(true)}
+          onError={advanceThumb}
         />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/40 to-purple-900/40" />
@@ -257,11 +273,14 @@ function CategoryRow({ title, channels }: { title: string; channels: Channel[] }
 }
 
 function RowCard({ channel }: { channel: Channel }) {
-  const isVideo = channel.thumbnail?.endsWith(".mp4") || channel.thumbnail?.includes("video");
+  const candidates = getThumbCandidates(channel);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [titleVideoBroken, setTitleVideoBroken] = useState(false);
-  const [thumbBroken, setThumbBroken] = useState(false);
+  const [thumbIdx, setThumbIdx] = useState(0);
+  const currentThumb = candidates[thumbIdx] ?? null;
+  const isVideo = currentThumb?.endsWith(".mp4") || currentThumb?.includes("video");
+  const advanceThumb = () => setThumbIdx(i => i + 1);
 
   // Auto-play/pause video thumbnails when visible (preserves the existing UX).
   useEffect(() => {
@@ -284,24 +303,26 @@ function RowCard({ channel }: { channel: Channel }) {
   return (
     <Link href={`/channels/${channel.slug}`} className="flex-shrink-0 w-56 sm:w-64 group">
       <div ref={cardRef} className="relative aspect-video rounded-xl overflow-hidden bg-gray-900 ring-1 ring-white/5 group-hover:ring-cyan-500/40 transition">
-        {channel.thumbnail && !thumbBroken && isVideo ? (
+        {currentThumb && isVideo ? (
           <video
             ref={videoRef}
-            src={channel.thumbnail}
+            key={currentThumb}
+            src={currentThumb}
             className="w-full h-full object-cover"
             muted
             loop
             playsInline
             preload="metadata"
-            onError={() => setThumbBroken(true)}
+            onError={advanceThumb}
           />
-        ) : channel.thumbnail && !thumbBroken ? (
+        ) : currentThumb ? (
           <img
-            src={channel.thumbnail}
+            key={currentThumb}
+            src={currentThumb}
             alt=""
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
-            onError={() => setThumbBroken(true)}
+            onError={advanceThumb}
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-gray-900 to-gray-800" />
