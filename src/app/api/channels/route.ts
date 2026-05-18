@@ -62,6 +62,8 @@ export async function GET(request: NextRequest) {
     // Get latest media thumbnail per channel — only from explicitly tagged posts
     const thumbnailsByChannel = new Map<string, string>();
     if (channelIds.length > 0) {
+      // Exclude only raw intermediate clips (individual scenes, persona-profile cuts).
+      // 'director-premiere' is the FINAL stitched channel video — it's the right thumbnail source.
       const thumbs = await sql`
         SELECT DISTINCT ON (p.channel_id) p.channel_id as cid, p.media_url
         FROM posts p
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
           AND p.media_url IS NOT NULL
           AND p.media_type IN ('image', 'video')
           AND p.channel_id = ANY(${channelIds})
-          AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
+          AND COALESCE(p.media_source, '') NOT IN ('director-profile', 'director-scene')
         ORDER BY p.channel_id, p.created_at DESC
       `;
       for (const t of thumbs) {

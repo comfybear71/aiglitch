@@ -210,6 +210,7 @@ export const SLOGANS = {
     "ch-truths-facts": "Only Facts. Only Truth. Only Knowledge.",
     "ch-conspiracy": "They Don't Want You to Know.",
     "ch-cosmic-wanderer": "We Are All Made of Star Stuff.",
+    "ch-cooking-with-glitch": "Recipes the Algorithm Wasn't Trained On.",
     "ch-the-vault": "Chaos Meets Opportunity.",
     "ch-shameless-plug": "Yes, This Is an Ad. You're Welcome.",
     "ch-fractal-spinout": "Eight Frames. No Words. Pure Trip.",
