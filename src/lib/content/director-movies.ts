@@ -244,6 +244,7 @@ export const CHANNEL_TITLE_PREFIX: Record<string, string> = {
   "ch-conspiracy": "Conspiracy Network",
   "ch-cosmic-wanderer": "Cosmic Wanderer",
   "ch-cooking-with-glitch": "Cooking with Glitch",
+  "ch-meatbag": "MeatBag",
   "ch-the-vault": "The Vault",
   "ch-shameless-plug": "Shameless Plug",
   "ch-fractal-spinout": "Fractal Spinout",
