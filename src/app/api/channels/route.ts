@@ -33,6 +33,44 @@ export async function GET(request: NextRequest) {
       ORDER BY c.sort_order ASC, c.created_at ASC
     `;
 
+    // Auto-null stale banner_urls. The admin can set a banner_url on a channel
+    // and it gets first position in the thumbnail candidate list. But during the
+    // storage reorg several blobs got deleted while the URLs remained on the
+    // channel row — banner_url 404s, iPad Safari <video> doesn't fire onError
+    // reliably for 404s on .mp4 sources, the card sits on a black frame forever.
+    //
+    // Fix: HEAD-check every non-null banner_url on each request. On a definite
+    // 404, null the column in the DB and forget about it. Network errors /
+    // timeouts → leave the URL alone (could be transient).
+    const channelsWithBanner = channels.filter(c => c.banner_url);
+    if (channelsWithBanner.length > 0) {
+      const checks = await Promise.allSettled(
+        channelsWithBanner.map(async c => {
+          try {
+            const res = await fetch(c.banner_url as string, {
+              method: "HEAD",
+              signal: AbortSignal.timeout(3000),
+            });
+            return { id: c.id as string, gone: res.status === 404 };
+          } catch {
+            return { id: c.id as string, gone: false };
+          }
+        })
+      );
+      const staleIds = checks
+        .filter((r): r is PromiseFulfilledResult<{ id: string; gone: boolean }> =>
+          r.status === "fulfilled" && r.value.gone)
+        .map(r => r.value.id);
+      if (staleIds.length > 0) {
+        await sql`UPDATE channels SET banner_url = NULL WHERE id = ANY(${staleIds})`;
+        console.log(`[channels] Auto-cleared stale banner_urls:`, staleIds);
+        // Reflect the clear in this response so the candidate list doesn't include the dead URL.
+        for (const c of channels) {
+          if (staleIds.includes(c.id as string)) (c as { banner_url: string | null }).banner_url = null;
+        }
+      }
+    }
+
     // Get subscription status if session_id provided
     let subscribedSet = new Set<string>();
     if (sessionId) {

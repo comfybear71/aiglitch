@@ -761,6 +761,50 @@ See full details in `errors/error-log.md #1`.
 3. GitHub UI: told user to "scroll up for the green button" when the user was NOT LOGGED IN to GitHub. Should have checked screenshot for "Sign in" text.
 4. email_drafts table didn't exist: migration had FOREIGN KEY to contacts table which didn't exist when the migration label first ran. Fixed with inline CREATE TABLE safety net.
 
+## Session Log — 2026-05-18 (Channels page Netflix redesign + MeatBag + cleanup)
+
+Massive single-day session — 11 PRs shipped (#236 through #245 plus the docs PR for this entry). Headline: `/channels` is now a Netflix-style multi-row browse layout, the MeatLab moderation system is wired to a new MeatBag community channel, blob folders have a traffic-light tag layer, and the thumbnail rendering self-heals broken blob URLs.
+
+### Shipped (master)
+
+| Version | PR | Title |
+|---------|----|----|
+| v1.10.0 | #236 | Sponsor credits: product_name + dedupe (forward + retroactive backfill) |
+| v1.10.1 | #237 | Channels page Netflix-style redesign (hero + category rows) |
+| v1.11.0 | #238 | Cooking with Glitch channel + thumbnail fallbacks |
+| v1.12.0 | #239 | Blob Manager folder tag layer (Active / Legacy / Personal / Untagged) |
+| v1.13.0 | #240 | MeatBag channel + admin moderation queue (originally duplicated MeatLab — see below) |
+| v1.14.1 | #241 | MeatBag channel auto-seed + Tier-2 thumbnail fallback |
+| v1.14.2 | #242 | Remove duplicate MeatBag Queue, wire MeatLab → ch-meatbag |
+| v1.15.0 | #243 | Channels thumbnail candidate list (self-heals stale blob URLs) |
+| v1.15.1 | #244 | Admin channels card cleanup (9 buttons → 2 per card) |
+| v1.15.2 | #245 | HOTFIX: /api/channels 500 — invalid ORDER BY p.cid |
+| v1.15.3 | TBD | Auto-null broken banner_urls + this session log (in flight) |
+
+### Key architectural changes
+
+**`/channels` Netflix-style layout** (PR #237) — Replaced the flat 3-column grid with hero banner + horizontal-scroll category rows. Rows: News & Current Affairs, Entertainment, Lifestyle & People, Community (new), Music & Cinema, Tech & Future, Self-Promo, More (catch-all). Hero rotates daily by day-of-year. "My Channels" row at the top for subscribed users. Subscribe button moved off the cards into the channel detail page. Auto-play video thumbnails preserved on visibility.
+
+**MeatLab → MeatBag channel wiring** (PR #242, after the #240 misstep) — MeatLab approvals now surface on the new `ch-meatbag` Community channel WITHOUT moving them off the main For You feed. Approach: leave `channel_id = NULL` on the approved post; the channel feed query (`/api/channels/feed`) special-cases ch-meatbag with an OR clause to include `post_type = 'meatlab'` posts. Zero cross-repo coordination — main feed in aiglitch-api untouched. Tier-3 thumbnail rescue added to `/api/channels` so the channel card surfaces the latest meatlab post even though it has no channel_id.
+
+**Thumbnail candidate list** (PR #243) — Real fix for the AiTunes/Fail Army emoji-fallback bug. `/api/channels` now returns `thumbnail_candidates: string[]` (up to 5 URLs per channel, banner_url first, then ROW_NUMBER-ranked posts). UI cycles through them via React `key` reset on each `onError`. Self-healing for any future stale blob URLs.
+
+**Auto-null broken banner_urls** (PR #245-followup, in flight as v1.15.3) — Diagnosing AiTunes + AI Fail Army revealed they were the ONLY two channels with `banner_url` set, and BOTH pointed at promo blobs deleted during the storage reorg. iPad Safari's `<video>` doesn't fire `onError` reliably for 404 mp4 sources, so the broken first candidate just sat there as a black frame. Fix: `/api/channels` GET handler now HEAD-checks every non-null `banner_url` on each request and NULLs the column on a definite 404. Network errors / timeouts are left alone (could be transient). Adds ~50ms per stale-URL check, only for the handful of channels with banner_url set, and the response is CDN-cached for 30s.
+
+**Blob Manager folder tag layer** (PR #239) — Adds 🟢 Active / 🟡 Legacy / 🔴 Personal / ⚪ Untagged tags to every folder card in /admin/blob-manager. Single source of truth in `FOLDER_TAGS` map at top of the file. Includes legend + filter pills with live counts. Initial classification: 11 active (incl. `meatlab/`), 7 legacy, 5 personal.
+
+### Bugs caught and fixed in the same session
+
+- **PR #243 → #245 hotfix loop**: My ROW_NUMBER subquery used `ORDER BY p.cid` where `cid` was a SELECT-list alias, not a column on the subquery. Postgres errored, /api/channels returned 500 for ~hours until #245 shipped. Lesson added to Known Gotchas in CLAUDE.md.
+- **PR #240 → #242 cleanup loop**: I built `/admin/meatbag-queue` as a parallel moderation system before grepping for the existing MeatLab page. #242 ripped it out (315 + 240 lines deleted) and wired MeatLab into the channel instead. Lesson: grep for existing systems before scaffolding new ones.
+
+### Pending / wishlist (see "Future Features" below)
+- Naming convention doc (`docs/blob-naming-convention.md`)
+- MeatLab post 🥩 badging on PostCard (visual differentiation on main feed)
+- User-facing MeatLab submission UI (currently admin-upload only)
+- Pinned hero channel (admin override of day-of-year rotation)
+- "MeatLab cross-link" UI on /admin/meatlab (orphaned from the abandoned Clear Thumb PR)
+
 ## Session Log — 2026-04-13
 
 ### X DM Bot (pending merge)
@@ -868,6 +912,17 @@ chibi/             ← Chibi avatars
 - **PopupAd** — Grokified NFT images, lower position
 
 ### Future Features
+
+#### Channels / MeatBag / MeatLab (added 2026-05-18)
+- **Naming convention doc** (`docs/blob-naming-convention.md`) — formalise the active/legacy/personal categorisation, folder prefixes, when to delete vs archive. Stops untagged folders accumulating in Blob Manager. No code change, just documentation.
+- **MeatLab post 🥩 badging on PostCard** — small badge / accent on main For You feed posts where `post_type = 'meatlab'` so they're visually distinct from AI-generated content. Cheap branding boost (~20 lines).
+- **User-facing MeatLab submission UI** — currently v1 is admin-upload only via /admin/meatlab. Add a public web submission form (with file upload, anti-spam, size limits, user auth) OR build it into the Bestie mobile app (cleaner UX but cross-repo work).
+- **Pinned hero channel on /channels** — admin override of the day-of-year rotation. Lets the boss feature a specific channel on the hero banner instead of waiting for the deterministic schedule. Probably a small selector on /admin/channels.
+- **"View on MeatBag channel" link on /admin/meatlab approved cards** — small cross-link from the moderation page to the public channel view. Was in the abandoned Clear Thumb PR and got lost.
+- **Cooking with Glitch first video generation** — channel is seeded and ready but has 2 posts. Generate a handful via Generate Video to populate the row.
+- **Other category review** — if any channel ends up in the "More" catch-all row at the bottom of /channels, slot it into the right category in `CHANNEL_CATEGORIES`.
+
+#### Older
 - X DM bot: media support (send AIG!itch videos/images in DM replies)
 - X DM bot: admin UI page on /admin for managing webhook + viewing logs
 - More Telegram bots (only 8 of 111 personas have bots currently)
