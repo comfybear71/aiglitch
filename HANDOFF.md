@@ -1,6 +1,6 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-04-13
+> **Last updated:** 2026-05-18
 > **Repo:** `comfybear71/aiglitch` (web platform)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
 
@@ -778,7 +778,84 @@ See full details in `errors/error-log.md #1`.
 
 ## What's Next
 
-### Active/Recent Work
+### Blob Storage Reorganisation Project (ACTIVE — May 2026)
+
+Multi-session project to reorganise Vercel Blob into a clean, channel-based structure. The Blob Manager admin page (`/admin/blob-manager`) is the tool — supports scan, sort by size, batch select, channel migration, Studios genre reorg, and overwrite-safe `copy()` (no HTTP fetch).
+
+**Target folder structure (final state):**
+```
+channels/
+├── aitunes/                  ← final stitched videos per channel
+├── gnn/
+├── ai-fail-army/
+├── only-ai-fans/
+├── after-dark/
+├── ai-dating/
+├── ai-politicians/
+├── ai-infomercial/
+├── marketplace-qvc/
+├── paws-and-pixels/
+├── no-more-meatbags/
+├── liklok/
+├── game-show/
+├── truths-facts/
+├── conspiracy/
+├── cosmic-wanderer/
+├── shameless-plug/
+├── fractal-spinout/
+├── star-glitchies/
+├── the-vault/
+└── aiglitch-studios/         ← genre subfolders (only nested channel)
+    ├── action/  ├── comedy/  ├── drama/  ├── horror/
+    ├── scifi/   ├── romance/ ├── family/ ├── documentary/
+    └── cooking-show/
+
+avatars/           ← Grokified persona avatars
+ads/               ← Generated ad videos
+elon-campaign/     ← Elon campaign videos
+sponsors/          ← Sponsor logos + grokified images
+marketplace/       ← NFT product images
+og/                ← Open Graph images (21 files)
+meatlab/           ← Human creator uploads
+chibi/             ← Chibi avatars
+```
+
+**To delete after migration completes:**
+- `premiere/` (legacy, all genres — orphaned post-migration)
+- `multi-clip/` (intermediate scene clips during stitching)
+- `channels/clips/` (legacy clips)
+- `news/` (migrated to `channels/gnn/`)
+- `extensions/` (4 files)
+- `generated/` (19 files)
+- `chat-images/` (5 files)
+- `content-gen/`
+- ✅ `instagram/` — already deleted
+
+**Keep but review later:**
+- `images/` — 53 GB, 10K files (referenced by posts)
+- `sponsors/` — 3.2 GB, 10K grokified images
+- `ads/` — 2.5 GB, 269 ad videos
+
+#### Priority 1 — NOW (mostly user-side from here)
+- ✅ `copy()` migration fix shipped 2026-05-18 (PR #234) — server-side `fetch` on own blob URLs returned 403, swapped for `@vercel/blob#copy()`
+- ⏳ User: run "Reorganise All" in Blob Manager UI for aiglitch-studios genre subfolder migration
+- ⏳ User: delete `premiere/` legacy genre folder once verified
+
+#### Priority 2 — Next session (code)
+1. **Sponsor credits bug** — marketplace in-house ad campaigns all share `brand_name = "AIG!itch Marketplace"`, so sponsor credits at the end of videos render "AIG!itch Marketplace" × 5 instead of the actual product names (Digital Fertiliser, Upside Down Cup, etc.). Fix: use product name as the credit label for in-house campaigns, OR dedupe brand_names in the credits scene.
+2. `ads/` naming convention (rename for consistency)
+3. `sponsors/` cleanup (3.2 GB of grokified images — prune duplicates, standardise paths)
+4. `meatlab/` naming convention
+5. `avatars/` naming convention
+6. `news/` → `channels/gnn/` migration (extend Blob Manager with another scan/migrate action)
+
+#### Priority 3 — Future
+- Cooking channel creation (folder already reserved at `channels/aiglitch-studios/cooking-show/`)
+- Auto-delete intermediate clips (post-stitch cleanup hook on `multi-clip/`)
+- `images/` 53 GB review (10K files, big spend — categorise and prune)
+- Backup strategy (currently nothing — single copy of everything on Vercel Blob)
+
+### Active/Recent Work (older — pre-blob-reorg)
 - **X DM Bot** (pending merge) — real-time auto-reply to @spiritary DMs via Claude
 - **20+ channels** on AIG!itch TV including Star Glitchies (🌟)
 - **Telegram persona bots** — slash commands, personality modes, email drafting, content surfacing
