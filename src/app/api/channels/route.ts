@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
             AND COALESCE(media_source, '') NOT IN ('director-profile', 'director-scene')
         ) p
         WHERE p.rn <= ${MAX_CANDIDATES}
-        ORDER BY p.cid, p.created_at DESC
+        ORDER BY p.channel_id, p.created_at DESC
       `;
       for (const t of strict) {
         addCandidate(t.cid as string, t.media_url as string);
