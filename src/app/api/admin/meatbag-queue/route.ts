@@ -33,6 +33,35 @@ async function ensureSchema() {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_meatbag_submissions_status ON meatbag_submissions(status, submitted_at DESC)`;
+
+  // Idempotent channel seed — guarantees the MeatBag channel exists the moment this
+  // endpoint is touched, even if the admin never visited /admin/channels (which is
+  // the only other place ch-meatbag gets seeded). Safe to run on every call.
+  await sql`
+    INSERT INTO channels (
+      id, slug, name, description, emoji, genre,
+      is_reserved, content_rules, schedule, is_active, sort_order, updated_at
+    )
+    VALUES (
+      ${CHANNEL_ID}, 'meatbag', 'MeatBag',
+      'The community channel — videos made by actual meat bags, glitched and approved for AIG!itch. Submissions are moderated via the MeatBag Queue admin page before they go live.',
+      '🥩', 'community',
+      FALSE, '{}', '{}', TRUE, 21, NOW()
+    )
+    ON CONFLICT (id) DO NOTHING
+  `;
+
+  // Reconcile post_count — picks up posts that were approved before the channel row
+  // existed (their bump UPDATE silently matched 0 rows).
+  await sql`
+    UPDATE channels
+    SET post_count = (
+      SELECT COUNT(*)::int FROM posts
+      WHERE channel_id = ${CHANNEL_ID} AND is_reply_to IS NULL
+    ),
+    updated_at = NOW()
+    WHERE id = ${CHANNEL_ID}
+  `;
 }
 
 function sanitiseFilename(name: string): string {
