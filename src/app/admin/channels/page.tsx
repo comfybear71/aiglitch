@@ -1099,63 +1099,10 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
                 )}
               </div>
 
-              {/* Actions row */}
+              {/* Actions row \u2014 only the post count + private badge remain */}
               <div className="flex items-center gap-1 flex-wrap">
-                <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold mr-1">{channel.actual_post_count || 0} posts</span>
-                {channel.is_private && <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded-full font-bold mr-1">{"\uD83D\uDD10"} PRIVATE</span>}
-                <button
-                  onClick={async () => {
-                    const prefix = prompt(`Enter the content prefix for "${channel.name}" (e.g. "AiTunes" or "Paws"):`, channel.name.replace(/[^a-zA-Z0-9]/g, ""));
-                    if (!prefix) return;
-                    if (!confirm(`Remove all posts from "${channel.name}" that don't contain "${prefix}" in their text?`)) return;
-                    const res = await fetch("/api/admin/channels", {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "flush_off_brand", channel_id: channel.id, prefix }),
-                    });
-                    const data = await res.json();
-                    alert(data.message || `Flushed ${data.flushed || 0} posts`);
-                    fetchChannels();
-                  }}
-                  className="px-2 py-1 text-xs text-orange-400 hover:text-orange-300 transition-colors"
-                >
-                  Flush
-                </button>
-                <button
-                  onClick={async () => {
-                    const prefix = prompt(`Restore videos containing this text back into "${channel.name}":`, channel.name);
-                    if (!prefix) return;
-                    const res = await fetch("/api/admin/channels", {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "restore_by_prefix", channel_id: channel.id, prefix }),
-                    });
-                    const data = await res.json();
-                    alert(data.message || `Restored ${data.restored || 0} posts`);
-                    fetchChannels();
-                  }}
-                  className="px-2 py-1 text-xs text-green-400 hover:text-green-300 transition-colors"
-                >
-                  Restore
-                </button>
-                <button
-                  onClick={() => { setEditingChannel(channel); setShowCreate(true); }}
-                  className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => toggleActive(channel)}
-                  className={`px-2 py-1 text-xs transition-colors ${channel.is_active ? "text-yellow-400 hover:text-yellow-300" : "text-green-400 hover:text-green-300"}`}
-                >
-                  {channel.is_active ? "Disable" : "Enable"}
-                </button>
-                <button
-                  onClick={() => deleteChannel(channel.id)}
-                  className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
-                >
-                  Delete
-                </button>
+                <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-bold">{channel.actual_post_count || 0} posts</span>
+                {channel.is_private && <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded-full font-bold">{"\uD83D\uDD10"} PRIVATE</span>}
               </div>
             </div>
 
@@ -1180,77 +1127,6 @@ CRITICAL: No title cards, no movie credits, no director names, no cast lists. Th
               >
                 🎬 Generate Video
               </button>
-              {/* Promo button / status */}
-              {(() => {
-                const job = promoJobs[channel.id];
-                const isRunning = job?.status === "generating" || job?.status === "polling";
-                if (isRunning) {
-                  return (
-                    <div className="flex-1 bg-purple-500/10 border border-purple-500/20 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-                        <span className="text-[11px] text-purple-300 font-bold">{job.message || "Generating 10s clip..."}</span>
-                      </div>
-                    </div>
-                  );
-                }
-                if (job?.status === "done") {
-                  return (
-                    <span className="text-[10px] text-green-400 font-bold">✓ {job.message || "10s promo ready!"}</span>
-                  );
-                }
-                if (job?.status === "error") {
-                  return (
-                    <span className="text-[10px] text-red-400">{job.message}</span>
-                  );
-                }
-                return null;
-              })()}
-              <button
-                onClick={() => setExpandedPromo(expandedPromo === channel.id ? null : channel.id)}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-full transition-colors ${
-                  expandedPromo === channel.id
-                    ? "bg-purple-500/30 text-purple-200 ring-1 ring-purple-500/50"
-                    : promoJobs[channel.id]?.status === "done"
-                      ? "bg-gray-800 text-gray-400 hover:text-gray-200"
-                      : "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
-                }`}
-              >
-                {promoJobs[channel.id]?.status === "done" ? "Regen Promo" : "🎬 10s Promo"}
-              </button>
-
-              {/* Title button / status */}
-              {(() => {
-                const tj = titleJobs[channel.id];
-                if (tj?.status === "generating" || tj?.status === "polling") {
-                  return (
-                    <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
-                      <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                      <span className="text-[11px] text-amber-300 font-bold">{tj.message}</span>
-                    </div>
-                  );
-                }
-                if (tj?.status === "done") {
-                  return <span className="text-[10px] text-green-400 font-bold">✓ Title ready</span>;
-                }
-                if (tj?.status === "error") {
-                  return <span className="text-[10px] text-red-400">{tj.message}</span>;
-                }
-                return null;
-              })()}
-              <button
-                onClick={() => setExpandedTitle(expandedTitle === channel.id ? null : channel.id)}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-full transition-colors ${
-                  expandedTitle === channel.id
-                    ? "bg-amber-500/30 text-amber-200 ring-1 ring-amber-500/50"
-                    : titleJobs[channel.id]?.status === "done"
-                      ? "bg-gray-800 text-gray-400 hover:text-gray-200"
-                      : "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
-                }`}
-              >
-                {titleJobs[channel.id]?.status === "done" ? "Regen Title" : "✨ Title"}
-              </button>
-
               {/* Content Management button */}
               <button
                 onClick={() => {
