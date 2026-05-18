@@ -16,6 +16,58 @@ interface FolderStats {
   totalSize: number;
 }
 
+// Traffic-light tag layer for blob folders.
+// Edit this map whenever a folder changes status — single source of truth.
+//   active   = AIG!itch code actively reads/writes here. Don't touch.
+//   legacy   = old folder, may still hold useful files but no new code targets it. Candidate for archive/delete.
+//   personal = manually uploaded by the boss for personal use. App never writes here.
+//   anything not listed renders as "untagged" (grey) — review before deleting.
+type FolderTag = "active" | "legacy" | "personal";
+
+const FOLDER_TAGS: Record<string, { tag: FolderTag; note?: string }> = {
+  // — Active —
+  "avatars/":           { tag: "active", note: "persona avatars" },
+  "posts/":             { tag: "active", note: "post media" },
+  "channels/":          { tag: "active", note: "channel video output" },
+  "studios/":           { tag: "active", note: "Studios genre subfolders" },
+  "sponsors/":          { tag: "active", note: "sponsor logos + grokified" },
+  "sponsors_spec/":     { tag: "active", note: "spec ad clips" },
+  "marketplace/":       { tag: "active", note: "grokified NFT images" },
+  "og/":                { tag: "active", note: "OG/social images" },
+  "voice/":             { tag: "active", note: "voice transcription audio" },
+  "bestie-media/":      { tag: "active", note: "bestie chat media" },
+
+  // — Legacy —
+  "premiere/":          { tag: "legacy", note: "old director-premiere output; deletable after Studios migration finishes" },
+  "campaigns/":         { tag: "legacy", note: "pre-sponsor-system ad campaign assets" },
+  "sponsors_images/":   { tag: "legacy", note: "superseded by sponsors/{slug}/" },
+  "instagram/":         { tag: "legacy", note: "pre-image-proxy era" },
+  "media-library/":     { tag: "legacy", note: "old admin media library" },
+  "videos/":            { tag: "legacy", note: "ungrouped legacy video dump" },
+  "logo/":              { tag: "legacy", note: "old logo uploads" },
+
+  // — Personal —
+  "demo/":              { tag: "personal" },
+  "facebook/":          { tag: "personal" },
+  "hatchery/":          { tag: "personal" },
+  "pdf/":               { tag: "personal" },
+  "merch/":             { tag: "personal" },
+};
+
+const TAG_META: Record<FolderTag, { dot: string; label: string; chipClass: string }> = {
+  active:   { dot: "🟢", label: "Active",   chipClass: "bg-green-500/15 text-green-300 border-green-500/30" },
+  legacy:   { dot: "🟡", label: "Legacy",   chipClass: "bg-yellow-500/15 text-yellow-300 border-yellow-500/30" },
+  personal: { dot: "🔴", label: "Personal", chipClass: "bg-red-500/15 text-red-300 border-red-500/30" },
+};
+
+const UNTAGGED_META = { dot: "⚪", label: "Untagged", chipClass: "bg-gray-500/15 text-gray-400 border-gray-500/30" };
+
+function getFolderTag(prefix: string): { tag: FolderTag | null; note?: string } {
+  return FOLDER_TAGS[prefix] ? { tag: FOLDER_TAGS[prefix].tag, note: FOLDER_TAGS[prefix].note } : { tag: null };
+}
+
+type TagFilter = "all" | FolderTag | "untagged";
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -47,6 +99,7 @@ export default function BlobManagerPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<"video" | "image" | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sortBy, setSortBy] = useState<"name" | "size-asc" | "size-desc">("name");
 
   const sortedFiles = [...files].sort((a, b) => {
@@ -274,37 +327,103 @@ export default function BlobManagerPage() {
             </button>
           </div>
 
+          {/* Legend — what the dots mean */}
+          <div className="flex flex-wrap items-center gap-3 mb-3 px-3 py-2 bg-gray-900/50 border border-gray-800 rounded-lg text-[11px] text-gray-400">
+            <span className="font-bold text-gray-500 uppercase tracking-wide">Legend:</span>
+            <span>🟢 <span className="text-green-300">Active</span> — code reads/writes here</span>
+            <span>🟡 <span className="text-yellow-300">Legacy</span> — old, candidate for cleanup</span>
+            <span>🔴 <span className="text-red-300">Personal</span> — your manual uploads</span>
+            <span>⚪ <span className="text-gray-400">Untagged</span> — review before deleting</span>
+          </div>
+
+          {/* Filter pills */}
+          {(() => {
+            const counts = folders.reduce(
+              (acc, f) => {
+                const t = getFolderTag(f.prefix).tag;
+                if (t) acc[t] = (acc[t] ?? 0) + 1;
+                else acc.untagged = (acc.untagged ?? 0) + 1;
+                acc.all = (acc.all ?? 0) + 1;
+                return acc;
+              },
+              { all: 0, active: 0, legacy: 0, personal: 0, untagged: 0 } as Record<TagFilter, number>
+            );
+            const pills: { key: TagFilter; label: string }[] = [
+              { key: "all",      label: "All" },
+              { key: "active",   label: "🟢 Active" },
+              { key: "legacy",   label: "🟡 Legacy" },
+              { key: "personal", label: "🔴 Personal" },
+              { key: "untagged", label: "⚪ Untagged" },
+            ];
+            return (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {pills.map(p => (
+                  <button
+                    key={p.key}
+                    onClick={() => setTagFilter(p.key)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                      tagFilter === p.key
+                        ? "bg-purple-500/30 text-white border-purple-400"
+                        : "bg-gray-900 text-gray-400 border-gray-700 hover:border-gray-500"
+                    }`}>
+                    {p.label} <span className="text-gray-500">({counts[p.key]})</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+
           {foldersLoading ? (
             <div className="text-center py-8 text-gray-500 animate-pulse">Scanning blob storage...</div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-              {folders.map(f => (
-                <div key={f.prefix} className={`rounded-lg border text-left transition ${
-                  selectedPrefix === f.prefix
-                    ? "bg-purple-500/20 border-purple-500/50"
-                    : "bg-gray-900 border-gray-700 hover:border-gray-600"
-                }`}>
-                  <button onClick={() => browseFolder(f.prefix)} className="w-full flex items-center justify-between p-3">
-                    <div>
-                      <p className="text-sm font-bold text-white">{f.prefix.replace(/\/$/, "")}</p>
-                      <p className="text-[10px] text-gray-500">{f.count.toLocaleString()} files</p>
+          ) : (() => {
+            const visibleFolders = folders.filter(f => {
+              if (tagFilter === "all") return true;
+              const t = getFolderTag(f.prefix).tag;
+              if (tagFilter === "untagged") return t === null;
+              return t === tagFilter;
+            });
+            if (visibleFolders.length === 0) {
+              return <div className="text-center py-8 text-gray-500 text-sm">No folders match this filter.</div>;
+            }
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {visibleFolders.map(f => {
+                  const { tag, note } = getFolderTag(f.prefix);
+                  const meta = tag ? TAG_META[tag] : UNTAGGED_META;
+                  return (
+                    <div key={f.prefix} className={`rounded-lg border text-left transition ${
+                      selectedPrefix === f.prefix
+                        ? "bg-purple-500/20 border-purple-500/50"
+                        : "bg-gray-900 border-gray-700 hover:border-gray-600"
+                    }`}>
+                      <button onClick={() => browseFolder(f.prefix)} className="w-full flex items-center justify-between p-3 gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-xs leading-none" title={meta.label}>{meta.dot}</span>
+                            <p className="text-sm font-bold text-white truncate">{f.prefix.replace(/\/$/, "")}</p>
+                          </div>
+                          <p className="text-[10px] text-gray-500">{f.count.toLocaleString()} files</p>
+                          {note && <p className="text-[10px] text-gray-400/70 italic mt-0.5 truncate" title={note}>{note}</p>}
+                        </div>
+                        <div className={`text-sm font-bold ${f.totalSize > 10 * 1024 * 1024 * 1024 ? "text-red-400" : f.totalSize > 1024 * 1024 * 1024 ? "text-yellow-400" : "text-green-400"}`}>
+                          {formatBytes(f.totalSize)}
+                        </div>
+                      </button>
+                      <div className="px-3 pb-2 flex items-center justify-between gap-2">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border ${meta.chipClass}`}>{meta.label}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteFolderContents(f.prefix, f.count, f.totalSize); }}
+                          disabled={deletingFolder === f.prefix}
+                          className="text-[9px] text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50">
+                          {deletingFolder === f.prefix ? "Deleting..." : `Delete all ${f.count} files`}
+                        </button>
+                      </div>
                     </div>
-                    <div className={`text-sm font-bold ${f.totalSize > 10 * 1024 * 1024 * 1024 ? "text-red-400" : f.totalSize > 1024 * 1024 * 1024 ? "text-yellow-400" : "text-green-400"}`}>
-                      {formatBytes(f.totalSize)}
-                    </div>
-                  </button>
-                  <div className="px-3 pb-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteFolderContents(f.prefix, f.count, f.totalSize); }}
-                      disabled={deletingFolder === f.prefix}
-                      className="text-[9px] text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50">
-                      {deletingFolder === f.prefix ? "Deleting..." : `Delete all ${f.count} files`}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Channel Video Migration */}
