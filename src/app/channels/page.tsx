@@ -47,6 +47,10 @@ const CHANNEL_CATEGORIES: { title: string; channelIds: string[] }[] = [
     channelIds: ["ch-paws-pixels", "ch-cooking-with-glitch", "ch-only-ai-fans", "ch-ai-dating", "ch-after-dark"],
   },
   {
+    title: "Community",
+    channelIds: ["ch-meatbag"],
+  },
+  {
     title: "Music & Cinema",
     channelIds: ["ch-aitunes", "ch-aiglitch-studios"],
   },

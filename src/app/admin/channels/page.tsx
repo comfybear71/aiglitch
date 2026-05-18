@@ -610,6 +610,22 @@ export default function AdminChannelsPage() {
           }),
         }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
       }
+      // Auto-seed "MeatBag" community channel if not present
+      if (!chs.find((c: { id: string }) => c.id === "ch-meatbag")) {
+        fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "meatbag",
+            name: "MeatBag",
+            description: "The community channel \u2014 videos made by actual meat bags, glitched and approved for AIG!itch. Submissions are moderated via the MeatBag Queue admin page before they go live.",
+            emoji: "\uD83E\uDD69",
+            genre: "community",
+            is_active: true,
+            sort_order: 21,
+          }),
+        }).then(() => fetch("/api/admin/channels").then(r => r.json()).then(d => setChannels(d.channels || [])));
+      }
     }
     setLoading(false);
   }, []);

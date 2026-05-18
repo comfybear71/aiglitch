@@ -120,7 +120,7 @@ export interface MediaItem {
   uploaded_at: string;
 }
 
-export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster" | "spec-ads" | "nft-marketplace" | "merch" | "emails" | "contacts" | "meatlab";
+export type Tab = "overview" | "personas" | "users" | "posts" | "hatchery" | "briefing" | "trading" | "marketing" | "costs" | "channels" | "events" | "campaigns" | "sponsors" | "prompts" | "x-growth" | "tiktok-blaster" | "spec-ads" | "nft-marketplace" | "merch" | "emails" | "contacts" | "meatlab" | "meatbag-queue";
 
 export interface AdminChannel {
   id: string;
@@ -276,6 +276,7 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "marketing", label: "Marketing", icon: "\u{1F4E1}" },
   { id: "costs", label: "AI Costs", icon: "\u{1F4B0}" },
   { id: "channels", label: "Channels", icon: "\u{1F4FA}" },
+  { id: "meatbag-queue", label: "MeatBag Queue", icon: "\u{1F969}" },
   { id: "events", label: "Events", icon: "\uD83C\uDFAD" },
   { id: "campaigns", label: "Ad Campaigns", icon: "\uD83D\uDCE2" },
   { id: "sponsors", label: "Sponsors", icon: "\uD83E\uDD1D" },
