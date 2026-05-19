@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
             AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
+            AND LOWER(p.content) LIKE '🎬 aig!itch studios%'
           ORDER BY md5(p.id::text || ${seed})
           LIMIT ${limit}
           OFFSET ${offset}
@@ -118,6 +119,7 @@ export async function GET(request: NextRequest) {
             AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
+            AND LOWER(p.content) LIKE '🎬 aig!itch studios%'
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `
@@ -158,6 +160,7 @@ export async function GET(request: NextRequest) {
             AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
+            AND LOWER(p.content) LIKE '🎬 aig!itch studios%'
           ORDER BY p.created_at DESC
           LIMIT ${limit}
         `

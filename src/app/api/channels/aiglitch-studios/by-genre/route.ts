@@ -65,6 +65,7 @@ export async function GET(_request: NextRequest) {
         AND p.is_reply_to IS NULL
         AND p.media_url IS NOT NULL AND p.media_url <> ''
         AND p.media_type = 'video'
+        AND LOWER(p.content) LIKE '🎬 aig!itch studios%'
       ORDER BY p.created_at DESC
       LIMIT 1000
     `;
