@@ -182,6 +182,24 @@ export async function GET(request: NextRequest) {
         `;
     }
 
+    // Genre-filtered Studios views: dedup posts by media_url. Many Studios films
+    // share the same dominant intro thumbnail (the kitchen scene that appears as
+    // the first frame on dozens of Cooking Show variants, the Studios-branded
+    // title cards, etc.), so without dedup the Up Next sidebar looks like
+    // "10 copies of the same video". Per-page only — cross-page dedup happens
+    // client-side in loadMore() of the channel detail page.
+    if (genreFilter && isStudiosChannel && posts.length > 0) {
+      const seen = new Set<string>();
+      const deduped: typeof posts = [];
+      for (const p of posts) {
+        const url = p.media_url as string;
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        deduped.push(p);
+      }
+      posts = deduped;
+    }
+
     // Batch fetch comments + bookmarks
     const postIds = posts.map(p => p.id as string);
 

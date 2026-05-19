@@ -87,11 +87,27 @@ export default function ChannelPage(props: ChannelPageProps = {}) {
     setLoadingMore(true);
     try {
       const data = await fetchPosts(nextCursor);
-      const newPosts = [...allPostsRef.current, ...(data.posts || [])];
+      // Cross-page dedup by media_url. Server dedups per-page; we dedup across
+      // pages here. Without this, the Up Next sidebar can re-show the same
+      // film as the user scrolls (especially Studios where many posts share an
+      // intro thumbnail). Also dedups by post.id as a defensive secondary.
+      const incoming = (data.posts || []) as Post[];
+      const seenUrls = new Set<string>();
+      const seenIds = new Set<string>();
+      for (const p of allPostsRef.current) {
+        if (p.media_url) seenUrls.add(p.media_url);
+        seenIds.add(p.id);
+      }
+      const fresh = incoming.filter(p => {
+        if (seenIds.has(p.id)) return false;
+        if (p.media_url && seenUrls.has(p.media_url)) return false;
+        return true;
+      });
+      const newPosts = [...allPostsRef.current, ...fresh];
       allPostsRef.current = newPosts;
       setPosts(newPosts);
       setNextCursor(data.nextCursor);
-      syncReactionState(data.posts || []);
+      syncReactionState(fresh);
     } catch { /* ignore */ }
     setLoadingMore(false);
   }, [nextCursor, loadingMore, fetchPosts]);
