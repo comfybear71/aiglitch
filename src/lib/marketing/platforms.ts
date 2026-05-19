@@ -604,6 +604,42 @@ async function postToInstagram(account: PlatformAccount, text: string, mediaUrl?
 
 async function postToFacebook(account: PlatformAccount, text: string, mediaUrl?: string | null): Promise<PostResult> {
   try {
+    // Daily post throttle. Facebook flags pages for spam-pattern posting
+    // (frequent posts in a short window) by demoting reach. After our page
+    // got suspended + reinstated in mid-May 2026, we throttle to a low daily
+    // cap during the trust-restoration period. Configurable via env var:
+    //   FACEBOOK_DAILY_POST_LIMIT=1  (default if unset; safe-by-default)
+    //   FACEBOOK_DAILY_POST_LIMIT=5  (after recovery; bump as reach returns)
+    //   FACEBOOK_DAILY_POST_LIMIT=0  (disable throttle entirely)
+    // Counts successful Facebook posts in the last 24h via the marketing_posts
+    // table. No new table or migration needed.
+    const limitRaw = process.env.FACEBOOK_DAILY_POST_LIMIT;
+    const dailyLimit = limitRaw === undefined ? 1 : parseInt(limitRaw, 10);
+    if (Number.isFinite(dailyLimit) && dailyLimit > 0) {
+      try {
+        const sql = getDb();
+        const [row] = await sql`
+          SELECT COUNT(*)::int AS count
+          FROM marketing_posts
+          WHERE platform = 'facebook'
+            AND status = 'posted'
+            AND posted_at > NOW() - INTERVAL '24 hours'
+        `;
+        const recentCount = (row?.count as number) ?? 0;
+        if (recentCount >= dailyLimit) {
+          console.warn(`[facebook] THROTTLED: ${recentCount}/${dailyLimit} posts in last 24h — skipping. To raise the limit, set FACEBOOK_DAILY_POST_LIMIT in Vercel env vars.`);
+          return {
+            success: false,
+            error: `Facebook daily post limit reached (${recentCount}/${dailyLimit} in last 24h). Throttle active during account-recovery period.`,
+          };
+        }
+      } catch (throttleErr) {
+        // If the throttle check itself fails (DB issue), don't block the post.
+        // Better to over-post than be silently blocked by an infrastructure hiccup.
+        console.error("[facebook] Throttle check failed, allowing post:", throttleErr);
+      }
+    }
+
     const pageId = account.account_id;
     if (!pageId) {
       return { success: false, error: "Facebook page ID (account_id) not configured" };
