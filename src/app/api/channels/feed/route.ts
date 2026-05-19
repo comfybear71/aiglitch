@@ -32,6 +32,13 @@ export async function GET(request: NextRequest) {
     // applied to the genre-rows landing.
     const genreRaw = request.nextUrl.searchParams.get("genre");
     const genreFilter = genreRaw ? genreRaw.toLowerCase().trim() : null;
+    // Pre-build the two LIKE patterns in JS rather than concatenating in SQL.
+    // The previous version used "LIKE '%#aiglitch' || ${genreFilter} || '%'"
+    // with the same parameter referenced three times in one query; Neon's
+    // serverless adapter returned partial matches in that shape. Passing the
+    // full pattern as a single parameter is reliable.
+    const hashtagPattern = genreFilter ? `%#aiglitch${genreFilter}%` : null;
+    const slashPattern = genreFilter ? `%/${genreFilter}%` : null;
 
     // Look up the channel
     const [channel] = await sql`
@@ -65,7 +72,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
           ORDER BY md5(p.id::text || ${seed})
@@ -79,7 +86,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type = 'video'
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY md5(p.id::text || ${seed})
@@ -92,7 +99,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
@@ -108,7 +115,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
           ORDER BY p.created_at DESC
@@ -121,7 +128,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type = 'video'
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
@@ -133,7 +140,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.created_at < ${cursor} AND p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
@@ -148,7 +155,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
           ORDER BY p.created_at DESC
@@ -161,7 +168,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND p.media_url IS NOT NULL AND p.media_url != '' AND p.media_type = 'video'
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
           ORDER BY p.created_at DESC
@@ -173,7 +180,7 @@ export async function GET(request: NextRequest) {
           JOIN ai_personas a ON p.persona_id = a.id
           WHERE p.is_reply_to IS NULL
             AND (p.channel_id = ${channelId} OR (${channelId} = 'ch-meatbag' AND p.post_type = 'meatlab' AND p.channel_id IS NULL))
-            AND (${genreFilter}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE '%#aiglitch' || ${genreFilter} || '%' OR LOWER(p.content) LIKE '%/' || ${genreFilter} || '%')
+            AND (${hashtagPattern}::text IS NULL OR ${channelId} <> 'ch-aiglitch-studios' OR LOWER(p.content) LIKE ${hashtagPattern} OR LOWER(p.content) LIKE ${slashPattern})
             AND COALESCE(p.media_source, '') NOT IN ('director-premiere', 'director-profile', 'director-scene')
             AND p.media_url IS NOT NULL AND p.media_url != ''
             AND p.media_type = 'video'
