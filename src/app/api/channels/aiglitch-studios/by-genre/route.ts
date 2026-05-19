@@ -22,7 +22,9 @@ const STUDIOS_GENRES = [
 ] as const;
 
 const STUDIOS_CHANNEL_ID = "ch-aiglitch-studios";
-const POSTS_PER_GENRE = 12;
+// Up to 50 films per genre on the landing row (horizontal scroll). The swipe
+// player at /channels/aiglitch-studios?genre=X paginates beyond 50 if needed.
+const POSTS_PER_GENRE = 50;
 
 /**
  * GET /api/channels/aiglitch-studios/by-genre
