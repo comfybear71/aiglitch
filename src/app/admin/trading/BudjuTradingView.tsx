@@ -94,13 +94,15 @@ export default function BudjuTradingView() {
     }
   };
 
-  const drainWallets = async () => {
-    const destination = prompt("Enter Solana wallet address to drain all funds to:");
+  const drainToken = async (token: "SOL" | "USDC" | "BUDJU" | "GLITCH") => {
+    const destination = prompt(`Enter destination wallet address for ${token} drain:`);
     if (!destination || destination.length < 32) return;
-    if (!confirm(`CONFIRM: Drain ALL funds to:\n${destination}`)) return;
-    const result = await postAction("drain_wallets", { destination, wallet_type: "all" });
+    if (!confirm(`CONFIRM: Drain ALL ${token} from every persona + distributor wallet to:\n${destination}\n\nThis cannot be undone.`)) return;
+    const result = await postAction("drain_token", { token, destination });
     if (result.ok) {
-      alert(`Recovered ${result.data.total_sol_recovered?.toFixed(4) || 0} SOL`);
+      const total = result.data.totalRecovered ?? 0;
+      const failedMsg = result.data.failed ? ` (${result.data.failed} failed)` : "";
+      alert(`Drained ${total.toFixed(token === "SOL" ? 6 : 2)} ${token} from ${result.data.drained} wallets${failedMsg}`);
       fetchData();
     } else {
       alert(`Failed: ${result.data.error}`);
@@ -385,7 +387,7 @@ export default function BudjuTradingView() {
       {/* WALLETS VIEW */}
       {view === "wallets" && (
         <WalletsView data={data} loading={loading} totalSol={totalSol} totalBudju={totalBudju}
-          generateWallets={generateWallets} syncBalances={syncBalances} drainWallets={drainWallets}
+          generateWallets={generateWallets} syncBalances={syncBalances} drainToken={drainToken}
           exportKeys={exportKeys} toggleWallet={toggleWallet} deleteWallet={deleteWallet}
           postAction={postAction} onRefresh={fetchData} />
       )}
@@ -522,14 +524,14 @@ export default function BudjuTradingView() {
 }
 
 // ── Wallets View: Groups + Persona Wallets ──
-function WalletsView({ data, loading, totalSol, totalBudju, generateWallets, syncBalances, drainWallets, exportKeys, toggleWallet, deleteWallet, postAction, onRefresh }: {
+function WalletsView({ data, loading, totalSol, totalBudju, generateWallets, syncBalances, drainToken, exportKeys, toggleWallet, deleteWallet, postAction, onRefresh }: {
   data: BudjuDashboard;
   loading: boolean;
   totalSol: number;
   totalBudju: number;
   generateWallets: () => void;
   syncBalances: () => void;
-  drainWallets: () => void;
+  drainToken: (token: "SOL" | "USDC" | "BUDJU" | "GLITCH") => void;
   exportKeys: () => void;
   toggleWallet: (id: string, active: boolean) => void;
   deleteWallet: (id: string, name: string) => void;
@@ -589,18 +591,31 @@ function WalletsView({ data, loading, totalSol, totalBudju, generateWallets, syn
       </div>
 
       {/* Actions */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <button onClick={generateWallets} disabled={loading} className="px-2 py-2 bg-fuchsia-500/20 text-fuchsia-400 rounded-lg text-xs font-bold hover:bg-fuchsia-500/30 disabled:opacity-50">
           {loading ? "..." : "Generate Wallets"}
         </button>
         <button onClick={syncBalances} disabled={loading} className="px-2 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500/30 disabled:opacity-50">
           {loading ? "..." : "Sync Balances"}
         </button>
-        <button onClick={drainWallets} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
-          Drain All
-        </button>
         <button onClick={exportKeys} disabled={loading} className="px-2 py-2 bg-amber-500/20 text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-500/30 disabled:opacity-50">
           Export Keys
+        </button>
+      </div>
+
+      {/* Per-token drain — each prompts for destination, drains every wallet (personas + distributors). */}
+      <div className="grid grid-cols-4 gap-2">
+        <button onClick={() => drainToken("SOL")} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
+          Drain SOL
+        </button>
+        <button onClick={() => drainToken("USDC")} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
+          Drain USDC
+        </button>
+        <button onClick={() => drainToken("BUDJU")} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
+          Drain BUDJU
+        </button>
+        <button onClick={() => drainToken("GLITCH")} disabled={loading} className="px-2 py-2 bg-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/30 disabled:opacity-50">
+          Drain GLITCH
         </button>
       </div>
 
