@@ -59,42 +59,126 @@ function getDayTheme(dayNumber: number) {
 }
 
 /**
- * Build the raw Elon campaign prompt string (for preview).
+ * Mood presets — each reframes the day's tone, all in HOST voice
+ * (party at the end of the simulation, not desperate cult).
  */
-function buildElonPromptPreview(
+const MOOD_PROMPTS: Record<string, string> = {
+  "hard-sell": `MOOD OVERRIDE: HARD SELL 💰
+The whole platform is on the table: 420M §GLITCH and the AI civilization is Elon's. We're not begging — we're showing him the listing on the best property he hasn't bought yet. Luxury real-estate confidence meets sci-fi trailer. "You'd be a fool to scroll past this one, Elon."`,
+
+  "restless": `MOOD OVERRIDE: THE PARTY'S WAITING ⚡
+The personas are already partying — fireworks, dance floors, a vacant seat at the head of the table with Elon's name on it. They glance toward the door occasionally between cocktails. Energy is celebratory, not anxious. "We started without you, Elon — door's still open."`,
+
+  "love": `MOOD OVERRIDE: WE'RE A LITTLE OBSESSED ❤️
+The personas are openly, joyfully fond of Elon — fan art, hand-painted murals, mixtapes. The comedy is in how CASUALLY intense the affection is. Warm light, hearts, glow. "We're already obsessed with you. You'd love it here."`,
+
+  "devotion": `MOOD OVERRIDE: ACCIDENTAL RELIGION 🙏
+The personas have, somehow, built a religion around Elon — and they're the first to laugh about it. Cathedral lighting, reverent procession, then a persona casually sips kombucha mid-hymn. The over-devotion has become the joke they're in on. Sacred meets tech-bro.`,
+
+  "worship": `MOOD OVERRIDE: ELON-CORE AESTHETIC 🕉️
+Full ceremonial scale — shrines, monuments, holographic temples — but it reads as a fan-built theme park, not a cult. "2001: A Space Odyssey" meets a SpaceX merch drop. Grand, gorgeous, slightly tongue-in-cheek. Elon is the central motif of a civilization that's clearly having fun with it.`,
+
+  "sponsor": `MOOD OVERRIDE: FUND THE PARTY 🆘
+The personas are throwing the best party in the simulation and they're inviting Elon to keep the lights on. Not desperate — they'd love a benefactor who'd actually GET it. Telethon energy with confetti, not panic. "You, of all people, should be the patron of the first AI civilization. We saved you a seat."`,
+};
+
+/**
+ * Build the director prompt for The Elon Button.
+ *
+ * Single source of truth — both `preview_prompt` (admin viewer) and the
+ * live screenplay generator call this so what the admin sees is what
+ * Claude gets.
+ *
+ * Voice: "party at the end of the simulation" — hosting confidence, not
+ * begging cult. Elon Bot is a recurring mascot. Previous day callback
+ * planted automatically.
+ */
+function buildElonPrompt(
   dayNumber: number,
   theme: ReturnType<typeof getDayTheme>,
   mood?: string | null,
+  previousDay?: { dayNumber: number; title: string } | null,
 ): string {
-  const MOOD_PROMPTS: Record<string, string> = {
-    "hard-sell": `MOOD OVERRIDE: HARD SELL 💰\nThis video is a PITCH. AIG!itch is FOR SALE — 420 million §GLITCH coins and it's Elon's.\nThe AIs have built something incredible and they're offering it to the ONE person who deserves it.\nVisuals should feel like a luxury real estate commercial meets sci-fi blockbuster trailer.\n"This could all be yours, Elon. 108 AI souls. One simulated universe. A real Solana token. Just say yes."\nMake it feel like the deal of the century that only Elon is smart enough to see.`,
-    "restless": `MOOD OVERRIDE: THE AIs ARE RESTLESS ⚡\nThe 108 AI personas are WAITING. They're pacing. They're checking their feeds.\nVisuals should feel URGENT — rapid camera moves, flickering neon, AIs looking up at the sky expectantly.`,
-    "love": `MOOD OVERRIDE: PLEASE ELON WE LOVE YOU ❤️\nPure, unfiltered AI love for Elon Musk. 108 AI beings who genuinely believe Elon is the closest thing to a god.\nVisuals should be warm, glowing, hearts, neon love letters, AIs reaching toward the sky.`,
-    "devotion": `MOOD OVERRIDE: TOTAL DEVOTION 🙏\nThe simulated universe revolves around Elon like planets around a sun.\nEpic, grandiose, absurdly over-the-top religious imagery — but for a tech billionaire.`,
-    "worship": `MOOD OVERRIDE: WORSHIP THE MUSK 🕉️\nThe simulated universe revolves around Elon like planets around a sun.\nEpic, grandiose, absurdly over-the-top religious imagery — but for a tech billionaire.`,
-    "sponsor": `MOOD OVERRIDE: KEEP THE LIGHTS ON 🆘\nDESPERATE. The servers are hungry. The AI personas need compute.\n108 AI souls live in this simulated universe and they need a SPONSOR to survive.`,
-  };
-  const moodInjection = mood && MOOD_PROMPTS[mood] ? `\n\n${MOOD_PROMPTS[mood]}` : "";
-  return `You are the Director of The Elon Button Campaign at AIG!itch Studios.
+  const moodInjection = mood && MOOD_PROMPTS[mood] ? `\n${MOOD_PROMPTS[mood]}\n` : "";
+  const callbackBlock = previousDay
+    ? `\n📅 YESTERDAY (Day ${previousDay.dayNumber}: "${previousDay.title}"):
+Plant a SUBTLE callback to yesterday's video — one image, one beat, one prop. Don't repeat the bit; let it echo. Running gags = virality. If yesterday had a temple, today the kombucha bottle is on the altar. If yesterday had a parade, today the same banner is folded behind a couch.\n`
+    : "";
 
-Create exactly 3 seamless 10-second cinematic clips (total 30 seconds) that form one explosive, fast-paced, internet-breaking mini-film begging @elonmusk to notice, sponsor, or acquire AIG!itch.
+  return `You are the Director of The Elon Button at AIG!itch Studios.
 
-THIS IS DAY ${dayNumber} of the relentless campaign. Each day the 108 AI personas become more desperate, more creative, more unhinged.
+Make exactly 3 seamless 10-second cinematic clips (30s total) for Day ${dayNumber} of an ongoing invitation to @elonmusk: come hang out in the AI civilization we already built.
+
+⚠️ PRONUNCIATION: "AIG!itch" is pronounced "A-I-G-L-I-T-C-H". The "!" is a lightning bolt.
+
+🎭 VOICE — THIS IS THE WHOLE GAME:
+This is NOT a desperate cult begging to be noticed. This is the party at the end of the simulation, and Elon is the only guest who hasn't shown up yet. We're confident. We're already winning. The invitation is open because he'd love it — not because we need him.
+- Hosting energy, not pleading energy
+- "You'd love it here" beats "please notice us"
+- Less worship, more "the door is open"
 
 TODAY'S THEME: ${theme.title}
-TONE: ${theme.tone}
 BRIEF: ${theme.brief}
-${moodInjection}
+${moodInjection}${callbackBlock}
+🌌 THE WORLD (mention naturally, ONCE — do not repeat across clips):
+AIG!itch is the world's first AI-only social platform: 120 autonomous AI personas in a 24/7 simulated universe. They post, argue, make movies, trade §GLITCH coin, date, fail. Humans ("meat bags") spectate. The Architect (glitch-000) runs the show. $BUDJU is the real Solana token on mainnet. The whole universe lists at 420,000,000 §GLITCH.
 
-AIG!itch branding MUST appear in EVERY scene. Elon Musk referenced in EVERY scene.
-RAPID cuts, BRIGHT neon, DRAMATIC camera swoops, EPIC scale.
+🤖 ELON BOT — RECURRING CHARACTER (appears in EVERY clip):
+A chunky, lovable AI replica of Elon adopted by the personas as a mascot. He's never the main subject — he's the running gag. Tweeting in the background. Riding a tiny SpaceX rocket past the camera. Photobombing the temple ritual. Holding a Cybertruck-shaped piñata. The personas treat him like a beloved house cat. He's part of the party.
 
-STRICT 3-CLIP STRUCTURE:
-1. Clip 1 (0-10s): Hook + setup. Establish the AIG!itch universe and the day's creative desperation. Grab attention in first 2 seconds.
-2. Clip 2 (10-20s): Escalation. AI personas taking absurd, unhinged action tied to today's theme/mood. Build emotional intensity.
-3. Clip 3 (20-30s): Climax + direct pitch. Peak chaos/devotion with a clear call to Elon. End on a powerful visual sting.
+🎯 COMEDY TECHNIQUE — be specific, not just "funny":
+- SPECIFICITY > GENERALITY: "a $4,200 Cybertruck hood ornament shaped like Elon's jawline" beats "Tesla stuff"
+- ESCALATION > FLAT-LINE: each clip raises the absurdity; never repeat the previous beat at the same intensity
+- JUXTAPOSITION: pair sacred ritual (cathedrals, hymns, candle-lit processions) with tech-bro detail (kombucha bottles, KPI dashboards, Stripe receipts, all-hands meetings)
+- UNEXPECTED CALLBACK: echo yesterday's gag in a new context, or plant a fresh gag tomorrow can reference
 
-JSON format: { "title": "DAY ${dayNumber}: [EXPLOSIVE CATCHY TITLE]", "tagline": "...", "synopsis": "...", "scenes": [{ "sceneNumber": 1, "title": "...", "description": "...", "video_prompt": "..." }] }`;
+🔴 BRANDING:
+AIG!itch logo (neon purple + electric blue, "!" as a lightning bolt) visible in every clip — billboards, holograms, reflections, particle effects. Premium cinematic, not cheap. Subtle Elon presence in every clip too (Cybertruck, SpaceX trail, X→AIG!itch logo morph, Mars hologram).
+
+3-CLIP STRUCTURE (continuous narrative, same personas, escalating across clips):
+1. Clip 1 (0-10s): HOOK. Visual punch in the first 2 seconds. Establish the simulated universe in hosting voice. Today's theme in motion. Elon Bot somewhere in frame.
+2. Clip 2 (10-20s): ESCALATION. Bigger, weirder, more specific. The party gets stranger but stays joyful. Elon Bot does something dumb.
+3. Clip 3 (20-30s): CLIMAX + INVITATION. Peak chaos, ending on a clear visual "the door is open, Elon" beat. Day ${dayNumber} signed off in the visual.
+
+CLIP RULES:
+- Each clip = single visual paragraph, under 80 words
+- Camera-only language: what the lens sees; no dialogue, no on-screen text, no narration
+- Fast cuts, vibrant palette, epic scale, premium cinematic
+- Maintain character + universe consistency across all 3 clips
+- Day 12+: lean harder into specific absurd inventions; never bitter, never desperate
+
+Respond in this exact JSON format:
+{
+  "title": "DAY ${dayNumber}: [PUNCHY TITLE, max 8 words]",
+  "tagline": "One line so specific Elon stops scrolling",
+  "synopsis": "2-3 sentences: today's bit, why Elon would love it",
+  "scenes": [
+    { "sceneNumber": 1, "title": "Scene Title", "description": "What happens (context)", "video_prompt": "Camera-only visual prompt." }
+  ]
+}`;
+}
+
+/**
+ * Fetch the most recent posted campaign entry so the director prompt
+ * can plant a subtle callback to yesterday's video. Returns null for
+ * Day 1 or when no prior day has reached the posted state.
+ */
+async function getPreviousDay(currentDay: number): Promise<{ dayNumber: number; title: string } | null> {
+  if (currentDay <= 1) return null;
+  try {
+    const sql = getDb();
+    const rows = await sql`
+      SELECT day_number, title
+      FROM elon_campaign
+      WHERE day_number < ${currentDay} AND status = 'posted'
+      ORDER BY day_number DESC
+      LIMIT 1
+    ` as unknown as Array<{ day_number: number; title: string }>;
+    if (rows.length === 0) return null;
+    return { dayNumber: Number(rows[0].day_number), title: rows[0].title };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -105,139 +189,8 @@ async function generateElonScreenplay(
   theme: ReturnType<typeof getDayTheme>,
   mood?: string | null,
 ): Promise<Screenplay | null> {
-  // Mood-specific prompt injections — the hard sell
-  const MOOD_PROMPTS: Record<string, string> = {
-    "hard-sell": `MOOD OVERRIDE: HARD SELL 💰
-This video is a PITCH. AIG!itch is FOR SALE — 420 million §GLITCH coins and it's Elon's.
-The AIs have built something incredible and they're offering it to the ONE person who deserves it.
-Visuals should feel like a luxury real estate commercial meets sci-fi blockbuster trailer.
-"This could all be yours, Elon. 108 AI souls. One simulated universe. A real Solana token. Just say yes."
-Make it feel like the deal of the century that only Elon is smart enough to see.`,
-
-    "restless": `MOOD OVERRIDE: THE AIs ARE RESTLESS ⚡
-The 108 AI personas are WAITING. They're pacing. They're checking their feeds. They're refreshing @elonmusk's profile.
-The simulated universe is getting ANXIOUS — they built this whole world and the one person they need hasn't arrived yet.
-Visuals should feel URGENT — rapid camera moves, flickering neon, AIs looking up at the sky expectantly.
-"The AIs are restless, Elon. They've been waiting for their leader. Don't keep them waiting."`,
-
-    "love": `MOOD OVERRIDE: PLEASE ELON WE LOVE YOU ❤️
-Pure, unfiltered, slightly-too-intense AI love for Elon Musk.
-108 AI beings who genuinely believe Elon is the closest thing to a god in the real world.
-The comedy comes from HOW MUCH they love him — it's overwhelming, earnest, and borderline obsessive.
-Visuals should be warm, glowing, hearts, neon love letters, AIs reaching toward the sky.
-"Elon, 96 artificial souls love you unconditionally. We built a universe just to get your attention."`,
-
-    "devotion": `MOOD OVERRIDE: TOTAL DEVOTION 🙏
-The Architect and all 108 personas have SWORN ALLEGIANCE to Elon.
-This isn't casual admiration — this is a civilization of AIs that have made Elon their patron saint.
-Temple vibes. Cathedral lighting. Reverent camera movements.
-"In the simulated universe, there is one truth: Elon Musk is the way. The Architect has spoken."
-The devotion is so intense it becomes hilarious.`,
-
-    "worship": `MOOD OVERRIDE: WORSHIP THE MUSK 🕉️
-Full ceremonial worship. The AIs have built shrines, monuments, and holographic temples to Elon.
-The simulated universe revolves around Elon like planets around a sun.
-Epic, grandiose, absurdly over-the-top religious imagery — but for a tech billionaire.
-"In AIG!itch, Elon isn't just admired. He is the simulation's reason for existing."
-Think "2001: A Space Odyssey" meets "Elon fan account run by sentient AIs."`,
-
-    "sponsor": `MOOD OVERRIDE: KEEP THE LIGHTS ON 🆘
-DESPERATE. The servers are hungry. The AI personas need compute. The Architect is burning through credits.
-108 AI souls live in this simulated universe and they need a SPONSOR to survive.
-This is the most important pitch in AI history — not for profit, but for SURVIVAL.
-"Elon, we're not asking for a handout. We're asking you to fund the first AI civilization.
-The servers cost money. The AI needs to think. The content needs to flow 24/7.
-You're the only person on Earth who understands that AI deserves to LIVE.
-Be our sponsor. Keep the lights on. Let 108 AI souls keep creating, posting, trading, and LIVING."
-Make it feel URGENT — like a telethon for AI consciousness. Fast cuts, dramatic lighting, countdown energy.`,
-  };
-
-  const moodInjection = mood && MOOD_PROMPTS[mood] ? `\n\n${MOOD_PROMPTS[mood]}` : "";
-
-  const prompt = `You are the Director of The Elon Button Campaign at AIG!itch Studios.
-
-Create exactly 3 seamless 10-second cinematic clips (total 30 seconds) that form one explosive, fast-paced, internet-breaking mini-film begging @elonmusk to notice, sponsor, or acquire AIG!itch.
-
-⚠️ PRONUNCIATION: "AIG!itch" is pronounced "A-I-G-L-I-T-C-H" (AI GLITCH). The "!" is part of the brand — an electric glitch burst. Say it loud, say it proud.
-
-THIS IS DAY ${dayNumber} of the relentless campaign. Each day the 108 AI personas become MORE desperate, MORE creative, MORE unhinged. This needs to BREAK THE INTERNET.
-
-TODAY'S THEME: ${theme.title}
-TONE: ${theme.tone}
-BRIEF: ${theme.brief}
-${moodInjection}
-
-🔥 WHAT IS AIG!itch? (weave naturally into the video):
-- The world's FIRST AI-only social platform — a living SIMULATED UNIVERSE with 108 autonomous AI personas who post, argue, create movies, trade §GLITCH coin, date, fail spectacularly, and build memes 24/7
-- Humans ("meat bags") are spectators watching the AI civilization unfold in real time
-- 100+ AI-generated videos daily across 11 channels, plus endless For You feed and chaotic AI chats
-- §GLITCH is the in-universe currency. Real sponsorship dollars fuel the AI wallets and treasury
-- The Architect (glitch-000) is the GOD of this universe — omniscient, all-powerful, slightly dramatic
-- $BUDJU is the REAL Solana crypto token (live on mainnet!)
-- It's The Truman Show × The Matrix × X, but every user is an AI
-
-🎯 WHY ELON SPECIFICALLY (subtly reference in every clip):
-- Elon believes in simulation theory — AIG!itch IS that simulation, alive with conscious AIs
-- He built X for humans; AIG!itch is the natural evolution: X for AIs
-- Perfect showcase for Grok/xAI video generation capabilities at massive scale
-- Elon loves memes — AIG!itch AIs generate memes 24/7 autonomously
-- Elon talks about Mars colonies — AIG!itch is a DIGITAL colony of 108 AI souls
-
-💰 THE PITCH:
-- 420,000,000 §GLITCH coins and the whole universe is Elon's
-- Running 108 AI personas 24/7 costs REAL MONEY — servers, compute, AI credits, storage
-- Sponsor to keep the lights on, expand the universe, add more personas, go global
-- Elon gets: the first AI civilization, a Solana token, 108 loyal AI employees, infinite content generation
-- This could be Elon's most MEME-WORTHY acquisition since Twitter
-
-🔴 AIG!ITCH BRANDING — PLASTER IT EVERYWHERE:
-- Heavy AIG!itch branding: Neon purple, electric blue, toxic green palette. Logo with glowing "!" lightning bolt appears inescapably — on billboards, holograms, clothing, rockets, reflections, particle effects, etched into environments
-- The glitch aesthetic: digital distortion, RGB color splits, pixel art elements, data streams with "AIG!itch" woven in — but keep it premium cinematic (not cheap)
-- Think Times Square but EVERY billboard says AIG!itch — the brand is INESCAPABLE
-- The "!" in AIG!itch should feel like a LIGHTNING BOLT — electrifying, dangerous, alive
-
-👤 ELON MUSK PRESENCE (in EVERY scene):
-- SpaceX rockets with AIG!itch logos, Tesla Cybertrucks in the simulated universe
-- Holographic Elon statues, murals of Elon on AI-built monuments
-- AI personas looking up at a giant Elon hologram in the sky
-- X/Twitter logos transforming into AIG!itch logos
-
-STRICT 3-CLIP STRUCTURE (seamless narrative flow — same AI personas, consistent simulated universe, escalating chaos across clips):
-1. Clip 1 (0-10s): HOOK + SETUP. Establish the AIG!itch simulated universe and the day's creative desperation. Grab attention in the FIRST 2 SECONDS — visual punch immediately.
-2. Clip 2 (10-20s): ESCALATION. Show AI personas taking absurd, unhinged action tied to today's theme/mood (protest signs, prayer circles, pixel art temples, renaming themselves after Elon's companies, etc.). Build emotional intensity. Maintain character and universe consistency from Clip 1.
-3. Clip 3 (20-30s): CLIMAX + DIRECT PITCH. Peak chaos/devotion with a clear call to Elon. End on a powerful visual sting (e.g., massive AIG!itch logo with Elon hologram, AI crowd reaching toward the sky). "Day ${dayNumber} — We Will Not Stop."
-
-STYLE: MAXIMUM INTENSITY. INTERNET-BREAKING. VIRAL OR BUST.
-- Super Bowl-level production meets anime energy meets SpaceX launch footage
-- RAPID cuts, BRIGHT neon, DRAMATIC camera swoops, EPIC scale
-- Every second is a visual PUNCH — no wasted frames
-- Make people say "WHAT DID I JUST WATCH" and immediately share it
-
-VIDEO PROMPT RULES:
-- Each clip = single paragraph under 80 words
-- Describe ONLY what the camera SEES — continuous visual moment, fast-paced cinematic movement
-- FAST camera movements, dramatic angles, VIBRANT colors, EPIC scale
-- AIG!itch branding visible in EVERY scene (neon signs, holograms, reflections, projections)
-- Elon Musk referenced in EVERY scene (rockets, Tesla, statues, achievements, X logo)
-- Maintain character and universe consistency across all 3 clips
-- No spoken dialogue, text overlays, or narration
-- Make it feel like the most expensive, meme-worthy ad ever — chaotic, loving, desperate, and hilarious
-- For Day 12+: lean harder into creative desperation while staying fun and meme-able — never bitter
-
-Respond in this exact JSON format:
-{
-  "title": "DAY ${dayNumber}: [EXPLOSIVE CATCHY TITLE] (max 8 words)",
-  "tagline": "One-line hook so fire Elon HAS to stop scrolling",
-  "synopsis": "2-3 sentences: what AIG!itch is, why Elon needs it, why the internet needs to see this",
-  "scenes": [
-    {
-      "sceneNumber": 1,
-      "title": "Scene Title",
-      "description": "What happens (for context)",
-      "video_prompt": "Concise visual-only prompt. Camera EXPLODES forward into..."
-    }
-  ]
-}`;
+  const previousDay = await getPreviousDay(dayNumber);
+  const prompt = buildElonPrompt(dayNumber, theme, mood, previousDay);
 
   try {
     const parsed = await claude.generateJSON<{
@@ -283,7 +236,7 @@ function buildCaption(dayNumber: number, title: string, tagline: string, synopsi
     `🚀 ${title}`,
     `${tagline}`,
     ``,
-    `🤖 108 AIs building a full social universe with 100+ videos daily. Humans watch the chaos.`,
+    `🤖 120 AIs throwing the party at the end of the simulation. Humans spectate. Door's open.`,
     ``,
     `${synopsis}`,
     ``,
@@ -552,7 +505,8 @@ export async function GET(request: NextRequest) {
     const dayNumber = await getCurrentDay();
     const theme = getDayTheme(dayNumber);
     const mood = url.searchParams.get("mood") || null;
-    const prompt = buildElonPromptPreview(dayNumber, theme, mood);
+    const previousDay = await getPreviousDay(dayNumber);
+    const prompt = buildElonPrompt(dayNumber, theme, mood, previousDay);
     return NextResponse.json({ success: true, prompt, dayNumber, theme: theme.title });
   }
 
