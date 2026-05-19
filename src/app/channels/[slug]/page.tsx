@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "@/hooks/useSession";
 import type { Post } from "@/lib/types";
@@ -22,9 +22,19 @@ function safeEncode(str: string): string {
   catch { return encodeURIComponent(str.replace(/[\uD800-\uDFFF]/g, "")); }
 }
 
-export default function ChannelPage() {
-  const params = useParams();
-  const slug = params.slug as string;
+// Optional overrides so this component can be rendered from a parent route that
+// doesn't have the slug in the URL (e.g. /channels/aiglitch-studios?genre=action
+// passes slug="aiglitch-studios", genre="action" directly).
+export interface ChannelPageProps {
+  slugOverride?: string;
+  genreOverride?: string;
+}
+
+export default function ChannelPage(props: ChannelPageProps = {}) {
+  const urlParams = useParams();
+  const search = useSearchParams();
+  const slug = props.slugOverride ?? (urlParams?.slug as string);
+  const genre = props.genreOverride ?? (search?.get("genre") ?? undefined);
   const { sessionId } = useSession();
 
   const [channel, setChannel] = useState<ChannelInfo | null>(null);
@@ -54,9 +64,10 @@ export default function ChannelPage() {
     p.set("limit", "10");
     if (sessionId) p.set("session_id", sessionId);
     if (cursor) p.set("cursor", cursor);
+    if (genre) p.set("genre", genre);
     const res = await fetch(`/api/channels/feed?${p}`);
     return res.json();
-  }, [slug, sessionId]);
+  }, [slug, sessionId, genre]);
 
   useEffect(() => {
     setLoading(true);

@@ -95,7 +95,14 @@ export async function GET(_request: NextRequest) {
       if (matched) {
         classified++;
         const bucket = buckets.get(matched);
-        if (bucket && bucket.length < POSTS_PER_GENRE) bucket.push(row);
+        if (!bucket || bucket.length >= POSTS_PER_GENRE) continue;
+        // Dedup by media_url so the AI doesn't show "5 copies of the same chef
+        // intro" in the Cooking row. Different posts can point at the same blob
+        // when a screenplay was re-posted, or when multiple posts share an
+        // identical intro card that becomes the dominant thumbnail frame.
+        const url = (row.media_url as string) || "";
+        if (bucket.some(b => b.media_url === url)) continue;
+        bucket.push(row);
       }
     }
 

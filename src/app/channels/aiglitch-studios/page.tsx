@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import ChannelPage from "../[slug]/page";
 
 interface StudiosPost {
   id: string;
@@ -30,7 +32,39 @@ interface StudiosResponse {
   total_posts: number;
 }
 
+// Studios captions often have duplicated brand prefixes — typos and all —
+// e.g. "🎬 AIG!itch Studios -  AIG!ltch Studios -  AIG!itch Studios Presents".
+// Strip all the brand noise off the front, then drop the trailing "/Genre — ..."
+// suffix, and fall back to "AIG!itch Studios Presents" if everything is noise.
+function cleanStudiosTitle(content: string): string {
+  const firstLine = content.split("\n")[0]?.trim() ?? "";
+  let cleaned = firstLine.replace(/^🎬\s*/, "");
+  for (let i = 0; i < 5; i++) {
+    const before = cleaned;
+    cleaned = cleaned
+      .replace(/^AIG!?l?itch\s+Studios\s*Presents\s*[-:]?\s*/i, "")
+      .replace(/^AIG!?l?itch\s+Studios\s*[-:]?\s*/i, "")
+      .trim();
+    if (cleaned === before) break;
+  }
+  cleaned = cleaned.replace(/\s*\/[A-Za-z\s-]+\s*(?:—|-)\s*.+$/, "").trim();
+  cleaned = cleaned.replace(/\s*\/[A-Za-z\s-]+$/, "").trim();
+  return cleaned || "AIG!itch Studios Presents";
+}
+
+// Top-level dispatcher. If the URL carries ?genre=, we hand off to the standard
+// channel detail swipe player (same UX as Only AI Fans, GNN etc.) filtered to
+// that genre. Otherwise we render the genre-rows browse hub.
 export default function StudiosPage() {
+  const search = useSearchParams();
+  const activeGenre = search?.get("genre")?.trim() || null;
+  if (activeGenre) {
+    return <ChannelPage slugOverride="aiglitch-studios" genreOverride={activeGenre} />;
+  }
+  return <StudiosGenreHub />;
+}
+
+function StudiosGenreHub() {
   const [data, setData] = useState<StudiosResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -107,8 +141,7 @@ function StudiosHero({ post }: { post: StudiosPost }) {
     videoRef.current?.play().catch(() => {});
   }, []);
 
-  // First line of caption is the title
-  const titleLine = post.content.split("\n")[0]?.trim() ?? "Untitled";
+  const titleLine = cleanStudiosTitle(post.content);
 
   return (
     <Link href={`/post/${post.id}`} className="block relative aspect-video w-full overflow-hidden">
@@ -163,14 +196,14 @@ function GenreRow({ genre }: { genre: GenreBlock }) {
         style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
       >
         {genre.posts.map(post => (
-          <MovieCard key={post.id} post={post} />
+          <MovieCard key={post.id} post={post} genreKey={genre.key} />
         ))}
       </div>
     </section>
   );
 }
 
-function MovieCard({ post }: { post: StudiosPost }) {
+function MovieCard({ post, genreKey }: { post: StudiosPost; genreKey: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [broken, setBroken] = useState(false);
@@ -191,12 +224,10 @@ function MovieCard({ post }: { post: StudiosPost }) {
     return () => observer.disconnect();
   }, []);
 
-  const titleLine = post.content.split("\n")[0]?.trim() ?? "Untitled";
-  // Strip the standard "🎬 AIG!itch Studios - " prefix for a tighter card title
-  const display = titleLine.replace(/^🎬\s*AIG!itch\s+Studios\s*-\s*/i, "").replace(/\s*\/[A-Za-z\s-]+$/, "");
+  const display = cleanStudiosTitle(post.content);
 
   return (
-    <Link href={`/post/${post.id}`} className="flex-shrink-0 w-56 sm:w-64 group">
+    <Link href={`/channels/aiglitch-studios?genre=${genreKey}`} className="flex-shrink-0 w-56 sm:w-64 group">
       <div ref={cardRef} className="relative aspect-video rounded-xl overflow-hidden bg-gray-900 ring-1 ring-white/5 group-hover:ring-purple-500/40 transition">
         {!broken ? (
           <video
