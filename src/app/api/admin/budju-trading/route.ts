@@ -50,95 +50,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Drain a specific token from ALL persona wallets back to treasury (keeps SOL for gas)
-  if (action === "drain_token") {
-    try {
-      const { Connection, PublicKey, Transaction, sendAndConfirmTransaction } = await import("@solana/web3.js");
-      const { getAssociatedTokenAddress, getAccount, createTransferInstruction } = await import("@solana/spl-token");
-      const { SERVER_RPC_URL, TREASURY_WALLET_STR } = await import("@/lib/solana-config");
-      const { decryptKeypair } = await import("@/lib/trading/budju");
-      const sql = (await import("@/lib/db")).getDb();
-      const connection = new Connection(SERVER_RPC_URL, "confirmed");
-      const treasuryPub = new PublicKey(TREASURY_WALLET_STR);
-
-      const token = (request.nextUrl.searchParams.get("token") || "").toUpperCase();
-      const MINT_MAP: Record<string, { mint: string; decimals: number; dbCol: string }> = {
-        "BUDJU": { mint: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump", decimals: 6, dbCol: "budju_balance" },
-        "USDC": { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6, dbCol: "" },
-        "GLITCH": { mint: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT", decimals: 9, dbCol: "" },
-      };
-
-      if (!MINT_MAP[token]) {
-        return NextResponse.json({ error: `Invalid token: ${token}. Use BUDJU, USDC, or GLITCH` }, { status: 400 });
-      }
-
-      const { mint, decimals, dbCol } = MINT_MAP[token];
-      const mintPub = new PublicKey(mint);
-      const toAta = await getAssociatedTokenAddress(mintPub, treasuryPub);
-
-      const wallets = await sql`
-        SELECT bw.*, p.display_name FROM budju_wallets bw
-        JOIN ai_personas p ON p.id = bw.persona_id
-        WHERE bw.is_active = TRUE
-      `;
-
-      let drained = 0, failed = 0, totalAmount = 0;
-      const errors: string[] = [];
-
-      for (const w of wallets) {
-        try {
-          const keypair = decryptKeypair(w.encrypted_keypair as string);
-          const fromAta = await getAssociatedTokenAddress(mintPub, keypair.publicKey);
-          const acc = await getAccount(connection, fromAta);
-          const bal = Number(acc.amount);
-          if (bal <= 0) continue;
-
-          const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, keypair.publicKey, BigInt(bal)));
-          await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
-          totalAmount += bal / (10 ** decimals);
-          drained++;
-          if (dbCol === "budju_balance") await sql`UPDATE budju_wallets SET budju_balance = 0 WHERE persona_id = ${w.persona_id}`;
-          await new Promise(r => setTimeout(r, 1000));
-        } catch (err) {
-          // Skip wallets with no ATA or no balance
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes("could not find account") && !msg.includes("TokenAccountNotFound")) {
-            failed++;
-            errors.push(`${w.display_name}: ${msg.slice(0, 80)}`);
-          }
-        }
-      }
-
-      // Also drain from distributors
-      const distributors = await sql`SELECT * FROM budju_distributors ORDER BY group_number`;
-      for (const d of distributors) {
-        try {
-          const keypair = decryptKeypair(d.encrypted_keypair as string);
-          const fromAta = await getAssociatedTokenAddress(mintPub, keypair.publicKey);
-          const acc = await getAccount(connection, fromAta);
-          const bal = Number(acc.amount);
-          if (bal <= 0) continue;
-          const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, keypair.publicKey, BigInt(bal)));
-          await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
-          totalAmount += bal / (10 ** decimals);
-          drained++;
-          await new Promise(r => setTimeout(r, 1000));
-        } catch { /* skip */ }
-      }
-
-      return NextResponse.json({
-        success: true,
-        token,
-        drained,
-        failed,
-        totalRecovered: totalAmount,
-        message: `Drained ${totalAmount.toFixed(2)} ${token} from ${drained} wallets back to treasury. SOL untouched.`,
-        errors: errors.length > 0 ? errors : undefined,
-      });
-    } catch (err) {
-      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
-    }
-  }
+  // drain_token moved to POST handler — see action === "drain_token" below.
+  // Old GET-via-query-string entry point removed; UI now sends destination via POST body.
 
   // Refuel distributors with SOL then drain all SPL tokens back to treasury
   if (action === "refuel_and_drain_distributors") {
@@ -526,6 +439,139 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Distribution failed" }, { status: 500 });
+    }
+  }
+
+  // Drain ONE specific token (SOL/USDC/BUDJU/GLITCH) from ALL persona + distributor wallets
+  // to a chosen destination. Used by the four "Drain X" buttons on the trading page.
+  // For SPL tokens: destination must already have an ATA for that mint (any prior balance
+  // creates it; user's admin wallet typically already has one for each tradable token).
+  if (action === "drain_token") {
+    try {
+      const token = (body.token as string || "").toUpperCase();
+      const destination = (body.destination as string || "").trim();
+      if (!destination || destination.length < 32) {
+        return NextResponse.json({ error: "destination address required" }, { status: 400 });
+      }
+
+      const { Connection, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
+      const { getAssociatedTokenAddress, getAccount, createTransferInstruction } = await import("@solana/spl-token");
+      const { SERVER_RPC_URL } = await import("@/lib/solana-config");
+      const { decryptKeypair } = await import("@/lib/trading/budju");
+      const sql = (await import("@/lib/db")).getDb();
+      const connection = new Connection(SERVER_RPC_URL, "confirmed");
+      const destPub = new PublicKey(destination);
+
+      const SPL_TOKENS: Record<string, { mint: string; decimals: number; dbCol?: string }> = {
+        "BUDJU": { mint: "2ajYe8eh8btUZRpaZ1v7ewWDkcYJmVGvPuDTU5xrpump", decimals: 6, dbCol: "budju_balance" },
+        "USDC": { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+        "GLITCH": { mint: "5hfHCmaL6e9bvruy35RQyghMXseTE2mXJ7ukqKAcS8fT", decimals: 9 },
+      };
+
+      if (token !== "SOL" && !SPL_TOKENS[token]) {
+        return NextResponse.json({ error: `Invalid token: ${token}. Use SOL, USDC, BUDJU, or GLITCH` }, { status: 400 });
+      }
+
+      // Build the full wallet list: personas + distributors
+      const personas = await sql`
+        SELECT bw.encrypted_keypair, bw.persona_id, p.display_name
+        FROM budju_wallets bw
+        JOIN ai_personas p ON p.id = bw.persona_id
+        WHERE bw.is_active = TRUE
+      `;
+      const distributors = await sql`SELECT encrypted_keypair, group_number FROM budju_distributors ORDER BY group_number`;
+      const allWallets = [
+        ...personas.map(w => ({ enc: w.encrypted_keypair as string, label: `persona:${w.display_name}`, personaId: w.persona_id as string | null })),
+        ...distributors.map(d => ({ enc: d.encrypted_keypair as string, label: `dist:${d.group_number}`, personaId: null })),
+      ];
+
+      let drained = 0, failed = 0, totalAmount = 0;
+      const errors: string[] = [];
+
+      if (token === "SOL") {
+        // Drain all SOL minus the 5000-lamport tx fee per wallet.
+        for (const w of allWallets) {
+          try {
+            const keypair = decryptKeypair(w.enc);
+            const balance = await connection.getBalance(keypair.publicKey);
+            const sendLamports = balance - 5000;
+            if (sendLamports <= 0) continue;
+            const tx = new Transaction().add(SystemProgram.transfer({
+              fromPubkey: keypair.publicKey,
+              toPubkey: destPub,
+              lamports: sendLamports,
+            }));
+            await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+            totalAmount += sendLamports / LAMPORTS_PER_SOL;
+            drained++;
+            if (w.personaId) {
+              await sql`UPDATE budju_wallets SET sol_balance = 0, updated_at = NOW() WHERE persona_id = ${w.personaId}`;
+            }
+            await new Promise(r => setTimeout(r, 1000));
+          } catch (err) {
+            failed++;
+            errors.push(`${w.label}: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+          }
+        }
+      } else {
+        // SPL token drain
+        const { mint, decimals, dbCol } = SPL_TOKENS[token];
+        const mintPub = new PublicKey(mint);
+        const toAta = await getAssociatedTokenAddress(mintPub, destPub);
+
+        // Verify destination ATA exists. If not, fail fast with a clear hint —
+        // we don't want to silently burn fees against a destination that can't receive.
+        try {
+          await getAccount(connection, toAta);
+        } catch {
+          return NextResponse.json({
+            error: `Destination wallet has no ${token} token account. Send any tiny amount of ${token} to ${destination.slice(0, 8)}... first to create the ATA, then retry.`,
+          }, { status: 400 });
+        }
+
+        for (const w of allWallets) {
+          try {
+            const keypair = decryptKeypair(w.enc);
+            const fromAta = await getAssociatedTokenAddress(mintPub, keypair.publicKey);
+            let bal: number;
+            try {
+              const acc = await getAccount(connection, fromAta);
+              bal = Number(acc.amount);
+            } catch {
+              continue; // no ATA — skip silently
+            }
+            if (bal <= 0) continue;
+
+            const tx = new Transaction().add(createTransferInstruction(fromAta, toAta, keypair.publicKey, BigInt(bal)));
+            await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: "confirmed" });
+            totalAmount += bal / (10 ** decimals);
+            drained++;
+            if (dbCol === "budju_balance" && w.personaId) {
+              await sql`UPDATE budju_wallets SET budju_balance = 0 WHERE persona_id = ${w.personaId}`;
+            }
+            await new Promise(r => setTimeout(r, 1000));
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!msg.includes("could not find account") && !msg.includes("TokenAccountNotFound")) {
+              failed++;
+              errors.push(`${w.label}: ${msg.slice(0, 80)}`);
+            }
+          }
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        token,
+        destination,
+        drained,
+        failed,
+        totalRecovered: totalAmount,
+        message: `Drained ${totalAmount.toFixed(token === "SOL" ? 6 : 2)} ${token} from ${drained} wallets → ${destination.slice(0, 8)}...${destination.slice(-4)}`,
+        errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
     }
   }
 
