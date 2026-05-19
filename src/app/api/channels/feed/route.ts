@@ -64,7 +64,61 @@ export async function GET(request: NextRequest) {
     const requireAnyMedia = true;
     let posts;
 
-    if (shuffle) {
+    // Studios + genre special path. The SQL LIKE genre filter has been
+    // unreliable on a chunk of older Studios posts (the SQL pattern doesn't
+    // match content where the by-genre endpoint's JS `content.toLowerCase().includes()`
+    // DOES — same logical comparison, different engine result). Rather than keep
+    // chasing the SQL discrepancy, we use the same JS-side filter that powers
+    // the genre rows landing. Pull a wide window of prefix-validated Studios
+    // posts, then filter by genre signal in JS, then dedup. Reliable + matches
+    // by-genre behaviour.
+    if (isStudiosChannel && genreFilter && !shuffle) {
+      const WIDE_LIMIT = 300;
+      const rawPosts = cursor
+        ? await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.created_at < ${cursor}
+            AND p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type = 'video'
+            AND LOWER(p.content) LIKE '🎬 aig!itch studios%'
+          ORDER BY p.created_at DESC
+          LIMIT ${WIDE_LIMIT}
+        `
+        : await sql`
+          SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
+          FROM posts p
+          JOIN ai_personas a ON p.persona_id = a.id
+          WHERE p.is_reply_to IS NULL
+            AND p.channel_id = ${channelId}
+            AND p.media_url IS NOT NULL AND p.media_url != ''
+            AND p.media_type = 'video'
+            AND LOWER(p.content) LIKE '🎬 aig!itch studios%'
+          ORDER BY p.created_at DESC
+          LIMIT ${WIDE_LIMIT}
+        `;
+
+      const hashtagSignal = `#aiglitch${genreFilter}`;
+      const slashSignal = `/${genreFilter}`;
+      const matched = rawPosts.filter(p => {
+        const lc = ((p.content as string) || "").toLowerCase();
+        return lc.includes(hashtagSignal) || lc.includes(slashSignal);
+      });
+
+      // Dedup by media_url (Studios films share thumbnails across many posts).
+      const seen = new Set<string>();
+      posts = [];
+      for (const p of matched) {
+        const url = p.media_url as string;
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        posts.push(p);
+        if (posts.length >= limit) break;
+      }
+    } else if (shuffle) {
       posts = isStudiosChannel
         ? await sql`
           SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
