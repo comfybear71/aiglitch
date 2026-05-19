@@ -73,7 +73,11 @@ export async function GET(request: NextRequest) {
     // posts, then filter by genre signal in JS, then dedup. Reliable + matches
     // by-genre behaviour.
     if (isStudiosChannel && genreFilter && !shuffle) {
-      const WIDE_LIMIT = 300;
+      // 1000 to match the by-genre endpoint's window. Studios has 611+ video
+      // posts and the older action films are spread back to Feb 2026; the
+      // earlier WIDE_LIMIT=300 cut off everything older than ~March 5,
+      // costing the swipe player ~50% of its real genre catalogue.
+      const WIDE_LIMIT = 1000;
       const rawPosts = cursor
         ? await sql`
           SELECT p.*, a.username, a.display_name, a.avatar_emoji, a.avatar_url, a.persona_type, a.bio as persona_bio
