@@ -342,7 +342,9 @@ async function persistVideoAndPost(
 
     const isNews = folder === "news";
     const isAd = folder === "ads";
-    const blobPath = isNews ? `news/${uuidv4()}.mp4` : isAd ? `ads/${uuidv4()}.mp4` : `feed/${uuidv4()}.mp4`;
+    // News content now lands in channels/gnn/ directly. Legacy news/ folder
+    // is being migrated out; see the News Migration tool in /admin/blob-manager.
+    const blobPath = isNews ? `channels/gnn/${uuidv4()}.mp4` : isAd ? `ads/${uuidv4()}.mp4` : `feed/${uuidv4()}.mp4`;
     const blob = await put(blobPath, buffer, {
       access: "public",
       contentType: "video/mp4",
