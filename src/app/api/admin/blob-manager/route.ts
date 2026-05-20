@@ -145,6 +145,53 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  if (action === "news-summary") {
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+      const rows = await sql`
+        SELECT
+          COUNT(*)::int as total,
+          COUNT(*) FILTER (WHERE media_url LIKE '%/news/%')::int as needs_moving
+        FROM posts
+        WHERE media_type = 'video'
+          AND media_url IS NOT NULL
+          AND is_reply_to IS NULL
+          AND (media_url LIKE '%/news/%' OR channel_id = 'ch-gnn')
+      ` as unknown as { total: number; needs_moving: number }[];
+      return NextResponse.json({ total: rows[0]?.total || 0, needs_moving: rows[0]?.needs_moving || 0 });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
+  if (action === "news-videos") {
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+      const rows = await sql`
+        SELECT id, media_url, content, created_at
+        FROM posts
+        WHERE media_type = 'video'
+          AND media_url IS NOT NULL
+          AND is_reply_to IS NULL
+          AND media_url LIKE '%/news/%'
+        ORDER BY created_at ASC
+      ` as unknown as { id: string; media_url: string; content: string; created_at: string }[];
+      const videos = rows.map(r => {
+        const title = (r.content || "").split("\n")[0].replace(/^🎬\s*/, "").slice(0, 80);
+        const date = new Date(r.created_at).toISOString().slice(0, 10);
+        const titleSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        // Append a post_id slice for guaranteed uniqueness in case of same-day same-title posts.
+        const newPath = `channels/gnn/${date}_${titleSlug || r.id.slice(0, 8)}_${r.id.slice(0, 6)}.mp4`;
+        return { post_id: r.id, old_url: r.media_url, new_path: newPath, title, date };
+      });
+      return NextResponse.json({ count: videos.length, videos });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
   if (action === "studios-genres") {
     try {
       const { getDb } = await import("@/lib/db");

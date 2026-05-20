@@ -39,6 +39,9 @@ const FOLDER_TAGS: Record<string, { tag: FolderTag; note?: string }> = {
   "meatlab/":           { tag: "active", note: "MeatLab community submissions (publishes to ch-meatbag)" },
   "feed-chaos/":        { tag: "active", note: "chaos drop feed videos (cron every 2h)" },
   "chibi/":             { tag: "active", note: "chibi avatar generator output" },
+  "ads/":               { tag: "active", note: "ad campaign videos (generate-ads cron)" },
+  "elon-campaign/":     { tag: "active", note: "Elon Button daily campaign videos" },
+  "feed/":              { tag: "active", note: "persona feed video posts" },
 
   // — Legacy —
   "premiere/":          { tag: "legacy", note: "old director-premiere output; deletable after Studios migration finishes" },
@@ -158,6 +161,13 @@ export default function BlobManagerPage() {
   const [migrating, setMigrating] = useState(false);
   const [migrateLog, setMigrateLog] = useState<string[]>([]);
   const [migrateProgress, setMigrateProgress] = useState({ done: 0, total: 0 });
+
+  // News → channels/gnn/ migration state
+  const [newsSummary, setNewsSummary] = useState<{ total: number; needs_moving: number } | null>(null);
+  const [newsVideos, setNewsVideos] = useState<{ post_id: string; old_url: string; new_path: string; title: string; date: string }[]>([]);
+  const [newsMigrating, setNewsMigrating] = useState(false);
+  const [newsLog, setNewsLog] = useState<string[]>([]);
+  const [newsProgress, setNewsProgress] = useState({ done: 0, total: 0 });
 
   // Sponsor credit backfill
   type CreditFix = { post_id: string; created_at: string; old_line: string; new_line: string; mode: "product_names" | "dedupe_only" | "skip" };
@@ -569,6 +579,111 @@ export default function BlobManagerPage() {
               {migrateLog.length > 0 && (
                 <div className="max-h-[30vh] overflow-y-auto bg-black rounded-lg p-3 space-y-0.5">
                   {migrateLog.map((log, i) => (
+                    <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{log}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* News → channels/gnn/ Migration */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-yellow-400 uppercase">News → channels/gnn/ Migration</h2>
+            <button
+              onClick={async () => {
+                const res = await fetch("/api/admin/blob-manager?action=news-summary");
+                const data = await res.json();
+                if (typeof data.needs_moving === "number") setNewsSummary({ total: data.total, needs_moving: data.needs_moving });
+                if (data.needs_moving > 0) {
+                  const vRes = await fetch("/api/admin/blob-manager?action=news-videos");
+                  const vData = await vRes.json();
+                  if (vData.videos) setNewsVideos(vData.videos);
+                }
+              }}
+              className="px-3 py-1 bg-yellow-600/20 text-yellow-400 rounded text-xs hover:bg-yellow-600/30 border border-yellow-500/30">
+              Scan News
+            </button>
+          </div>
+
+          {newsSummary && (
+            <div className="bg-gray-900 border border-yellow-500/20 rounded-lg p-3 mb-3 text-xs text-gray-300">
+              {newsSummary.needs_moving === 0 ? (
+                <p className="text-green-400">✅ No news/ files to migrate — folder is safe to delete via the folders list above.</p>
+              ) : (
+                <p>
+                  <span className="text-yellow-400 font-bold">{newsSummary.needs_moving}</span> posts still point at <code className="text-yellow-300">news/</code> · {newsSummary.total} total GNN videos in DB
+                </p>
+              )}
+            </div>
+          )}
+
+          {newsVideos.length > 0 && (
+            <div className="bg-gray-900 border border-yellow-500/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">
+                  {newsVideos.length} videos to migrate
+                </h3>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Migrate ${newsVideos.length} news videos to channels/gnn/?\n\nThis copies each video to the new location and updates the database. Old files in news/ are NOT deleted — you can delete them after via the folders list once this completes.`)) return;
+                    setNewsMigrating(true);
+                    setNewsProgress({ done: 0, total: newsVideos.length });
+                    const logs: string[] = [];
+                    let done = 0;
+                    for (const v of newsVideos) {
+                      try {
+                        const res = await fetch("/api/admin/blob-manager", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "migrate-video", post_id: v.post_id, old_url: v.old_url, new_path: v.new_path }),
+                        });
+                        const data = await res.json();
+                        done++;
+                        if (data.success) {
+                          logs.push(`✅ ${v.title.slice(0, 50)} → ${v.new_path}`);
+                        } else {
+                          logs.push(`❌ ${v.title.slice(0, 50)}: ${data.error}`);
+                        }
+                      } catch (err) {
+                        done++;
+                        logs.push(`❌ ${v.title.slice(0, 50)}: ${err}`);
+                      }
+                      setNewsLog([...logs]);
+                      setNewsProgress({ done, total: newsVideos.length });
+                    }
+                    setNewsMigrating(false);
+                    // Re-scan so the summary updates
+                    const res = await fetch("/api/admin/blob-manager?action=news-summary");
+                    const data = await res.json();
+                    if (typeof data.needs_moving === "number") setNewsSummary({ total: data.total, needs_moving: data.needs_moving });
+                  }}
+                  disabled={newsMigrating}
+                  className="px-4 py-2 bg-yellow-600 text-white font-bold rounded-lg text-xs hover:bg-yellow-500 disabled:opacity-50">
+                  {newsMigrating ? `Migrating ${newsProgress.done}/${newsProgress.total}...` : `Migrate All ${newsVideos.length} Videos`}
+                </button>
+              </div>
+
+              {newsMigrating && (
+                <div className="w-full bg-gray-800 rounded-full h-2">
+                  <div className="bg-yellow-500 h-2 rounded-full transition-all" style={{ width: `${(newsProgress.done / newsProgress.total) * 100}%` }} />
+                </div>
+              )}
+
+              <div className="max-h-[40vh] overflow-y-auto space-y-1">
+                {newsVideos.map(v => (
+                  <div key={v.post_id} className="flex items-center gap-2 text-[10px] p-1.5 bg-gray-800 rounded">
+                    <span className="text-gray-500 flex-shrink-0">{v.date}</span>
+                    <span className="text-white truncate flex-1">{v.title}</span>
+                    <span className="text-yellow-400 flex-shrink-0">→ channels/gnn/</span>
+                  </div>
+                ))}
+              </div>
+
+              {newsLog.length > 0 && (
+                <div className="max-h-[30vh] overflow-y-auto bg-black rounded-lg p-3 space-y-0.5">
+                  {newsLog.map((log, i) => (
                     <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{log}</p>
                   ))}
                 </div>

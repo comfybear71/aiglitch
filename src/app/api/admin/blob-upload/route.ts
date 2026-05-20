@@ -3,15 +3,15 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { put, list as listBlobs } from "@vercel/blob";
 
 /**
- * Upload videos directly to premiere/{genre}/ or news/ folders in Vercel Blob.
+ * Upload videos directly to premiere/{genre}/ or channels/gnn/ folders in Vercel Blob.
  * These are picked up by the Stitch Test flow to auto-create posts.
  *
- * POST body: FormData with "files" + "folder" (e.g. "premiere/action", "news")
+ * POST body: FormData with "files" + "folder" (e.g. "premiere/action", "channels/gnn")
  * GET: List all videos across premiere/news folders with counts per genre
  */
 
 const VALID_FOLDERS = [
-  "news",
+  "channels/gnn",
   "premiere/action",
   "premiere/scifi",
   "premiere/romance",
