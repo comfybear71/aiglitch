@@ -180,6 +180,11 @@ export default function BlobManagerPage() {
   const [imagesAudit, setImagesAudit] = useState<ImagesAudit | null>(null);
   const [imagesAuditing, setImagesAuditing] = useState(false);
   const [imagesAuditError, setImagesAuditError] = useState<string | null>(null);
+  // Phase 5.1 — bulk orphan delete state
+  type OrphanDeleteResult = { scanned: number; referenced: number; targeted: number; orphans: number; placements: number; deleted: number; bytesFreed: number; errors: string[] };
+  const [orphanDeleting, setOrphanDeleting] = useState(false);
+  const [orphanDeleteResult, setOrphanDeleteResult] = useState<OrphanDeleteResult | null>(null);
+  const [orphanDeleteError, setOrphanDeleteError] = useState<string | null>(null);
 
   // Sponsor credit backfill
   type CreditFix = { post_id: string; created_at: string; old_line: string; new_line: string; mode: "product_names" | "dedupe_only" | "skip" };
@@ -794,6 +799,75 @@ export default function BlobManagerPage() {
                   <li>Then migrate the {imagesAudit.referenced.count.toLocaleString()} referenced files ({formatBytes(imagesAudit.referenced.size)}) to <code className="text-fuchsia-300">posts/&#123;YYYY-MM&#125;/</code> in a follow-up phase.</li>
                 </ol>
               </div>
+
+              {/* Phase 5.1 — bulk orphan delete */}
+              {(imagesAudit.orphan.count > 0 || imagesAudit.placement.count > 0) && (
+                <div className="bg-red-950/30 border border-red-500/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs text-gray-300">
+                      <p className="text-red-400 font-bold">⚠️ Phase 5.1 — Bulk delete</p>
+                      <p className="mt-1">
+                        Deletes {(imagesAudit.orphan.count + imagesAudit.placement.count).toLocaleString()} files ({formatBytes(imagesAudit.orphan.size + imagesAudit.placement.size)}). Re-scans first so any newly-referenced files are skipped — referenced files are NEVER touched.
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const totalCount = imagesAudit.orphan.count + imagesAudit.placement.count;
+                        if (!confirm(`DELETE ${totalCount.toLocaleString()} unreferenced files from images/?\n\n${formatBytes(imagesAudit.orphan.size + imagesAudit.placement.size)} will be freed.\n\nReferenced files (${imagesAudit.referenced.count.toLocaleString()}) will NOT be touched.\n\nThis CANNOT be undone.`)) return;
+                        if (!confirm(`Are you SURE? About to delete ${totalCount.toLocaleString()} blob files.`)) return;
+                        setOrphanDeleting(true);
+                        setOrphanDeleteError(null);
+                        setOrphanDeleteResult(null);
+                        try {
+                          const res = await fetch("/api/admin/blob-manager", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "delete-images-orphans" }),
+                          });
+                          const data = await res.json();
+                          if (data.error) {
+                            setOrphanDeleteError(data.error);
+                          } else {
+                            setOrphanDeleteResult(data as OrphanDeleteResult);
+                            // Re-run the audit so the bucket cards reflect the new state
+                            const auditRes = await fetch("/api/admin/blob-manager?action=images-audit");
+                            const auditData = await auditRes.json();
+                            if (!auditData.error) setImagesAudit(auditData as ImagesAudit);
+                          }
+                        } catch (err) {
+                          setOrphanDeleteError(err instanceof Error ? err.message : String(err));
+                        }
+                        setOrphanDeleting(false);
+                      }}
+                      disabled={orphanDeleting}
+                      className="flex-shrink-0 px-4 py-2 bg-red-600 text-white font-bold rounded-lg text-xs hover:bg-red-500 disabled:opacity-50">
+                      {orphanDeleting ? "Deleting…" : `🗑 Delete ${(imagesAudit.orphan.count + imagesAudit.placement.count).toLocaleString()} files`}
+                    </button>
+                  </div>
+
+                  {orphanDeleting && (
+                    <p className="text-[10px] text-red-400 animate-pulse">Working… 30-60s depending on file count.</p>
+                  )}
+
+                  {orphanDeleteResult && (
+                    <div className="bg-black/50 rounded p-2 text-[10px] font-mono space-y-0.5">
+                      <p className={orphanDeleteResult.errors.length === 0 ? "text-green-400" : "text-yellow-400"}>
+                        {orphanDeleteResult.errors.length === 0 ? "✅" : "⚠️"} Deleted {orphanDeleteResult.deleted.toLocaleString()} of {orphanDeleteResult.targeted.toLocaleString()} · freed {formatBytes(orphanDeleteResult.bytesFreed)}
+                      </p>
+                      <p className="text-gray-400">Scanned {orphanDeleteResult.scanned.toLocaleString()} · {orphanDeleteResult.referenced.toLocaleString()} referenced (kept) · {orphanDeleteResult.orphans.toLocaleString()} orphans · {orphanDeleteResult.placements.toLocaleString()} placement-intermediates</p>
+                      {orphanDeleteResult.errors.length > 0 && orphanDeleteResult.errors.map((e, i) => (
+                        <p key={i} className="text-red-400">❌ {e}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  {orphanDeleteError && (
+                    <div className="bg-red-900/40 border border-red-500/30 rounded p-2 text-[10px] text-red-400">
+                      ❌ {orphanDeleteError}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Orphan sample */}
               {imagesAudit.orphan.sample.length > 0 && (

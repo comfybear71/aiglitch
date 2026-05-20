@@ -483,6 +483,90 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const { action } = body;
 
+  if (action === "delete-images-orphans") {
+    // Phase 5.1 — bulk-delete orphans + placement intermediates from images/.
+    //
+    // Re-runs the audit scan so we're working from the live state (not a
+    // stale audit snapshot from minutes ago), then deletes any file under
+    // images/ that is NOT referenced by posts.media_url. Placement-
+    // intermediate filenames (placement-*, ref-*, ref-fallback-*) are
+    // included in the delete set since they're transient by design.
+    //
+    // Files that ARE referenced are never touched — those belong to
+    // Phase 5.2 (migration to posts/{YYYY-MM}/).
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+
+      const postRows = await sql`
+        SELECT media_url FROM posts
+        WHERE media_url IS NOT NULL
+          AND media_url LIKE '%/images/%'
+      ` as unknown as { media_url: string }[];
+
+      const referencedPaths = new Set<string>();
+      for (const r of postRows) {
+        const m = r.media_url.match(/^https?:\/\/[^/]+\/(.+)$/);
+        if (m) referencedPaths.add(m[1]);
+      }
+
+      const PLACEMENT_RE = /^images\/(placement-|ref-|ref-fallback-)/;
+      const toDelete: { url: string; size: number; kind: "orphan" | "placement" }[] = [];
+      let scanned = 0;
+      let referencedCount = 0;
+
+      let cursor: string | undefined;
+      do {
+        const page = await listBlobs({ prefix: "images/", limit: 1000, cursor });
+        for (const b of page.blobs) {
+          scanned++;
+          if (referencedPaths.has(b.pathname)) {
+            referencedCount++;
+          } else if (PLACEMENT_RE.test(b.pathname)) {
+            toDelete.push({ url: b.url, size: b.size, kind: "placement" });
+          } else {
+            toDelete.push({ url: b.url, size: b.size, kind: "orphan" });
+          }
+        }
+        cursor = page.hasMore ? page.cursor : undefined;
+      } while (cursor);
+
+      // Delete in chunks of 500 (the limit the DELETE handler enforces and
+      // a sensible cap for Vercel Blob's batch del API).
+      let deleted = 0;
+      let bytesFreed = 0;
+      const errors: string[] = [];
+      const BATCH = 500;
+      for (let i = 0; i < toDelete.length; i += BATCH) {
+        const slice = toDelete.slice(i, i + BATCH);
+        try {
+          await del(slice.map(s => s.url));
+          deleted += slice.length;
+          bytesFreed += slice.reduce((sum, s) => sum + s.size, 0);
+        } catch (err) {
+          errors.push(`batch ${i / BATCH + 1}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      const orphanCount = toDelete.filter(t => t.kind === "orphan").length;
+      const placementCount = toDelete.filter(t => t.kind === "placement").length;
+
+      return NextResponse.json({
+        success: errors.length === 0,
+        scanned,
+        referenced: referencedCount,
+        targeted: toDelete.length,
+        orphans: orphanCount,
+        placements: placementCount,
+        deleted,
+        bytesFreed,
+        errors,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
   if (action === "migrate-video") {
     const { post_id, old_url, new_path } = body as { post_id: string; old_url: string; new_path: string };
     if (!post_id || !old_url || !new_path) {
