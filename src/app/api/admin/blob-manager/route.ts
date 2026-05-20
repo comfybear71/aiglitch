@@ -145,6 +145,74 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  if (action === "images-audit") {
+    // Phase 4 of the images/ migration — read-only classifier.
+    // Walks every blob under images/, joins against posts.media_url, and
+    // sorts each file into one of three buckets:
+    //   referenced — a post still points at this URL (must migrate before delete)
+    //   placement  — filename prefix matches a product-placement intermediate
+    //                (placement-, ref-, ref-fallback-) — safe to delete after
+    //                verifying nothing depends on them
+    //   orphan     — neither — feed-post image whose post was deleted
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+
+      // Collect every media_url that points at the images/ folder
+      const postRows = await sql`
+        SELECT media_url FROM posts
+        WHERE media_url IS NOT NULL
+          AND media_url LIKE '%/images/%'
+      ` as unknown as { media_url: string }[];
+
+      // Build a set of pathnames (everything after the hostname) for O(1) lookup
+      const referencedPaths = new Set<string>();
+      for (const r of postRows) {
+        const m = r.media_url.match(/^https?:\/\/[^/]+\/(.+)$/);
+        if (m) referencedPaths.add(m[1]);
+      }
+
+      const referenced = { count: 0, size: 0 };
+      const placement = { count: 0, size: 0 };
+      const orphan = { count: 0, size: 0, sample: [] as { pathname: string; size: number; url: string }[] };
+      let totalScanned = 0;
+
+      const PLACEMENT_RE = /^images\/(placement-|ref-|ref-fallback-)/;
+
+      let cursor: string | undefined;
+      do {
+        const page = await listBlobs({ prefix: "images/", limit: 1000, cursor });
+        for (const b of page.blobs) {
+          totalScanned++;
+          if (referencedPaths.has(b.pathname)) {
+            referenced.count++;
+            referenced.size += b.size;
+          } else if (PLACEMENT_RE.test(b.pathname)) {
+            placement.count++;
+            placement.size += b.size;
+          } else {
+            orphan.count++;
+            orphan.size += b.size;
+            if (orphan.sample.length < 50) {
+              orphan.sample.push({ pathname: b.pathname, size: b.size, url: b.url });
+            }
+          }
+        }
+        cursor = page.hasMore ? page.cursor : undefined;
+      } while (cursor);
+
+      return NextResponse.json({
+        scanned: totalScanned,
+        postsPointingAtImages: postRows.length,
+        referenced,
+        placement,
+        orphan,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
   if (action === "news-summary") {
     try {
       const { getDb } = await import("@/lib/db");

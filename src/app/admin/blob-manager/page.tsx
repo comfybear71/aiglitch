@@ -169,6 +169,18 @@ export default function BlobManagerPage() {
   const [newsLog, setNewsLog] = useState<string[]>([]);
   const [newsProgress, setNewsProgress] = useState({ done: 0, total: 0 });
 
+  // images/ audit state (Phase 4 — read-only classifier)
+  type ImagesAudit = {
+    scanned: number;
+    postsPointingAtImages: number;
+    referenced: { count: number; size: number };
+    placement: { count: number; size: number };
+    orphan: { count: number; size: number; sample: { pathname: string; size: number; url: string }[] };
+  };
+  const [imagesAudit, setImagesAudit] = useState<ImagesAudit | null>(null);
+  const [imagesAuditing, setImagesAuditing] = useState(false);
+  const [imagesAuditError, setImagesAuditError] = useState<string | null>(null);
+
   // Sponsor credit backfill
   type CreditFix = { post_id: string; created_at: string; old_line: string; new_line: string; mode: "product_names" | "dedupe_only" | "skip" };
   const [creditScan, setCreditScan] = useState<{ scanned: number; broken: number; all: CreditFix[] } | null>(null);
@@ -687,6 +699,119 @@ export default function BlobManagerPage() {
                     <p key={i} className={`text-[10px] ${log.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{log}</p>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* images/ Audit — Phase 4 (read-only classifier) */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-fuchsia-400 uppercase">images/ Audit (read-only)</h2>
+            <button
+              onClick={async () => {
+                setImagesAuditing(true);
+                setImagesAuditError(null);
+                setImagesAudit(null);
+                try {
+                  const res = await fetch("/api/admin/blob-manager?action=images-audit");
+                  const data = await res.json();
+                  if (data.error) {
+                    setImagesAuditError(data.error);
+                  } else {
+                    setImagesAudit(data as ImagesAudit);
+                  }
+                } catch (err) {
+                  setImagesAuditError(err instanceof Error ? err.message : String(err));
+                }
+                setImagesAuditing(false);
+              }}
+              disabled={imagesAuditing}
+              className="px-3 py-1 bg-fuchsia-600/20 text-fuchsia-400 rounded text-xs hover:bg-fuchsia-600/30 border border-fuchsia-500/30 disabled:opacity-50">
+              {imagesAuditing ? "Scanning…" : "Scan images/"}
+            </button>
+          </div>
+
+          <p className="text-[10px] text-gray-500 mb-3">
+            Cross-references every file under <code className="text-fuchsia-300">images/</code> against <code className="text-fuchsia-300">posts.media_url</code> to classify each blob. No files are read, moved, or deleted — this just counts. Takes 30-60s for 10K+ files.
+          </p>
+
+          {imagesAuditError && (
+            <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-3 text-xs text-red-400">
+              ❌ {imagesAuditError}
+            </div>
+          )}
+
+          {imagesAudit && (
+            <div className="space-y-3">
+              {/* Summary headline */}
+              <div className="bg-gray-900 border border-fuchsia-500/20 rounded-lg p-3 text-xs text-gray-300">
+                Scanned <span className="text-fuchsia-400 font-bold">{imagesAudit.scanned.toLocaleString()}</span> files
+                · {imagesAudit.postsPointingAtImages.toLocaleString()} posts point at the folder
+              </div>
+
+              {/* Three bucket cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-gray-900 border border-green-500/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base">🟢</span>
+                    <span className="text-xs font-bold text-green-400 uppercase">Referenced</span>
+                  </div>
+                  <p className="text-2xl font-black text-white">{imagesAudit.referenced.count.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">{formatBytes(imagesAudit.referenced.size)}</p>
+                  <p className="text-[10px] text-gray-500 mt-2">A post still points at these — must migrate before delete.</p>
+                </div>
+
+                <div className="bg-gray-900 border border-yellow-500/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base">🟡</span>
+                    <span className="text-xs font-bold text-yellow-400 uppercase">Placement Intermediates</span>
+                  </div>
+                  <p className="text-2xl font-black text-white">{imagesAudit.placement.count.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">{formatBytes(imagesAudit.placement.size)}</p>
+                  <p className="text-[10px] text-gray-500 mt-2">
+                    <code>placement-*</code>, <code>ref-*</code>, <code>ref-fallback-*</code>. Transient — woven into a video then forgotten. Safe to delete.
+                  </p>
+                </div>
+
+                <div className="bg-gray-900 border border-red-500/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base">🔴</span>
+                    <span className="text-xs font-bold text-red-400 uppercase">Orphans</span>
+                  </div>
+                  <p className="text-2xl font-black text-white">{imagesAudit.orphan.count.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">{formatBytes(imagesAudit.orphan.size)}</p>
+                  <p className="text-[10px] text-gray-500 mt-2">Nothing references them — old feed images from deleted posts. Safe to delete.</p>
+                </div>
+              </div>
+
+              {/* Headline recommendation */}
+              <div className="bg-black/40 border border-fuchsia-500/30 rounded-lg p-3 text-xs">
+                <p className="text-fuchsia-400 font-bold mb-1">Recommended next move:</p>
+                <ol className="list-decimal list-inside space-y-0.5 text-gray-300">
+                  <li>Delete the {imagesAudit.placement.count.toLocaleString()} placement intermediates ({formatBytes(imagesAudit.placement.size)}) — transient by design.</li>
+                  <li>Delete the {imagesAudit.orphan.count.toLocaleString()} orphans ({formatBytes(imagesAudit.orphan.size)}) — no references in DB.</li>
+                  <li>Then migrate the {imagesAudit.referenced.count.toLocaleString()} referenced files ({formatBytes(imagesAudit.referenced.size)}) to <code className="text-fuchsia-300">posts/&#123;YYYY-MM&#125;/</code> in a follow-up phase.</li>
+                </ol>
+              </div>
+
+              {/* Orphan sample */}
+              {imagesAudit.orphan.sample.length > 0 && (
+                <details className="bg-gray-900 border border-red-500/20 rounded-lg p-3">
+                  <summary className="text-xs font-bold text-red-400 cursor-pointer hover:text-red-300">
+                    Sample orphans ({imagesAudit.orphan.sample.length} of {imagesAudit.orphan.count.toLocaleString()})
+                  </summary>
+                  <div className="mt-2 max-h-[40vh] overflow-y-auto space-y-1">
+                    {imagesAudit.orphan.sample.map(s => (
+                      <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-[10px] p-1.5 bg-gray-800 rounded hover:bg-gray-700">
+                        <span className="text-gray-500 flex-shrink-0">{formatBytes(s.size)}</span>
+                        <span className="text-white truncate flex-1">{s.pathname}</span>
+                        <span className="text-red-400 flex-shrink-0">↗</span>
+                      </a>
+                    ))}
+                  </div>
+                </details>
               )}
             </div>
           )}
