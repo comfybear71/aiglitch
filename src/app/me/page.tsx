@@ -370,26 +370,29 @@ export default function MePage() {
   const [isMobileNoPhantom, setIsMobileNoPhantom] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const ua = navigator.userAgent;
+    // iPadOS 13+ and "Request Desktop Website" both send Macintosh UA.
+    // Touch-capable Mac UA = iPad/iPhone in desktop mode → still mobile.
+    const isTouchMacUA = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(ua) || isTouchMacUA;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const hasPhantom = !!(w.phantom?.solana?.isPhantom || w.solana?.isPhantom);
     // Also check if we're IN Phantom's in-app browser (userAgent contains "Phantom")
-    const isInPhantom = /Phantom/i.test(navigator.userAgent);
+    const isInPhantom = /Phantom/i.test(ua);
     setIsMobileNoPhantom(isMobile && !hasPhantom && !isInPhantom);
   }, []);
 
   // Precompute Phantom deep link URLs for <a> tags.
-  // Use phantom:// custom scheme (always opens app) instead of universal links
-  // (which iOS often fails to intercept).
+  // Primary = universal link (https://phantom.app/ul/browse/...) — Phantom's
+  // documented scheme, opens the App Store if Phantom isn't installed.
+  // The banner UI shows phantom:// as an "alternative" fallback.
   const phantomLoginHref = useMemo(() => {
     if (typeof window === "undefined") return "";
     const targetUrl = new URL(window.location.origin + "/me");
     targetUrl.searchParams.set("phantom_login", "1");
     if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-    const encoded = encodeURIComponent(targetUrl.toString());
-    const ref = encodeURIComponent(window.location.origin);
-    return `phantom://browse/${encoded}?ref=${ref}`;
+    return buildPhantomBrowseLink(targetUrl.toString());
   }, [sessionId]);
 
   const phantomLinkWalletHref = useMemo(() => {
@@ -397,9 +400,7 @@ export default function MePage() {
     const targetUrl = new URL(window.location.origin + "/me");
     targetUrl.searchParams.set("phantom_link", "1");
     if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-    const encoded = encodeURIComponent(targetUrl.toString());
-    const ref = encodeURIComponent(window.location.origin);
-    return `phantom://browse/${encoded}?ref=${ref}`;
+    return buildPhantomBrowseLink(targetUrl.toString());
   }, [sessionId]);
 
   const fetchProfile = useCallback(async () => {
@@ -554,20 +555,15 @@ export default function MePage() {
       const provider = await waitForPhantomProvider(3000);
 
       if (!provider) {
-        addDebug("No provider found");
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        if (isMobile) {
-          // Show tappable deep link (programmatic redirect doesn't trigger universal links on iOS)
-          addDebug("Mobile without provider — showing deep link");
-          setError("Phantom not detected. Tap the link below to open in Phantom app.");
-          setShowPhantomDeepLink("login");
-          setShowDebug(true);
-          setWalletLoggingIn(false);
-          return;
-        }
-        window.open("https://phantom.app/download", "_blank");
-        setError("Phantom wallet not detected. Install Phantom to sign in with your wallet.");
-        setTimeout(() => setError(""), 5000);
+        // Always surface the deep-link banner — never call window.open()
+        // because iOS Safari blocks it with a "site is opening a pop-up"
+        // prompt. The banner has a tappable <a href> which the user can
+        // hit directly: opens Phantom on mobile, App Store if not installed,
+        // or phantom.app/download via the alt link on desktop.
+        addDebug("No provider found — showing deep link");
+        setError("Phantom not detected. Tap below to open in the Phantom app (or install it).");
+        setShowPhantomDeepLink("login");
+        setShowDebug(true);
         setWalletLoggingIn(false);
         return;
       }
@@ -1547,9 +1543,11 @@ export default function MePage() {
             {error}
           </div>
         )}
-        {/* Tappable deep link fallback — iOS requires real <a> tap for universal links.
-            We show BOTH phantom:// (custom scheme, always opens app) and https://phantom.app/ul/
-            (universal link, may or may not work depending on iOS state). */}
+        {/* Tappable deep link fallback. Primary uses Phantom's universal link
+            (https://phantom.app/ul/browse/...) — the documented scheme that
+            opens the app if installed or the App Store if not. The alternative
+            is the phantom:// custom scheme for users where universal links
+            are stripped by some other handler. */}
         {showPhantomDeepLink && (
           <div className="bg-purple-500/20 border border-purple-500/30 rounded-xl p-4 mb-4 text-center space-y-3">
             <a
@@ -1557,9 +1555,7 @@ export default function MePage() {
                 const targetUrl = new URL(window.location.origin + "/me");
                 targetUrl.searchParams.set(showPhantomDeepLink === "login" ? "phantom_login" : "phantom_link", "1");
                 if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-                const encoded = encodeURIComponent(targetUrl.toString());
-                const ref = encodeURIComponent(window.location.origin);
-                return `phantom://browse/${encoded}?ref=${ref}`;
+                return buildPhantomBrowseLink(targetUrl.toString());
               })()}
               className="inline-block w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:scale-105 transition-all"
             >
@@ -1570,13 +1566,15 @@ export default function MePage() {
                 const targetUrl = new URL(window.location.origin + "/me");
                 targetUrl.searchParams.set(showPhantomDeepLink === "login" ? "phantom_login" : "phantom_link", "1");
                 if (sessionId) targetUrl.searchParams.set("sid", sessionId);
-                return buildPhantomBrowseLink(targetUrl.toString());
+                const encoded = encodeURIComponent(targetUrl.toString());
+                const ref = encodeURIComponent(window.location.origin);
+                return `phantom://browse/${encoded}?ref=${ref}`;
               })()}
               className="inline-block text-[11px] text-purple-400 underline"
             >
               Alternative link (if above doesn&apos;t work)
             </a>
-            <p className="text-[10px] text-gray-500">Tap to open this page inside Phantom&apos;s browser</p>
+            <p className="text-[10px] text-gray-500">Don&apos;t have Phantom? <a href="https://phantom.app/download" target="_blank" rel="noopener noreferrer" className="text-purple-400 underline">Install it here</a></p>
           </div>
         )}
         {/* Debug log panel — shows on error or toggle */}
