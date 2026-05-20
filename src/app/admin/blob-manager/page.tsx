@@ -28,7 +28,7 @@ const FOLDER_TAGS: Record<string, { tag: FolderTag; note?: string }> = {
   // — Active —
   "avatars/":           { tag: "active", note: "persona avatars" },
   "posts/":             { tag: "active", note: "post media" },
-  "channels/":          { tag: "active", note: "channel video output" },
+  "channels/":          { tag: "active", note: "channel video output (subfolders inherit this tag)" },
   "studios/":           { tag: "active", note: "Studios genre subfolders" },
   "sponsors/":          { tag: "active", note: "sponsor logos + grokified" },
   "sponsors_spec/":     { tag: "active", note: "spec ad clips" },
@@ -38,6 +38,7 @@ const FOLDER_TAGS: Record<string, { tag: FolderTag; note?: string }> = {
   "bestie-media/":      { tag: "active", note: "bestie chat media" },
   "meatlab/":           { tag: "active", note: "MeatLab community submissions (publishes to ch-meatbag)" },
   "feed-chaos/":        { tag: "active", note: "chaos drop feed videos (cron every 2h)" },
+  "chibi/":             { tag: "active", note: "chibi avatar generator output" },
 
   // — Legacy —
   "premiere/":          { tag: "legacy", note: "old director-premiere output; deletable after Studios migration finishes" },
@@ -47,6 +48,12 @@ const FOLDER_TAGS: Record<string, { tag: FolderTag; note?: string }> = {
   "media-library/":     { tag: "legacy", note: "old admin media library" },
   "videos/":            { tag: "legacy", note: "ungrouped legacy video dump" },
   "logo/":              { tag: "legacy", note: "old logo uploads" },
+  "extensions/":        { tag: "legacy", note: "orphan — safe to delete" },
+  "generated/":         { tag: "legacy", note: "orphan — safe to delete" },
+  "chat-images/":       { tag: "legacy", note: "orphan — safe to delete" },
+  "multi-clip/":        { tag: "legacy", note: "intermediate scene clips; safe to delete (no active stitching depends on it)" },
+  "channels/clips/":    { tag: "legacy", note: "old clips dir, superseded by channels/{slug}/; safe to delete" },
+  "news/":              { tag: "legacy", note: "pending migration to channels/gnn/" },
 
   // — Personal —
   "demo/":              { tag: "personal" },
@@ -64,8 +71,28 @@ const TAG_META: Record<FolderTag, { dot: string; label: string; chipClass: strin
 
 const UNTAGGED_META = { dot: "⚪", label: "Untagged", chipClass: "bg-gray-500/15 text-gray-400 border-gray-500/30" };
 
+/**
+ * Resolve a folder's tag using longest-matching-prefix.
+ *
+ * Direct hits win: `channels/clips/` is matched as legacy even though
+ * the parent `channels/` is active.
+ *
+ * Otherwise the longest registered prefix that the folder starts with
+ * provides the tag, so `channels/aitunes/`, `channels/gnn/`, etc.
+ * all inherit the active tag from `channels/` without each one needing
+ * its own entry.
+ */
 function getFolderTag(prefix: string): { tag: FolderTag | null; note?: string } {
-  return FOLDER_TAGS[prefix] ? { tag: FOLDER_TAGS[prefix].tag, note: FOLDER_TAGS[prefix].note } : { tag: null };
+  if (FOLDER_TAGS[prefix]) {
+    return { tag: FOLDER_TAGS[prefix].tag, note: FOLDER_TAGS[prefix].note };
+  }
+  let best: { tag: FolderTag; note?: string; length: number } | null = null;
+  for (const [registered, meta] of Object.entries(FOLDER_TAGS)) {
+    if (prefix.startsWith(registered) && (!best || registered.length > best.length)) {
+      best = { tag: meta.tag, note: meta.note, length: registered.length };
+    }
+  }
+  return best ? { tag: best.tag, note: best.note } : { tag: null };
 }
 
 type TagFilter = "all" | FolderTag | "untagged";
