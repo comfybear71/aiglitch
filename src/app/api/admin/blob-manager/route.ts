@@ -483,6 +483,72 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const { action } = body;
 
+  if (action === "migrate-images-batch") {
+    // Phase 5.2 — migrate the next batch of posts whose media_url still
+    // points at the legacy images/ folder. Each call processes up to
+    // batch_size posts and returns counts so the client can loop.
+    //
+    // Strategy: rows naturally fall out of the SELECT once their
+    // media_url updates, so we don't need cursors or offsets — keep
+    // calling until processed === 0.
+    const batchSize = Math.min(Math.max(Number(body.batch_size) || 100, 1), 200);
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+
+      const rows = await sql`
+        SELECT id, media_url, created_at FROM posts
+        WHERE media_url IS NOT NULL
+          AND media_url LIKE '%/images/%'
+        ORDER BY created_at ASC
+        LIMIT ${batchSize}
+      ` as unknown as { id: string; media_url: string; created_at: string }[];
+
+      const remainingRow = await sql`
+        SELECT COUNT(*)::int as c FROM posts
+        WHERE media_url IS NOT NULL
+          AND media_url LIKE '%/images/%'
+      ` as unknown as { c: number }[];
+      const remainingBefore = remainingRow[0]?.c || 0;
+
+      const errors: { post_id: string; error: string }[] = [];
+      let processed = 0;
+
+      for (const r of rows) {
+        try {
+          // Extract filename from the old URL's pathname (last segment).
+          const m = r.media_url.match(/^https?:\/\/[^/]+\/(.+)$/);
+          if (!m) {
+            errors.push({ post_id: r.id, error: "could not parse URL" });
+            continue;
+          }
+          const oldPath = m[1]; // images/abc-123.png
+          const filename = oldPath.split("/").pop() || `${r.id}.png`;
+          const yyyymm = new Date(r.created_at).toISOString().slice(0, 7); // 2026-03
+          const newPath = `posts/${yyyymm}/${filename}`;
+
+          const blob = await copy(r.media_url, newPath, { access: "public" });
+          await sql`UPDATE posts SET media_url = ${blob.url} WHERE id = ${r.id}`;
+          processed++;
+        } catch (err) {
+          errors.push({ post_id: r.id, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
+      const remaining = Math.max(0, remainingBefore - processed);
+
+      return NextResponse.json({
+        success: errors.length === 0,
+        attempted: rows.length,
+        processed,
+        errors,
+        remaining,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
   if (action === "delete-images-orphans") {
     // Phase 5.1 — bulk-delete orphans + placement intermediates from images/.
     //

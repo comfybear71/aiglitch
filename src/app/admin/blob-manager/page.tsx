@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "../AdminContext";
 
 interface BlobFile {
@@ -185,6 +185,11 @@ export default function BlobManagerPage() {
   const [orphanDeleting, setOrphanDeleting] = useState(false);
   const [orphanDeleteResult, setOrphanDeleteResult] = useState<OrphanDeleteResult | null>(null);
   const [orphanDeleteError, setOrphanDeleteError] = useState<string | null>(null);
+  // Phase 5.2 — images/ → posts/{YYYY-MM}/ batched migration state
+  const [imgMigrating, setImgMigrating] = useState(false);
+  const [imgMigrateProgress, setImgMigrateProgress] = useState({ done: 0, total: 0, batches: 0 });
+  const [imgMigrateLog, setImgMigrateLog] = useState<string[]>([]);
+  const imgMigrateAbortRef = useRef(false);
 
   // Sponsor credit backfill
   type CreditFix = { post_id: string; created_at: string; old_line: string; new_line: string; mode: "product_names" | "dedupe_only" | "skip" };
@@ -864,6 +869,116 @@ export default function BlobManagerPage() {
                   {orphanDeleteError && (
                     <div className="bg-red-900/40 border border-red-500/30 rounded p-2 text-[10px] text-red-400">
                       ❌ {orphanDeleteError}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Phase 5.2 — bulk migrate referenced files to posts/{YYYY-MM}/ */}
+              {imagesAudit.referenced.count > 0 && (
+                <div className="bg-green-950/30 border border-green-500/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs text-gray-300">
+                      <p className="text-green-400 font-bold">Phase 5.2 — Migrate to <code className="text-green-300">posts/&#123;YYYY-MM&#125;/</code></p>
+                      <p className="mt-1">
+                        Copies each of the {imagesAudit.referenced.count.toLocaleString()} files to its month-bucket and updates <code className="text-green-300">posts.media_url</code>. Runs in batches of 100 — ~15-20 min wall-clock. Safe to close tab and resume: each row updates atomically as it migrates.
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (imgMigrating) {
+                          imgMigrateAbortRef.current = true;
+                          return;
+                        }
+                        if (!confirm(`Migrate ${imagesAudit.referenced.count.toLocaleString()} files to posts/{YYYY-MM}/?\n\nCopies each blob and updates the database. Originals remain in images/ until you delete the empty folder at the end.\n\nRuns in client-driven batches — closing this tab pauses the loop (resumable via Re-scan + Migrate).`)) return;
+
+                        imgMigrateAbortRef.current = false;
+                        setImgMigrating(true);
+                        setImgMigrateLog([]);
+                        setImgMigrateProgress({ done: 0, total: imagesAudit.referenced.count, batches: 0 });
+                        const logs: string[] = [];
+                        let totalDone = 0;
+                        let batches = 0;
+                        let remaining = imagesAudit.referenced.count;
+
+                        while (remaining > 0 && !imgMigrateAbortRef.current) {
+                          batches++;
+                          try {
+                            const res = await fetch("/api/admin/blob-manager", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "migrate-images-batch", batch_size: 100 }),
+                            });
+                            const data = await res.json();
+                            if (data.error) {
+                              logs.push(`❌ Batch ${batches}: ${data.error}`);
+                              setImgMigrateLog([...logs]);
+                              break;
+                            }
+                            totalDone += data.processed;
+                            remaining = data.remaining;
+                            logs.push(`✅ Batch ${batches}: ${data.processed}/${data.attempted} migrated · ${remaining.toLocaleString()} remaining` + (data.errors?.length ? ` · ${data.errors.length} errors` : ""));
+                            if (data.errors?.length) {
+                              for (const e of data.errors.slice(0, 3)) logs.push(`   ↳ ${e.post_id}: ${e.error}`);
+                            }
+                            setImgMigrateLog([...logs]);
+                            setImgMigrateProgress({ done: totalDone, total: imagesAudit.referenced.count, batches });
+
+                            // If a batch didn't process anything, stop to avoid an infinite loop on errors.
+                            if (data.processed === 0 && data.attempted > 0) {
+                              logs.push(`⏸ Stopping — batch ${batches} attempted ${data.attempted} but processed 0. Fix the errors and re-run.`);
+                              setImgMigrateLog([...logs]);
+                              break;
+                            }
+                          } catch (err) {
+                            logs.push(`❌ Batch ${batches}: ${err instanceof Error ? err.message : String(err)}`);
+                            setImgMigrateLog([...logs]);
+                            break;
+                          }
+                        }
+
+                        if (imgMigrateAbortRef.current) {
+                          logs.push(`⏸ Paused at batch ${batches} · ${totalDone.toLocaleString()} done · ${remaining.toLocaleString()} remaining`);
+                          setImgMigrateLog([...logs]);
+                        } else if (remaining === 0) {
+                          logs.push(`🎉 Complete — ${totalDone.toLocaleString()} files migrated in ${batches} batches`);
+                          setImgMigrateLog([...logs]);
+                          // Re-run the audit so the bucket cards reflect the new state
+                          const auditRes = await fetch("/api/admin/blob-manager?action=images-audit");
+                          const auditData = await auditRes.json();
+                          if (!auditData.error) setImagesAudit(auditData as ImagesAudit);
+                        }
+
+                        setImgMigrating(false);
+                      }}
+                      className="flex-shrink-0 px-4 py-2 bg-green-600 text-white font-bold rounded-lg text-xs hover:bg-green-500 disabled:opacity-50">
+                      {imgMigrating ? "⏸ Pause" : `🚀 Migrate ${imagesAudit.referenced.count.toLocaleString()}`}
+                    </button>
+                  </div>
+
+                  {(imgMigrating || imgMigrateProgress.batches > 0) && (
+                    <>
+                      <div className="w-full bg-gray-800 rounded-full h-2">
+                        <div className="bg-green-500 h-2 rounded-full transition-all"
+                          style={{ width: `${imgMigrateProgress.total > 0 ? (imgMigrateProgress.done / imgMigrateProgress.total) * 100 : 0}%` }} />
+                      </div>
+                      <p className="text-[10px] text-green-300">
+                        {imgMigrateProgress.done.toLocaleString()} of {imgMigrateProgress.total.toLocaleString()} migrated · {imgMigrateProgress.batches} batches
+                      </p>
+                    </>
+                  )}
+
+                  {imgMigrateLog.length > 0 && (
+                    <div className="max-h-[30vh] overflow-y-auto bg-black/60 rounded p-2 space-y-0.5 font-mono text-[10px]">
+                      {imgMigrateLog.map((line, i) => (
+                        <p key={i} className={
+                          line.startsWith("❌") ? "text-red-400" :
+                          line.startsWith("⏸") ? "text-yellow-400" :
+                          line.startsWith("🎉") ? "text-green-400 font-bold" :
+                          line.startsWith("   ") ? "text-gray-500" :
+                          "text-gray-300"
+                        }>{line}</p>
+                      ))}
                     </div>
                   )}
                 </div>

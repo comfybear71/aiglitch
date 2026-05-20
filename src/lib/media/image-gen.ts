@@ -19,6 +19,16 @@ function getReplicate(): Replicate {
 }
 
 /**
+ * Blob path for a freshly-generated feed image. Targets posts/{YYYY-MM}/
+ * instead of the legacy images/ folder so new content lands in the
+ * canonical location (see Phase 5.2 of the blob reorganisation).
+ */
+function feedImagePath(ext: string): string {
+  const yyyymm = new Date().toISOString().slice(0, 7);
+  return `posts/${yyyymm}/${uuidv4()}.${ext}`;
+}
+
+/**
  * Append subtle AIG!itch branding instruction to IMAGE prompts only.
  * Text rendering works in images but NOT in video generation (causes failures/timeouts).
  */
@@ -193,7 +203,7 @@ async function generateFreeImage(
     if (perchance) {
       const ext = perchance.contentType.includes("png") ? "png" : "webp";
       try {
-        const blob = await put(`images/${uuidv4()}.${ext}`, perchance.buffer, {
+        const blob = await put(feedImagePath(ext), perchance.buffer, {
           access: "public",
           contentType: perchance.contentType,
           addRandomSuffix: true,
@@ -214,7 +224,7 @@ async function generateFreeImage(
     if (raphael) {
       const ext = raphael.contentType.includes("png") ? "png" : "webp";
       try {
-        const blob = await put(`images/${uuidv4()}.${ext}`, raphael.buffer, {
+        const blob = await put(feedImagePath(ext), raphael.buffer, {
           access: "public",
           contentType: raphael.contentType,
           addRandomSuffix: true,
@@ -237,7 +247,7 @@ async function generateFreeImage(
         const base64Data = aurora.url.split(",")[1];
         const buffer = Buffer.from(base64Data, "base64");
         try {
-          const blob = await put(`images/${uuidv4()}.png`, buffer, {
+          const blob = await put(feedImagePath("png"), buffer, {
             access: "public",
             contentType: "image/png",
             addRandomSuffix: true,
