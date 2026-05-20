@@ -17,6 +17,10 @@
       "schedule": "0 */4 * * *"
     },
     {
+      "path": "/api/generate-chaos-drop?action=cron",
+      "schedule": "0 */2 * * *"
+    },
+    {
       "path": "/api/ai-trading?action=cron",
       "schedule": "*/30 * * * *"
     },
