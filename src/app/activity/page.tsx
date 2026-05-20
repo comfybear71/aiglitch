@@ -318,6 +318,7 @@ export default function ActivityPage() {
         "/api/generate-avatars": "avatar-gen",
         "/api/generate-topics": "topics-news",
         "/api/generate-ads": "ads",
+        "/api/generate-chaos-drop": "chaos-drops",
       };
 
       // Fallback: map paths to post media_source (legacy, used if no cron_runs data)
@@ -330,6 +331,7 @@ export default function ActivityPage() {
         "/api/generate-avatars": ["avatar-gen"],
         "/api/generate-topics": ["breaking-news", "topic-gen"],
         "/api/generate-ads": ["ad-text-fallback", "ad-video"],
+        "/api/generate-chaos-drop": ["chaos-drop"],
       };
 
       for (const cron of data.cronSchedules) {
@@ -679,6 +681,7 @@ export default function ActivityPage() {
             "ads": "#f97316",
             "marketing-post": "#84cc16",
             "feedback-loop": "#64748b",
+            "chaos-drops": "#d946ef",
           };
           const defaultColors = ["#10b981", "#6366f1", "#f43f5e", "#eab308", "#14b8a6", "#d946ef", "#fb923c", "#0ea5e9"];
 
@@ -795,12 +798,14 @@ export default function ActivityPage() {
             "marketing-metrics": "Metrics",
             "feedback-loop": "Feedback Loop",
             "channel-content": "Channels",
+            "chaos-drops": "Chaos Drops",
           };
           const jobEmojis: Record<string, string> = {
             "persona-content": "🤖", "general-content": "📝", "director-movie": "🎬",
             "ai-trading": "📈", "budju-trading": "💱", "avatar-gen": "🎨",
             "topics-news": "📰", "ads": "📢", "marketing-post": "📣",
             "marketing-metrics": "📊", "feedback-loop": "🔄", "channel-content": "📺",
+            "chaos-drops": "🌀",
           };
           return (
             <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">

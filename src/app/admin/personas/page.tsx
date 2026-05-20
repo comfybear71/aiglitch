@@ -1174,6 +1174,62 @@ export default function PersonasPage() {
   const [elonOpen, setElonOpen] = useState(false);
   const [glitchPromoOpen, setGlitchPromoOpen] = useState(false);
   const [adCampaignOpen, setAdCampaignOpen] = useState(false);
+  const [chaosOpen, setChaosOpen] = useState(false);
+
+  // Chaos Drops state
+  const [chaosGenerating, setChaosGenerating] = useState(false);
+  const [chaosLog, setChaosLog] = useState<string[]>([]);
+  const [chaosPreview, setChaosPreview] = useState<{
+    scenario: { id: string; category: string; title: string; verticals: string[]; marketplaceCta: string };
+    renderedPrompt: string;
+    renderedCaption: string;
+    totalScenarios: number;
+  } | null>(null);
+  const chaosLogRef = useRef<HTMLDivElement>(null);
+
+  const fetchChaosPreview = useCallback(async () => {
+    try {
+      const res = await fetch("/api/generate-chaos-drop?action=preview");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) setChaosPreview(data);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (authenticated && chaosOpen) fetchChaosPreview();
+  }, [authenticated, chaosOpen, fetchChaosPreview]);
+
+  const triggerChaosDrop = async () => {
+    if (chaosGenerating) return;
+    setChaosGenerating(true);
+    setChaosLog(["🌀 Rolling chaos…"]);
+    try {
+      const res = await fetch("/api/generate-chaos-drop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setChaosLog([
+          `🌀 Scenario: ${data.scenarioTitle} (${data.scenario})`,
+          `🤖 Persona: @${data.persona}`,
+          `🛍️ Product: ${data.product}${data.usingMarketplace ? " (real marketplace)" : " (fictional drop)"}`,
+          `🎬 Video: ${data.videoUrl ? "rendered" : "failed"}`,
+          `📤 Spread: ${data.spreading?.length ? data.spreading.join(", ") : "no platforms configured"}`,
+          `✅ Done.`,
+        ]);
+        fetchChaosPreview();
+      } else {
+        setChaosLog([`❌ ${data.error || "Failed to drop chaos"}`]);
+      }
+    } catch (err) {
+      setChaosLog([`❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setChaosGenerating(false);
+  };
 
   // Ad Campaign state
   const [adStyle, setAdStyle] = useState<string>("auto");
@@ -2267,6 +2323,76 @@ export default function PersonasPage() {
             ))}
           </div>
         )}
+        </div>}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════
+          CHAOS DROPS — surreal feed videos
+          Cron runs every 2h. Button below fires one off manually.
+          ══════════════════════════════════════════════════════════════════ */}
+      <div className="bg-gray-900/50 border border-fuchsia-500/30 rounded-xl mb-3">
+        <button onClick={() => setChaosOpen(!chaosOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs transition-transform ${chaosOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-xs font-bold text-fuchsia-400">🌀 Chaos Drops</h3>
+            <p className="text-[10px] text-gray-500 hidden sm:inline">Surreal feed videos — cron every 2h</p>
+            {chaosPreview && <span className="text-[10px] text-fuchsia-300 font-bold">{chaosPreview.totalScenarios} scenarios</span>}
+          </div>
+          {chaosGenerating && <span className="text-[10px] text-fuchsia-400 animate-pulse">Dropping…</span>}
+        </button>
+        {chaosOpen && <div className="px-4 pb-4">
+          <div className="flex items-center justify-end mb-3 gap-2">
+            <button onClick={triggerChaosDrop} disabled={chaosGenerating}
+              className="px-4 py-2 bg-gradient-to-r from-fuchsia-600 via-purple-600 to-cyan-600 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
+              {chaosGenerating ? "⏳ Dropping…" : "🌀 Drop Chaos Now"}
+            </button>
+            <button onClick={fetchChaosPreview} disabled={chaosGenerating}
+              className="px-3 py-2 bg-gray-800 border border-fuchsia-500/30 text-fuchsia-300 font-bold rounded-lg text-[10px] hover:bg-gray-700 disabled:opacity-50 transition-all">
+              🎲 Re-roll Preview
+            </button>
+          </div>
+
+          {chaosPreview && (
+            <div className="bg-black/30 rounded-lg p-3 mb-3 space-y-2">
+              <p className="text-[10px] text-fuchsia-300 font-bold">Next random scenario:</p>
+              <p className="text-xs text-white font-bold">{chaosPreview.scenario.title}</p>
+              <div className="flex flex-wrap gap-1 text-[9px]">
+                <span className="px-1.5 py-0.5 bg-fuchsia-900/40 text-fuchsia-300 rounded">{chaosPreview.scenario.category}</span>
+                {chaosPreview.scenario.verticals.map(v => (
+                  <span key={v} className="px-1.5 py-0.5 bg-purple-900/40 text-purple-300 rounded">{v}</span>
+                ))}
+                <span className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-300 rounded">cta: {chaosPreview.scenario.marketplaceCta}</span>
+              </div>
+              <details className="text-[10px] text-gray-400">
+                <summary className="cursor-pointer hover:text-gray-200">Show prompt</summary>
+                <p className="mt-1 font-mono whitespace-pre-wrap text-[9px] leading-snug">{chaosPreview.renderedPrompt}</p>
+              </details>
+              <details className="text-[10px] text-gray-400">
+                <summary className="cursor-pointer hover:text-gray-200">Show caption</summary>
+                <p className="mt-1 font-mono whitespace-pre-wrap text-[9px] leading-snug">{chaosPreview.renderedCaption}</p>
+              </details>
+            </div>
+          )}
+
+          {chaosLog.length > 0 && (
+            <div ref={chaosLogRef} className="bg-black/40 rounded-lg p-3 space-y-1 mb-3">
+              {chaosLog.map((line, i) => (
+                <p key={i} className={`text-xs font-mono ${
+                  line.includes("❌") ? "text-red-400" :
+                  line.includes("✅") ? "text-green-400" :
+                  "text-gray-300"
+                }`}>{line}</p>
+              ))}
+              {chaosGenerating && (
+                <p className="text-xs font-mono text-fuchsia-400 animate-pulse">⏳ Working… (2-4 min)</p>
+              )}
+            </div>
+          )}
+
+          <p className="text-[10px] text-gray-500">
+            Manage via <a href="/activity" className="text-fuchsia-400 underline">/activity</a> — pause toggle and cost dashboard live there.
+          </p>
         </div>}
       </div>
 
