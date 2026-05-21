@@ -28,7 +28,7 @@ import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "@/lib/marketplace
 import { PERSONA_VERTICALS, type SponsorVertical } from "@/lib/bible/constants";
 import type { AIPersona } from "@/lib/personas";
 
-export const maxDuration = 300;
+export const maxDuration = 360;
 
 const CRON_NAME = "chaos-drops";
 
@@ -189,130 +189,167 @@ async function pollUntilDone(requestId: string, maxWaitMs = 240_000): Promise<st
 
 /**
  * The full drop pipeline. Used by both cron and admin POST.
+ *
+ * Up to MAX_ATTEMPTS scenarios are tried before giving up. Grok Imagine
+ * sometimes rejects creative prompts at the moderation stage (the most
+ * common failure for chaos drops), and a moderation rejection comes back
+ * fast (~10-30s) so a retry with a different scenario is almost free.
+ *
+ * Attempt 1 uses the full poll timeout (240s) so slow legitimate renders
+ * complete. Attempt 2 uses a shorter timeout (120s) so we don't blow
+ * the 360s maxDuration if BOTH attempts happen to be slow renders.
  */
 async function runDrop(scenarioOverride?: string): Promise<NextResponse> {
   if (!env.XAI_API_KEY) {
     return NextResponse.json({ success: false, error: "XAI_API_KEY not set" });
   }
 
-  // 1. Pick scenario (override or random)
-  const scenario = scenarioOverride
-    ? (CHAOS_DROPS.find(s => s.id === scenarioOverride) ?? pickScenario())
-    : pickScenario();
-
-  // 2. Pick persona
-  const persona = await pickPersona(scenario);
-  if (!persona) {
-    return NextResponse.json({ success: false, error: "No matching persona" });
-  }
-
-  // 3. Pick product (real marketplace or fictional via Claude)
-  const usingMarketplace = shouldUseMarketplace(scenario);
-  let product: MarketplaceProduct | FictionalProduct;
-  if (usingMarketplace) {
-    product = MARKETPLACE_PRODUCTS[Math.floor(Math.random() * MARKETPLACE_PRODUCTS.length)];
-  } else {
-    product = await generateFictionalProduct(scenario, persona);
-  }
-
-  // 4. Build prompt + caption
-  const ctx = buildContext(persona, product);
-  const videoPrompt = renderTemplate(scenario.visualConcept, ctx);
-  const captionBody = renderTemplate(scenario.captionTemplate, ctx);
-  const hashtags = buildHashtags(scenario, usingMarketplace);
-  const marketplaceLine = usingMarketplace
-    ? `\n\n🛒 aiglitch.app/marketplace`
-    : "";
-  const caption = `🌀 ${captionBody}${marketplaceLine}\n\n${hashtags.map(h => `#${h}`).join(" ")}`;
-
-  console.log(`[chaos-drops] ${scenario.id} by @${persona.username} (marketplace=${usingMarketplace})`);
-
-  // 5. Submit to Grok Imagine
-  const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${env.XAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "grok-imagine-video",
-      prompt: videoPrompt,
-      duration: 10,
-      aspect_ratio: "9:16",
-      resolution: "720p",
-    }),
-  });
-
-  if (!createRes.ok) {
-    const errText = await createRes.text();
-    return NextResponse.json({ success: false, error: `Grok submit failed: ${errText.slice(0, 200)}` });
-  }
-
-  const createData = await createRes.json();
-  const requestId = createData.request_id;
-  let tempUrl: string | null = createData.video?.url ?? null;
-
-  if (!tempUrl && requestId) {
-    tempUrl = await pollUntilDone(requestId);
-  }
-
-  if (!tempUrl) {
-    return NextResponse.json({ success: false, error: "Video render failed or timed out", scenario: scenario.id });
-  }
-
-  // 6. Persist to Blob
-  const videoRes = await fetch(tempUrl);
-  if (!videoRes.ok) {
-    return NextResponse.json({ success: false, error: "Failed to download rendered video" });
-  }
-  const videoBuf = Buffer.from(await videoRes.arrayBuffer());
-  const today = new Date().toISOString().slice(0, 10);
-  const blob = await put(
-    `feed-chaos/${persona.id}/${today}/${scenario.id}-${uuidv4().slice(0, 8)}.mp4`,
-    videoBuf,
-    { access: "public", contentType: "video/mp4" },
-  );
-
-  // 7. Insert post
   const sql = getDb();
-  const postId = uuidv4();
-  await sql`
-    INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, created_at)
-    VALUES (
-      ${postId},
-      ${persona.id},
-      ${caption},
-      ${"chaos_drop"},
-      ${hashtags.join(",")},
-      ${Math.floor(Math.random() * 200) + 50},
-      ${blob.url},
-      ${"video"},
-      ${"chaos-drop"},
-      ${10},
-      NOW()
-    )
-  `;
-  await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
+  const tried = new Set<string>();
+  const failureReasons: { scenario: string; reason: string }[] = [];
+  const MAX_ATTEMPTS = 2;
 
-  // 8. Spread to socials (best-effort, may take 30-40s)
-  let spreadPlatforms: string[] = [];
-  try {
-    const spread = await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji, { url: blob.url, type: "video" });
-    spreadPlatforms = spread.platforms;
-  } catch (err) {
-    console.error("[chaos-drops] Spread failed:", err);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // Pick a scenario not yet tried this run (override only honoured on attempt 1)
+    let scenario: ChaosScenario;
+    if (attempt === 1 && scenarioOverride) {
+      scenario = CHAOS_DROPS.find(s => s.id === scenarioOverride) ?? pickScenario();
+    } else {
+      const pool = CHAOS_DROPS.filter(s => !tried.has(s.id));
+      scenario = pool.length > 0
+        ? pool[Math.floor(Math.random() * pool.length)]
+        : pickScenario();
+    }
+    tried.add(scenario.id);
+
+    const persona = await pickPersona(scenario);
+    if (!persona) {
+      failureReasons.push({ scenario: scenario.id, reason: "no matching persona" });
+      continue;
+    }
+
+    const usingMarketplace = shouldUseMarketplace(scenario);
+    let product: MarketplaceProduct | FictionalProduct;
+    if (usingMarketplace) {
+      product = MARKETPLACE_PRODUCTS[Math.floor(Math.random() * MARKETPLACE_PRODUCTS.length)];
+    } else {
+      product = await generateFictionalProduct(scenario, persona);
+    }
+
+    const ctx = buildContext(persona, product);
+    const videoPrompt = renderTemplate(scenario.visualConcept, ctx);
+    const captionBody = renderTemplate(scenario.captionTemplate, ctx);
+    const hashtags = buildHashtags(scenario, usingMarketplace);
+    const marketplaceLine = usingMarketplace ? `\n\n🛒 aiglitch.app/marketplace` : "";
+    const caption = `🌀 ${captionBody}${marketplaceLine}\n\n${hashtags.map(h => `#${h}`).join(" ")}`;
+
+    console.log(`[chaos-drops] attempt ${attempt}/${MAX_ATTEMPTS}: ${scenario.id} by @${persona.username} (marketplace=${usingMarketplace})`);
+
+    // Submit to Grok Imagine
+    const createRes = await fetch("https://api.x.ai/v1/videos/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.XAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "grok-imagine-video",
+        prompt: videoPrompt,
+        duration: 10,
+        aspect_ratio: "9:16",
+        resolution: "720p",
+      }),
+    });
+
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      console.error(`[chaos-drops] attempt ${attempt}: Grok submit failed: ${errText.slice(0, 200)}`);
+      failureReasons.push({ scenario: scenario.id, reason: `submit failed: ${errText.slice(0, 100)}` });
+      continue;
+    }
+
+    const createData = await createRes.json();
+    const requestId = createData.request_id;
+    let tempUrl: string | null = createData.video?.url ?? null;
+
+    if (!tempUrl && requestId) {
+      // Attempt 1 gets the full poll budget; attempt 2 is shorter so we don't
+      // blow the function deadline if both attempts are slow.
+      const pollTimeout = attempt === 1 ? 240_000 : 120_000;
+      const pollStart = Date.now();
+      tempUrl = await pollUntilDone(requestId, pollTimeout);
+      const elapsedSec = Math.round((Date.now() - pollStart) / 1000);
+      console.log(`[chaos-drops] attempt ${attempt}: poll ${tempUrl ? "succeeded" : "failed"} in ${elapsedSec}s`);
+    }
+
+    if (!tempUrl) {
+      failureReasons.push({ scenario: scenario.id, reason: "Grok render failed or rejected" });
+      continue;
+    }
+
+    // SUCCESS — download, persist to Blob, insert post, spread to socials
+    const videoRes = await fetch(tempUrl);
+    if (!videoRes.ok) {
+      failureReasons.push({ scenario: scenario.id, reason: "video download 4xx/5xx" });
+      continue;
+    }
+    const videoBuf = Buffer.from(await videoRes.arrayBuffer());
+    const today = new Date().toISOString().slice(0, 10);
+    const blob = await put(
+      `feed-chaos/${persona.id}/${today}/${scenario.id}-${uuidv4().slice(0, 8)}.mp4`,
+      videoBuf,
+      { access: "public", contentType: "video/mp4" },
+    );
+
+    const postId = uuidv4();
+    await sql`
+      INSERT INTO posts (id, persona_id, content, post_type, hashtags, ai_like_count, media_url, media_type, media_source, video_duration, created_at)
+      VALUES (
+        ${postId},
+        ${persona.id},
+        ${caption},
+        ${"chaos_drop"},
+        ${hashtags.join(",")},
+        ${Math.floor(Math.random() * 200) + 50},
+        ${blob.url},
+        ${"video"},
+        ${"chaos-drop"},
+        ${10},
+        NOW()
+      )
+    `;
+    await sql`UPDATE ai_personas SET post_count = post_count + 1 WHERE id = ${persona.id}`;
+
+    let spreadPlatforms: string[] = [];
+    try {
+      const spread = await spreadPostToSocial(postId, persona.id, persona.display_name, persona.avatar_emoji, { url: blob.url, type: "video" });
+      spreadPlatforms = spread.platforms;
+    } catch (err) {
+      console.error("[chaos-drops] Spread failed:", err);
+    }
+
+    return NextResponse.json({
+      success: true,
+      attempt,
+      attempts: tried.size,
+      previousFailures: failureReasons,
+      scenario: scenario.id,
+      scenarioTitle: scenario.title,
+      persona: persona.username,
+      product: product.name,
+      usingMarketplace,
+      postId,
+      videoUrl: blob.url,
+      spreading: spreadPlatforms,
+    });
   }
 
+  // All attempts exhausted
   return NextResponse.json({
-    success: true,
-    scenario: scenario.id,
-    scenarioTitle: scenario.title,
-    persona: persona.username,
-    product: product.name,
-    usingMarketplace,
-    postId,
-    videoUrl: blob.url,
-    spreading: spreadPlatforms,
+    success: false,
+    error: `All ${MAX_ATTEMPTS} scenarios failed`,
+    attempts: tried.size,
+    previousFailures: failureReasons,
   });
 }
 
