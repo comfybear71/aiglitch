@@ -191,6 +191,14 @@ export default function BlobManagerPage() {
   const [imgMigrateLog, setImgMigrateLog] = useState<string[]>([]);
   const imgMigrateAbortRef = useRef(false);
 
+  // Dead-URL posts cleanup state (orphan posts pointing at deleted blob folders)
+  type DeadPostsResult = { scanned: number; alive: number; dead: number; deleted: number; remaining: number; deadSample: { id: string; media_url: string; folder: string; created_at: string }[] };
+  const [deadPostsRunning, setDeadPostsRunning] = useState(false);
+  const [deadPostsProgress, setDeadPostsProgress] = useState({ totalDead: 0, totalDeleted: 0, batches: 0, remaining: 0 });
+  const [deadPostsSample, setDeadPostsSample] = useState<DeadPostsResult["deadSample"]>([]);
+  const [deadPostsLog, setDeadPostsLog] = useState<string[]>([]);
+  const deadPostsAbortRef = useRef(false);
+
   // Sponsor credit backfill
   type CreditFix = { post_id: string; created_at: string; old_line: string; new_line: string; mode: "product_names" | "dedupe_only" | "skip" };
   const [creditScan, setCreditScan] = useState<{ scanned: number; broken: number; all: CreditFix[] } | null>(null);
@@ -710,6 +718,151 @@ export default function BlobManagerPage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Dead-URL posts cleanup — removes feed entries pointing at deleted folders */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-red-400 uppercase">Dead-URL Posts Cleanup</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (deadPostsRunning) return;
+                  setDeadPostsRunning(true);
+                  setDeadPostsLog([`🔍 Dry-run scan…`]);
+                  setDeadPostsSample([]);
+                  try {
+                    const res = await fetch("/api/admin/blob-manager", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "dead-posts-batch", batch_size: 50, dry_run: true }),
+                    });
+                    const data = await res.json();
+                    if (data.error) {
+                      setDeadPostsLog([`❌ ${data.error}`]);
+                    } else {
+                      setDeadPostsSample(data.deadSample || []);
+                      setDeadPostsLog([
+                        `📊 Sample batch: ${data.scanned} suspect posts scanned`,
+                        `   ✅ ${data.alive} videos still alive (will be left alone)`,
+                        `   ❌ ${data.dead} confirmed dead (404 from Blob)`,
+                        `   📋 Total suspect posts in DB: ${data.remaining + data.dead}`,
+                        ``,
+                        `This is a DRY RUN. Hit "Delete All Dead" below to actually remove them.`,
+                      ]);
+                    }
+                  } catch (err) {
+                    setDeadPostsLog([`❌ ${err instanceof Error ? err.message : String(err)}`]);
+                  }
+                  setDeadPostsRunning(false);
+                }}
+                disabled={deadPostsRunning}
+                className="px-3 py-1 bg-yellow-600/20 text-yellow-400 rounded text-xs hover:bg-yellow-600/30 border border-yellow-500/30 disabled:opacity-50">
+                {deadPostsRunning ? "Scanning…" : "Dry-Run Scan"}
+              </button>
+              <button
+                onClick={async () => {
+                  if (deadPostsRunning) {
+                    deadPostsAbortRef.current = true;
+                    return;
+                  }
+                  if (!confirm("Delete every post in the DB whose media_url is in a deprecated folder AND returns 404 from Vercel Blob?\n\nThe HEAD-check ensures only ACTUALLY DEAD posts get deleted — live ones are left alone. Cannot be undone, but only affects orphaned rows whose files are already gone.")) return;
+                  if (!confirm("Confirm: run the cleanup loop now?")) return;
+
+                  deadPostsAbortRef.current = false;
+                  setDeadPostsRunning(true);
+                  setDeadPostsLog([]);
+                  setDeadPostsProgress({ totalDead: 0, totalDeleted: 0, batches: 0, remaining: 0 });
+                  const logs: string[] = [];
+                  let totalDead = 0;
+                  let totalDeleted = 0;
+                  let batches = 0;
+                  let remaining = 1; // seed > 0 to enter loop
+                  while (remaining > 0 && !deadPostsAbortRef.current) {
+                    batches++;
+                    try {
+                      const res = await fetch("/api/admin/blob-manager", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "dead-posts-batch", batch_size: 50 }),
+                      });
+                      const data = await res.json();
+                      if (data.error) {
+                        logs.push(`❌ Batch ${batches}: ${data.error}`);
+                        setDeadPostsLog([...logs]);
+                        break;
+                      }
+                      totalDead += data.dead;
+                      totalDeleted += data.deleted;
+                      remaining = data.remaining;
+                      logs.push(`Batch ${batches}: scanned ${data.scanned}, ${data.alive} alive, ${data.dead} dead, ${data.deleted} deleted · ${remaining} remaining`);
+                      setDeadPostsLog([...logs]);
+                      setDeadPostsProgress({ totalDead, totalDeleted, batches, remaining });
+
+                      // If a batch hit zero scanned, we're done
+                      if (data.scanned === 0) break;
+                    } catch (err) {
+                      logs.push(`❌ Batch ${batches}: ${err instanceof Error ? err.message : String(err)}`);
+                      setDeadPostsLog([...logs]);
+                      break;
+                    }
+                  }
+
+                  if (deadPostsAbortRef.current) {
+                    logs.push(`⏸ Paused at batch ${batches} · ${totalDeleted} deleted · ${remaining} remaining`);
+                  } else {
+                    logs.push(`🎉 Cleanup complete — ${totalDeleted} orphan posts deleted across ${batches} batches`);
+                  }
+                  setDeadPostsLog([...logs]);
+                  setDeadPostsRunning(false);
+                }}
+                disabled={false}
+                className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-500 border border-red-500/30 font-bold">
+                {deadPostsRunning ? "⏸ Pause" : `🗑 Delete All Dead`}
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-gray-500 mb-3">
+            Finds posts whose <code className="text-red-300">media_url</code> points at a deprecated folder (<code>premiere/</code>, <code>news/</code>, <code>memes/</code>, <code>multi-clip/</code>, <code>extensions/</code>, <code>generated/</code>, <code>chat-images/</code>), then HEAD-checks each URL to confirm the file is actually gone. Posts whose files still exist are skipped. Only confirmed-dead posts get deleted. This is the cleanup that catches what the channel_id-based migrations missed.
+          </p>
+
+          {(deadPostsRunning || deadPostsProgress.batches > 0) && (
+            <div className="bg-gray-900 border border-red-500/20 rounded-lg p-3 text-xs space-y-1">
+              <p className="text-red-400 font-bold">
+                Progress: {deadPostsProgress.totalDeleted.toLocaleString()} deleted · {deadPostsProgress.remaining.toLocaleString()} remaining · {deadPostsProgress.batches} batches
+              </p>
+            </div>
+          )}
+
+          {deadPostsSample.length > 0 && (
+            <details className="mt-3 bg-gray-900 border border-red-500/20 rounded-lg p-3">
+              <summary className="text-xs font-bold text-red-400 cursor-pointer hover:text-red-300">
+                Sample dead posts ({deadPostsSample.length} shown)
+              </summary>
+              <div className="mt-2 max-h-[30vh] overflow-y-auto space-y-1">
+                {deadPostsSample.map(s => (
+                  <div key={s.id} className="text-[10px] p-1.5 bg-gray-800 rounded font-mono">
+                    <div className="text-red-300">{s.folder}/...</div>
+                    <div className="text-gray-500">{s.created_at?.slice(0, 10)} · {s.id.slice(0, 8)}</div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {deadPostsLog.length > 0 && (
+            <div className="mt-3 max-h-[30vh] overflow-y-auto bg-black/60 rounded p-2 space-y-0.5 font-mono text-[10px]">
+              {deadPostsLog.map((line, i) => (
+                <p key={i} className={
+                  line.startsWith("❌") ? "text-red-400" :
+                  line.startsWith("⏸") ? "text-yellow-400" :
+                  line.startsWith("🎉") ? "text-green-400 font-bold" :
+                  "text-gray-300"
+                }>{line}</p>
+              ))}
             </div>
           )}
         </div>

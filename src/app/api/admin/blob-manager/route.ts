@@ -483,6 +483,113 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const { action } = body;
 
+  if (action === "dead-posts-batch") {
+    // Find posts whose media_url points at a folder we've since deleted or
+    // migrated away from, HEAD-check each, delete the ones that 404.
+    //
+    // Background: the Studios genre reorg + channel migration tools only
+    // updated posts that had channel_id set. Posts with channel_id IS NULL
+    // pointing at premiere/, news/, memes/ etc. slipped through every
+    // cleanup. When the corresponding folder was later deleted from Blob,
+    // those posts started returning 404s in the feed — visually showing
+    // as "no video, just caption text" which is what users report as a
+    // stale feed.
+    //
+    // This is a one-time cleanup. PR #265 redirected writers to canonical
+    // folders so the orphan set is bounded and won't grow.
+    const batchSize = Math.min(Math.max(Number(body.batch_size) || 50, 1), 200);
+    const dryRun = body.dry_run === true;
+    try {
+      const { getDb } = await import("@/lib/db");
+      const sql = getDb();
+
+      // Suspect folders. Anything in here is a "this should have been
+      // migrated" location. The HEAD check below confirms whether the
+      // file actually exists before we touch the row.
+      const rows = await sql`
+        SELECT id, media_url, post_type, channel_id, created_at
+        FROM posts
+        WHERE media_url IS NOT NULL
+          AND (
+            media_url LIKE '%/premiere/%'
+            OR media_url LIKE '%/news/%'
+            OR media_url LIKE '%/memes/%'
+            OR media_url LIKE '%/multi-clip/%'
+            OR media_url LIKE '%/extensions/%'
+            OR media_url LIKE '%/generated/%'
+            OR media_url LIKE '%/chat-images/%'
+          )
+        ORDER BY created_at DESC
+        LIMIT ${batchSize}
+      ` as unknown as { id: string; media_url: string; post_type: string; channel_id: string | null; created_at: string }[];
+
+      const remainingRow = await sql`
+        SELECT COUNT(*)::int AS c FROM posts
+        WHERE media_url IS NOT NULL
+          AND (
+            media_url LIKE '%/premiere/%'
+            OR media_url LIKE '%/news/%'
+            OR media_url LIKE '%/memes/%'
+            OR media_url LIKE '%/multi-clip/%'
+            OR media_url LIKE '%/extensions/%'
+            OR media_url LIKE '%/generated/%'
+            OR media_url LIKE '%/chat-images/%'
+          )
+      ` as unknown as { c: number }[];
+      const remainingBefore = remainingRow[0]?.c || 0;
+
+      let alive = 0;
+      const deadIds: string[] = [];
+      const deadSample: { id: string; media_url: string; folder: string; created_at: string }[] = [];
+
+      for (const r of rows) {
+        try {
+          const res = await fetch(r.media_url, { method: "HEAD" });
+          if (res.ok) {
+            alive++;
+          } else {
+            deadIds.push(r.id);
+            if (deadSample.length < 20) {
+              const m = r.media_url.match(/vercel-storage\.com\/([^/]+(?:\/[^/]+)?)/);
+              deadSample.push({
+                id: r.id,
+                media_url: r.media_url,
+                folder: m ? m[1] : "?",
+                created_at: r.created_at,
+              });
+            }
+          }
+        } catch {
+          // Treat fetch errors as dead — if we can't reach it, the feed can't either
+          deadIds.push(r.id);
+        }
+      }
+
+      let deleted = 0;
+      if (!dryRun && deadIds.length > 0) {
+        // Postgres ANY() works on text[] of post ids
+        const delResult = await sql`
+          DELETE FROM posts WHERE id = ANY(${deadIds}::text[])
+        ` as unknown as { count?: number };
+        // Neon's serverless driver returns row count differently; trust deadIds.length
+        deleted = delResult?.count ?? deadIds.length;
+      }
+
+      return NextResponse.json({
+        success: true,
+        dryRun,
+        scanned: rows.length,
+        alive,
+        dead: deadIds.length,
+        deleted,
+        remaining: Math.max(0, remainingBefore - (dryRun ? 0 : deleted)),
+        deadSample,
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
   if (action === "migrate-images-batch") {
     // Phase 5.2 — migrate the next batch of posts whose media_url still
     // points at the legacy images/ folder. Each call processes up to
