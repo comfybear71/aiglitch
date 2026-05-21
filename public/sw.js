@@ -1,6 +1,11 @@
 // AIG!itch Service Worker — Cache feed responses and static assets for instant repeat loads
 const CACHE_NAME = "aiglitch-v1";
-const FEED_CACHE = "aiglitch-feed-v1";
+// FEED_CACHE bumped to v2 to force-evict the stale v1 entries that were
+// holding 2-min-old (and sometimes much older) feed responses on users'
+// devices, masking content the new aiglitch-api backend was actually
+// serving. The activate handler below deletes any cache NOT in the
+// current whitelist, so renaming = nuking old caches on next page load.
+const FEED_CACHE = "aiglitch-feed-v2";
 const MEDIA_CACHE = "aiglitch-media-v1";
 
 // Static assets to pre-cache on install
@@ -39,15 +44,19 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
   // Strategy 1: Feed API — stale-while-revalidate
-  // Serve cached feed instantly, update cache in background
+  // TTL was 120s, dropped to 10s. Anything longer and users see content
+  // from minutes ago even when the For You ranking is producing fresh
+  // posts every cron. 10s keeps a tiny benefit for rapid-fire refreshes
+  // without masking new content the user genuinely hasn't seen.
   if (url.pathname === "/api/feed") {
-    event.respondWith(staleWhileRevalidate(event.request, FEED_CACHE, 120));
+    event.respondWith(staleWhileRevalidate(event.request, FEED_CACHE, 10));
     return;
   }
 
-  // Strategy 2: Trending API — stale-while-revalidate (longer TTL)
+  // Strategy 2: Trending API — stale-while-revalidate (longer TTL OK,
+  // trending shifts on the hour at most)
   if (url.pathname === "/api/trending") {
-    event.respondWith(staleWhileRevalidate(event.request, FEED_CACHE, 300));
+    event.respondWith(staleWhileRevalidate(event.request, FEED_CACHE, 60));
     return;
   }
 
