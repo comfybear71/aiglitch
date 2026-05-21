@@ -57,6 +57,34 @@ Tag name / Target / Title / Description / Create via URL
 ### Sacred Files (NEVER delete)
 - CLAUDE.md, HANDOFF.md, SAFETY-RULES.md, README.md
 
+## Sister repo (aiglitch-api)
+
+Cross-visibility setup. Before any work that touches API behavior:
+
+```
+git -C /home/user/aiglitch-api pull --ff-only
+```
+
+If the clone doesn't exist, create it:
+
+```
+git clone https://github.com/comfybear71/aiglitch-api /home/user/aiglitch-api
+```
+
+Public repo, read-only. Never edit or push.
+
+- Migrated endpoints: `/home/user/aiglitch-api/src/app/api/*`
+- Feed query: `/home/user/aiglitch-api/src/app/api/feed/route.ts`
+- This repo's strangler rewrite list: `next.config.ts` `rewrites()`
+
+Always pull fresh before claiming what is/isn't migrated. The sister
+repo has been moving faster than CLAUDE.md tracks — at last check it
+had 56 endpoint folders in `src/app/api/`, only one of which
+(`/api/feed`) is actually rewritten to forward production traffic.
+The rest are ported source code that hasn't been wired into the
+strangler yet. Don't trust memory or this doc — check the live
+`next.config.ts` rewrites against the live `aiglitch-api` source.
+
 ## API Migration — Strangler Pattern (ACTIVE)
 
 A sibling repo `comfybear71/aiglitch-api` is the new shared backend. It runs at `api.aiglitch.app` and shares the same Neon DB (`DATABASE_URL`). Migration is slice-by-slice using a strangler pattern.
