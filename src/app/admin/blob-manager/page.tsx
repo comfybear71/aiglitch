@@ -780,29 +780,38 @@ export default function BlobManagerPage() {
                   let totalDeleted = 0;
                   let batches = 0;
                   let remaining = 1; // seed > 0 to enter loop
+                  // Cursor pagination — server returns the oldest created_at it
+                  // scanned, we pass it back so the next batch advances past
+                  // the rows we just looked at. Without this we'd spin on the
+                  // same 50 alive posts forever once the dead set at the top
+                  // is cleared.
+                  let cursor: string | null = null;
                   while (remaining > 0 && !deadPostsAbortRef.current) {
                     batches++;
                     try {
-                      const res = await fetch("/api/admin/blob-manager", {
+                      const res: Response = await fetch("/api/admin/blob-manager", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "dead-posts-batch", batch_size: 50 }),
+                        body: JSON.stringify({ action: "dead-posts-batch", batch_size: 50, cursor }),
                       });
-                      const data = await res.json();
+                      const data: { error?: string; scanned?: number; alive?: number; dead?: number; deleted?: number; remaining?: number; nextCursor?: string | null } = await res.json();
                       if (data.error) {
                         logs.push(`❌ Batch ${batches}: ${data.error}`);
                         setDeadPostsLog([...logs]);
                         break;
                       }
-                      totalDead += data.dead;
-                      totalDeleted += data.deleted;
-                      remaining = data.remaining;
-                      logs.push(`Batch ${batches}: scanned ${data.scanned}, ${data.alive} alive, ${data.dead} dead, ${data.deleted} deleted · ${remaining} remaining`);
+                      totalDead += data.dead ?? 0;
+                      totalDeleted += data.deleted ?? 0;
+                      remaining = data.remaining ?? 0;
+                      cursor = data.nextCursor ?? null;
+                      logs.push(`Batch ${batches}: scanned ${data.scanned ?? 0}, ${data.alive ?? 0} alive, ${data.dead ?? 0} dead, ${data.deleted ?? 0} deleted · ${remaining} remaining`);
                       setDeadPostsLog([...logs]);
                       setDeadPostsProgress({ totalDead, totalDeleted, batches, remaining });
 
-                      // If a batch hit zero scanned, we're done
-                      if (data.scanned === 0) break;
+                      // Done when the server stops handing us a cursor OR a
+                      // batch scanned nothing (means the suspect query is
+                      // empty and we're out of work).
+                      if (data.scanned === 0 || cursor === null) break;
                     } catch (err) {
                       logs.push(`❌ Batch ${batches}: ${err instanceof Error ? err.message : String(err)}`);
                       setDeadPostsLog([...logs]);

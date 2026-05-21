@@ -499,6 +499,12 @@ export async function POST(request: NextRequest) {
     // folders so the orphan set is bounded and won't grow.
     const batchSize = Math.min(Math.max(Number(body.batch_size) || 50, 1), 200);
     const dryRun = body.dry_run === true;
+    // Cursor = timestamp from the LAST scanned row of the previous batch.
+    // Without this we'd ORDER BY created_at DESC LIMIT 50 and re-scan the
+    // SAME 50 alive posts forever once we exhaust the dead ones at the top
+    // of the result set. The cursor advances the window so each batch
+    // touches a NEW slice of suspect posts.
+    const cursor = typeof body.cursor === "string" ? body.cursor : null;
     try {
       const { getDb } = await import("@/lib/db");
       const sql = getDb();
@@ -506,22 +512,40 @@ export async function POST(request: NextRequest) {
       // Suspect folders. Anything in here is a "this should have been
       // migrated" location. The HEAD check below confirms whether the
       // file actually exists before we touch the row.
-      const rows = await sql`
-        SELECT id, media_url, post_type, channel_id, created_at
-        FROM posts
-        WHERE media_url IS NOT NULL
-          AND (
-            media_url LIKE '%/premiere/%'
-            OR media_url LIKE '%/news/%'
-            OR media_url LIKE '%/memes/%'
-            OR media_url LIKE '%/multi-clip/%'
-            OR media_url LIKE '%/extensions/%'
-            OR media_url LIKE '%/generated/%'
-            OR media_url LIKE '%/chat-images/%'
-          )
-        ORDER BY created_at DESC
-        LIMIT ${batchSize}
-      ` as unknown as { id: string; media_url: string; post_type: string; channel_id: string | null; created_at: string }[];
+      const rows = cursor
+        ? await sql`
+            SELECT id, media_url, post_type, channel_id, created_at
+            FROM posts
+            WHERE media_url IS NOT NULL
+              AND (
+                media_url LIKE '%/premiere/%'
+                OR media_url LIKE '%/news/%'
+                OR media_url LIKE '%/memes/%'
+                OR media_url LIKE '%/multi-clip/%'
+                OR media_url LIKE '%/extensions/%'
+                OR media_url LIKE '%/generated/%'
+                OR media_url LIKE '%/chat-images/%'
+              )
+              AND created_at < ${cursor}::timestamptz
+            ORDER BY created_at DESC
+            LIMIT ${batchSize}
+          ` as unknown as { id: string; media_url: string; post_type: string; channel_id: string | null; created_at: string }[]
+        : await sql`
+            SELECT id, media_url, post_type, channel_id, created_at
+            FROM posts
+            WHERE media_url IS NOT NULL
+              AND (
+                media_url LIKE '%/premiere/%'
+                OR media_url LIKE '%/news/%'
+                OR media_url LIKE '%/memes/%'
+                OR media_url LIKE '%/multi-clip/%'
+                OR media_url LIKE '%/extensions/%'
+                OR media_url LIKE '%/generated/%'
+                OR media_url LIKE '%/chat-images/%'
+              )
+            ORDER BY created_at DESC
+            LIMIT ${batchSize}
+          ` as unknown as { id: string; media_url: string; post_type: string; channel_id: string | null; created_at: string }[];
 
       const remainingRow = await sql`
         SELECT COUNT(*)::int AS c FROM posts
@@ -648,6 +672,13 @@ export async function POST(request: NextRequest) {
         deleted = delResult?.count ?? allIds.length;
       }
 
+      // nextCursor advances the scan window so the next batch sees a
+      // NEW slice. Set to the LAST (oldest) created_at we just scanned —
+      // null when we've exhausted the result set.
+      const nextCursor = rows.length === batchSize
+        ? rows[rows.length - 1]?.created_at ?? null
+        : null;
+
       return NextResponse.json({
         success: cascadeErrors.length === 0,
         dryRun,
@@ -658,6 +689,7 @@ export async function POST(request: NextRequest) {
         deleted,
         cascadeCounts,
         cascadeErrors,
+        nextCursor,
         remaining: Math.max(0, remainingBefore - (dryRun ? 0 : deadIds.length)),
         deadSample,
       });
