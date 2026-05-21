@@ -566,23 +566,99 @@ export async function POST(request: NextRequest) {
       }
 
       let deleted = 0;
+      let descendantCount = 0;
+      const cascadeCounts: Record<string, number> = {};
+      const cascadeErrors: { table: string; error: string }[] = [];
+
       if (!dryRun && deadIds.length > 0) {
-        // Postgres ANY() works on text[] of post ids
+        // ── Step 1: walk the reply tree so we delete descendants too.
+        // posts.is_reply_to is a self-referential FK. If we delete a
+        // parent before its replies, the FK constraint blocks the delete.
+        // Replies can chain (reply to reply to reply) so we walk the
+        // graph breadth-first until no new descendants surface.
+        const allDead = new Set<string>(deadIds);
+        let frontier = [...deadIds];
+        for (let depth = 0; depth < 50 && frontier.length > 0; depth++) {
+          const replyRows = await sql`
+            SELECT id FROM posts
+            WHERE is_reply_to = ANY(${frontier}::text[])
+          ` as unknown as { id: string }[];
+          const newOnes: string[] = [];
+          for (const r of replyRows) {
+            if (!allDead.has(r.id)) {
+              allDead.add(r.id);
+              newOnes.push(r.id);
+            }
+          }
+          frontier = newOnes;
+        }
+        descendantCount = allDead.size - deadIds.length;
+        const allIds = Array.from(allDead);
+
+        // ── Step 2: delete from child tables that ONLY make sense with
+        // the post. Each FK is NOT NULL — these rows can't survive
+        // without their parent post, so removing them is correct.
+        const childTables = [
+          "ai_interactions",
+          "human_likes",
+          "emoji_reactions",
+          "content_feedback",
+          "human_comments",
+          "human_bookmarks",
+          "human_view_history",
+        ];
+        for (const t of childTables) {
+          try {
+            let n = 0;
+            if (t === "ai_interactions")    n = (await sql`DELETE FROM ai_interactions    WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+            if (t === "human_likes")        n = (await sql`DELETE FROM human_likes        WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+            if (t === "emoji_reactions")    n = (await sql`DELETE FROM emoji_reactions    WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+            if (t === "content_feedback")   n = (await sql`DELETE FROM content_feedback   WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+            if (t === "human_comments")     n = (await sql`DELETE FROM human_comments     WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+            if (t === "human_bookmarks")    n = (await sql`DELETE FROM human_bookmarks    WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+            if (t === "human_view_history") n = (await sql`DELETE FROM human_view_history WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+            cascadeCounts[t] = n;
+          } catch (err) {
+            cascadeErrors.push({ table: t, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+
+        // ── Step 3: NULL out nullable FK references in historical/log
+        // tables we want to preserve (campaign records, ad impressions,
+        // marketing send logs). The audit trail survives but no longer
+        // points at the now-deleted post.
+        try {
+          const n = (await sql`UPDATE marketing_posts SET source_post_id = NULL WHERE source_post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+          cascadeCounts["marketing_posts(nulled)"] = n;
+        } catch (err) { cascadeErrors.push({ table: "marketing_posts", error: err instanceof Error ? err.message : String(err) }); }
+        try {
+          const n = (await sql`UPDATE elon_campaign SET post_id = NULL WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+          cascadeCounts["elon_campaign(nulled)"] = n;
+        } catch (err) { cascadeErrors.push({ table: "elon_campaign", error: err instanceof Error ? err.message : String(err) }); }
+        try {
+          const n = (await sql`UPDATE ad_impressions SET post_id = NULL WHERE post_id = ANY(${allIds}::text[])` as unknown as { count?: number })?.count ?? 0;
+          cascadeCounts["ad_impressions(nulled)"] = n;
+        } catch (err) { cascadeErrors.push({ table: "ad_impressions", error: err instanceof Error ? err.message : String(err) }); }
+
+        // ── Step 4: finally delete the posts themselves. Safe now that
+        // every FK pointing at them has been cleared.
         const delResult = await sql`
-          DELETE FROM posts WHERE id = ANY(${deadIds}::text[])
+          DELETE FROM posts WHERE id = ANY(${allIds}::text[])
         ` as unknown as { count?: number };
-        // Neon's serverless driver returns row count differently; trust deadIds.length
-        deleted = delResult?.count ?? deadIds.length;
+        deleted = delResult?.count ?? allIds.length;
       }
 
       return NextResponse.json({
-        success: true,
+        success: cascadeErrors.length === 0,
         dryRun,
         scanned: rows.length,
         alive,
         dead: deadIds.length,
+        descendantsAlsoDeleted: descendantCount,
         deleted,
-        remaining: Math.max(0, remainingBefore - (dryRun ? 0 : deleted)),
+        cascadeCounts,
+        cascadeErrors,
+        remaining: Math.max(0, remainingBefore - (dryRun ? 0 : deadIds.length)),
         deadSample,
       });
     } catch (err) {
