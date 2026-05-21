@@ -14,7 +14,7 @@ export const ALL_GENRES = [
 
 export type GenreName = (typeof ALL_GENRES)[number];
 
-/** Map internal genre name to the blob storage folder name under premiere/ */
+/** Map internal genre name to the blob storage folder name under channels/aiglitch-studios/ */
 const GENRE_TO_FOLDER: Record<string, string> = {
   action: "action",
   scifi: "scifi",
@@ -27,6 +27,9 @@ const GENRE_TO_FOLDER: Record<string, string> = {
   documentary: "documentary",
   music_video: "music_video",
 };
+
+/** Canonical blob prefix for genre-bucketed videos (Phase 5.2 onwards). */
+const STUDIOS_PREFIX = "channels/aiglitch-studios";
 
 /** Reverse: map blob folder name back to internal genre name */
 const FOLDER_TO_GENRE: Record<string, string> = {};
@@ -50,12 +53,18 @@ export const GENRE_LABELS: Record<string, string> = {
 
 /**
  * Get the blob storage folder path for a genre.
- * e.g. "cooking_channel" -> "premiere/cooking_show"
- *      "romance"         -> "premiere/romance"
+ *
+ * Returns the canonical location after the Phase 5.2 reorganisation —
+ * `channels/aiglitch-studios/{folder}`. The legacy `premiere/{folder}`
+ * path is still recognised by `detectGenreFromPath` for backwards
+ * compatibility with old blob URLs sitting in posts.media_url.
+ *
+ * e.g. "cooking_channel" -> "channels/aiglitch-studios/cooking_show"
+ *      "romance"         -> "channels/aiglitch-studios/romance"
  */
 export function getGenreBlobFolder(genre: string): string {
   const folder = GENRE_TO_FOLDER[genre] || genre;
-  return `premiere/${folder}`;
+  return `${STUDIOS_PREFIX}/${folder}`;
 }
 
 /**
@@ -91,10 +100,16 @@ export function detectGenreFromPath(pathname: string): string | null {
 }
 
 /**
- * Get all valid blob folder paths (for scanning/listing).
+ * Get all valid blob folder paths (for scanning/listing). Returns both
+ * the canonical channels/aiglitch-studios/{f} prefixes AND the legacy
+ * premiere/{f} prefixes so historical content still scans correctly.
  */
 export function getAllBlobFolders(): string[] {
-  return Object.values(GENRE_TO_FOLDER).map(f => `premiere/${f}`);
+  const folders = Object.values(GENRE_TO_FOLDER);
+  return [
+    ...folders.map(f => `${STUDIOS_PREFIX}/${f}`),
+    ...folders.map(f => `premiere/${f}`),
+  ];
 }
 
 /**

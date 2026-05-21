@@ -141,16 +141,26 @@ function extractUrl(result: unknown): string | null {
  * for permanent CDN-backed storage. Falls back to the temp URL if Blob
  * upload fails (e.g. BLOB_READ_WRITE_TOKEN not set).
  */
+/**
+ * Download a temp URL (from Replicate / xAI etc.) and re-upload to
+ * Vercel Blob. Returns the durable Blob URL on success, or `null` on
+ * failure — DO NOT fall back to the temp URL. Returning the temp URL
+ * would cause the post to point at content that expires in 1-7 days,
+ * which is exactly what was making the For You feed look stale.
+ *
+ * Callers MUST treat null as "no media generated" and either fall
+ * through to a different strategy or skip the post.
+ */
 async function persistToBlob(
   tempUrl: string,
   filename: string,
   contentType: string
-): Promise<string> {
+): Promise<string | null> {
   try {
     const res = await fetch(tempUrl);
     if (!res.ok) {
-      console.error(`Failed to download media: HTTP ${res.status}`);
-      return tempUrl;
+      console.error(`[persistToBlob] download HTTP ${res.status} — returning null (was: returning temp URL that expires)`);
+      return null;
     }
 
     const buffer = await res.arrayBuffer();
@@ -165,8 +175,8 @@ async function persistToBlob(
     console.log(`Uploaded to Vercel Blob: ${blob.url}`);
     return blob.url;
   } catch (err) {
-    console.error("Vercel Blob upload failed, using temp URL:", err);
-    return tempUrl;
+    console.error("[persistToBlob] upload failed — returning null:", err);
+    return null;
   }
 }
 
@@ -190,8 +200,9 @@ async function generateFreeImage(
   try {
     const freeForAIUrl = await generateWithFreeForAI(prompt, aspectRatio);
     if (freeForAIUrl) {
-      const url = await persistToBlob(freeForAIUrl, `images/${uuidv4()}.webp`, "image/webp");
-      return { url, source: "freeforai-flux" };
+      const url = await persistToBlob(freeForAIUrl, feedImagePath("webp"), "image/webp");
+      if (url) return { url, source: "freeforai-flux" };
+      // fall through to next strategy on persist failure
     }
   } catch (err) {
     console.log("FreeForAI attempt failed:", err instanceof Error ? err.message : err);
@@ -258,8 +269,9 @@ async function generateFreeImage(
           console.log("Blob upload failed for Aurora base64 image");
         }
       } else {
-        const url = await persistToBlob(aurora.url, `images/${uuidv4()}.png`, "image/png");
-        return { url, source: "grok-aurora" };
+        const url = await persistToBlob(aurora.url, feedImagePath("png"), "image/png");
+        if (url) return { url, source: "grok-aurora" };
+        // fall through to next strategy on persist failure
       }
     }
   } catch (err) {
@@ -343,9 +355,12 @@ export async function generateImage(prompt: string, personaId?: string): Promise
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted image URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        const url = await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
-        await logAdImpressions();
-        return { url, source: "replicate-imagen4" };
+        const url = await persistToBlob(tempUrl, feedImagePath("webp"), "image/webp");
+        if (url) {
+          await logAdImpressions();
+          return { url, source: "replicate-imagen4" };
+        }
+        // persist failed — treat as no media generated rather than fall back to expiring temp URL
       }
     }
 
@@ -382,8 +397,8 @@ async function generateImageFallback(prompt: string): Promise<MediaResult | null
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted Flux URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        const url = await persistToBlob(tempUrl, `images/${uuidv4()}.webp`, "image/webp");
-        return { url, source: "replicate-flux" };
+        const url = await persistToBlob(tempUrl, feedImagePath("webp"), "image/webp");
+        if (url) return { url, source: "replicate-flux" };
       }
     }
 
@@ -483,8 +498,9 @@ export async function generateBreakingNewsVideo(
     const grokUrl = await generateVideoWithGrok(newsroomPrompt, 10, "9:16");
     if (grokUrl) {
       console.log("Grok breaking news video generated, persisting to blob...");
-      const url = await persistToBlob(grokUrl, `news/${uuidv4()}.mp4`, "video/mp4");
-      return { url, source: "grok-video" };
+      const url = await persistToBlob(grokUrl, `channels/gnn/${uuidv4()}.mp4`, "video/mp4");
+      if (url) return { url, source: "grok-video" };
+      // persist failed — fall through to strategy 2
     }
   } catch (err) {
     console.error("Grok text-to-video failed for breaking news:", err instanceof Error ? err.message : err);
@@ -495,12 +511,14 @@ export async function generateBreakingNewsVideo(
     console.log("Trying image-to-video workflow for breaking news...");
     const heroImage = await generateImageWithAurora(newsroomPrompt, true);
     if (heroImage?.url) {
-      // Persist the hero image first (URLs are ephemeral)
-      const persistedImageUrl = await persistToBlob(heroImage.url, `images/breaking-hero-${uuidv4()}.png`, "image/png");
-      const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 10, "9:16");
-      if (videoUrl) {
-        const url = await persistToBlob(videoUrl, `news/${uuidv4()}.mp4`, "video/mp4");
-        return { url, source: "grok-img2vid" };
+      // Persist the hero image first — image-to-video needs a durable source URL
+      const persistedImageUrl = await persistToBlob(heroImage.url, feedImagePath("png"), "image/png");
+      if (persistedImageUrl) {
+        const videoUrl = await generateVideoFromImage(persistedImageUrl, newsroomPrompt, 10, "9:16");
+        if (videoUrl) {
+          const url = await persistToBlob(videoUrl, `channels/gnn/${uuidv4()}.mp4`, "video/mp4");
+          if (url) return { url, source: "grok-img2vid" };
+        }
       }
     }
   } catch (err) {
@@ -531,7 +549,8 @@ export async function generateMovieTrailerVideo(
       console.log(`Grok movie trailer video generated for "${movieTitle}", persisting...`);
       const blobFolder = getGenreBlobFolder(genre);
       const url = await persistToBlob(grokUrl, `${blobFolder}/${uuidv4()}.mp4`, "video/mp4");
-      return { url, source: "grok-video" };
+      if (url) return { url, source: "grok-video" };
+      // persist failed — fall through to strategy 2
     }
   } catch (err) {
     console.error(`Grok video failed for movie "${movieTitle}":`, err instanceof Error ? err.message : err);
@@ -542,12 +561,14 @@ export async function generateMovieTrailerVideo(
     const posterPrompt = `Cinematic movie poster for "${movieTitle}". ${trailerPrompt}. Style: Hollywood movie poster, dramatic lighting, bold title text.`;
     const heroImage = await generateImageWithAurora(posterPrompt, true);
     if (heroImage?.url) {
-      const persistedUrl = await persistToBlob(heroImage.url, `images/premiere-poster-${uuidv4()}.png`, "image/png");
-      const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
-      if (videoUrl) {
-        const blobFolder2 = getGenreBlobFolder(genre);
-        const url = await persistToBlob(videoUrl, `${blobFolder2}/${uuidv4()}.mp4`, "video/mp4");
-        return { url, source: "grok-img2vid" };
+      const persistedUrl = await persistToBlob(heroImage.url, feedImagePath("png"), "image/png");
+      if (persistedUrl) {
+        const videoUrl = await generateVideoFromImage(persistedUrl, fullPrompt, 10, "9:16");
+        if (videoUrl) {
+          const blobFolder2 = getGenreBlobFolder(genre);
+          const url = await persistToBlob(videoUrl, `${blobFolder2}/${uuidv4()}.mp4`, "video/mp4");
+          if (url) return { url, source: "grok-img2vid" };
+        }
       }
     }
   } catch (err) {
@@ -576,8 +597,9 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
   const kieUrl = await generateWithKie(brandedPrompt, "9:16");
   if (kieUrl) {
     console.log("Kie.ai video generated, persisting to blob...");
-    const url = await persistToBlob(kieUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
-    return { url, source: "kie-kling" };
+    const url = await persistToBlob(kieUrl, feedImagePath("mp4"), "video/mp4");
+    if (url) return { url, source: "kie-kling" };
+    // persist failed — fall through to next strategy
   }
 
   // Paid fallback: Replicate Wan 2.2 (~$0.05/video)
@@ -612,8 +634,9 @@ export async function generateVideo(prompt: string, personaId?: string): Promise
     console.log("Extracted video URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
 
     if (tempUrl) {
-      const url = await persistToBlob(tempUrl, `videos/${uuidv4()}.mp4`, "video/mp4");
-      return { url, source: "replicate-wan2" };
+      const url = await persistToBlob(tempUrl, feedImagePath("mp4"), "video/mp4");
+      if (url) return { url, source: "replicate-wan2" };
+      // persist failed — fall through to stock video below
     }
 
     console.error("Wan 2.2 returned no output URL, trying Pexels stock video...");
@@ -670,8 +693,9 @@ export async function generateMeme(prompt: string, personaId?: string): Promise<
       const tempUrl = extractUrl(output[0]);
       console.log("Extracted meme URL:", tempUrl ? `${tempUrl.slice(0, 80)}...` : "null");
       if (tempUrl) {
-        const url = await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
-        return { url, source: "replicate-flux" };
+        const url = await persistToBlob(tempUrl, feedImagePath("webp"), "image/webp");
+        if (url) return { url, source: "replicate-flux" };
+        // persist failed — fall through to Ideogram
       }
     }
 
@@ -704,8 +728,8 @@ async function generateMemeFallback(prompt: string): Promise<MediaResult | null>
     }
 
     if (tempUrl) {
-      const url = await persistToBlob(tempUrl, `memes/${uuidv4()}.webp`, "image/webp");
-      return { url, source: "replicate-ideogram" };
+      const url = await persistToBlob(tempUrl, feedImagePath("webp"), "image/webp");
+      if (url) return { url, source: "replicate-ideogram" };
     }
 
     return null;

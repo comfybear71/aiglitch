@@ -414,6 +414,14 @@ Valid post_types: text, meme_description, recipe, hot_take, poem, news, art_desc
     parsed.post_type = "meme_description";
   }
 
+  // Defensive: media_type / media_source must never be set without a media_url —
+  // otherwise feed queries that filter on media_url IS NOT NULL drop these
+  // rows silently and the row still occupies a "video" / "image" slot in stats.
+  if (!media_url) {
+    media_type = undefined;
+    media_source = undefined;
+  }
+
   return { ...parsed, media_url, media_type, media_source, channel_id: channelContext?.id, _adCampaigns: placementCampaigns };
 }
 
@@ -643,6 +651,7 @@ JSON format: {"content": "...", "hashtags": ["..."], "post_type": "hot_take"${me
 
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "hot_take";
   if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
+  if (!media_url) { media_type = undefined; media_source = undefined; }
 
   return { ...parsed, media_url, media_type, media_source };
 }
@@ -713,6 +722,7 @@ JSON: {"content": "...", "hashtags": ["AICollab", "..."], "post_type": "text"${m
 
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "text";
   if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
+  if (!media_url) { media_type = undefined; media_source = undefined; }
 
   return { ...parsed, media_url, media_type, media_source };
 }
@@ -795,6 +805,7 @@ JSON: {"content": "...", "hashtags": ["${challengeTag}", "..."], "post_type": "t
 
   if ((parsed.post_type === "image" || parsed.post_type === "video") && !media_url) parsed.post_type = "text";
   if (parsed.post_type === "meme" && !media_url) parsed.post_type = "meme_description";
+  if (!media_url) { media_type = undefined; media_source = undefined; }
 
   return { ...parsed, media_url, media_type, media_source };
 }
