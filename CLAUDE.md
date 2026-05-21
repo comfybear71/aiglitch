@@ -57,33 +57,45 @@ Tag name / Target / Title / Description / Create via URL
 ### Sacred Files (NEVER delete)
 - CLAUDE.md, HANDOFF.md, SAFETY-RULES.md, README.md
 
-## Sister repo (aiglitch-api)
+## Sister repo (aiglitch-api) — MANDATORY first step every session
 
-Cross-visibility setup. Before any work that touches API behavior:
-
-```
-git -C /home/user/aiglitch-api pull --ff-only
-```
-
-If the clone doesn't exist, create it:
+**Run this command at session start, before reading any other docs:**
 
 ```
-git clone https://github.com/comfybear71/aiglitch-api /home/user/aiglitch-api
+if [ -d /home/user/aiglitch-api ]; then
+  git -C /home/user/aiglitch-api pull --ff-only
+else
+  git clone https://github.com/comfybear71/aiglitch-api /home/user/aiglitch-api
+fi
 ```
 
-Public repo, read-only. Never edit or push.
+Public repo, read-only. Never edit or push there.
 
-- Migrated endpoints: `/home/user/aiglitch-api/src/app/api/*`
-- Feed query: `/home/user/aiglitch-api/src/app/api/feed/route.ts`
-- This repo's strangler rewrite list: `next.config.ts` `rewrites()`
+Then before reasoning about ANY feed / API / DB-shape question, also
+do `git -C /home/user/aiglitch-api log --oneline -10` so you know the
+current API version. The user works with both Claude sessions in
+parallel — the API side ships its own PRs and tags, and what you see
+on aiglitch.app depends on BOTH repos. Don't diagnose feed bugs
+without knowing what the API side is currently doing.
 
-Always pull fresh before claiming what is/isn't migrated. The sister
-repo has been moving faster than CLAUDE.md tracks — at last check it
-had 56 endpoint folders in `src/app/api/`, only one of which
-(`/api/feed`) is actually rewritten to forward production traffic.
-The rest are ported source code that hasn't been wired into the
-strangler yet. Don't trust memory or this doc — check the live
-`next.config.ts` rewrites against the live `aiglitch-api` source.
+Key locations inside the sister repo:
+- All ported endpoints: `/home/user/aiglitch-api/src/app/api/*`
+- For You feed query: `/home/user/aiglitch-api/src/app/api/feed/route.ts`
+- Per-channel feed: `/home/user/aiglitch-api/src/app/api/channels/feed/route.ts`
+- Channel counts query: `/home/user/aiglitch-api/src/lib/repositories/channels.ts`
+
+This repo's strangler rewrite list: `next.config.ts` `rewrites()`.
+Only `/api/feed` is actually rewritten right now. The sister repo has
+56+ endpoint folders ported but most aren't routed yet — check the
+live `next.config.ts` against the live source before claiming what
+is/isn't migrated.
+
+**Why this matters:** in May 2026 a "feed staleness" bug took weeks
+to diagnose because neither side could see the other's code. Root
+cause was a 1-line service worker cache name in THIS repo. With
+cross-visibility we'd have caught it in 10 minutes. The user pays
+for both sessions; coordinating them is worth more than rediscovering
+context from scratch every time.
 
 ## API Migration — Strangler Pattern (ACTIVE)
 

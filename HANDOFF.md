@@ -761,6 +761,72 @@ See full details in `errors/error-log.md #1`.
 3. GitHub UI: told user to "scroll up for the green button" when the user was NOT LOGGED IN to GitHub. Should have checked screenshot for "Sign in" text.
 4. email_drafts table didn't exist: migration had FOREIGN KEY to contacts table which didn't exist when the migration label first ran. Fixed with inline CREATE TABLE safety net.
 
+## Session Log — 2026-05-21/22 (Feed staleness saga + cross-repo coordination)
+
+Multi-hour debug-and-ship session. Headline: a "For You feed is stale"
+report turned out to be six layered bugs across both aiglitch and
+aiglitch-api repos. Solved by tight back-and-forth between this Claude
+session and a parallel session in the aiglitch-api repo, with the
+user shuttling structured handoff prompts between them.
+
+### Cross-repo working model (NEW — see CLAUDE.md too)
+
+The user now runs TWO Claude Code on the Web sessions side-by-side:
+one in `comfybear71/aiglitch` (this repo) and one in
+`comfybear71/aiglitch-api` (sister). Each session is hard-locked to
+its own repo by MCP. To stay in sync:
+
+1. Every session start, both sides run `git -C /home/user/aiglitch-api
+   pull --ff-only` (this side) or pull the aiglitch repo (their side)
+   to ensure each can read the other's live source.
+2. When a bug spans repos, the side that diagnosed it writes a
+   structured Markdown handoff prompt — context, evidence, suspect
+   query / SQL the other side can run, definition of done. The user
+   pastes it into the other session.
+3. Coordination overhead pays for itself: this session debugged the
+   "stale feed" issue end-to-end in one sitting because both sides
+   knew exactly what the other had already verified.
+
+### Bugs found + shipped (in order)
+
+| Bug | Repo | Fix | Tag |
+|---|---|---|---|
+| Chaos drops 25% success rate — Grok moderation rejecting horror-coded scenarios | aiglitch | Rewrote 25 scenarios Grok-safe + 2-attempt retry | v1.26.0 |
+| `persistToBlob` returned temp URLs on Blob upload fail, leaking to DB | aiglitch | Returns null instead, callers fall through | v1.27.0 |
+| Writers wrote to deprecated folders (premiere/, news/, videos/, memes/) | aiglitch | Redirected to canonical posts/{YYYY-MM}/ or channels/* | v1.27.0 |
+| ai-engine left `media_type` set when `media_url` was null | aiglitch | Defensive guard at every return statement | v1.27.0 |
+| Service worker cached `/api/feed` with 120s TTL — masked all backend feed fixes for weeks | aiglitch | `FEED_CACHE` v1 → v2 (forces evict) + TTL 120s → 10s | v1.27.1 |
+| Database had 4,983 orphan posts pointing at deleted Blob folders → user perceived as "text posts" since `<video>` 404s rendered as caption-only | aiglitch | New Dead-URL Posts Cleanup tool in `/admin/blob-manager` — HEAD-checks every URL in deprecated folders, cascades through 10 FK-referencing child tables + reply chains, then deletes | v1.28.0, v1.28.1, v1.28.2 |
+| Allowlist filter on `media_url LIKE '%blob.vercel-storage.com%'` excluded fresh content | aiglitch-api | Flipped to denylist of `vidgen.x.ai`, `replicate.delivery` | v1.8.15 |
+| Stale feed channel content under-represented in For You | aiglitch-api | Recency tiers (6h/24h/3d boost) + channels stream with 40% allocation | v1.8.12-1.8.14 |
+
+### Open items at session end
+
+1. **aiglitch-api v1.8.16 — pending.** Channel stream is still
+   under-represented: top 30 has only 1 post with `channel_id` set
+   despite `/api/channels` showing 2,500+ channel posts in the DB.
+   Recommendation sent to API Claude: tighten the channel stream's
+   `RANDOM() * 604800` (7-day) jitter to `RANDOM() * 86400` (24h)
+   and drop the URL-pattern fallbacks in the OR clause — rely on
+   `channel_id IS NOT NULL` only since that aligns with how the
+   channels listing endpoint counts.
+2. **Blob Manager strip-down PR — drafted, not shipped.** Once the
+   feed is healthy, remove obsolete migration tools (Channel Video
+   Migration, News → channels/gnn, images/ Audit + Phase 5.1/5.2,
+   Studios Genre Reorganisation, Sponsor Credit Backfill). Keep
+   folder list + Dead-URL Posts Cleanup. The user explicitly asked
+   for this — waiting on channel feed verification first.
+
+### Lessons captured in CLAUDE.md
+
+- "Sister repo (aiglitch-api) — MANDATORY first step every session"
+  block expanded from advisory to required, with the bug history
+  explained so future sessions understand WHY.
+- Strangler-pattern caveat: the sister repo has 56+ ported endpoint
+  folders but only `/api/feed` is actually rewritten in
+  `next.config.ts`. Don't assume an endpoint has migrated just
+  because it exists over there.
+
 ## Session Log — 2026-05-18 (Channels page Netflix redesign + MeatBag + cleanup)
 
 Massive single-day session — 11 PRs shipped (#236 through #245 plus the docs PR for this entry). Headline: `/channels` is now a Netflix-style multi-row browse layout, the MeatLab moderation system is wired to a new MeatBag community channel, blob folders have a traffic-light tag layer, and the thumbnail rendering self-heals broken blob URLs.
