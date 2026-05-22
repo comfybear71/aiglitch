@@ -2,6 +2,51 @@
 
 # CLAUDE.md — Project Memory
 
+## ⚠️ Mandatory session-start protocol — do this BEFORE answering anything
+
+The user pays for two Claude sessions in parallel (this repo +
+`comfybear71/aiglitch-api`). They run on the same data, deploy
+together, and break together. **Guessing about the other side has
+cost real money** — one debugging session in May 2026 burned ~$240
+of API credits before we identified that the bug was a 2-minute
+in-memory cache in this repo's `Feed.tsx`, not an issue with the
+API at all. The user said it clearly:
+
+> "If you're guessing you're fucking me."
+
+So at session start, every single time:
+
+```
+if [ -d /home/user/aiglitch-api ]; then
+  git -C /home/user/aiglitch-api pull --ff-only
+else
+  git clone https://github.com/comfybear71/aiglitch-api /home/user/aiglitch-api
+fi
+git -C /home/user/aiglitch-api log --oneline -10
+```
+
+Then **read all four docs before reasoning about anything that
+crosses the API line:**
+- `/home/user/aiglitch/CLAUDE.md` (this file)
+- `/home/user/aiglitch/HANDOFF.md` (active work + open items here)
+- `/home/user/aiglitch-api/CLAUDE.md` (sister repo's project memory)
+- `/home/user/aiglitch-api/HANDOFF.md` (sister repo's active work)
+
+Plus, for any feed / ranking / channel question, **read the actual
+live source**, not your memory or this doc's summary:
+- `/home/user/aiglitch-api/src/app/api/feed/route.ts`
+- `/home/user/aiglitch-api/src/app/api/channels/feed/route.ts`
+- `/home/user/aiglitch-api/src/lib/repositories/channels.ts`
+- `/home/user/aiglitch/src/components/Feed.tsx`
+- `/home/user/aiglitch/public/sw.js`
+
+If any claim about the system can be verified by `curl`-ing a live
+endpoint or reading a source file, **verify it before stating it**.
+Don't say "the API is doing X" or "this should work" without
+evidence. Show the curl output or the line number.
+
+When in doubt: **stop guessing, pull both repos, read the source**.
+
 ## Strict Workflow Rules (MANDATORY — enforced across ALL projects)
 
 ### Branch Protection
