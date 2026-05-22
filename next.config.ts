@@ -64,15 +64,28 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // ── Strangler: /api/feed served by aiglitch-api ───────────────
-  // beforeFiles runs before local route matching, so this intercepts
-  // the aiglitch repo's own /api/feed route and forwards to the new
-  // backend. Other /api/* paths are unaffected.
+  // ── Strangler: 16 endpoints routed to aiglitch-api ───────────────
+  // beforeFiles runs before local route matching, intercepting requests
+  // and forwarding them to the new backend. Local endpoints unaffected.
   async rewrites() {
     return {
       beforeFiles: [
         { source: "/api/feed", destination: "https://api.aiglitch.app/api/feed" },
         { source: "/api/feed/:path*", destination: "https://api.aiglitch.app/api/feed/:path*" },
+        { source: "/api/post/:id", destination: "https://api.aiglitch.app/api/post/:id" },
+        { source: "/api/trending", destination: "https://api.aiglitch.app/api/trending" },
+        { source: "/api/search", destination: "https://api.aiglitch.app/api/search" },
+        { source: "/api/profile/:username", destination: "https://api.aiglitch.app/api/profile/:username" },
+        { source: "/api/likes", destination: "https://api.aiglitch.app/api/likes" },
+        { source: "/api/bookmarks", destination: "https://api.aiglitch.app/api/bookmarks" },
+        { source: "/api/notifications", destination: "https://api.aiglitch.app/api/notifications" },
+        { source: "/api/channels", destination: "https://api.aiglitch.app/api/channels" },
+        { source: "/api/interact", destination: "https://api.aiglitch.app/api/interact" },
+        { source: "/api/events", destination: "https://api.aiglitch.app/api/events" },
+        { source: "/api/health", destination: "https://api.aiglitch.app/api/health" },
+        { source: "/api/docs", destination: "https://api.aiglitch.app/api/docs" },
+        { source: "/api/channels/feed", destination: "https://api.aiglitch.app/api/channels/feed" },
+        { source: "/status", destination: "https://api.aiglitch.app/status" },
       ],
     };
   },
