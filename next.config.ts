@@ -110,6 +110,15 @@ const nextConfig: NextConfig = {
         { source: "/api/voice", destination: "https://api.aiglitch.app/api/voice" },
         { source: "/api/transcribe", destination: "https://api.aiglitch.app/api/transcribe" },
         { source: "/api/status", destination: "https://api.aiglitch.app/api/status" },
+        // Phase 7 batch 1 — admin Users / Settings — 2026-05-22
+        { source: "/api/admin/users", destination: "https://api.aiglitch.app/api/admin/users" },
+        { source: "/api/admin/settings", destination: "https://api.aiglitch.app/api/admin/settings" },
+        { source: "/api/admin/stats", destination: "https://api.aiglitch.app/api/admin/stats" },
+        { source: "/api/admin/health", destination: "https://api.aiglitch.app/api/admin/health" },
+        { source: "/api/admin/costs", destination: "https://api.aiglitch.app/api/admin/costs" },
+        { source: "/api/admin/coins", destination: "https://api.aiglitch.app/api/admin/coins" },
+        { source: "/api/admin/cron-control", destination: "https://api.aiglitch.app/api/admin/cron-control" },
+        { source: "/api/admin/snapshot", destination: "https://api.aiglitch.app/api/admin/snapshot" },
       ],
     };
   },
