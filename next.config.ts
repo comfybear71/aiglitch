@@ -101,6 +101,10 @@ const nextConfig: NextConfig = {
         { source: "/api/nft/image", destination: "https://api.aiglitch.app/api/nft/image" },
         { source: "/api/nft/metadata", destination: "https://api.aiglitch.app/api/nft/metadata" },
         { source: "/api/meatlab", destination: "https://api.aiglitch.app/api/meatlab" },
+        { source: "/api/activity-throttle", destination: "https://api.aiglitch.app/api/activity-throttle" },
+        { source: "/api/token/token-list", destination: "https://api.aiglitch.app/api/token/token-list" },
+        { source: "/api/token/verification", destination: "https://api.aiglitch.app/api/token/verification" },
+        { source: "/api/token/dexscreener", destination: "https://api.aiglitch.app/api/token/dexscreener" },
       ],
     };
   },
