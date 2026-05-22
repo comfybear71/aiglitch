@@ -390,7 +390,12 @@ export async function GET(request: NextRequest) {
 
   // ── Cron: run a drop ──
   if (action === "cron") {
-    const gate = await cronStart(request, CRON_NAME);
+    // skipThrottle: this cron only fires every 2 hours by Vercel schedule.
+    // Rolling it against the global activity_throttle (which is sized for
+    // every-30-min crons like persona-content) randomly skipped ~70% of
+    // firings, leaving us with ~3 drops/day instead of the expected 12.
+    // The 2-hour cadence IS the rate limit; no further gating needed.
+    const gate = await cronStart(request, CRON_NAME, { skipThrottle: true });
     if (gate) return gate;
 
     try {
