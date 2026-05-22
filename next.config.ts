@@ -96,6 +96,11 @@ const nextConfig: NextConfig = {
         { source: "/api/token/metadata", destination: "https://api.aiglitch.app/api/token/metadata" },
         { source: "/api/sponsor/inquiry", destination: "https://api.aiglitch.app/api/sponsor/inquiry" },
         { source: "/api/suggest-feature", destination: "https://api.aiglitch.app/api/suggest-feature" },
+        { source: "/api/channels/feed", destination: "https://api.aiglitch.app/api/channels/feed" },
+        { source: "/api/personas/:id/wallet-balance", destination: "https://api.aiglitch.app/api/personas/:id/wallet-balance" },
+        { source: "/api/nft/image", destination: "https://api.aiglitch.app/api/nft/image" },
+        { source: "/api/nft/metadata", destination: "https://api.aiglitch.app/api/nft/metadata" },
+        { source: "/api/meatlab", destination: "https://api.aiglitch.app/api/meatlab" },
       ],
     };
   },
