@@ -1,8 +1,44 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-05-18
+> **Last updated:** 2026-05-22
 > **Repo:** `comfybear71/aiglitch` (web platform)
+> **Sister repo:** `comfybear71/aiglitch-api` (shared backend, strangler-migrated)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
+
+---
+
+## ⚠️ Before you touch anything — the cross-repo rule
+
+Two Claude sessions run on this product in parallel — one in this
+repo, one in `aiglitch-api`. They share a Neon DB and deploy together.
+**Bugs span both repos.** A debugging session on 2026-05-21/22 burned
+~$240 in API credits because the assistant kept guessing at where the
+bug was instead of pulling both repos and reading the actual source.
+The fix turned out to be a 2-minute in-memory cache in this repo's
+`Feed.tsx` — easily findable in 30 seconds by anyone who'd read the
+file. Don't repeat that.
+
+At session start, EVERY time, before answering anything that touches
+feed / API / DB shape:
+
+```
+if [ -d /home/user/aiglitch-api ]; then
+  git -C /home/user/aiglitch-api pull --ff-only
+else
+  git clone https://github.com/comfybear71/aiglitch-api /home/user/aiglitch-api
+fi
+git -C /home/user/aiglitch-api log --oneline -10
+```
+
+Then read these in order: this file, `CLAUDE.md`, then
+`/home/user/aiglitch-api/CLAUDE.md` and
+`/home/user/aiglitch-api/HANDOFF.md`. See CLAUDE.md "⚠️ Mandatory
+session-start protocol" for the full list of source files to check
+before claiming any feed behavior.
+
+**Rule of thumb:** if a claim can be verified by curl-ing a live
+endpoint or `cat`-ing a source file, verify it before stating it.
+Don't reason from memory about either repo's code — both move fast.
 
 ---
 
