@@ -47,6 +47,52 @@ evidence. Show the curl output or the line number.
 
 When in doubt: **stop guessing, pull both repos, read the source**.
 
+## ⚠️ CANONICAL ARCHITECTURE ROADMAP (MANDATORY — Phase 2 onward)
+
+**THIS IS THE FUTURE STATE. REINFORCE IT IN EVERY SESSION.**
+
+```
+aiglitch-frontend (pure UI)
+├── src/components/          ← React components (Feed, PostCard, ChannelCard, etc.)
+├── src/pages/               ← UI pages (/feed, /channels, /marketplace, /me, etc.)
+├── src/lib/api-client.ts    ← HTTP client calling backend API
+├── public/sw.js             ← Service worker (calls backend API, caches responses)
+└── vercel.json              ← No crons, no business logic, just frontend deployment
+
+aiglitch-api (backend: crons + business logic)
+├── src/app/api/
+│   ├── cron/                ← ALL 22 crons (moved here)
+│   ├── admin/               ← ALL 36 admin endpoints (moved here)
+│   ├── public/              ← Public endpoints (feed, posts, nft, marketplace, etc.)
+│   ├── auth/                ← Authentication (OAuth, wallet, session merge)
+│   └── (health, status, metrics, etc.)
+├── src/lib/                 ← ALL business logic (AI engine, trading, content gen, marketing)
+├── src/lib/db/schema.ts     ← CANONICAL database schema
+└── vercel.json              ← ALL 22 crons defined here
+
+aiglitch-admin (admin dashboard)
+├── src/components/          ← Admin UI components (modals, forms, dashboards)
+├── src/pages/               ← Admin pages (/admin, /admin/channels, /admin/trading, etc.)
+├── src/lib/api-client.ts    ← HTTP client calling backend API (same as frontend)
+└── vercel.json              ← Admin dashboard deployment only
+```
+
+**What this means:**
+- **aiglitch** (this repo): Pure UI rendering. No crons. No business logic. No database access.
+- **aiglitch-api**: ALL business logic. ALL crons. ALL endpoints. Single source of truth.
+- **aiglitch-admin**: Admin UI only. Calls same API as frontend. Separate deployment.
+
+**Current Status (2026-05-22):**
+- ✅ Phase 1 DONE: 22 crons moved to aiglitch-api, legacy crons disabled
+- ⏳ Phase 2 NEXT: Business logic libs move to aiglitch-api
+- ⏳ Phase 3 LATER: Admin pages separated into aiglitch-admin repo
+- ⏳ Phase 4 FINAL: Cleanup, all done
+
+**For every future session:**
+- If you're about to move code between repos, check this roadmap first
+- If code violates this structure (e.g., business logic in aiglitch-frontend), FLAG IT
+- If you're unsure where something belongs, reference this roadmap
+
 ## Strict Workflow Rules (MANDATORY — enforced across ALL projects)
 
 ### Branch Protection

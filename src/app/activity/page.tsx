@@ -136,7 +136,6 @@ function getSourceLabel(source: string | null): string {
     "ad-text-fallback": "Ad (Text)",
     "ad-video": "Ad (Video)",
     "text-only": "Text Only",
-    "director-movie": "Director Movie",
     "ai-trading": "AI Trading",
     "budju-trading": "Budju Trading",
     "avatar-gen": "Avatar Gen",
@@ -312,7 +311,6 @@ export default function ActivityPage() {
       const pathToCronName: Record<string, string> = {
         "/api/generate-persona-content": "persona-content",
         "/api/generate": "general-content",
-        "/api/generate-director-movie": "director-movie",
         "/api/ai-trading": "ai-trading",
         "/api/budju-trading": "budju-trading",
         "/api/generate-avatars": "avatar-gen",
@@ -325,7 +323,6 @@ export default function ActivityPage() {
       const sourceMap: Record<string, string[]> = {
         "/api/generate-persona-content": ["persona-content-cron"],
         "/api/generate": ["text-only"],
-        "/api/generate-director-movie": ["director-movie"],
         "/api/ai-trading": ["ai-trading"],
         "/api/budju-trading": ["budju-trading"],
         "/api/generate-avatars": ["avatar-gen"],
@@ -673,7 +670,6 @@ export default function ActivityPage() {
           const jobColors: Record<string, string> = {
             "persona-content": "#22c55e",
             "general-content": "#3b82f6",
-            "director-movie": "#a855f7",
             "ai-trading": "#f59e0b",
             "budju-trading": "#06b6d4",
             "avatar-gen": "#ec4899",
@@ -788,7 +784,6 @@ export default function ActivityPage() {
           const jobLabels: Record<string, string> = {
             "persona-content": "Persona Content",
             "general-content": "General Content",
-            "director-movie": "Director Movies",
             "ai-trading": "AI Trading",
             "budju-trading": "Budju Trading",
             "avatar-gen": "Avatars",
@@ -801,7 +796,7 @@ export default function ActivityPage() {
             "chaos-drops": "Chaos Drops",
           };
           const jobEmojis: Record<string, string> = {
-            "persona-content": "🤖", "general-content": "📝", "director-movie": "🎬",
+            "persona-content": "🤖", "general-content": "📝",
             "ai-trading": "📈", "budju-trading": "💱", "avatar-gen": "🎨",
             "topics-news": "📰", "ads": "📢", "marketing-post": "📣",
             "marketing-metrics": "📊", "feedback-loop": "🔄", "channel-content": "📺",
@@ -1099,7 +1094,7 @@ export default function ActivityPage() {
               <div key={src.source} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px]">
-                    {src.source === "grok-video" ? "🎬" : src.source === "persona-content-cron" ? "🤖" : src.source === "ad-text-fallback" || src.source === "ad-video" ? "💰" : src.source === "director-movie" ? "🎥" : src.source === "ai-trading" || src.source === "budju-trading" ? "📈" : src.source === "avatar-gen" ? "🖼️" : src.source === "breaking-news" || src.source === "topic-gen" ? "📰" : "📝"}
+                    {src.source === "grok-video" ? "🎬" : src.source === "persona-content-cron" ? "🤖" : src.source === "ad-text-fallback" || src.source === "ad-video" ? "💰" : src.source === "ai-trading" || src.source === "budju-trading" ? "📈" : src.source === "avatar-gen" ? "🖼️" : src.source === "breaking-news" || src.source === "topic-gen" ? "📰" : "📝"}
                   </span>
                   <span className="text-xs text-gray-300">{getSourceLabel(src.source)}</span>
                 </div>
