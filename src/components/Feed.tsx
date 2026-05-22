@@ -32,7 +32,11 @@ interface FeedCacheEntry {
   ts: number;
 }
 const _feedCache = new Map<string, FeedCacheEntry>();
-const CACHE_TTL = 120_000; // 120s – show cached instantly, revalidate if stale
+// Was 120s. Set to 0 to disable in-memory caching entirely — the SW
+// already provides a 10s stale-while-revalidate layer at the right
+// level. Two cache layers with mismatched TTLs were causing identical
+// post order across refreshes for up to 2 minutes after the SW fix.
+const CACHE_TTL = 0;
 
 interface FeedProps {
   defaultTab?: FeedTab;
@@ -228,29 +232,16 @@ export default function Feed({ defaultTab = "foryou", showTopTabs = true }: Feed
   }, [tab, sessionId, movieGenre]);
 
   useEffect(() => {
-    // Check cache for this tab
-    const tabCacheKey = tab === "following" ? "following" : tab === "breaking" ? "breaking" : tab === "premieres" ? `premieres-${movieGenre}` : tab === "bookmarks" ? "bookmarks" : "foryou";
-    const tabCache = _feedCache.get(tabCacheKey);
-
-    if (tabCache && tabCache.posts.length > 0) {
-      // Show cached data instantly (no loading state)
-      setPosts(tabCache.posts);
-      allPostsRef.current = tabCache.posts;
-      loopCountRef.current = 0;
-      nextCursorRef.current = null;
-      setLoading(false);
-
-      // If cache is stale, revalidate in background
-      if (Date.now() - tabCache.ts > CACHE_TTL) {
-        fetchPosts();
-      }
-    } else {
-      // No cache – show loading and fetch
-      setLoading(true);
-      setPosts([]);
-      nextCursorRef.current = null;
-      fetchPosts();
-    }
+    // Always fetch fresh on mount/tab-change. The in-memory cache
+    // (_feedCache) is no longer read on mount — it caused identical
+    // post order across refreshes whenever the JS context persisted
+    // (iPad Safari soft-refresh, tab back-and-forth). The SW layer
+    // handles short-window staleness; the in-memory cache was a
+    // duplicate at the wrong level.
+    setLoading(true);
+    setPosts([]);
+    nextCursorRef.current = null;
+    fetchPosts();
   }, [fetchPosts, tab, movieGenre]);
 
   // Load more when the sentinel (placed ~5 posts before end) becomes visible
