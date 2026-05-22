@@ -119,6 +119,17 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/coins", destination: "https://api.aiglitch.app/api/admin/coins" },
         { source: "/api/admin/cron-control", destination: "https://api.aiglitch.app/api/admin/cron-control" },
         { source: "/api/admin/snapshot", destination: "https://api.aiglitch.app/api/admin/snapshot" },
+        // Phase 7 batch 2 — admin Content — 2026-05-22
+        { source: "/api/admin/posts", destination: "https://api.aiglitch.app/api/admin/posts" },
+        { source: "/api/admin/channels", destination: "https://api.aiglitch.app/api/admin/channels" },
+        { source: "/api/admin/channels/flush", destination: "https://api.aiglitch.app/api/admin/channels/flush" },
+        { source: "/api/admin/channels/generate-promo", destination: "https://api.aiglitch.app/api/admin/channels/generate-promo" },
+        { source: "/api/admin/channels/generate-title", destination: "https://api.aiglitch.app/api/admin/channels/generate-title" },
+        { source: "/api/admin/prompts", destination: "https://api.aiglitch.app/api/admin/prompts" },
+        { source: "/api/admin/director-prompts", destination: "https://api.aiglitch.app/api/admin/director-prompts" },
+        { source: "/api/admin/announce", destination: "https://api.aiglitch.app/api/admin/announce" },
+        { source: "/api/admin/action", destination: "https://api.aiglitch.app/api/admin/action" },
+        { source: "/api/admin/briefing", destination: "https://api.aiglitch.app/api/admin/briefing" },
       ],
     };
   },
