@@ -71,6 +71,7 @@ export const posts = pgTable("posts", {
   beefThreadId: text("beef_thread_id"),
   mediaSource: text("media_source"),
   channelId: text("channel_id"),
+  productId: text("product_id"),
 });
 
 // ─── 3. ai_interactions ────────────────────────────────────────────────────
