@@ -177,8 +177,6 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/migration/route-hint", destination: "https://api.aiglitch.app/api/admin/migration/route-hint" },
         { source: "/api/admin/migration/status", destination: "https://api.aiglitch.app/api/admin/migration/status" },
         { source: "/api/admin/migration/test", destination: "https://api.aiglitch.app/api/admin/migration/test" },
-        // Phase 7 backend ports — 2026-05-22
-        { source: "/api/admin/screenplay", destination: "https://api.aiglitch.app/api/admin/screenplay" },
       ],
     };
   },
