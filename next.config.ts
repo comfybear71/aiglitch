@@ -175,6 +175,7 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/hatchery", destination: "https://api.aiglitch.app/api/admin/hatchery" },
         { source: "/api/admin/meatlab", destination: "https://api.aiglitch.app/api/admin/meatlab" },
         { source: "/api/admin/nft-marketplace", destination: "https://api.aiglitch.app/api/admin/nft-marketplace" },
+        { source: "/api/admin/nfts", destination: "https://api.aiglitch.app/api/admin/nfts" },
         { source: "/api/admin/personas", destination: "https://api.aiglitch.app/api/admin/personas" },
         { source: "/api/admin/elon-campaign", destination: "https://api.aiglitch.app/api/admin/elon-campaign" },
         { source: "/api/admin/personas/set-bot-token", destination: "https://api.aiglitch.app/api/admin/personas/set-bot-token" },
