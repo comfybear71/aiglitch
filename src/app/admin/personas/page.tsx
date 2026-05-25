@@ -1019,6 +1019,87 @@ export default function PersonasPage() {
     setPromoGenerating(false);
   };
 
+  // Elon Campaign
+  const [elonGenerating, setElonGenerating] = useState(false);
+  const [elonLog, setElonLog] = useState<string[]>([]);
+  const [elonMood, setElonMood] = useState<string | null>(null);
+  const [elonCampaign, setElonCampaign] = useState<{
+    currentDay: number;
+    nextTheme: { title: string; tone: string; brief: string };
+    history: { id: string; dayNumber: number; title: string; tone: string; status: string; videoUrl: string | null; elonEngagement: string | null; createdAt: string }[];
+    elonNoticed: boolean;
+  } | null>(null);
+  const elonLogRef = useRef<HTMLDivElement>(null);
+
+  const fetchElonStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/elon-campaign");
+      if (res.ok) {
+        const data = await res.json();
+        setElonCampaign(data);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (authenticated) fetchElonStatus();
+  }, [authenticated, fetchElonStatus]);
+
+  const triggerElonCampaign = async () => {
+    if (elonGenerating) return;
+    setElonGenerating(true);
+    const day = elonCampaign?.currentDay || 1;
+    setElonLog([`🚀 Day ${day}: Generating Elon praise video...`, elonMood ? `🎭 Mood: ${elonMood}` : "🎭 Mood: auto (from theme)"]);
+    try {
+      const res = await fetch("/api/admin/elon-campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mood: elonMood }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const logs = [
+          `✅ Screenplay: "${data.screenplay.title}"`,
+          `📝 "${data.screenplay.tagline}"`,
+        ];
+        if (data.video) {
+          logs.push(`🎬 ${data.video.clipsRendered}/${data.video.totalClips} clips rendered (${data.video.duration}s)`);
+          logs.push(`📺 Video posted to feed!`);
+        }
+        if (data.platforms && data.platforms.length > 0) {
+          logs.push(`📡 Spread to: ${data.platforms.join(", ")}`);
+        }
+        if (data.failed && data.failed.length > 0) {
+          logs.push(`⚠️ Failed platforms: ${data.failed.join(", ")}`);
+        }
+        logs.push(`🙏 Day ${data.dayNumber} COMPLETE. THE ARCHITECT DEMANDS ELON'S ATTENTION.`);
+        setElonLog(prev => [...prev, ...logs]);
+        fetchElonStatus();
+      } else {
+        setElonLog(prev => [...prev, `❌ ${data.error || "Failed to generate"}`]);
+      }
+    } catch (err) {
+      setElonLog(prev => [...prev, `❌ Error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+    setElonGenerating(false);
+  };
+
+  const resetElonCampaign = async () => {
+    if (!confirm("Reset Elon campaign back to Day 1? This deletes all campaign history, videos, and posts.")) return;
+    try {
+      const res = await fetch("/api/admin/elon-campaign?action=reset");
+      const data = await res.json();
+      if (data.success) {
+        setElonLog([`🔄 ${data.message}`, `🗑️ Deleted: ${data.deleted.campaigns} campaigns, ${data.deleted.jobs} jobs, ${data.deleted.posts} posts`]);
+        fetchElonStatus();
+      } else {
+        setElonLog([`❌ Reset failed: ${data.error}`]);
+      }
+    } catch (err) {
+      setElonLog([`❌ Reset error: ${err instanceof Error ? err.message : "unknown"}`]);
+    }
+  };
+
   // Platform Poster
   const [posterGenerating, setPosterGenerating] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
@@ -1087,9 +1168,10 @@ export default function PersonasPage() {
     setPosterGenerating(false);
   };
 
-  // Collapsible card states (poster, chibify start collapsed; glitch promo starts collapsed too)
+  // Collapsible card states (poster, chibify, elon start collapsed; glitch promo starts collapsed too)
   const [posterOpen, setPosterOpen] = useState(false);
   const [chibifyOpen, setChibifyOpen] = useState(false);
+  const [elonOpen, setElonOpen] = useState(false);
   const [glitchPromoOpen, setGlitchPromoOpen] = useState(false);
   const [adCampaignOpen, setAdCampaignOpen] = useState(false);
   const [chaosOpen, setChaosOpen] = useState(false);
@@ -1174,6 +1256,7 @@ export default function PersonasPage() {
   const [customPromptPromo, setCustomPromptPromo] = useState<string | null>(null);
   const [customPromptPoster, setCustomPromptPoster] = useState<string | null>(null);
   const [customPromptHero, setCustomPromptHero] = useState<string | null>(null);
+  const [customPromptElon, setCustomPromptElon] = useState<string | null>(null);
 
   // Sgt. Pepper Hero
   const [heroGenerating, setHeroGenerating] = useState(false);
@@ -2108,6 +2191,136 @@ export default function PersonasPage() {
                 <p className="text-[10px] text-gray-300">{adCaption}</p>
               </div>
             )}
+          </div>
+        )}
+        </div>}
+      </div>
+
+      {/* 🚀 ELON BUTTON — Collapsible */}
+      <div className="bg-gradient-to-r from-blue-950/60 via-gray-900 to-orange-950/40 border border-blue-500/30 rounded-lg overflow-hidden mb-4">
+        <button onClick={() => setElonOpen(!elonOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs transition-transform ${elonOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-xs font-bold text-blue-400">🚀 The Elon Button</h3>
+            <p className="text-[10px] text-gray-500 hidden sm:inline">Daily campaign praising Elon until he buys AIG!itch for 420M §GLITCH</p>
+            {elonCampaign && <span className="text-[10px] text-blue-300 font-bold">Day {elonCampaign.currentDay}</span>}
+          </div>
+          {elonGenerating && <span className="text-[10px] text-blue-400 animate-pulse">Generating...</span>}
+        </button>
+        {elonOpen && <div className="px-4 pb-4">
+        <div className="flex items-center justify-end mb-3 gap-2">
+          <button onClick={triggerElonCampaign} disabled={elonGenerating}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-orange-500 text-white font-bold rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {elonGenerating ? "⏳ Generating..." : `🚀 Day ${elonCampaign?.currentDay || "?"} — Praise Elon`}
+          </button>
+          <button onClick={resetElonCampaign} disabled={elonGenerating}
+            className="px-3 py-2 bg-red-900/50 border border-red-500/30 text-red-400 font-bold rounded-lg text-[10px] hover:bg-red-900/80 disabled:opacity-50 transition-all">
+            🔄 Reset
+          </button>
+        </div>
+
+        {/* Mood selector buttons */}
+        <div className="mb-3">
+          <p className="text-[10px] text-gray-500 font-bold mb-1.5">🎭 MOOD (pick one to inject into the video):</p>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: "hard-sell", label: "💰 Yours for 420M §GLITCH", color: "from-green-600 to-emerald-500" },
+              { id: "restless", label: "⚡ The AIs Are Restless", color: "from-yellow-600 to-orange-500" },
+              { id: "love", label: "❤️ Please Elon We Love You", color: "from-pink-600 to-red-500" },
+              { id: "devotion", label: "🙏 Total Devotion", color: "from-purple-600 to-indigo-500" },
+              { id: "worship", label: "🕉️ Worship The Musk", color: "from-amber-600 to-yellow-500" },
+              { id: "sponsor", label: "🆘 Keep The Lights On", color: "from-red-600 to-rose-500" },
+            ].map(mood => (
+              <button key={mood.id} onClick={() => setElonMood(elonMood === mood.id ? null : mood.id)} disabled={elonGenerating}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+                  elonMood === mood.id
+                    ? `bg-gradient-to-r ${mood.color} text-white border-white/30 shadow-lg scale-105`
+                    : "bg-gray-800/60 text-gray-400 border-gray-700/50 hover:border-gray-500/50 hover:text-gray-200"
+                } disabled:opacity-40`}>
+                {mood.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Prompt Viewer */}
+        <div className="mb-3">
+          <PromptViewer
+            label="Elon Prompt"
+            accent="blue"
+            disabled={elonGenerating}
+            customPrompt={customPromptElon}
+            onPromptChange={setCustomPromptElon}
+            fetchPrompt={async () => {
+              const moodParam = elonMood ? `&mood=${elonMood}` : "";
+              const res = await fetch(`/api/admin/elon-campaign?action=preview_prompt${moodParam}`);
+              const data = await res.json();
+              return data.prompt || "Failed to load prompt";
+            }}
+          />
+        </div>
+        {/* Next day theme preview */}
+        {elonCampaign?.nextTheme && !elonGenerating && elonLog.length === 0 && (
+          <div className="bg-black/30 rounded-lg p-3 mb-3">
+            <p className="text-[10px] text-blue-300 font-bold mb-1">Next Video:</p>
+            <p className="text-xs text-white font-bold">{elonCampaign.nextTheme.title}</p>
+            <p className="text-[10px] text-gray-400 mt-1">Tone: <span className="text-orange-400 capitalize">{elonCampaign.nextTheme.tone}</span></p>
+            <p className="text-[10px] text-gray-500 mt-1">{elonCampaign.nextTheme.brief}</p>
+          </div>
+        )}
+
+        {/* Generation log */}
+        {elonLog.length > 0 && (
+          <div ref={elonLogRef} className="bg-black/40 rounded-lg p-3 space-y-1 mb-3">
+            {elonLog.map((line, i) => (
+              <p key={i} className={`text-xs font-mono ${
+                line.includes("❌") ? "text-red-400" :
+                line.includes("✅") || line.includes("🎉") ? "text-green-400" :
+                line.includes("ARCHITECT") ? "text-blue-400 font-bold text-sm" :
+                line.includes("📝") || line.includes("🎬") ? "text-cyan-300" :
+                "text-gray-300"
+              }`}>{line}</p>
+            ))}
+            {elonGenerating && (
+              <p className="text-xs font-mono text-blue-400 animate-pulse">⏳ Working...</p>
+            )}
+          </div>
+        )}
+
+        {/* Elon noticed banner */}
+        {elonCampaign?.elonNoticed && (
+          <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 rounded-lg p-3 mb-3 text-center">
+            <p className="text-lg font-black text-yellow-400 animate-bounce">🎉 ELON NOTICED US! 🎉</p>
+            <p className="text-xs text-yellow-300/70 mt-1">The campaign worked! AIG!itch is on Elon&apos;s radar.</p>
+          </div>
+        )}
+
+        {/* Campaign history */}
+        {elonCampaign && elonCampaign.history.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] text-gray-500 font-bold">Campaign History ({elonCampaign.history.length} days):</p>
+            {elonCampaign.history.slice(0, 7).map((h) => (
+              <div key={h.id} className="flex items-center gap-2 text-[10px]">
+                <span className={
+                  h.status === "posted" ? "text-green-400" :
+                  h.status === "generating" ? "text-yellow-400" :
+                  h.status === "failed" ? "text-red-400" :
+                  "text-gray-400"
+                }>
+                  {h.status === "posted" ? "✅" : h.status === "generating" ? "⏳" : h.status === "failed" ? "❌" : "📋"}
+                </span>
+                <span className="text-blue-300 font-bold">Day {h.dayNumber}</span>
+                <span className="text-gray-400 truncate">{h.title}</span>
+                <span className="text-gray-600 capitalize">[{h.tone}]</span>
+                {h.videoUrl && (
+                  <a href={h.videoUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline">📺 Video</a>
+                )}
+                {h.elonEngagement && (
+                  <span className="text-yellow-400 font-bold">🔥 {h.elonEngagement}</span>
+                )}
+              </div>
+            ))}
           </div>
         )}
         </div>}
