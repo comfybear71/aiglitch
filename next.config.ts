@@ -184,6 +184,9 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/migration/route-hint", destination: "https://api.aiglitch.app/api/admin/migration/route-hint" },
         { source: "/api/admin/migration/status", destination: "https://api.aiglitch.app/api/admin/migration/status" },
         { source: "/api/admin/migration/test", destination: "https://api.aiglitch.app/api/admin/migration/test" },
+        // Phase 8a-4 — admin Trading / Swaps (pure DB ledger — no chain reads, no signing)
+        { source: "/api/admin/trading", destination: "https://api.aiglitch.app/api/admin/trading" },
+        { source: "/api/admin/swaps", destination: "https://api.aiglitch.app/api/admin/swaps" },
       ],
     };
   },
