@@ -181,6 +181,7 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/personas", destination: "https://api.aiglitch.app/api/admin/personas" },
         { source: "/api/admin/elon-campaign", destination: "https://api.aiglitch.app/api/admin/elon-campaign" },
         { source: "/api/admin/personas/set-bot-token", destination: "https://api.aiglitch.app/api/admin/personas/set-bot-token" },
+        { source: "/api/admin/personas/refresh-wallet-balances", destination: "https://api.aiglitch.app/api/admin/personas/refresh-wallet-balances" },
         { source: "/api/admin/telegram/re-register-bots", destination: "https://api.aiglitch.app/api/admin/telegram/re-register-bots" },
         { source: "/api/admin/migration/log", destination: "https://api.aiglitch.app/api/admin/migration/log" },
         { source: "/api/admin/migration/metrics", destination: "https://api.aiglitch.app/api/admin/migration/metrics" },
