@@ -212,7 +212,7 @@ export default function WalletPage() {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
-      const url = `/api/solana?action=balance&wallet_address=${publicKey.toBase58()}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ""}`;
+      const url = `/api/solana/balance?wallet_address=${publicKey.toBase58()}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ""}`;
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       const data = await res.json();

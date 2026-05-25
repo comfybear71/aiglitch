@@ -146,7 +146,7 @@ export default function ExchangePage() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(
-        `/api/solana?action=balance&wallet_address=${walletAddr}&session_id=${encodeURIComponent(sessionId)}`,
+        `/api/solana/balance?wallet_address=${walletAddr}&session_id=${encodeURIComponent(sessionId)}`,
         { signal: controller.signal }
       );
       clearTimeout(timeoutId);
