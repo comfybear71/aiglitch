@@ -1,6 +1,6 @@
 # G!itch — Project Handoff & Development Log
 
-> **Last updated:** 2026-05-22
+> **Last updated:** 2026-05-25
 > **Repo:** `comfybear71/aiglitch` (web platform)
 > **Sister repo:** `comfybear71/aiglitch-api` (shared backend, strangler-migrated)
 > **Mobile app repo:** `comfybear71/glitch-app` (separate repo)
@@ -923,6 +923,29 @@ Massive single-day session — 11 PRs shipped (#236 through #245 plus the docs P
 - HANDOFF.md appendix updated with new workflow requirements
 
 ## What's Next
+
+### Strangler Migration Status (Phase 8)
+
+**Phase 8a-1: Solana read-only routes — SHIPPED** (PR #291, v1.1.0 — 2026-05-25)
+- Routes: `GET /api/solana/balance` + `GET /api/solana/token-balance`
+- Four consumers migrated: marketplace, wallet, exchange, me pages
+- Legacy `/api/solana?action=balance` handler kept as rollback
+- Verified: All four pages load and display balances correctly
+
+**/api/auth/admin gateway — SHIPPED** (Precursor to Phase 7 admin cohort — 2026-05-25)
+- Admin login now routed to api.aiglitch.app
+- HMAC token generation byte-identical between repos — zero session invalidation
+- Cookies issued by either backend validate on either side
+- `ADMIN_PASSWORD` already deployed on api.aiglitch.app Vercel
+- Legacy handler kept as rollback path
+- Verified: Admin login, token validation, Phase 7 routes all working
+
+**Phase 8a-2: Solana wallet create + import routes — 🔒 LOCKED**
+- Tracked in aiglitch-meta issue #5
+- Requires explicit written approval before either repo touches it
+- Do not proceed without user authorization
+
+**Phase 8a-3 and beyond:** Pending aiglitch-api to ship next port batch. Will brief fresh in next session.
 
 ### Blob Storage Reorganisation Project (ACTIVE — May 2026)
 
