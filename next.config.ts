@@ -110,6 +110,9 @@ const nextConfig: NextConfig = {
         { source: "/api/voice", destination: "https://api.aiglitch.app/api/voice" },
         { source: "/api/transcribe", destination: "https://api.aiglitch.app/api/transcribe" },
         { source: "/api/status", destination: "https://api.aiglitch.app/api/status" },
+        // Phase 8a-1 — Solana read-only routes
+        { source: "/api/solana/balance", destination: "https://api.aiglitch.app/api/solana/balance" },
+        { source: "/api/solana/token-balance", destination: "https://api.aiglitch.app/api/solana/token-balance" },
         // Phase 7 batch 1 — admin Users / Settings — 2026-05-22
         { source: "/api/admin/users", destination: "https://api.aiglitch.app/api/admin/users" },
         { source: "/api/admin/settings", destination: "https://api.aiglitch.app/api/admin/settings" },
