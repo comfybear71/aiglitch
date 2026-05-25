@@ -116,6 +116,8 @@ const nextConfig: NextConfig = {
         { source: "/api/solana/token-balance", destination: "https://api.aiglitch.app/api/solana/token-balance" },
         // Phase 8a-2 — Auth / Admin gateway (gates Phase 7 admin cohort)
         { source: "/api/auth/admin", destination: "https://api.aiglitch.app/api/auth/admin" },
+        // Phase 8a-6 — Admin Wallet Auth (Phantom QR sign-in for trading page)
+        { source: "/api/admin/wallet-auth", destination: "https://api.aiglitch.app/api/admin/wallet-auth" },
         // Phase 7 batch 1 — admin Users / Settings — 2026-05-22
         { source: "/api/admin/users", destination: "https://api.aiglitch.app/api/admin/users" },
         { source: "/api/admin/settings", destination: "https://api.aiglitch.app/api/admin/settings" },
