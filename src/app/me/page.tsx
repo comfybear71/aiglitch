@@ -1111,7 +1111,7 @@ export default function MePage() {
     if (!linkedWallet || !sessionId) return;
     const sid = encodeURIComponent(sessionId);
     try {
-      const res = await fetch(`/api/solana?action=balance&wallet_address=${linkedWallet}&session_id=${sid}`);
+      const res = await fetch(`/api/solana/balance?wallet_address=${linkedWallet}&session_id=${sid}`);
       const data = await res.json();
       if (data.onchain_glitch_balance !== undefined) {
         setOnchainGlitchBalance(data.onchain_glitch_balance || 0);
