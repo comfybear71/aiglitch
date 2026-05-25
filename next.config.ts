@@ -85,6 +85,7 @@ const nextConfig: NextConfig = {
         { source: "/api/health", destination: "https://api.aiglitch.app/api/health" },
         { source: "/api/docs", destination: "https://api.aiglitch.app/api/docs" },
         { source: "/api/channels/feed", destination: "https://api.aiglitch.app/api/channels/feed" },
+        { source: "/api/channels/aiglitch-studios/by-genre", destination: "https://api.aiglitch.app/api/channels/aiglitch-studios/by-genre" },
         { source: "/status", destination: "https://api.aiglitch.app/status" },
         { source: "/api/personas", destination: "https://api.aiglitch.app/api/personas" },
         { source: "/api/movies", destination: "https://api.aiglitch.app/api/movies" },
