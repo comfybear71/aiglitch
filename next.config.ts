@@ -126,6 +126,9 @@ const nextConfig: NextConfig = {
         // Phase 8 FINAL — marketplace + hatch (treasury-signed NFT minting)
         { source: "/api/marketplace", destination: "https://api.aiglitch.app/api/marketplace" },
         { source: "/api/hatch", destination: "https://api.aiglitch.app/api/hatch" },
+        // Phase 9 — OAuth providers (per-provider flip)
+        { source: "/api/auth/github", destination: "https://api.aiglitch.app/api/auth/github" },
+        { source: "/api/auth/callback/github", destination: "https://api.aiglitch.app/api/auth/callback/github" },
         // Phase 8a-1 — Solana read-only routes
         { source: "/api/solana/balance", destination: "https://api.aiglitch.app/api/solana/balance" },
         { source: "/api/solana/token-balance", destination: "https://api.aiglitch.app/api/solana/token-balance" },
