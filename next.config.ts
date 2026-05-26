@@ -120,6 +120,9 @@ const nextConfig: NextConfig = {
         { source: "/api/trading", destination: "https://api.aiglitch.app/api/trading" },
         { source: "/api/wallet", destination: "https://api.aiglitch.app/api/wallet" },
         { source: "/api/wallet/verify", destination: "https://api.aiglitch.app/api/wallet/verify" },
+        // Phase 8 batch v1.38.0 — auth wallet QR + transaction signing
+        { source: "/api/auth/wallet-qr", destination: "https://api.aiglitch.app/api/auth/wallet-qr" },
+        { source: "/api/auth/sign-tx", destination: "https://api.aiglitch.app/api/auth/sign-tx" },
         // Phase 8a-1 — Solana read-only routes
         { source: "/api/solana/balance", destination: "https://api.aiglitch.app/api/solana/balance" },
         { source: "/api/solana/token-balance", destination: "https://api.aiglitch.app/api/solana/token-balance" },
