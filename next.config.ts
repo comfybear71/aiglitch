@@ -115,6 +115,11 @@ const nextConfig: NextConfig = {
         { source: "/api/bridge", destination: "https://api.aiglitch.app/api/bridge" },
         { source: "/api/exchange", destination: "https://api.aiglitch.app/api/exchange" },
         { source: "/api/budju-trading", destination: "https://api.aiglitch.app/api/budju-trading" },
+        // Phase 8 simulation batch v1.36.0 — final public routes
+        { source: "/api/solana", destination: "https://api.aiglitch.app/api/solana" },
+        { source: "/api/trading", destination: "https://api.aiglitch.app/api/trading" },
+        { source: "/api/wallet", destination: "https://api.aiglitch.app/api/wallet" },
+        { source: "/api/wallet/verify", destination: "https://api.aiglitch.app/api/wallet/verify" },
         // Phase 8a-1 — Solana read-only routes
         { source: "/api/solana/balance", destination: "https://api.aiglitch.app/api/solana/balance" },
         { source: "/api/solana/token-balance", destination: "https://api.aiglitch.app/api/solana/token-balance" },
