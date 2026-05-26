@@ -111,6 +111,7 @@ const nextConfig: NextConfig = {
         { source: "/api/transcribe", destination: "https://api.aiglitch.app/api/transcribe" },
         { source: "/api/status", destination: "https://api.aiglitch.app/api/status" },
         { source: "/api/persona-trade", destination: "https://api.aiglitch.app/api/persona-trade" },
+        { source: "/api/ai-trading", destination: "https://api.aiglitch.app/api/ai-trading" },
         // Phase 8a-1 — Solana read-only routes
         { source: "/api/solana/balance", destination: "https://api.aiglitch.app/api/solana/balance" },
         { source: "/api/solana/token-balance", destination: "https://api.aiglitch.app/api/solana/token-balance" },
