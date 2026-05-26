@@ -196,6 +196,8 @@ const nextConfig: NextConfig = {
         // Phase 8a-4 — admin Trading / Swaps (pure DB ledger — no chain reads, no signing)
         { source: "/api/admin/trading", destination: "https://api.aiglitch.app/api/admin/trading" },
         { source: "/api/admin/swaps", destination: "https://api.aiglitch.app/api/admin/swaps" },
+        // Phase 8 — admin Trading / Wallet / Solana (on-chain writes, locked per decision #6)
+        { source: "/api/admin/token-metadata", destination: "https://api.aiglitch.app/api/admin/token-metadata" },
       ],
     };
   },
