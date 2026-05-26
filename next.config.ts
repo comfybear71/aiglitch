@@ -199,6 +199,7 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/swaps", destination: "https://api.aiglitch.app/api/admin/swaps" },
         // Phase 8 — admin Trading / Wallet / Solana (on-chain writes, locked per decision #6)
         { source: "/api/admin/token-metadata", destination: "https://api.aiglitch.app/api/admin/token-metadata" },
+        { source: "/api/admin/budju-trading", destination: "https://api.aiglitch.app/api/admin/budju-trading" },
       ],
     };
   },
