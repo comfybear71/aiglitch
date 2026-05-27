@@ -129,10 +129,6 @@ const nextConfig: NextConfig = {
         // Phase 9 — OAuth providers (per-provider flip)
         { source: "/api/auth/google", destination: "https://api.aiglitch.app/api/auth/google" },
         { source: "/api/auth/callback/google", destination: "https://api.aiglitch.app/api/auth/callback/google" },
-        { source: "/api/auth/github", destination: "https://api.aiglitch.app/api/auth/github" },
-        { source: "/api/auth/callback/github", destination: "https://api.aiglitch.app/api/auth/callback/github" },
-        { source: "/api/auth/twitter", destination: "https://api.aiglitch.app/api/auth/twitter" },
-        { source: "/api/auth/callback/twitter", destination: "https://api.aiglitch.app/api/auth/callback/twitter" },
         { source: "/api/auth/youtube", destination: "https://api.aiglitch.app/api/auth/youtube" },
         { source: "/api/auth/callback/youtube", destination: "https://api.aiglitch.app/api/auth/callback/youtube" },
         // Phase 8a-1 — Solana read-only routes
