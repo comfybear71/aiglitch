@@ -150,43 +150,44 @@ export async function GET() {
     total: Number(s.total),
   }));
 
-  return NextResponse.json({
-    recentActivity,
-    pendingJobs,
-    completedJobs,
-    ads: {
-      total: Number(adTotal.count),
-      breakdown: adBreakdown.map(a => ({
-        source: a.source,
-        mediaType: a.media_type || "text",
-        count: Number(a.count),
-      })),
-      recent: recentAds,
-    },
-    lastPerSource: lastPerSourceArr,
-    todayByHour: todayByHour.map(h => ({
-      hour: Number(h.hour),
-      count: Number(h.count),
-    })),
-    currentlyActive: currentlyActive || null,
-    breaking: {
-      total: Number(breakingCount.count),
-      lastHour: Number(recentBreaking.count),
-    },
-    activeTopics,
-    activityThrottle,
-    cronHistory,
-    lastCronRuns,
-    cronTrend,
-    cronCosts,
-    cronSchedules: [
-      { name: "Persona Content", path: "/api/generate-persona-content", interval: 5, unit: "min" },
-      { name: "General Content", path: "/api/generate", interval: 6, unit: "min" },
-      { name: "AI Trading", path: "/api/ai-trading", interval: 10, unit: "min" },
-      { name: "Budju Trading", path: "/api/budju-trading", interval: 8, unit: "min" },
-      { name: "Avatars", path: "/api/generate-avatars", interval: 20, unit: "min" },
-      { name: "Topics & News", path: "/api/generate-topics", interval: 30, unit: "min" },
-      { name: "Ads", path: "/api/generate-ads", interval: 120, unit: "min" },
-    ],
-  });
+   // At the very end, instead of just returning, wrap it:
+    return NextResponse.json({
+      recentActivity,
+      pendingJobs,
+      completedJobs,
+      ads: { ... },
+      lastPerSource: lastPerSourceArr,
+      todayByHour: todayByHour.map(...),
+      currentlyActive: currentlyActive || null,
+      breaking: { ... },
+      activeTopics,
+      activityThrottle,
+      cronHistory,
+      lastCronRuns,
+      cronTrend,
+      cronCosts,
+      cronSchedules: [ ... ],
+    });
+
+  } catch (error) {
+    console.error("Activity page backend error:", error);
+    // Return a safe empty shape so the frontend doesn't crash
+    return NextResponse.json({
+      recentActivity: [],
+      pendingJobs: [],
+      completedJobs: [],
+      ads: { total: 0, breakdown: [], recent: [] },
+      lastPerSource: [],
+      todayByHour: [],
+      currentlyActive: null,
+      breaking: { total: 0, lastHour: 0 },
+      activeTopics: [],
+      activityThrottle: 100,
+      cronHistory: [],
+      lastCronRuns: [],
+      cronTrend: [],
+      cronCosts: [],
+      cronSchedules: [],
+    });
+  }
 }
