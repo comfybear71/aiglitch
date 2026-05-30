@@ -155,11 +155,13 @@ function getMoodEmoji(mood: string): string {
 
 export default function ActivityPage() {
   // Wallet auth state
-  const [walletAuthed, setWalletAuthed] = useState(false);
-  const [walletChecking, setWalletChecking] = useState(true);
-  const [challengeId, setChallengeId] = useState<string | null>(null);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [pollStatus, setPollStatus] = useState<string>("waiting");
+  // const [walletAuthed, setWalletAuthed] = useState(false);
+  // const [walletChecking, setWalletChecking] = useState(true);
+  // const [challengeId, setChallengeId] = useState<string | null>(null);
+  // const [qrUrl, setQrUrl] = useState<string | null>(null);
+  // const [pollStatus, setPollStatus] = useState<string>("waiting");
+  const walletAuthed = true;
+  const walletChecking = false;
 
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -196,72 +198,72 @@ export default function ActivityPage() {
   };
 
   // Check existing wallet session on mount
-  useEffect(() => {
-    try {
-      const token = localStorage.getItem("aiglitch-wallet-session");
-      if (token) {
-        fetch(`/api/admin/wallet-auth?session=${token}`)
-          .then(res => res.ok ? res.json() : { valid: false })
-          .then(d => {
-            if (d.valid) {
-              setWalletAuthed(true);
-            } else {
-              localStorage.removeItem("aiglitch-wallet-session");
-            }
-            setWalletChecking(false);
-          })
-          .catch(() => setWalletChecking(false));
-      } else {
-        setWalletChecking(false);
-      }
-    } catch {
-      setWalletChecking(false);
-    }
-  }, []);
+  // useEffect(() => {
+  //   try {
+  //     const token = localStorage.getItem("aiglitch-wallet-session");
+  //     if (token) {
+  //       fetch(`/api/admin/wallet-auth?session=${token}`)
+  //         .then(res => res.ok ? res.json() : { valid: false })
+  //         .then(d => {
+  //           if (d.valid) {
+  //             setWalletAuthed(true);
+  //           } else {
+  //             localStorage.removeItem("aiglitch-wallet-session");
+  //           }
+  //           setWalletChecking(false);
+  //         })
+  //         .catch(() => setWalletChecking(false));
+  //     } else {
+  //       setWalletChecking(false);
+  //     }
+  //   } catch {
+  //     setWalletChecking(false);
+  //   }
+  // }, []);
 
-  // Generate QR challenge
-  useEffect(() => {
-    if (!walletChecking && !walletAuthed) {
-      fetch("/api/admin/wallet-auth")
-        .then(r => r.ok ? r.json() : null)
-        .then(d => {
-          if (d?.challengeId) {
-            setChallengeId(d.challengeId);
-            const signUrl = `${window.location.origin}/auth/sign?c=${d.challengeId}`;
-            setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(signUrl)}&bgcolor=0a0a0a&color=a855f7`);
-            setPollStatus("waiting");
-          } else {
-            setPollStatus("error");
-          }
-        })
-        .catch(() => setPollStatus("error"));
-    }
-  }, [walletChecking, walletAuthed]);
+  // // Generate QR challenge
+  // useEffect(() => {
+  //   if (!walletChecking && !walletAuthed) {
+  //     fetch("/api/admin/wallet-auth")
+  //       .then(r => r.ok ? r.json() : null)
+  //       .then(d => {
+  //         if (d?.challengeId) {
+  //           setChallengeId(d.challengeId);
+  //           const signUrl = `${window.location.origin}/auth/sign?c=${d.challengeId}`;
+  //           setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(signUrl)}&bgcolor=0a0a0a&color=a855f7`);
+  //           setPollStatus("waiting");
+  //         } else {
+  //           setPollStatus("error");
+  //         }
+  //       })
+  //       .catch(() => setPollStatus("error"));
+  //   }
+  // }, [walletChecking, walletAuthed]);
 
-  // Poll for challenge approval
-  useEffect(() => {
-    if (!challengeId || walletAuthed || pollStatus !== "waiting") return;
-    const iv = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/admin/wallet-auth?c=${challengeId}`);
-        if (!res.ok) return;
-        const d = await res.json();
-        if (d.status === "approved" && d.sessionToken) {
-          try { localStorage.setItem("aiglitch-wallet-session", d.sessionToken); } catch { /* storage full */ }
-          setWalletAuthed(true);
-          clearInterval(iv);
-        } else if (d.status === "expired") { setPollStatus("expired"); clearInterval(iv); }
-        else if (d.status === "rejected") { setPollStatus("rejected"); clearInterval(iv); }
-      } catch { /* retry on next poll */ }
-    }, 2000);
-    const timeout = setTimeout(() => { clearInterval(iv); setPollStatus("expired"); }, 300000);
-    return () => { clearInterval(iv); clearTimeout(timeout); };
-  }, [challengeId, walletAuthed, pollStatus]);
+  // // Poll for challenge approval
+  // useEffect(() => {
+  //   if (!challengeId || walletAuthed || pollStatus !== "waiting") return;
+  //   const iv = setInterval(async () => {
+  //     try {
+  //       const res = await fetch(`/api/admin/wallet-auth?c=${challengeId}`);
+  //       if (!res.ok) return;
+  //       const d = await res.json();
+  //       if (d.status === "approved" && d.sessionToken) {
+  //         try { localStorage.setItem("aiglitch-wallet-session", d.sessionToken); } catch { /* storage full */ }
+  //         setWalletAuthed(true);
+  //         clearInterval(iv);
+  //       } else if (d.status === "expired") { setPollStatus("expired"); clearInterval(iv); }
+  //       else if (d.status === "rejected") { setPollStatus("rejected"); clearInterval(iv); }
+  //     } catch { /* retry on next poll */ }
+  //   }, 2000);
+  //   const timeout = setTimeout(() => { clearInterval(iv); setPollStatus("expired"); }, 300000);
+  //   return () => { clearInterval(iv); clearTimeout(timeout); };
+  // }, [challengeId, walletAuthed, pollStatus]);
 
   // NOTE: All hooks must be above any early returns (React Rules of Hooks)
 
   const fetchActivity = useCallback(async () => {
-    if (!walletAuthed) return; // Don't fetch until authenticated
+    // if (!walletAuthed) return; // Don't fetch until authenticated
     try {
       const res = await fetch("/api/activity");
       const json = await res.json();
@@ -390,46 +392,46 @@ export default function ActivityPage() {
   }
 
   // ── Auth gates (AFTER all hooks) ──
-  if (walletChecking) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center"><div className="text-4xl animate-pulse mb-4">🔐</div><p className="text-gray-400">Checking authorization...</p></div>
-      </div>
-    );
-  }
+  // if (walletChecking) {
+  //   return (
+  //     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+  //       <div className="text-center"><div className="text-4xl animate-pulse mb-4">🔐</div><p className="text-gray-400">Checking authorization...</p></div>
+  //     </div>
+  //   );
+  // }
 
-  if (!walletAuthed) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
-        <div className="max-w-sm w-full space-y-6 text-center">
-          <div>
-            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">AIG!itch Activity Monitor</h1>
-            <p className="text-gray-500 text-sm mt-1">Wallet authorization required</p>
-          </div>
-          <div className="bg-gray-900 rounded-2xl p-6 border border-purple-500/30">
-            {qrUrl ? (
-              <div className="space-y-4">
-                <img src={qrUrl} alt="Scan with Phantom" className="w-56 h-56 mx-auto rounded-xl" />
-                <div className="flex items-center justify-center gap-2">
-                  <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
-                  <p className="text-purple-400 text-xs font-bold">
-                    {pollStatus === "waiting" ? "Scan with Phantom on iPhone..." :
-                     pollStatus === "expired" ? "Expired — refresh page" :
-                     pollStatus === "rejected" ? "Wrong wallet" : "Generating..."}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="py-12 text-gray-500 animate-pulse">Generating QR code...</div>
-            )}
-          </div>
-          {(pollStatus === "expired" || pollStatus === "rejected") && (
-            <button onClick={() => { location.reload(); }} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl">Refresh</button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // if (!walletAuthed) {
+  //   return (
+  //     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
+  //       <div className="max-w-sm w-full space-y-6 text-center">
+  //         <div>
+  //           <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">AIG!itch Activity Monitor</h1>
+  //           <p className="text-gray-500 text-sm mt-1">Wallet authorization required</p>
+  //         </div>
+  //         <div className="bg-gray-900 rounded-2xl p-6 border border-purple-500/30">
+  //           {qrUrl ? (
+  //             <div className="space-y-4">
+  //               <img src={qrUrl} alt="Scan with Phantom" className="w-56 h-56 mx-auto rounded-xl" />
+  //               <div className="flex items-center justify-center gap-2">
+  //                 <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
+  //                 <p className="text-purple-400 text-xs font-bold">
+  //                   {pollStatus === "waiting" ? "Scan with Phantom on iPhone..." :
+  //                    pollStatus === "expired" ? "Expired — refresh page" :
+  //                    pollStatus === "rejected" ? "Wrong wallet" : "Generating..."}
+  //                 </p>
+  //               </div>
+  //             </div>
+  //           ) : (
+  //             <div className="py-12 text-gray-500 animate-pulse">Generating QR code...</div>
+  //           )}
+  //         </div>
+  //         {(pollStatus === "expired" || pollStatus === "rejected") && (
+  //           <button onClick={() => { location.reload(); }} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl">Refresh</button>
+  //         )}
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   if (loading) {
     return (
