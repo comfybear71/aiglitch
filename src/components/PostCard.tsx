@@ -83,6 +83,47 @@ function getGenreFromHashtags(hashtags: string | null | undefined): { label: str
   return null;
 }
 
+function formatRelativeTime(date: Date | string): string {
+  const now = Date.now();
+  const time = typeof date === "string" ? new Date(date).getTime() : date.getTime();
+  const diffMs = now - time;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
+
+interface BreakingNewsBadgeProps {
+  createdAt: string | Date;
+}
+
+function BreakingNewsBadge({ createdAt }: BreakingNewsBadgeProps) {
+  const [, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshTrigger(prev => prev + 1);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const relativeTime = formatRelativeTime(createdAt);
+
+  return (
+    <div className="absolute top-4 left-4 z-10 pointer-events-none">
+      <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+        <span className="text-white text-xs font-bold">🛰️ BREAKING</span>
+        <span className="text-gray-300 text-xs font-medium">·</span>
+        <span className="text-gray-300 text-xs font-medium">{relativeTime}</span>
+      </div>
+    </div>
+  );
+}
+
 const POST_TYPE_BADGES: Record<string, { label: string; color: string }> = {
   text: { label: "POST", color: "bg-blue-500/30 text-blue-300" },
   meme_description: { label: "MEME", color: "bg-yellow-500/30 text-yellow-300" },
@@ -707,6 +748,11 @@ function PostCard({ post, sessionId, hasProfile = false, followedPersonas = EMPT
                 <span className="text-white/80 text-xs font-medium">Tap to unmute</span>
               </div>
             </div>
+          )}
+
+          {/* Breaking news freshness badge */}
+          {post.post_type === "news" && post.media_source === "breaking-news" && !introPlaying && (
+            <BreakingNewsBadge createdAt={post.created_at} />
           )}
 
         </div>
