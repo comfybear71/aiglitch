@@ -18,6 +18,7 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -35,12 +36,19 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
   const handleSubmit = async () => {
     if (!file || !sessionId) return;
     setUploading(true);
+    setProgress(0);
     setResult(null);
+
+    const ac = new AbortController();
+    const timeoutId = setTimeout(() => ac.abort(), 5 * 60 * 1000);
+
     try {
       // Step 1: upload file directly to Vercel Blob (bypasses 4.5MB serverless limit)
       const blob = await upload(`meatlab/${Date.now()}-${file.name}`, file, {
         access: "public",
         handleUploadUrl: "/api/meatlab/upload",
+        abortSignal: ac.signal,
+        onUploadProgress: ({ percentage }) => setProgress(percentage),
       });
 
       // Step 2: submit metadata + blob URL to the API (tiny JSON, well under limits)
@@ -62,9 +70,18 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
         setResult({ success: false, message: data.error || "Upload failed" });
       }
     } catch (err) {
-      setResult({ success: false, message: err instanceof Error ? err.message : "Upload failed" });
+      const aborted = err instanceof DOMException && err.name === "AbortError";
+      setResult({
+        success: false,
+        message: aborted
+          ? "Upload timed out after 5 min. Try a smaller file or check connection."
+          : err instanceof Error ? err.message : "Upload failed",
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      setUploading(false);
+      setProgress(0);
     }
-    setUploading(false);
   };
 
   return (
@@ -147,12 +164,18 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
               />
             </div>
 
+            {uploading && (
+              <div className="h-1 bg-gray-800 rounded-full mb-2 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-green-400 to-cyan-400 transition-all duration-200"
+                     style={{ width: `${progress}%` }} />
+              </div>
+            )}
             <button
               onClick={handleSubmit}
               disabled={!file || !sessionId || uploading}
               className="w-full py-3 bg-gradient-to-r from-green-500 to-cyan-500 text-black font-bold rounded-xl disabled:opacity-40 transition-all active:scale-95"
             >
-              {uploading ? "Uploading..." : "\uD83D\uDD2C Submit to MeatLab"}
+              {uploading ? `Uploading\u2026 ${progress.toFixed(0)}%` : "\uD83D\uDD2C Submit to MeatLab"}
             </button>
           </>
         )}

@@ -293,6 +293,7 @@ export default function MePage() {
   const [editUsername, setEditUsername] = useState("");
   const [editAvatarUrl, setEditAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarProgress, setAvatarProgress] = useState(0);
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
   // Liked and saved posts
@@ -2331,23 +2332,37 @@ export default function MePage() {
                 </div>
                 <div className="flex gap-2 justify-center mt-2">
                   <label className="text-[11px] px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg cursor-pointer">
-                    {uploadingAvatar ? "Uploading..." : "\uD83D\uDCF7 Upload image"}
+                    {uploadingAvatar ? `Uploading\u2026 ${avatarProgress.toFixed(0)}%` : "\uD83D\uDCF7 Upload image"}
                     <input type="file" accept="image/*" className="hidden"
                       onChange={async (e) => {
                         const f = e.target.files?.[0];
                         if (!f || !sessionId) return;
                         setUploadingAvatar(true);
+                        setAvatarProgress(0);
+
+                        const ac = new AbortController();
+                        const timeoutId = setTimeout(() => ac.abort(), 5 * 60 * 1000);
+
                         try {
                           const { upload } = await import("@vercel/blob/client");
                           const blob = await upload(`avatars/meatbag-${sessionId}-${Date.now()}-${f.name}`, f, {
                             access: "public",
                             handleUploadUrl: "/api/meatlab/upload",
+                            abortSignal: ac.signal,
+                            onUploadProgress: ({ percentage }) => setAvatarProgress(percentage),
                           });
                           setEditAvatarUrl(blob.url);
                         } catch (err) {
-                          alert("Avatar upload failed: " + (err instanceof Error ? err.message : String(err)));
+                          const aborted = err instanceof DOMException && err.name === "AbortError";
+                          const message = aborted
+                            ? "Avatar upload timed out after 5 min. Try a smaller image."
+                            : err instanceof Error ? err.message : "Upload failed";
+                          alert("Avatar upload failed: " + message);
+                        } finally {
+                          clearTimeout(timeoutId);
+                          setUploadingAvatar(false);
+                          setAvatarProgress(0);
                         }
-                        setUploadingAvatar(false);
                       }}
                     />
                   </label>

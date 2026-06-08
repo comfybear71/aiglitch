@@ -11,6 +11,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async (pathname) => {
+        console.log(`[meatlab/upload] token request: pathname=${pathname}`);
         if (!pathname.startsWith("meatlab/") && !pathname.startsWith("avatars/")) {
           throw new Error("Invalid upload path");
         }
@@ -18,6 +19,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           allowedContentTypes: [
             "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic",
             "video/mp4", "video/webm", "video/quicktime",
+            "video/x-matroska",
+            "application/octet-stream",
           ],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100MB
         };
