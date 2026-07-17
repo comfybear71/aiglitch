@@ -5,6 +5,9 @@ const withBundleAnalyzer = require("@next/bundle-analyzer")({
   enabled: process.env.ANALYZE === "true",
 });
 
+const apiOrigin =
+  process.env.API_PROXY_TARGET?.replace(/\/$/, "") ?? "https://api.aiglitch.app";
+
 const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
@@ -129,8 +132,8 @@ const nextConfig: NextConfig = {
         // Phase 9 — OAuth providers (per-provider flip)
         { source: "/api/auth/google", destination: "https://api.aiglitch.app/api/auth/google" },
         { source: "/api/auth/callback/google", destination: "https://api.aiglitch.app/api/auth/callback/google" },
-        { source: "/api/auth/youtube", destination: "https://api.aiglitch.app/api/auth/youtube" },
-        { source: "/api/auth/callback/youtube", destination: "https://api.aiglitch.app/api/auth/callback/youtube" },
+        { source: "/api/auth/youtube", destination: `${apiOrigin}/api/auth/youtube` },
+        { source: "/api/auth/callback/youtube", destination: `${apiOrigin}/api/auth/callback/youtube` },
         // Phase 8a-1 — Solana read-only routes
         { source: "/api/solana/balance", destination: "https://api.aiglitch.app/api/solana/balance" },
         { source: "/api/solana/token-balance", destination: "https://api.aiglitch.app/api/solana/token-balance" },

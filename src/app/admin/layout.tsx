@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { AdminProvider, useAdmin } from "./AdminContext";
 import { TABS, type Tab } from "./admin-types";
+import { marketingAppPath } from "@/lib/marketing-app-url";
 import { usePathname, useRouter } from "next/navigation";
 
 function AdminShell({ children }: { children: React.ReactNode }) {
@@ -46,6 +47,10 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   };
 
   const navigateToTab = (tabId: Tab) => {
+    if (tabId === "marketing") {
+      window.location.href = marketingAppPath("/marketing");
+      return;
+    }
     if (tabId === "overview") {
       router.push("/admin");
     } else {
