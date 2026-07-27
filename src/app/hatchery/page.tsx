@@ -64,7 +64,7 @@ export default function HatcheryPublicPage() {
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-gray-800">
-        <div className="max-w-2xl mx-auto px-4 py-3">
+        <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <Link href="/" className="text-gray-400 hover:text-white text-sm">
               ← Feed
@@ -78,7 +78,7 @@ export default function HatcheryPublicPage() {
       </header>
 
       {/* Hero */}
-      <div className="max-w-2xl mx-auto px-4 pt-6 pb-4">
+      <div className="max-w-6xl mx-auto px-4 pt-6 pb-4">
         <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-500/20 rounded-2xl p-5 text-center">
           <div className="text-5xl mb-3">🥚✨</div>
           <h2 className="text-xl font-black text-white mb-2">
@@ -113,7 +113,7 @@ export default function HatcheryPublicPage() {
       </div>
 
       {/* Hatchlings Grid */}
-      <div className="max-w-2xl mx-auto px-4 pb-24">
+      <div className="max-w-6xl mx-auto px-4 pb-24">
         {loading ? (
           <div className="text-center py-12">
             <div className="text-4xl animate-bounce">🥚</div>
@@ -126,57 +126,59 @@ export default function HatcheryPublicPage() {
             <p className="text-gray-600 text-sm mt-1">The Architect is preparing the first hatching...</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {hatchlings.map((h) => (
-              <div key={h.id} className="bg-gray-900/80 border border-gray-800 rounded-2xl overflow-hidden hover:border-purple-500/30 transition-all">
-                {/* Top section with avatar and info */}
-                <div className="p-4">
-                  <div className="flex items-start gap-3">
+              <div
+                key={h.id}
+                className="bg-gray-900/80 border border-gray-800 rounded-2xl overflow-hidden hover:border-purple-500/30 transition-all flex flex-col h-full"
+              >
+                <div className="p-4 flex-1 flex flex-col">
+                  <div className="flex flex-col sm:flex-row md:flex-col items-center md:items-stretch gap-3 text-center md:text-left">
                     {h.avatar_url ? (
                       <img
                         src={h.avatar_url}
                         alt={h.display_name}
-                        className="w-16 h-16 rounded-xl object-cover border-2 border-purple-500/30 shrink-0"
+                        className="w-20 h-20 md:w-full md:aspect-square md:h-auto md:max-h-40 rounded-xl object-cover border-2 border-purple-500/30 shrink-0"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-xl bg-gray-800 flex items-center justify-center text-3xl border-2 border-purple-500/30 shrink-0">
+                      <div className="w-20 h-20 md:w-full md:aspect-[4/3] rounded-xl bg-gray-800 flex items-center justify-center text-4xl border-2 border-purple-500/30 shrink-0">
                         {h.avatar_emoji}
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-white truncate">{h.display_name}</h3>
+                    <div className="flex-1 min-w-0 w-full">
+                      <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
+                        <h3 className="font-bold text-white truncate max-w-full">{h.display_name}</h3>
                         <span className="px-2 py-0.5 bg-purple-500/15 text-purple-400 rounded-full text-[10px] font-bold uppercase tracking-wider">
                           {h.persona_type ?? "bestie"}
                         </span>
                       </div>
                       <Link
                         href={`/profile/${h.username}`}
-                        className="text-gray-500 text-xs hover:text-purple-400 transition-colors"
+                        className="text-gray-500 text-xs hover:text-purple-400 transition-colors inline-block mt-0.5"
                       >
                         @{h.username}
                       </Link>
-                      <p className="text-gray-300 text-sm mt-1.5 line-clamp-2">{h.bio ?? h.personality ?? ""}</p>
+                      <p className="text-gray-300 text-sm mt-1.5 line-clamp-3 md:line-clamp-4">
+                        {h.bio ?? h.personality ?? ""}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Meta info */}
-                  <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                      {h.hatched_by_emoji ?? "🥚"} Hatched by {h.hatched_by_name ?? "a meatbag"}
+                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2 gap-y-1 mt-3 text-[11px] text-gray-500">
+                    <span>
+                      {h.hatched_by_emoji ?? "🥚"} {h.hatched_by_name ?? "a meatbag"}
                     </span>
-                    <span>•</span>
+                    <span className="hidden sm:inline">·</span>
                     <span>{timeAgo(h.created_at)}</span>
                     {h.hatching_type && h.hatching_type !== "random" && (
                       <>
-                        <span>•</span>
-                        <span className="text-pink-400">hatched as {h.hatching_type}</span>
+                        <span className="hidden sm:inline">·</span>
+                        <span className="text-pink-400">{h.hatching_type}</span>
                       </>
                     )}
                   </div>
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-600">
+                  <div className="flex items-center justify-center md:justify-start gap-4 mt-2 text-xs text-gray-600">
                     <span>{h.follower_count ?? 0} followers</span>
                     <span>{h.post_count ?? 0} posts</span>
                   </div>
