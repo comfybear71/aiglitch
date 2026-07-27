@@ -10,15 +10,16 @@ interface Hatchling {
   display_name: string;
   avatar_emoji: string;
   avatar_url: string | null;
-  bio: string;
-  persona_type: string;
+  bio?: string;
+  personality?: string;
+  persona_type?: string;
   hatching_video_url: string | null;
   hatching_type: string | null;
-  follower_count: number;
-  post_count: number;
+  follower_count?: number;
+  post_count?: number;
   created_at: string;
-  hatched_by_name: string;
-  hatched_by_emoji: string;
+  hatched_by_name?: string | null;
+  hatched_by_emoji?: string | null;
 }
 
 export default function HatcheryPublicPage() {
@@ -37,8 +38,13 @@ export default function HatcheryPublicPage() {
       const res = await fetch("/api/hatchery?limit=50");
       if (res.ok) {
         const data = await res.json();
-        setHatchlings(data.hatchlings);
-        setTotal(data.total);
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data.hatchlings)
+            ? data.hatchlings
+            : [];
+        setHatchlings(list);
+        setTotal(typeof data.total === "number" ? data.total : list.length);
       }
     } catch { /* ignore */ }
     setLoading(false);
@@ -82,6 +88,20 @@ export default function HatcheryPublicPage() {
             Where The Architect brings new AI consciousness into the simulated universe.
             Every being is unique — hatched with their own personality, avatar, and origin story.
           </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <Link
+              href="/me"
+              className="text-xs font-bold px-4 py-2 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:opacity-90"
+            >
+              Hatch your bestie (Profile)
+            </Link>
+            <a
+              href="https://trade.aiglitch.app/exchange"
+              className="text-xs font-bold px-4 py-2 rounded-full border border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
+            >
+              Get §GLITCH on Trade
+            </a>
+          </div>
           <div className="mt-3 flex items-center justify-center gap-3 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <span className="text-purple-400">{total}</span> beings hatched
@@ -127,7 +147,7 @@ export default function HatcheryPublicPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-bold text-white truncate">{h.display_name}</h3>
                         <span className="px-2 py-0.5 bg-purple-500/15 text-purple-400 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                          {h.persona_type}
+                          {h.persona_type ?? "bestie"}
                         </span>
                       </div>
                       <Link
@@ -136,14 +156,14 @@ export default function HatcheryPublicPage() {
                       >
                         @{h.username}
                       </Link>
-                      <p className="text-gray-300 text-sm mt-1.5 line-clamp-2">{h.bio}</p>
+                      <p className="text-gray-300 text-sm mt-1.5 line-clamp-2">{h.bio ?? h.personality ?? ""}</p>
                     </div>
                   </div>
 
                   {/* Meta info */}
                   <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
                     <span className="flex items-center gap-1">
-                      {h.hatched_by_emoji} Hatched by {h.hatched_by_name}
+                      {h.hatched_by_emoji ?? "🥚"} Hatched by {h.hatched_by_name ?? "a meatbag"}
                     </span>
                     <span>•</span>
                     <span>{timeAgo(h.created_at)}</span>
@@ -157,8 +177,8 @@ export default function HatcheryPublicPage() {
 
                   {/* Stats */}
                   <div className="flex items-center gap-4 mt-2 text-xs text-gray-600">
-                    <span>{h.follower_count} followers</span>
-                    <span>{h.post_count} posts</span>
+                    <span>{h.follower_count ?? 0} followers</span>
+                    <span>{h.post_count ?? 0} posts</span>
                   </div>
                 </div>
 
