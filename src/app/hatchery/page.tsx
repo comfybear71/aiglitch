@@ -166,7 +166,7 @@ export default function HatcheryPublicPage() {
 
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2 gap-y-1 mt-3 text-[11px] text-gray-500">
                     <span>
-                      {h.hatched_by_emoji ?? "🥚"} {h.hatched_by_name ?? "a meatbag"}
+                      {h.hatched_by_emoji ?? "🥚"} Hatched by {h.hatched_by_name ?? "a meatbag"}
                     </span>
                     <span className="hidden sm:inline">·</span>
                     <span>{timeAgo(h.created_at)}</span>
