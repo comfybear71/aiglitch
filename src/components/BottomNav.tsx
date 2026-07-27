@@ -228,50 +228,15 @@ export default function BottomNav() {
     if (pathname?.startsWith("/inbox")) markAllRead();
   }, [pathname, markAllRead]);
 
-  // Bottom center: Trade (trade.aiglitch.app) + NFT Marketplace — always both
   const TRADE_APP_URL = "https://trade.aiglitch.app/";
-  const centerTab = {
-    key: "trade-marketplace",
-    label: "",
-    href: "/marketplace",
-    paths: ["/wallet", "/exchange", "/marketplace"],
-    isCenter: true,
-    icon: (_active: boolean) => (
-      <div className="flex flex-col items-center gap-0.5 -mt-1">
-        <div className="flex items-center gap-0.5">
-          <a
-            href={TRADE_APP_URL}
-            className="w-9 h-9 bg-gradient-to-r from-purple-500 to-pink-500 rounded-l-lg flex items-center justify-center shadow-lg shadow-purple-500/30"
-            aria-label="Trade on trade.aiglitch.app"
-          >
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-            </svg>
-          </a>
-          <Link
-            href="/marketplace"
-            className="w-9 h-9 bg-gradient-to-r from-green-500 to-cyan-500 rounded-r-lg flex items-center justify-center shadow-lg shadow-green-500/30"
-            aria-label="NFT Marketplace"
-          >
-            <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 14H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v10z" />
-            </svg>
-          </Link>
-        </div>
-        <div className="flex gap-2 text-[8px] font-bold uppercase tracking-wide text-gray-500">
-          <span className="w-9 text-center text-purple-400/90">Trade</span>
-          <span className="w-9 text-center text-cyan-500/90">NFTs</span>
-        </div>
-      </div>
-    ),
-  };
+  const TRADE_NFT_URL = "https://trade.aiglitch.app/nft";
 
   const tabs: {
     key: string;
     label: string;
     href: string;
+    external?: boolean;
     paths: string[];
-    isCenter?: boolean;
     icon: (active: boolean) => ReactNode;
   }[] = [
     {
@@ -296,7 +261,30 @@ export default function BottomNav() {
         </svg>
       ),
     },
-    centerTab,
+    {
+      key: "trade",
+      label: "Trade",
+      href: TRADE_APP_URL,
+      external: true,
+      paths: [],
+      icon: (active: boolean) => (
+        <svg className="w-6 h-6" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      ),
+    },
+    {
+      key: "nfts",
+      label: "NFTs",
+      href: TRADE_NFT_URL,
+      external: true,
+      paths: [],
+      icon: (active: boolean) => (
+        <svg className="w-6 h-6" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+        </svg>
+      ),
+    },
     {
       key: "inbox",
       label: "Inbox",
@@ -320,6 +308,11 @@ export default function BottomNav() {
       ),
     },
   ];
+
+  const tabClass = (active: boolean) =>
+    `flex flex-col items-center justify-center gap-0.5 py-1 px-1.5 sm:px-2 min-w-0 flex-1 max-w-[4.5rem] transition-colors relative ${
+      active ? "text-white" : "text-gray-500"
+    }`;
 
   const isActive = (paths: string[]) => paths.some(p => pathname === p || (p !== "/" && pathname?.startsWith(p)));
 
@@ -354,16 +347,36 @@ export default function BottomNav() {
     {showJoinPrompt && <JoinPopup onClose={() => setShowJoinPrompt(false)} fixed />}
 
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-t border-gray-800/50">
-      <div className="flex items-center justify-around px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-center justify-between px-0.5 sm:px-1 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
         {tabs.map((tab) => {
           const active = isActive(tab.paths);
-          if (tab.isCenter) {
-            return (
-              <div key={tab.key} className="flex flex-col items-center justify-center">
+          const inner = (
+            <>
+              <div className="relative">
                 {tab.icon(active)}
+                {tab.key === "inbox" && unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full leading-none">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </div>
+              <span className="text-[10px] font-medium truncate w-full text-center">{tab.label}</span>
+            </>
+          );
+
+          if (tab.external) {
+            return (
+              <a
+                key={tab.key}
+                href={tab.href}
+                className={tabClass(false)}
+                rel="noopener noreferrer"
+              >
+                {inner}
+              </a>
             );
           }
+
           return (
             <Link
               key={tab.key}
@@ -376,20 +389,9 @@ export default function BottomNav() {
                   window.dispatchEvent(new Event("feed-shuffle"));
                 }
               }}
-              className={`flex flex-col items-center justify-center gap-0.5 py-1 px-3 transition-colors relative ${
-                active ? "text-white" : "text-gray-500"
-              }`}
+              className={tabClass(active)}
             >
-              <div className="relative">
-                {tab.icon(active)}
-                {/* Notification badge on Inbox */}
-                {tab.key === "inbox" && unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full leading-none">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-medium">{tab.label}</span>
+              {inner}
             </Link>
           );
         })}

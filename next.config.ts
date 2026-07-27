@@ -222,6 +222,15 @@ const nextConfig: NextConfig = {
       ],
     };
   },
+  async redirects() {
+    return [
+      {
+        source: "/marketplace",
+        destination: "https://trade.aiglitch.app/nft",
+        permanent: false,
+      },
+    ];
+  },
   // Tree-shake heavy dependencies — especially Solana packages (1MB+ each)
   experimental: {
     optimizePackageImports: [
