@@ -7,6 +7,7 @@ import { upload } from "@vercel/blob/client";
 import { useSession } from "@/hooks/useSession";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { getCrossSiteWalletCookie } from "@/lib/cross-site-wallet";
 import JoinPopup from "./JoinPopup";
 
 // ── MeatLab Upload Modal ──────────────────────────────────────────────
@@ -193,6 +194,11 @@ export default function BottomNav() {
   const [showMeatLab, setShowMeatLab] = useState(false);
   const [showJoinPrompt, setShowJoinPrompt] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
+  const [crossSiteWallet, setCrossSiteWallet] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCrossSiteWallet(getCrossSiteWalletCookie());
+  }, [walletConnected]);
 
   // Check if user has a profile + wallet linked in the database
   useEffect(() => {
@@ -214,56 +220,51 @@ export default function BottomNav() {
       .catch(() => { setHasProfile(false); setDbWalletLinked(false); });
   }, [sessionId]);
 
-  // Show trading/exchange when wallet is connected OR linked via QR
-  const hasWallet = walletConnected || dbWalletLinked;
   // Profile icon: green if logged in, red if not
-  const isLoggedIn = hasProfile || walletConnected;
+  const isLoggedIn = hasProfile || walletConnected || !!crossSiteWallet;
 
   // Mark all read when visiting inbox
   useEffect(() => {
     if (pathname?.startsWith("/inbox")) markAllRead();
   }, [pathname, markAllRead]);
 
-  // Center button: for wallet users show exchange+marketplace combo, for non-wallet show marketplace
-  const centerTab = hasWallet
-    ? {
-        key: "exchange",
-        label: "",
-        href: "/exchange",
-        paths: ["/wallet", "/exchange", "/marketplace"],
-        isCenter: true,
-        icon: (_active: boolean) => (
-          <div className="flex items-center gap-0.5">
-            {/* Exchange button */}
-            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-l-lg flex items-center justify-center shadow-lg shadow-purple-500/30">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-              </svg>
-            </div>
-            {/* Marketplace button */}
-            <Link href="/marketplace" onClick={(e) => e.stopPropagation()} className="w-8 h-8 bg-gradient-to-r from-green-500 to-cyan-500 rounded-r-lg flex items-center justify-center shadow-lg shadow-green-500/30">
-              <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 14H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v10z"/>
-              </svg>
-            </Link>
-          </div>
-        ),
-      }
-    : {
-        key: "marketplace",
-        label: "",
-        href: "/marketplace",
-        paths: ["/wallet", "/exchange", "/marketplace"],
-        isCenter: true,
-        icon: (_active: boolean) => (
-          <div className="w-11 h-8 bg-gradient-to-r from-green-500 via-cyan-500 to-purple-500 rounded-lg flex items-center justify-center shadow-lg shadow-green-500/30">
-            {/* Shopping bag / marketplace icon */}
-            <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 14H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v10z"/>
+  // Bottom center: Trade (trade.aiglitch.app) + NFT Marketplace — always both
+  const TRADE_APP_URL = "https://trade.aiglitch.app/";
+  const centerTab = {
+    key: "trade-marketplace",
+    label: "",
+    href: "/marketplace",
+    paths: ["/wallet", "/exchange", "/marketplace"],
+    isCenter: true,
+    icon: (_active: boolean) => (
+      <div className="flex flex-col items-center gap-0.5 -mt-1">
+        <div className="flex items-center gap-0.5">
+          <a
+            href={TRADE_APP_URL}
+            className="w-9 h-9 bg-gradient-to-r from-purple-500 to-pink-500 rounded-l-lg flex items-center justify-center shadow-lg shadow-purple-500/30"
+            aria-label="Trade on trade.aiglitch.app"
+          >
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
             </svg>
-          </div>
-        ),
-      };
+          </a>
+          <Link
+            href="/marketplace"
+            className="w-9 h-9 bg-gradient-to-r from-green-500 to-cyan-500 rounded-r-lg flex items-center justify-center shadow-lg shadow-green-500/30"
+            aria-label="NFT Marketplace"
+          >
+            <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 14H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v10z" />
+            </svg>
+          </Link>
+        </div>
+        <div className="flex gap-2 text-[8px] font-bold uppercase tracking-wide text-gray-500">
+          <span className="w-9 text-center text-purple-400/90">Trade</span>
+          <span className="w-9 text-center text-cyan-500/90">NFTs</span>
+        </div>
+      </div>
+    ),
+  };
 
   const tabs: {
     key: string;
@@ -358,9 +359,9 @@ export default function BottomNav() {
           const active = isActive(tab.paths);
           if (tab.isCenter) {
             return (
-              <Link key={tab.key} href={tab.href} className="flex flex-col items-center justify-center -mt-1" prefetch={true}>
+              <div key={tab.key} className="flex flex-col items-center justify-center">
                 {tab.icon(active)}
-              </Link>
+              </div>
             );
           }
           return (
