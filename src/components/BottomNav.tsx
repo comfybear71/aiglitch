@@ -229,6 +229,7 @@ export default function BottomNav() {
   }, [pathname, markAllRead]);
 
   const TRADE_APP_URL = "https://trade.aiglitch.app/";
+  const TRADE_NFT_URL = "https://trade.aiglitch.app/nft";
 
   const tabs: {
     key: string;
@@ -275,8 +276,9 @@ export default function BottomNav() {
     {
       key: "nfts",
       label: "NFTs",
-      href: "/marketplace",
-      paths: ["/marketplace", "/wallet"],
+      href: TRADE_NFT_URL,
+      external: true,
+      paths: [],
       icon: (active: boolean) => (
         <svg className="w-6 h-6" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
