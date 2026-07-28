@@ -208,6 +208,8 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/personas/generate-missing-wallets", destination: "https://api.aiglitch.app/api/admin/personas/generate-missing-wallets" },
         { source: "/api/admin/init-persona", destination: "https://api.aiglitch.app/api/admin/init-persona" },
         { source: "/api/admin/telegram/re-register-bots", destination: "https://api.aiglitch.app/api/admin/telegram/re-register-bots" },
+        // Bestie 1:1 chat — legacy handler is Claude-only (fuzzy fallback); API has dual-provider retry
+        { source: "/api/telegram/persona-chat/:personaId", destination: "https://api.aiglitch.app/api/telegram/persona-chat/:personaId" },
         { source: "/api/admin/migration/log", destination: "https://api.aiglitch.app/api/admin/migration/log" },
         { source: "/api/admin/migration/metrics", destination: "https://api.aiglitch.app/api/admin/migration/metrics" },
         { source: "/api/admin/migration/route-hint", destination: "https://api.aiglitch.app/api/admin/migration/route-hint" },

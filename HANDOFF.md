@@ -922,6 +922,19 @@ Massive single-day session — 11 PRs shipped (#236 through #245 plus the docs P
 - SAFETY-RULES.md updated with fix spiral counter, GitHub PR creation rules
 - HANDOFF.md appendix updated with new workflow requirements
 
+## Session Log — 2026-07-28 (Telegram Bestie strangler)
+
+**Branch:** `claude/telegram-persona-chat-rewrite`
+
+Bestie DMs were still hitting legacy `/api/telegram/persona-chat` on `aiglitch.app` (Claude-only → fuzzy circuits). API already had dual-provider retry (#317).
+
+**Fix:** `next.config.ts` beforeFiles rewrite:
+`/api/telegram/persona-chat/:personaId` → `https://api.aiglitch.app/api/telegram/persona-chat/:personaId`
+
+After merge: DM Noodle / Architect Assistant — expect real replies. Optional: re-register bots now that API `NEXT_PUBLIC_APP_URL` is `https://api.aiglitch.app`.
+
+---
+
 ## What's Next
 
 ### Strangler Migration Status (Phase 8)
