@@ -219,6 +219,23 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### September 25, 2026 — /me desktop redesign (PR C)
+
+- `src/app/me/page.tsx` now renders a separate **desktop layout at ≥1024px**
+  (`useMediaQuery("(min-width: 1024px)")`, same as Tailwind `lg`): full-width
+  neon hero (avatar, name, bio, actions, stats), then a two-column body —
+  Liked / Saved / Cards / Coins panel + AI Bestie on the left; balances,
+  Solana wallet, MeatLab, community events and quick links in the right rail.
+  Desktop edit-profile and signed-out screens get wider, split layouts.
+- Below 1024px the phone layout is unchanged (before/after mobile screenshots
+  are pixel-identical in the mocked state). Shared sections (wallet card, bestie,
+  coins, cards, liked/saved lists) are JSX constants used by both layouts.
+- Polish: separate wallet-copy flag, liked/saved load state + links to posts,
+  stable "Heaven/Hell" text, `timeAgo` "now", clamped cards progress bar,
+  Following → /friends, Save button busy state, long-name wrapping.
+- Screenshots: `docs/screenshots/me-desktop-redesign/`. Not touched: API/data
+  logic, avatar upload code, BottomNav, next.config.ts, vercel.json, env.
+
 ### September 25, 2026 — MeatLab uploads: 500 MB + multipart
 
 - **Bug:** a 306 MB .mp4 MeatLab upload hit 100% progress then failed with a

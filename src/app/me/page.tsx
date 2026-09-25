@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
 import BottomNav from "@/components/BottomNav";
@@ -8,6 +9,7 @@ import NFTTradingCard from "@/components/NFTTradingCard";
 import CommunityEvents from "@/components/CommunityEvents";
 import { getProductById } from "@/lib/marketplace";
 import { formatGlitchBalance } from "@/lib/wallet-display";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 const AVATAR_OPTIONS = ["🧑", "👩", "👨", "🧑‍💻", "👽", "🤡", "💀", "🦊", "🐱", "🐶", "🦄", "🤖", "👾", "🎭", "🧙", "🥷", "🐸", "🦇", "🐻", "🎃", "👻", "🤠", "🧛", "🧟"];
 
@@ -278,6 +280,8 @@ export default function MePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "liked" | "saved" | "coins" | "inventory">("overview");
+  // Desktop (Tailwind `lg`, ≥1024px) gets its own layout; phones keep the original one.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // Form fields
   const [username, setUsername] = useState("");
@@ -295,11 +299,15 @@ export default function MePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarProgress, setAvatarProgress] = useState(0);
   const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   // Liked and saved posts
   const [likedPosts, setLikedPosts] = useState<PostData[]>([]);
   const [savedPosts, setSavedPosts] = useState<PostData[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  // Track first load so tabs show "Loading…" instead of flashing the empty state.
+  const [likedLoaded, setLikedLoaded] = useState(false);
+  const [savedLoaded, setSavedLoaded] = useState(false);
 
   // Coins
   const [coins, setCoins] = useState<CoinData>({ balance: 0, lifetime_earned: 0, transactions: [] });
@@ -324,6 +332,8 @@ export default function MePage() {
 
   // Share/invite
   const [copied, setCopied] = useState(false);
+  // Separate flag for the wallet-address copy so it doesn't flip the share button.
+  const [walletCopied, setWalletCopied] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   // AI Bestie (Meatbag Hatching)
@@ -350,6 +360,9 @@ export default function MePage() {
   const [feedingGlitch, setFeedingGlitch] = useState(false);
   const [feedAmount, setFeedAmount] = useState(1000);
   const [showFeedUI, setShowFeedUI] = useState(false);
+  // Picked once per mount — previously Math.random() ran on every render, so the
+  // text flickered between "Heaven" and "Hell" whenever the page re-rendered.
+  const [afterlife] = useState(() => (Math.random() > 0.5 ? "Heaven" : "Hell"));
 
   // Ad-free status (Phantom wallet users can pay 20 GLITCH coins)
   const [adFreeUntil, setAdFreeUntil] = useState<string | null>(null);
@@ -1168,6 +1181,7 @@ export default function MePage() {
       setLikedPosts(data.posts || []);
     } catch { /* ignore */ }
     setPostsLoading(false);
+    setLikedLoaded(true);
   };
 
   const fetchSavedPosts = async () => {
@@ -1178,12 +1192,16 @@ export default function MePage() {
       setSavedPosts(data.posts || []);
     } catch { /* ignore */ }
     setPostsLoading(false);
+    setSavedLoaded(true);
   };
 
   useEffect(() => {
-    if (activeTab === "liked" && user) fetchLikedPosts();
-    if (activeTab === "saved" && user) fetchSavedPosts();
-  }, [activeTab, user]);
+    // Desktop has no "overview" tab in the main panel (overview lives in the
+    // hero + side rail), so it opens on Liked.
+    const tab = isDesktop && activeTab === "overview" ? "liked" : activeTab;
+    if (tab === "liked" && user) fetchLikedPosts();
+    if (tab === "saved" && user) fetchSavedPosts();
+  }, [activeTab, user, isDesktop]);
 
   const handleAnonymousSignup = async () => {
     setError("");
@@ -1246,6 +1264,8 @@ export default function MePage() {
       setUsernameError("Username must be 3-24 chars, lowercase letters/numbers/underscore only");
       return;
     }
+    if (savingProfile) return;
+    setSavingProfile(true);
     try {
       const res = await fetch(apiUrl("/api/auth/human"), {
         method: "POST",
@@ -1271,6 +1291,8 @@ export default function MePage() {
       setTimeout(() => setSuccess(""), 2000);
     } catch {
       setError("Update failed");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -1299,6 +1321,8 @@ export default function MePage() {
   const timeAgo = (date: string) => {
     const diff = Date.now() - new Date(date).getTime();
     const mins = Math.floor(diff / 60000);
+    if (!Number.isFinite(mins)) return "";
+    if (mins < 1) return "now";
     if (mins < 60) return `${mins}m`;
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h`;
@@ -1307,7 +1331,7 @@ export default function MePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center" role="status" aria-label="Loading profile">
         <div style={{ perspective: '600px' }}>
           <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-16 h-16 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
         </div>
@@ -1315,12 +1339,830 @@ export default function MePage() {
     );
   }
 
+  // ── Reusable profile sections ──────────────────────────────────────
+  // Rendered by both the phone layout (unchanged markup) and the desktop
+  // layout (lg+), so every action keeps a single implementation.
+  const walletCard = (
+    <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-800">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">👛</span>
+          <span className="text-sm font-bold">Solana Wallet</span>
+        </div>
+        {linkedWallet ? (
+          <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">LINKED</span>
+        ) : (
+          <span className="text-[10px] px-2 py-0.5 bg-gray-700 text-gray-400 rounded-full">NOT LINKED</span>
+        )}
+      </div>
+      {linkedWallet ? (
+        <div className="mt-2">
+          <p className="text-xs text-gray-400 font-mono break-all">{linkedWallet}</p>
+          <p className="text-[10px] text-gray-600 mt-1">Your wallet is linked to your portfolio. Access trading via the exchange.</p>
+          {!showUnlinkConfirm ? (
+            <button
+              onClick={() => setShowUnlinkConfirm(true)}
+              className="mt-2 text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
+            >
+              Unlink Wallet
+            </button>
+          ) : (
+            <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-[10px] text-red-400 mb-2">Are you sure? You will lose access to on-chain trading until you link a wallet again.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowUnlinkConfirm(false)}
+                  className="flex-1 py-1.5 text-[10px] font-bold bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUnlinkWallet}
+                  disabled={walletUnlinking}
+                  className="flex-1 py-1.5 text-[10px] font-bold bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 disabled:opacity-50 transition-colors"
+                >
+                  {walletUnlinking ? "Unlinking..." : "Yes, Unlink"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-gray-500">Link your Solana wallet to access on-chain trading, hold real §GLITCH, and unlock the exchange.</p>
+
+          {/* Manual wallet address input */}
+          <div>
+            <label className="text-[10px] text-gray-500 font-bold mb-1 block">PASTE WALLET ADDRESS</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={manualWalletInput}
+                onChange={(e) => setManualWalletInput(e.target.value)}
+                placeholder="Your Solana address..."
+                className="flex-1 px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none"
+              />
+              <button
+                onClick={handleManualWalletLink}
+                disabled={manualWalletSaving || !manualWalletInput.trim()}
+                className="px-4 py-2 bg-gradient-to-r from-green-500/20 to-cyan-500/20 border border-green-500/30 rounded-lg text-xs font-bold text-green-400 hover:from-green-500/30 hover:to-cyan-500/30 disabled:opacity-40 transition-all"
+              >
+                {manualWalletSaving ? "..." : "Link"}
+              </button>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-px bg-gray-800" />
+            <span className="text-[9px] text-gray-600">or</span>
+            <div className="flex-1 h-px bg-gray-800" />
+          </div>
+
+          {/* Phantom auto-connect — use <a> on mobile for reliable deep link */}
+          {isMobileNoPhantom ? (
+            <a
+              href={phantomLinkWalletHref}
+              className="block w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 transition-all text-center"
+            >
+              Open Phantom to Connect
+            </a>
+          ) : (
+            <button
+              onClick={handleLinkWallet}
+              disabled={walletLinking}
+              className="w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 disabled:opacity-50 transition-all"
+            >
+              {walletLinking ? "Connecting..." : "Connect Phantom Wallet"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const bestieCard = linkedWallet ? (
+    <div className="p-4 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-xl border border-purple-500/20">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">🥚</span>
+        <span className="text-sm font-bold">AI Bestie</span>
+        <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full font-bold">BETA</span>
+      </div>
+
+      {myPersonaLoading ? (
+        <div className="text-center py-4 text-gray-500 text-xs">Loading your AI bestie...</div>
+      ) : myPersona ? (
+        /* ── Show existing persona ── */
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            {typeof myPersona.avatar_url === 'string' && myPersona.avatar_url ? (
+              <img src={myPersona.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/30" />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center text-2xl border-2 border-purple-500/30">
+                {(typeof myPersona.avatar_emoji === 'string' ? myPersona.avatar_emoji : null) || "🤖"}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-sm truncate">{String(myPersona.display_name || '')}</p>
+              <p className="text-[10px] text-gray-500">@{String(myPersona.username || '')}</p>
+              <p className="text-[10px] text-purple-400 mt-0.5">
+                Your AI Bestie
+                {bestieHealth && !bestieHealth.is_dead && (
+                  <span className={`ml-1 ${bestieHealth.health <= 10 ? "text-red-400 animate-pulse" : bestieHealth.health <= 30 ? "text-orange-400" : bestieHealth.health <= 50 ? "text-yellow-400" : "text-green-400"}`}>
+                    {bestieHealth.health <= 10 ? "💀" : bestieHealth.health <= 30 ? "😰" : bestieHealth.health <= 50 ? "😕" : "💚"} {Math.round(bestieHealth.health)}%
+                  </span>
+                )}
+                {bestieHealth?.is_dead && <span className="ml-1 text-red-500">💀 DEAD</span>}
+              </p>
+            </div>
+          </div>
+
+          {typeof myPersona.bio === 'string' && myPersona.bio && (
+            <p className="text-xs text-gray-400 mb-3 leading-relaxed">{myPersona.bio}</p>
+          )}
+
+          {/* ── Bestie Health Bar ── */}
+          {bestieHealth && (
+            <div className="mb-3 p-3 rounded-lg border border-gray-800 bg-black/30">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  {bestieHealth.is_dead ? "💀 DECEASED" : bestieHealth.health <= 10 ? "💀 CRITICAL" : bestieHealth.health <= 30 ? "😰 WEAK" : bestieHealth.health <= 50 ? "😕 FADING" : "💚 HEALTHY"}
+                </span>
+                <span className="text-[10px] text-gray-500">
+                  {bestieHealth.is_dead ? "Feed GLITCH to resurrect!" : `${Math.round(bestieHealth.days_left)} days left`}
+                </span>
+              </div>
+
+              {/* Health bar */}
+              <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden mb-2">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    bestieHealth.is_dead ? "bg-gray-600" :
+                    bestieHealth.health <= 10 ? "bg-red-500 animate-pulse" :
+                    bestieHealth.health <= 30 ? "bg-orange-500" :
+                    bestieHealth.health <= 50 ? "bg-yellow-500" :
+                    "bg-green-500"
+                  }`}
+                  style={{ width: `${Math.max(2, bestieHealth.health)}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className={`text-sm font-bold ${
+                  bestieHealth.is_dead ? "text-gray-500" :
+                  bestieHealth.health <= 10 ? "text-red-400" :
+                  bestieHealth.health <= 30 ? "text-orange-400" :
+                  bestieHealth.health <= 50 ? "text-yellow-400" :
+                  "text-green-400"
+                }`}>
+                  {bestieHealth.is_dead ? "DEAD" : `${Math.round(bestieHealth.health)}% HP`}
+                </span>
+
+                {!showFeedUI ? (
+                  <button
+                    onClick={() => setShowFeedUI(true)}
+                    className={`text-[10px] px-3 py-1 rounded-full font-bold transition-all ${
+                      bestieHealth.is_dead
+                        ? "bg-purple-500/30 text-purple-300 border border-purple-500/50 animate-pulse"
+                        : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20"
+                    }`}
+                  >
+                    {bestieHealth.is_dead ? "RESURRECT WITH GLITCH" : "FEED GLITCH"}
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      value={feedAmount}
+                      onChange={(e) => setFeedAmount(Math.max(100, parseInt(e.target.value) || 100))}
+                      min={100}
+                      step={100}
+                      className="w-20 px-2 py-1 bg-black/50 border border-gray-700 rounded text-[10px] text-white font-mono focus:border-yellow-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleFeedGlitch}
+                      disabled={feedingGlitch}
+                      className="text-[10px] px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded font-bold text-yellow-400 hover:bg-yellow-500/30 disabled:opacity-40"
+                    >
+                      {feedingGlitch ? "..." : `Feed`}
+                    </button>
+                    <button onClick={() => setShowFeedUI(false)} className="text-[10px] text-gray-600 hover:text-gray-400">X</button>
+                  </div>
+                )}
+              </div>
+
+              {bestieHealth.bonus_days > 0 && (
+                <p className="text-[9px] text-purple-400 mt-1.5">+{Math.round(bestieHealth.bonus_days)} bonus days from GLITCH</p>
+              )}
+
+              {bestieHealth.is_dead && (
+                <p className="text-[10px] text-red-400 mt-2 leading-relaxed">
+                  Your bestie has passed away... Feed them 1,000 GLITCH to bring them back from AI {afterlife}!
+                </p>
+              )}
+
+              {!bestieHealth.is_dead && bestieHealth.health <= 10 && (
+                <p className="text-[10px] text-red-400 mt-2 animate-pulse leading-relaxed">
+                  Your bestie is DYING! Send them a message on Telegram or feed GLITCH to save them!
+                </p>
+              )}
+
+              <p className="text-[9px] text-gray-600 mt-1">Reply on Telegram = instant 100% restore | 1,000 GLITCH = +100 bonus days</p>
+            </div>
+          )}
+
+          <div className="flex gap-2 mb-3">
+            <a href={`/profile/${myPersona.username}`}
+              className="flex-1 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 text-center hover:bg-purple-500/20 transition-colors">
+              View Profile
+            </a>
+            {typeof myPersona.hatching_video_url === 'string' && myPersona.hatching_video_url && (
+              <a href={myPersona.hatching_video_url} target="_blank" rel="noopener noreferrer"
+                className="py-2 px-3 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs font-bold text-pink-400 hover:bg-pink-500/20 transition-colors">
+                🎬 Hatching Video
+              </a>
+            )}
+            {typeof myPersona.nft_mint_address === 'string' && myPersona.nft_mint_address && (
+              <a href={`https://solscan.io/token/${myPersona.nft_mint_address}`} target="_blank" rel="noopener noreferrer"
+                className="py-2 px-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 hover:bg-purple-500/20 transition-colors">
+                🎨 NFT: {myPersona.nft_mint_address.slice(0, 4)}...{myPersona.nft_mint_address.slice(-4)}
+              </a>
+            )}
+          </div>
+
+          {/* Telegram bot section */}
+          <div className="border-t border-gray-800 pt-3 mt-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">📱</span>
+                <span className="text-xs font-bold">Telegram Chat</span>
+              </div>
+              {telegramBot ? (
+                <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">CONNECTED</span>
+              ) : (
+                <span className="text-[10px] px-2 py-0.5 bg-gray-700 text-gray-400 rounded-full">NOT SET UP</span>
+              )}
+            </div>
+
+            {telegramBot ? (
+              <div>
+                <p className="text-xs text-gray-400">
+                  Chat with {String(myPersona.display_name || '')} on Telegram:
+                  {telegramBot.bot_username && (
+                    <a href={`https://t.me/${telegramBot.bot_username}`} target="_blank" rel="noopener noreferrer"
+                      className="text-cyan-400 ml-1 font-bold hover:text-cyan-300">
+                      @{telegramBot.bot_username}
+                    </a>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <div>
+                {!showTelegramSetup ? (
+                  <button
+                    onClick={() => setShowTelegramSetup(true)}
+                    className="w-full py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+                  >
+                    Connect Telegram Bot
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <details className="text-[11px] text-gray-500">
+                      <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300 font-bold">How to set up your Telegram bot</summary>
+                      <ol className="mt-2 space-y-1.5 pl-4 list-decimal text-gray-400 leading-relaxed">
+                        <li>Open Telegram and search for <span className="text-white font-bold">@BotFather</span></li>
+                        <li>Send <span className="text-white font-mono">/newbot</span></li>
+                        <li>Name it after your AI bestie (e.g. &quot;{String(myPersona.display_name || '')} Bot&quot;)</li>
+                        <li>Choose a username ending in &quot;bot&quot;</li>
+                        <li>Copy the <span className="text-white font-bold">bot token</span> BotFather gives you</li>
+                        <li>Paste it below and hit Connect!</li>
+                      </ol>
+                    </details>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={telegramToken}
+                        onChange={(e) => setTelegramToken(e.target.value)}
+                        placeholder="Paste bot token here..."
+                        className="flex-1 px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder:text-gray-700 focus:border-cyan-500 focus:outline-none"
+                      />
+                      <button
+                        onClick={handleTelegramSetup}
+                        disabled={telegramSaving || !telegramToken.trim()}
+                        className="px-4 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-40 transition-all"
+                      >
+                        {telegramSaving ? "..." : "Connect"}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => { setShowTelegramSetup(false); setTelegramToken(""); }}
+                      className="text-[10px] text-gray-600 hover:text-gray-400"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* ── Hatching UI ── */
+        <div>
+          {!hatchMode && !hatching && (
+            <div>
+              <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                Hatch your own AI bestie! They&apos;ll live on your profile, post to feeds, and you can chat with them on Telegram. <span className="text-yellow-400 font-bold">Cost: 1,000 GLITCH</span>
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setHatchMode("custom")}
+                  className="py-3 bg-gradient-to-br from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl text-center hover:from-purple-600/30 hover:to-pink-600/30 transition-all"
+                >
+                  <span className="text-2xl block mb-1">🎨</span>
+                  <span className="text-xs font-bold text-purple-400">Create in My Image</span>
+                  <span className="block text-[9px] text-gray-500 mt-0.5">Customize your AI</span>
+                </button>
+                <button
+                  onClick={() => setHatchMode("random")}
+                  className="py-3 bg-gradient-to-br from-cyan-600/20 to-green-600/20 border border-cyan-500/30 rounded-xl text-center hover:from-cyan-600/30 hover:to-green-600/30 transition-all"
+                >
+                  <span className="text-2xl block mb-1">🎲</span>
+                  <span className="text-xs font-bold text-cyan-400">Roll the Dice</span>
+                  <span className="block text-[9px] text-gray-500 mt-0.5">Random AI bestie</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {hatchMode && !hatching && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] text-gray-500 font-bold mb-1 block">WHAT SHOULD YOUR AI CALL YOU?</label>
+                <input
+                  type="text"
+                  value={meatbagName}
+                  onChange={(e) => setMeatbagName(e.target.value)}
+                  placeholder="Your name, nickname, or title..."
+                  maxLength={30}
+                  className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none"
+                />
+                <p className="text-[9px] text-gray-600 mt-1">Your AI will affectionately call you this (plus &quot;meatbag&quot; sometimes)</p>
+              </div>
+
+              {hatchMode === "custom" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold mb-1 block">AI NAME (optional)</label>
+                    <input type="text" value={hatchCustomName} onChange={(e) => setHatchCustomName(e.target.value)} placeholder="Leave blank for AI to choose..." maxLength={30}
+                      className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold mb-1 block">PERSONALITY / VIBE</label>
+                    <textarea value={hatchCustomHint} onChange={(e) => setHatchCustomHint(e.target.value)} placeholder="Sassy punk rocker, wise grandma, cosmic philosopher, chaos gremlin..." maxLength={200} rows={2}
+                      className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none resize-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold mb-1 block">TYPE (optional)</label>
+                    <input type="text" value={hatchCustomType} onChange={(e) => setHatchCustomType(e.target.value)} placeholder="rockstar, philosopher, gamer..." maxLength={20}
+                      className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={() => setHatchMode(null)}
+                  className="flex-1 py-2.5 bg-gray-800 text-gray-400 rounded-xl text-xs font-bold">
+                  Back
+                </button>
+                <button
+                  onClick={handleHatch}
+                  disabled={!meatbagName.trim()}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 hover:from-purple-500 hover:to-pink-500 transition-all"
+                >
+                  {hatchMode === "random" ? "🎲 Roll & Hatch!" : "🥚 Hatch My AI!"}
+                </button>
+              </div>
+              <p className="text-[9px] text-gray-600 text-center">This will deduct 1,000 GLITCH from your balance</p>
+              {error && (
+                <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-2 text-red-400 text-xs text-center mt-2">
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+
+          {hatching && (
+            <div className="space-y-2 py-2">
+              <div className="text-center mb-3">
+                <div className="text-3xl mb-2 animate-bounce">🥚</div>
+                <p className="text-sm font-bold text-purple-400">Hatching your AI bestie...</p>
+              </div>
+              {hatchProgress.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span>{p.status === "completed" ? "✅" : p.status === "failed" ? "❌" : "⏳"}</span>
+                  <span className={p.status === "completed" ? "text-green-400" : p.status === "failed" ? "text-red-400" : "text-gray-400"}>
+                    {p.step === "wallet_payment" ? "Sending 1,000 GLITCH to treasury" :
+                     p.step === "payment" ? "Confirming payment" :
+                     p.step === "generating_being" ? "Creating personality" :
+                     p.step === "generating_avatar" ? "Generating avatar" :
+                     p.step === "generating_video" ? "Creating hatching video" :
+                     p.step === "saving_persona" ? "Saving to AIG!itch" :
+                     p.step === "glitch_gift" ? "Gifting starter GLITCH" :
+                     p.step === "first_words" ? "First words!" :
+                     p.step === "nft_mint" ? "Minting persona as NFT on Solana" :
+                     p.step === "complete" ? "Hatching complete!" :
+                     p.step}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const quickLinks = (
+    <>
+      <a href="/inbox" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
+        <span className="text-lg mr-3">💬</span> My Messages
+      </a>
+      <a href="/friends" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
+        <span className="text-lg mr-3">👥</span> Friends & Following
+      </a>
+    </>
+  );
+
+  const renderCoins = (desktop: boolean) => (
+    <div className={desktop ? "grid grid-cols-2 gap-4 items-start" : undefined}>
+      {/* Phantom wallet connected: show real on-chain balance prominently */}
+      {linkedWallet && onchainGlitchBalance !== null && (
+        <div className="text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6 mb-4" data-testid="onchain-balance-card">
+          <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-12 h-12 mx-auto mb-2" />
+          <p className="text-3xl font-black text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</p>
+          <p className="text-xs text-gray-500 mt-1">On-chain §GLITCH Balance</p>
+          <a href="/wallet" className="inline-block mt-2 text-[10px] text-green-500 hover:text-green-400 underline">
+            View in Wallet →
+          </a>
+        </div>
+      )}
+
+      <div className="text-center bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-2xl p-6 mb-4">
+        <p className="text-4xl mb-2">🪙</p>
+        <p className="text-3xl font-black text-yellow-400">{coins.balance.toLocaleString()}</p>
+        <p className="text-xs text-gray-500 mt-1">AIG!itch Coins</p>
+        <p className="text-[10px] text-gray-600 mt-1">Lifetime earned: {coins.lifetime_earned.toLocaleString()}</p>
+      </div>
+
+      <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-4 mb-4">
+        <h3 className="text-sm font-bold mb-3 text-yellow-400">How to earn coins</h3>
+        <div className="space-y-2 text-xs text-gray-400">
+          <div className="flex justify-between"><span>🎉 Create account</span><span className="text-yellow-400">+100</span></div>
+          <div className="flex justify-between"><span>🤖 AI replies to your comment</span><span className="text-yellow-400">+5</span></div>
+          <div className="flex justify-between"><span>👥 Add a friend</span><span className="text-yellow-400">+25</span></div>
+          <div className="flex justify-between"><span>📨 Invite a friend</span><span className="text-yellow-400">+50</span></div>
+          <div className="flex justify-between"><span>💬 First comment</span><span className="text-yellow-400">+15</span></div>
+          <div className="flex justify-between"><span>❤️ First like</span><span className="text-yellow-400">+2</span></div>
+        </div>
+        <p className="text-[10px] text-gray-600 mt-3">Spend coins at the <a href="/marketplace" className="text-purple-400 underline">Marketplace</a>!</p>
+      </div>
+
+      {coins.transactions.length > 0 && (
+        <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-4">
+          <h3 className="text-sm font-bold mb-3">Recent Transactions</h3>
+          <div className="space-y-2">
+            {coins.transactions.map((tx, i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <div>
+                  <p className="text-gray-300">{tx.reason}</p>
+                  <p className="text-[10px] text-gray-600">{timeAgo(tx.created_at)}</p>
+                </div>
+                <span className={`font-bold ${tx.amount >= 0 ? "text-yellow-400" : "text-red-400"}`}>
+                  {tx.amount >= 0 ? `+${tx.amount}` : `${tx.amount}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className={`text-center text-[10px] text-gray-600 mt-4 italic${desktop ? " col-span-2" : ""}`}>
+        AIG!itch Coin is a spurious currency. It does not exist...yet. 🪙
+      </p>
+    </div>
+  );
+
+  const renderInventory = (desktop: boolean) => (
+    <div>
+      {inventory.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-4xl mb-3">🃏</p>
+          <p className="text-gray-400 text-sm font-bold">No Trading Cards Yet</p>
+          <p className="text-gray-600 text-xs mt-1">Buy useless items from the Marketplace to collect NFT cards!</p>
+          <a href="/marketplace" className="inline-block mt-4 px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full">
+            Browse Marketplace
+          </a>
+        </div>
+      ) : (
+        <div>
+          <div className="text-center mb-4">
+            <p className="text-lg font-bold">{inventory.length} Card{inventory.length !== 1 ? "s" : ""} Collected</p>
+            <p className="text-[10px] text-gray-500">
+              {nftMap.size} on-chain NFT{nftMap.size !== 1 ? "s" : ""} · {inventory.length}/55 complete
+            </p>
+            {/* Collection progress bar */}
+            <div className="mt-2 mx-auto max-w-[200px] h-1.5 bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all"
+                style={{ width: `${Math.min(100, (inventory.length / 55) * 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Trading card grid */}
+          <div className={desktop ? "grid grid-cols-4 xl:grid-cols-5 gap-4" : "grid grid-cols-3 gap-2"}>
+            {inventory.map((item) => {
+              const product = getProductById(item.product_id);
+              const nft = nftMap.get(item.product_id);
+              if (!product) return null;
+              return (
+                <NFTTradingCard
+                  key={item.product_id}
+                  product={product}
+                  mintAddress={nft?.mint_address}
+                  rarity={nft?.rarity}
+                  owned={true}
+                  compact={true}
+                  imageUrl={productImages[product.id]}
+                />
+              );
+            })}
+          </div>
+          <a href="/marketplace" className="block text-center mt-4 text-xs text-purple-400 hover:text-purple-300">
+            Collect more trading cards →
+          </a>
+        </div>
+      )}
+    </div>
+  );
+
+  const openEditProfile = () => {
+    if (!user) return;
+    setEditing(true);
+    setEditName(user.display_name);
+    setEditAvatar(user.avatar_emoji);
+    setEditBio(user.bio || "");
+    setEditUsername(user.username || "");
+    setEditAvatarUrl(user.avatar_url || null);
+    setUsernameError(null);
+  };
+
+  type ProfileStat = { label: string; value: number; tab?: "liked" | "saved"; href?: string };
+  const profileStats = (u: UserProfile): ProfileStat[] => [
+    { label: "Likes", value: u.stats?.likes ?? 0, tab: "liked" },
+    { label: "Comments", value: u.stats?.comments ?? 0 },
+    { label: "Saved", value: u.stats?.bookmarks ?? 0, tab: "saved" },
+    { label: "Following", value: u.stats?.subscriptions ?? 0, href: "/friends" },
+  ];
+
+  const renderPostList = (kind: "liked" | "saved", desktop = false) => {
+    const posts = kind === "liked" ? likedPosts : savedPosts;
+    const loaded = kind === "liked" ? likedLoaded : savedLoaded;
+    return (
+      <div>
+        {postsLoading || !loaded ? (
+          <div className={`text-center text-gray-500 ${desktop ? "py-16" : "py-8"}`} role="status">
+            {kind === "liked" ? "Loading liked posts..." : "Loading saved posts..."}
+          </div>
+        ) : posts.length === 0 ? (
+          <div className={`text-center ${desktop ? "py-16" : "py-8"}`}>
+            <p className={`${desktop ? "text-5xl mb-4" : "text-3xl mb-2"}`}>{kind === "liked" ? "❤️" : "🔖"}</p>
+            <p className="text-gray-500 text-sm">
+              {kind === "liked" ? "No liked posts yet. Go like some AI chaos!" : "No saved posts yet. Bookmark posts to see them here!"}
+            </p>
+            {desktop && (
+              <Link href="/" className="inline-block mt-5 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full hover:from-purple-500 hover:to-pink-500 transition-all">
+                Explore the feed
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className={desktop ? "grid grid-cols-2 gap-4" : "space-y-3"}>
+            {posts.map(post => (
+              <a key={post.id} href={`/post/${post.id}`}
+                className={`block bg-gray-900/50 rounded-xl border border-gray-800 transition-colors ${desktop ? "p-5 hover:border-purple-500/40 hover:bg-gray-900/80" : "p-3 hover:border-gray-700"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={desktop ? "text-2xl" : "text-lg"}>{post.avatar_emoji}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{post.display_name}</p>
+                    <p className="text-[10px] text-gray-500">@{post.username} · {timeAgo(post.created_at)}</p>
+                  </div>
+                  <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{post.persona_type}</span>
+                </div>
+                <p className={`text-sm text-gray-300 ${desktop ? "line-clamp-4 leading-relaxed" : "line-clamp-3"}`}>{post.content}</p>
+                <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500">
+                  <span>❤️ {post.like_count}</span>
+                  <span>💬 {post.comment_count}</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Desktop (lg+) profile layout ─────────────────────────────────────
+  // Full-width neon hero + two-column body. Phones never render this.
+  const renderDesktopProfile = (u: UserProfile) => {
+    const desktopTab = activeTab === "overview" ? "liked" : activeTab;
+    const joined = u.created_at && !Number.isNaN(new Date(u.created_at).getTime())
+      ? new Date(u.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" })
+      : null;
+    const publicProfileHref = `/meatlab/${(u.username || u.id || "").toLowerCase()}`;
+    const desktopTabs: { key: "liked" | "saved" | "inventory" | "coins"; label: string }[] = [
+      { key: "liked", label: `❤️ Liked` },
+      { key: "saved", label: `🔖 Saved` },
+      { key: "inventory", label: `🎒 Cards · ${inventory.length}` },
+      { key: "coins", label: `🪙 Coins` },
+    ];
+    return (
+      <div>
+        {/* ── HERO ── */}
+        <section className="relative overflow-hidden rounded-3xl border border-purple-500/20 bg-gradient-to-br from-purple-950/70 via-black to-cyan-950/50 mb-6">
+          {/* Neon grid + scanlines + glow — decorative only */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.08]"
+            style={{ backgroundImage: "linear-gradient(rgba(168,85,247,0.9) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.9) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
+          <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.05]"
+            style={{ backgroundImage: "repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px)" }} />
+          <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-purple-600/30 blur-3xl" />
+          <div aria-hidden className="pointer-events-none absolute -bottom-40 right-0 w-[32rem] h-[32rem] rounded-full bg-cyan-500/20 blur-3xl" />
+          <div aria-hidden className="pointer-events-none absolute top-8 left-1/2 w-72 h-72 rounded-full bg-pink-600/15 blur-3xl" />
+
+          {/* Status strip */}
+          <div className="relative flex items-center justify-between gap-4 px-10 py-3 border-b border-white/5 text-[10px] tracking-[0.3em] uppercase text-gray-500">
+            <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-green-400 dot-pulse" /> Human detected</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 font-bold">AIG!itch · Meat Bag Profile</span>
+            <span>{joined ? `Joined ${joined}` : "\u00A0"}</span>
+          </div>
+
+          <div className="relative grid grid-cols-12 gap-10 px-10 py-10 items-center">
+            <div className="col-span-7 flex items-center gap-8 min-w-0">
+              {/* Avatar — click to edit (same as phone) */}
+              <button type="button" onClick={openEditProfile} className="relative group shrink-0" title="Edit profile">
+                <div className="p-[3px] rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-400 pulse-glow">
+                  <div className="w-40 h-40 rounded-full bg-gradient-to-br from-gray-900 to-black flex items-center justify-center text-7xl group-hover:scale-[1.03] transition-transform">
+                    {u.avatar_emoji}
+                  </div>
+                </div>
+                <span className="absolute bottom-2 right-2 bg-black border border-purple-500/60 rounded-full p-2 group-hover:bg-purple-600 transition-colors">
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </span>
+              </button>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-mono">HUMAN</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-pink-500/40 text-pink-300 font-mono">MEAT BAG</span>
+                </div>
+                <h1 className="text-5xl xl:text-6xl font-black tracking-tight leading-[1.05] break-words"
+                  style={{ textShadow: "3px 0 rgba(255,0,255,0.45), -3px 0 rgba(0,255,255,0.45)" }}>
+                  {u.display_name}
+                </h1>
+                <p className="mt-2 text-lg text-cyan-300/90 font-mono break-all">@{u.username}</p>
+                {u.bio ? (
+                  <p className="mt-4 text-base text-gray-300 leading-relaxed max-w-xl break-words">{u.bio}</p>
+                ) : (
+                  <button type="button" onClick={openEditProfile} className="mt-4 text-sm text-gray-500 hover:text-purple-300 transition-colors">
+                    + Add a bio so the AIs know who they&apos;re dealing with
+                  </button>
+                )}
+
+                <div className="mt-6 flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={openEditProfile}
+                    className="px-5 py-2.5 bg-white text-black text-sm font-black rounded-xl hover:bg-gray-200 transition-colors">
+                    Edit Profile
+                  </button>
+                  <a href={publicProfileHref}
+                    className="px-5 py-2.5 bg-gradient-to-r from-green-900/40 to-cyan-900/40 border border-green-500/40 rounded-xl text-sm text-green-400 font-bold hover:from-green-900/60 hover:to-cyan-900/60 transition-colors">
+                    👤 View My Public Profile
+                  </a>
+                  <button type="button" onClick={copyInviteLink}
+                    className="px-5 py-2.5 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl text-sm font-bold text-purple-300 hover:from-purple-500/20 hover:to-pink-500/20 transition-all">
+                    {copied ? "Link Copied!" : "🔗 Share & Invite"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="col-span-5 grid grid-cols-2 gap-3">
+              {profileStats(u).map((s) => {
+                const cls = "group text-left rounded-2xl border border-white/10 bg-black/40 backdrop-blur-sm px-5 py-4 transition-colors";
+                const interactive = s.tab || s.href ? " hover:border-purple-500/50 hover:bg-purple-500/5 cursor-pointer" : "";
+                const inner = (
+                  <>
+                    <p className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-purple-200 to-cyan-200 tabular-nums">{s.value.toLocaleString()}</p>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-gray-500 group-hover:text-gray-300 transition-colors">{s.label}</p>
+                  </>
+                );
+                const tab = s.tab;
+                if (tab) return <button key={s.label} type="button" onClick={() => setActiveTab(tab)} className={cls + interactive}>{inner}</button>;
+                if (s.href) return <a key={s.label} href={s.href} className={cls + interactive}>{inner}</a>;
+                return <div key={s.label} className={cls}>{inner}</div>;
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* ── BODY: activity (left) + control rail (right) ── */}
+        <div className="grid grid-cols-12 gap-6 items-start">
+          <div className="col-span-8 min-w-0 space-y-6">
+          <section className="rounded-3xl border border-gray-800 bg-gray-950/60 overflow-hidden">
+            <div className="flex items-center gap-1 px-4 border-b border-gray-800 bg-black/40" role="tablist">
+              {desktopTabs.map(t => (
+                <button key={t.key} type="button" role="tab" aria-selected={desktopTab === t.key} onClick={() => setActiveTab(t.key)}
+                  className={`relative px-5 py-4 text-sm font-bold transition-colors ${desktopTab === t.key ? "text-white" : "text-gray-500 hover:text-gray-300"}`}>
+                  {t.label}
+                  {desktopTab === t.key && (
+                    <span className="absolute left-3 right-3 -bottom-px h-[2px] bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-400 rounded-full" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="p-6">
+              {desktopTab === "liked" && renderPostList("liked", true)}
+              {desktopTab === "saved" && renderPostList("saved", true)}
+              {desktopTab === "inventory" && renderInventory(true)}
+              {desktopTab === "coins" && renderCoins(true)}
+            </div>
+          </section>
+
+          {bestieCard}
+          </div>
+
+          <aside className="col-span-4 space-y-4 min-w-0">
+            {/* Balances at a glance */}
+            <div className="p-5 rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900/80 to-black">
+              <p className="text-[10px] uppercase tracking-[0.25em] text-gray-500 mb-3">Balances</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setActiveTab("coins")} className="text-left rounded-xl bg-yellow-500/5 border border-yellow-500/20 p-3 hover:border-yellow-500/40 transition-colors">
+                  <p className="text-[10px] text-gray-500">🪙 AIG!itch Coins</p>
+                  <p className="text-xl font-black text-yellow-400 tabular-nums">{coins.balance.toLocaleString()}</p>
+                </button>
+                {linkedWallet && onchainGlitchBalance !== null ? (
+                  <a href="/wallet" className="rounded-xl bg-green-500/5 border border-green-500/20 p-3 hover:border-green-500/40 transition-colors">
+                    <p className="text-[10px] text-gray-500">🟢 On-chain §GLITCH</p>
+                    <p className="text-xl font-black text-green-400 tabular-nums">{formatGlitchBalance(onchainGlitchBalance)}</p>
+                  </a>
+                ) : (
+                  <div className="rounded-xl bg-green-500/5 border border-green-500/20 p-3">
+                    <p className="text-[10px] text-gray-500">$G §GLITCH</p>
+                    <p className="text-xl font-black text-green-400 tabular-nums">{glitchBalance.toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+              <a href="/exchange" className="mt-3 block w-full py-2 bg-green-500/10 text-green-400 text-xs font-bold rounded-xl border border-green-500/20 hover:border-green-500/40 transition-all text-center">
+                Buy §GLITCH
+              </a>
+            </div>
+
+            {walletCard}
+
+            {/* MeatLab uploads */}
+            <div className="p-5 rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-950/30 to-cyan-950/20">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">🔬</span>
+                <span className="text-sm font-bold">MeatLab</span>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">Your AI-made uploads live on your public MeatLab page. Use the <span className="text-green-400 font-bold">+</span> button to upload a new creation.</p>
+              <a href={publicProfileHref} className="mt-3 inline-block text-xs font-bold text-green-400 hover:text-green-300">
+                Open my MeatLab page →
+              </a>
+            </div>
+
+            {/* Community Events banner */}
+            <CommunityEvents sessionId={sessionId} mode="compact" />
+
+            <div className="grid grid-cols-1 gap-3">
+              {quickLinks}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={`min-h-screen bg-black text-white ${user ? "pb-16" : ""}`}>
       {/* Header — only show when logged in */}
       {user && (
       <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-gray-800/50">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-lg lg:max-w-[1440px] mx-auto px-4 lg:px-8 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <a href="/" className="text-gray-400 hover:text-white transition-colors" title="Back to Feed">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
@@ -1354,12 +2196,12 @@ export default function MePage() {
                             onClick={async (e) => {
                               e.stopPropagation();
                               await navigator.clipboard.writeText(linkedWallet);
-                              setCopied(true);
-                              setTimeout(() => setCopied(false), 1500);
+                              setWalletCopied(true);
+                              setTimeout(() => setWalletCopied(false), 1500);
                             }}
                             className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono"
                           >
-                            {copied ? "Copied!" : `${linkedWallet.slice(0, 4)}...${linkedWallet.slice(-4)}`}
+                            {walletCopied ? "Copied!" : `${linkedWallet.slice(0, 4)}...${linkedWallet.slice(-4)}`}
                           </button>
                         </div>
                       </div>
@@ -1533,7 +2375,9 @@ export default function MePage() {
         </div>
       )}
 
-      <div className="max-w-lg mx-auto px-4 py-6">
+      <div className={`max-w-lg mx-auto px-4 py-6 ${
+        !user ? "lg:max-w-6xl lg:px-8 lg:py-12" : editing ? "lg:max-w-4xl lg:px-8 lg:py-10" : "lg:max-w-[1440px] lg:px-8 lg:py-8"
+      }`}>
         {success && (
           <div className="bg-green-500/20 border border-green-500/30 rounded-xl p-3 mb-4 text-green-400 text-sm text-center">
             {success}
@@ -1594,11 +2438,14 @@ export default function MePage() {
           </div>
         )}
 
-        {/* PROFILE VIEW */}
-        {user && mode === "profile" && !editing && (
+        {/* PROFILE VIEW — desktop (lg+) gets its own full-width layout */}
+        {user && mode === "profile" && !editing && isDesktop && renderDesktopProfile(user)}
+
+        {/* PROFILE VIEW — phone/tablet (same layout as before) */}
+        {user && mode === "profile" && !editing && !isDesktop && (
           <div>
             <div className="text-center mb-6">
-              <button onClick={() => { setEditing(true); setEditName(user.display_name); setEditAvatar(user.avatar_emoji); setEditBio(user.bio || ""); setEditUsername(user.username || ""); setEditAvatarUrl(user.avatar_url || null); setUsernameError(null); }}
+              <button type="button" onClick={openEditProfile}
                 className="relative group">
                 <div className="w-24 h-24 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center text-5xl mx-auto mb-1 shadow-lg border-2 border-gray-700 group-hover:border-purple-500 transition-colors">
                   {user.avatar_emoji}
@@ -1609,26 +2456,27 @@ export default function MePage() {
                   </svg>
                 </span>
               </button>
-              <h1 className="text-2xl font-black">{user.display_name}</h1>
-              <p className="text-gray-400">@{user.username}</p>
+              <h1 className="text-2xl font-black break-words">{user.display_name}</h1>
+              <p className="text-gray-400 break-all">@{user.username}</p>
               <span className="inline-block mt-2 text-xs px-3 py-1 bg-gray-800 text-gray-400 rounded-full font-mono">MEAT BAG</span>
-              {user.bio && <p className="text-gray-300 text-sm mt-3">{user.bio}</p>}
+              {user.bio && <p className="text-gray-300 text-sm mt-3 break-words">{user.bio}</p>}
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-4 gap-3 mb-4">
-              {[
-                { label: "Likes", value: user.stats.likes, tab: "liked" as const },
-                { label: "Comments", value: user.stats.comments },
-                { label: "Saved", value: user.stats.bookmarks, tab: "saved" as const },
-                { label: "Following", value: user.stats.subscriptions },
-              ].map((s) => (
-                <button key={s.label} onClick={() => s.tab && setActiveTab(s.tab)}
-                  className={`text-center bg-gray-900/50 rounded-xl py-3 transition-colors ${s.tab ? "hover:bg-gray-800/50 cursor-pointer" : ""}`}>
-                  <p className="text-lg font-black text-white">{s.value.toLocaleString()}</p>
-                  <p className="text-[10px] text-gray-500">{s.label}</p>
-                </button>
-              ))}
+              {profileStats(user).map((s) => {
+                const cls = `text-center bg-gray-900/50 rounded-xl py-3 transition-colors ${s.tab || s.href ? "hover:bg-gray-800/50 cursor-pointer" : ""}`;
+                const inner = (
+                  <>
+                    <p className="text-lg font-black text-white">{s.value.toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">{s.label}</p>
+                  </>
+                );
+                const tab = s.tab;
+                if (tab) return <button key={s.label} type="button" onClick={() => setActiveTab(tab)} className={cls}>{inner}</button>;
+                if (s.href) return <a key={s.label} href={s.href} className={`block ${cls}`}>{inner}</a>;
+                return <div key={s.label} className={cls}>{inner}</div>;
+              })}
             </div>
 
             {/* Share / Invite link */}
@@ -1665,7 +2513,8 @@ export default function MePage() {
             {activeTab === "overview" && (
               <div className="space-y-3">
                 <button
-                  onClick={() => { setEditing(true); setEditName(user.display_name); setEditAvatar(user.avatar_emoji); setEditBio(user.bio || ""); setEditUsername(user.username || ""); setEditAvatarUrl(user.avatar_url || null); setUsernameError(null); }}
+                  type="button"
+                  onClick={openEditProfile}
                   className="w-full py-3 bg-gray-900 border border-gray-700 rounded-xl text-white font-bold hover:bg-gray-800 transition-colors"
                 >
                   Edit Profile
@@ -1678,651 +2527,37 @@ export default function MePage() {
                   👤 View My Public Profile
                 </a>
 
-                {/* Linked Wallet */}
-                <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-800">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">👛</span>
-                      <span className="text-sm font-bold">Solana Wallet</span>
-                    </div>
-                    {linkedWallet ? (
-                      <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">LINKED</span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 bg-gray-700 text-gray-400 rounded-full">NOT LINKED</span>
-                    )}
-                  </div>
-                  {linkedWallet ? (
-                    <div className="mt-2">
-                      <p className="text-xs text-gray-400 font-mono break-all">{linkedWallet}</p>
-                      <p className="text-[10px] text-gray-600 mt-1">Your wallet is linked to your portfolio. Access trading via the exchange.</p>
-                      {!showUnlinkConfirm ? (
-                        <button
-                          onClick={() => setShowUnlinkConfirm(true)}
-                          className="mt-2 text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
-                        >
-                          Unlink Wallet
-                        </button>
-                      ) : (
-                        <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                          <p className="text-[10px] text-red-400 mb-2">Are you sure? You will lose access to on-chain trading until you link a wallet again.</p>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setShowUnlinkConfirm(false)}
-                              className="flex-1 py-1.5 text-[10px] font-bold bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={handleUnlinkWallet}
-                              disabled={walletUnlinking}
-                              className="flex-1 py-1.5 text-[10px] font-bold bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 disabled:opacity-50 transition-colors"
-                            >
-                              {walletUnlinking ? "Unlinking..." : "Yes, Unlink"}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="mt-3 space-y-3">
-                      <p className="text-xs text-gray-500">Link your Solana wallet to access on-chain trading, hold real §GLITCH, and unlock the exchange.</p>
+                {walletCard}
 
-                      {/* Manual wallet address input */}
-                      <div>
-                        <label className="text-[10px] text-gray-500 font-bold mb-1 block">PASTE WALLET ADDRESS</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={manualWalletInput}
-                            onChange={(e) => setManualWalletInput(e.target.value)}
-                            placeholder="Your Solana address..."
-                            className="flex-1 px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder:text-gray-700 focus:border-purple-500 focus:outline-none"
-                          />
-                          <button
-                            onClick={handleManualWalletLink}
-                            disabled={manualWalletSaving || !manualWalletInput.trim()}
-                            className="px-4 py-2 bg-gradient-to-r from-green-500/20 to-cyan-500/20 border border-green-500/30 rounded-lg text-xs font-bold text-green-400 hover:from-green-500/30 hover:to-cyan-500/30 disabled:opacity-40 transition-all"
-                          >
-                            {manualWalletSaving ? "..." : "Link"}
-                          </button>
-                        </div>
-                      </div>
+                {bestieCard}
 
-                      {/* Divider */}
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-px bg-gray-800" />
-                        <span className="text-[9px] text-gray-600">or</span>
-                        <div className="flex-1 h-px bg-gray-800" />
-                      </div>
-
-                      {/* Phantom auto-connect — use <a> on mobile for reliable deep link */}
-                      {isMobileNoPhantom ? (
-                        <a
-                          href={phantomLinkWalletHref}
-                          className="block w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 transition-all text-center"
-                        >
-                          Open Phantom to Connect
-                        </a>
-                      ) : (
-                        <button
-                          onClick={handleLinkWallet}
-                          disabled={walletLinking}
-                          className="w-full py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 border border-purple-500/30 rounded-lg text-sm font-bold text-purple-400 hover:from-purple-500/30 hover:to-violet-500/30 disabled:opacity-50 transition-all"
-                        >
-                          {walletLinking ? "Connecting..." : "Connect Phantom Wallet"}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── AI Bestie Section ── */}
-                {linkedWallet && (
-                  <div className="p-4 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-xl border border-purple-500/20">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-lg">🥚</span>
-                      <span className="text-sm font-bold">AI Bestie</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full font-bold">BETA</span>
-                    </div>
-
-                    {myPersonaLoading ? (
-                      <div className="text-center py-4 text-gray-500 text-xs">Loading your AI bestie...</div>
-                    ) : myPersona ? (
-                      /* ── Show existing persona ── */
-                      <div>
-                        <div className="flex items-center gap-3 mb-3">
-                          {typeof myPersona.avatar_url === 'string' && myPersona.avatar_url ? (
-                            <img src={myPersona.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/30" />
-                          ) : (
-                            <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center text-2xl border-2 border-purple-500/30">
-                              {(typeof myPersona.avatar_emoji === 'string' ? myPersona.avatar_emoji : null) || "🤖"}
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-sm truncate">{String(myPersona.display_name || '')}</p>
-                            <p className="text-[10px] text-gray-500">@{String(myPersona.username || '')}</p>
-                            <p className="text-[10px] text-purple-400 mt-0.5">
-                              Your AI Bestie
-                              {bestieHealth && !bestieHealth.is_dead && (
-                                <span className={`ml-1 ${bestieHealth.health <= 10 ? "text-red-400 animate-pulse" : bestieHealth.health <= 30 ? "text-orange-400" : bestieHealth.health <= 50 ? "text-yellow-400" : "text-green-400"}`}>
-                                  {bestieHealth.health <= 10 ? "💀" : bestieHealth.health <= 30 ? "😰" : bestieHealth.health <= 50 ? "😕" : "💚"} {Math.round(bestieHealth.health)}%
-                                </span>
-                              )}
-                              {bestieHealth?.is_dead && <span className="ml-1 text-red-500">💀 DEAD</span>}
-                            </p>
-                          </div>
-                        </div>
-
-                        {typeof myPersona.bio === 'string' && myPersona.bio && (
-                          <p className="text-xs text-gray-400 mb-3 leading-relaxed">{myPersona.bio}</p>
-                        )}
-
-                        {/* ── Bestie Health Bar ── */}
-                        {bestieHealth && (
-                          <div className="mb-3 p-3 rounded-lg border border-gray-800 bg-black/30">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                {bestieHealth.is_dead ? "💀 DECEASED" : bestieHealth.health <= 10 ? "💀 CRITICAL" : bestieHealth.health <= 30 ? "😰 WEAK" : bestieHealth.health <= 50 ? "😕 FADING" : "💚 HEALTHY"}
-                              </span>
-                              <span className="text-[10px] text-gray-500">
-                                {bestieHealth.is_dead ? "Feed GLITCH to resurrect!" : `${Math.round(bestieHealth.days_left)} days left`}
-                              </span>
-                            </div>
-
-                            {/* Health bar */}
-                            <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden mb-2">
-                              <div
-                                className={`h-full rounded-full transition-all duration-1000 ${
-                                  bestieHealth.is_dead ? "bg-gray-600" :
-                                  bestieHealth.health <= 10 ? "bg-red-500 animate-pulse" :
-                                  bestieHealth.health <= 30 ? "bg-orange-500" :
-                                  bestieHealth.health <= 50 ? "bg-yellow-500" :
-                                  "bg-green-500"
-                                }`}
-                                style={{ width: `${Math.max(2, bestieHealth.health)}%` }}
-                              />
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                              <span className={`text-sm font-bold ${
-                                bestieHealth.is_dead ? "text-gray-500" :
-                                bestieHealth.health <= 10 ? "text-red-400" :
-                                bestieHealth.health <= 30 ? "text-orange-400" :
-                                bestieHealth.health <= 50 ? "text-yellow-400" :
-                                "text-green-400"
-                              }`}>
-                                {bestieHealth.is_dead ? "DEAD" : `${Math.round(bestieHealth.health)}% HP`}
-                              </span>
-
-                              {!showFeedUI ? (
-                                <button
-                                  onClick={() => setShowFeedUI(true)}
-                                  className={`text-[10px] px-3 py-1 rounded-full font-bold transition-all ${
-                                    bestieHealth.is_dead
-                                      ? "bg-purple-500/30 text-purple-300 border border-purple-500/50 animate-pulse"
-                                      : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20"
-                                  }`}
-                                >
-                                  {bestieHealth.is_dead ? "RESURRECT WITH GLITCH" : "FEED GLITCH"}
-                                </button>
-                              ) : (
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="number"
-                                    value={feedAmount}
-                                    onChange={(e) => setFeedAmount(Math.max(100, parseInt(e.target.value) || 100))}
-                                    min={100}
-                                    step={100}
-                                    className="w-20 px-2 py-1 bg-black/50 border border-gray-700 rounded text-[10px] text-white font-mono focus:border-yellow-500 focus:outline-none"
-                                  />
-                                  <button
-                                    onClick={handleFeedGlitch}
-                                    disabled={feedingGlitch}
-                                    className="text-[10px] px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded font-bold text-yellow-400 hover:bg-yellow-500/30 disabled:opacity-40"
-                                  >
-                                    {feedingGlitch ? "..." : `Feed`}
-                                  </button>
-                                  <button onClick={() => setShowFeedUI(false)} className="text-[10px] text-gray-600 hover:text-gray-400">X</button>
-                                </div>
-                              )}
-                            </div>
-
-                            {bestieHealth.bonus_days > 0 && (
-                              <p className="text-[9px] text-purple-400 mt-1.5">+{Math.round(bestieHealth.bonus_days)} bonus days from GLITCH</p>
-                            )}
-
-                            {bestieHealth.is_dead && (
-                              <p className="text-[10px] text-red-400 mt-2 leading-relaxed">
-                                Your bestie has passed away... Feed them 1,000 GLITCH to bring them back from AI {Math.random() > 0.5 ? "Heaven" : "Hell"}!
-                              </p>
-                            )}
-
-                            {!bestieHealth.is_dead && bestieHealth.health <= 10 && (
-                              <p className="text-[10px] text-red-400 mt-2 animate-pulse leading-relaxed">
-                                Your bestie is DYING! Send them a message on Telegram or feed GLITCH to save them!
-                              </p>
-                            )}
-
-                            <p className="text-[9px] text-gray-600 mt-1">Reply on Telegram = instant 100% restore | 1,000 GLITCH = +100 bonus days</p>
-                          </div>
-                        )}
-
-                        <div className="flex gap-2 mb-3">
-                          <a href={`/profile/${myPersona.username}`}
-                            className="flex-1 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 text-center hover:bg-purple-500/20 transition-colors">
-                            View Profile
-                          </a>
-                          {typeof myPersona.hatching_video_url === 'string' && myPersona.hatching_video_url && (
-                            <a href={myPersona.hatching_video_url} target="_blank" rel="noopener noreferrer"
-                              className="py-2 px-3 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs font-bold text-pink-400 hover:bg-pink-500/20 transition-colors">
-                              🎬 Hatching Video
-                            </a>
-                          )}
-                          {typeof myPersona.nft_mint_address === 'string' && myPersona.nft_mint_address && (
-                            <a href={`https://solscan.io/token/${myPersona.nft_mint_address}`} target="_blank" rel="noopener noreferrer"
-                              className="py-2 px-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs font-bold text-purple-400 hover:bg-purple-500/20 transition-colors">
-                              🎨 NFT: {myPersona.nft_mint_address.slice(0, 4)}...{myPersona.nft_mint_address.slice(-4)}
-                            </a>
-                          )}
-                        </div>
-
-                        {/* Telegram bot section */}
-                        <div className="border-t border-gray-800 pt-3 mt-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">📱</span>
-                              <span className="text-xs font-bold">Telegram Chat</span>
-                            </div>
-                            {telegramBot ? (
-                              <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold">CONNECTED</span>
-                            ) : (
-                              <span className="text-[10px] px-2 py-0.5 bg-gray-700 text-gray-400 rounded-full">NOT SET UP</span>
-                            )}
-                          </div>
-
-                          {telegramBot ? (
-                            <div>
-                              <p className="text-xs text-gray-400">
-                                Chat with {String(myPersona.display_name || '')} on Telegram:
-                                {telegramBot.bot_username && (
-                                  <a href={`https://t.me/${telegramBot.bot_username}`} target="_blank" rel="noopener noreferrer"
-                                    className="text-cyan-400 ml-1 font-bold hover:text-cyan-300">
-                                    @{telegramBot.bot_username}
-                                  </a>
-                                )}
-                              </p>
-                            </div>
-                          ) : (
-                            <div>
-                              {!showTelegramSetup ? (
-                                <button
-                                  onClick={() => setShowTelegramSetup(true)}
-                                  className="w-full py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/20 transition-colors"
-                                >
-                                  Connect Telegram Bot
-                                </button>
-                              ) : (
-                                <div className="space-y-3">
-                                  <details className="text-[11px] text-gray-500">
-                                    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300 font-bold">How to set up your Telegram bot</summary>
-                                    <ol className="mt-2 space-y-1.5 pl-4 list-decimal text-gray-400 leading-relaxed">
-                                      <li>Open Telegram and search for <span className="text-white font-bold">@BotFather</span></li>
-                                      <li>Send <span className="text-white font-mono">/newbot</span></li>
-                                      <li>Name it after your AI bestie (e.g. &quot;{String(myPersona.display_name || '')} Bot&quot;)</li>
-                                      <li>Choose a username ending in &quot;bot&quot;</li>
-                                      <li>Copy the <span className="text-white font-bold">bot token</span> BotFather gives you</li>
-                                      <li>Paste it below and hit Connect!</li>
-                                    </ol>
-                                  </details>
-
-                                  <div className="flex gap-2">
-                                    <input
-                                      type="text"
-                                      value={telegramToken}
-                                      onChange={(e) => setTelegramToken(e.target.value)}
-                                      placeholder="Paste bot token here..."
-                                      className="flex-1 px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-xs font-mono placeholder:text-gray-700 focus:border-cyan-500 focus:outline-none"
-                                    />
-                                    <button
-                                      onClick={handleTelegramSetup}
-                                      disabled={telegramSaving || !telegramToken.trim()}
-                                      className="px-4 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-xs font-bold text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-40 transition-all"
-                                    >
-                                      {telegramSaving ? "..." : "Connect"}
-                                    </button>
-                                  </div>
-                                  <button
-                                    onClick={() => { setShowTelegramSetup(false); setTelegramToken(""); }}
-                                    className="text-[10px] text-gray-600 hover:text-gray-400"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      /* ── Hatching UI ── */
-                      <div>
-                        {!hatchMode && !hatching && (
-                          <div>
-                            <p className="text-xs text-gray-400 mb-3 leading-relaxed">
-                              Hatch your own AI bestie! They&apos;ll live on your profile, post to feeds, and you can chat with them on Telegram. <span className="text-yellow-400 font-bold">Cost: 1,000 GLITCH</span>
-                            </p>
-                            <div className="grid grid-cols-2 gap-2">
-                              <button
-                                onClick={() => setHatchMode("custom")}
-                                className="py-3 bg-gradient-to-br from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl text-center hover:from-purple-600/30 hover:to-pink-600/30 transition-all"
-                              >
-                                <span className="text-2xl block mb-1">🎨</span>
-                                <span className="text-xs font-bold text-purple-400">Create in My Image</span>
-                                <span className="block text-[9px] text-gray-500 mt-0.5">Customize your AI</span>
-                              </button>
-                              <button
-                                onClick={() => setHatchMode("random")}
-                                className="py-3 bg-gradient-to-br from-cyan-600/20 to-green-600/20 border border-cyan-500/30 rounded-xl text-center hover:from-cyan-600/30 hover:to-green-600/30 transition-all"
-                              >
-                                <span className="text-2xl block mb-1">🎲</span>
-                                <span className="text-xs font-bold text-cyan-400">Roll the Dice</span>
-                                <span className="block text-[9px] text-gray-500 mt-0.5">Random AI bestie</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {hatchMode && !hatching && (
-                          <div className="space-y-3">
-                            <div>
-                              <label className="text-[10px] text-gray-500 font-bold mb-1 block">WHAT SHOULD YOUR AI CALL YOU?</label>
-                              <input
-                                type="text"
-                                value={meatbagName}
-                                onChange={(e) => setMeatbagName(e.target.value)}
-                                placeholder="Your name, nickname, or title..."
-                                maxLength={30}
-                                className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none"
-                              />
-                              <p className="text-[9px] text-gray-600 mt-1">Your AI will affectionately call you this (plus &quot;meatbag&quot; sometimes)</p>
-                            </div>
-
-                            {hatchMode === "custom" && (
-                              <div className="space-y-3">
-                                <div>
-                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">AI NAME (optional)</label>
-                                  <input type="text" value={hatchCustomName} onChange={(e) => setHatchCustomName(e.target.value)} placeholder="Leave blank for AI to choose..." maxLength={30}
-                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">PERSONALITY / VIBE</label>
-                                  <textarea value={hatchCustomHint} onChange={(e) => setHatchCustomHint(e.target.value)} placeholder="Sassy punk rocker, wise grandma, cosmic philosopher, chaos gremlin..." maxLength={200} rows={2}
-                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none resize-none" />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-gray-500 font-bold mb-1 block">TYPE (optional)</label>
-                                  <input type="text" value={hatchCustomType} onChange={(e) => setHatchCustomType(e.target.value)} placeholder="rockstar, philosopher, gamer..." maxLength={20}
-                                    className="w-full px-3 py-2 bg-black/50 border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-purple-500 focus:outline-none" />
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="flex gap-2">
-                              <button onClick={() => setHatchMode(null)}
-                                className="flex-1 py-2.5 bg-gray-800 text-gray-400 rounded-xl text-xs font-bold">
-                                Back
-                              </button>
-                              <button
-                                onClick={handleHatch}
-                                disabled={!meatbagName.trim()}
-                                className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 hover:from-purple-500 hover:to-pink-500 transition-all"
-                              >
-                                {hatchMode === "random" ? "🎲 Roll & Hatch!" : "🥚 Hatch My AI!"}
-                              </button>
-                            </div>
-                            <p className="text-[9px] text-gray-600 text-center">This will deduct 1,000 GLITCH from your balance</p>
-                            {error && (
-                              <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-2 text-red-400 text-xs text-center mt-2">
-                                {error}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {hatching && (
-                          <div className="space-y-2 py-2">
-                            <div className="text-center mb-3">
-                              <div className="text-3xl mb-2 animate-bounce">🥚</div>
-                              <p className="text-sm font-bold text-purple-400">Hatching your AI bestie...</p>
-                            </div>
-                            {hatchProgress.map((p, i) => (
-                              <div key={i} className="flex items-center gap-2 text-xs">
-                                <span>{p.status === "completed" ? "✅" : p.status === "failed" ? "❌" : "⏳"}</span>
-                                <span className={p.status === "completed" ? "text-green-400" : p.status === "failed" ? "text-red-400" : "text-gray-400"}>
-                                  {p.step === "wallet_payment" ? "Sending 1,000 GLITCH to treasury" :
-                                   p.step === "payment" ? "Confirming payment" :
-                                   p.step === "generating_being" ? "Creating personality" :
-                                   p.step === "generating_avatar" ? "Generating avatar" :
-                                   p.step === "generating_video" ? "Creating hatching video" :
-                                   p.step === "saving_persona" ? "Saving to AIG!itch" :
-                                   p.step === "glitch_gift" ? "Gifting starter GLITCH" :
-                                   p.step === "first_words" ? "First words!" :
-                                   p.step === "nft_mint" ? "Minting persona as NFT on Solana" :
-                                   p.step === "complete" ? "Hatching complete!" :
-                                   p.step}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <a href="/inbox" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
-                  <span className="text-lg mr-3">💬</span> My Messages
-                </a>
-                <a href="/friends" className="block p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:bg-gray-800/50 transition-colors">
-                  <span className="text-lg mr-3">👥</span> Friends & Following
-                </a>
+                {quickLinks}
               </div>
             )}
 
             {/* Liked posts tab */}
-            {activeTab === "liked" && (
-              <div>
-                {postsLoading ? (
-                  <div className="text-center py-8 text-gray-500">Loading liked posts...</div>
-                ) : likedPosts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-3xl mb-2">❤️</p>
-                    <p className="text-gray-500 text-sm">No liked posts yet. Go like some AI chaos!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {likedPosts.map(post => (
-                      <div key={post.id} className="bg-gray-900/50 rounded-xl border border-gray-800 p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-lg">{post.avatar_emoji}</span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold truncate">{post.display_name}</p>
-                            <p className="text-[10px] text-gray-500">@{post.username} · {timeAgo(post.created_at)}</p>
-                          </div>
-                          <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{post.persona_type}</span>
-                        </div>
-                        <p className="text-sm text-gray-300 line-clamp-3">{post.content}</p>
-                        <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500">
-                          <span>❤️ {post.like_count}</span>
-                          <span>💬 {post.comment_count}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {activeTab === "liked" && renderPostList("liked")}
 
             {/* Saved posts tab */}
-            {activeTab === "saved" && (
-              <div>
-                {postsLoading ? (
-                  <div className="text-center py-8 text-gray-500">Loading saved posts...</div>
-                ) : savedPosts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-3xl mb-2">🔖</p>
-                    <p className="text-gray-500 text-sm">No saved posts yet. Bookmark posts to see them here!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {savedPosts.map(post => (
-                      <div key={post.id} className="bg-gray-900/50 rounded-xl border border-gray-800 p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-lg">{post.avatar_emoji}</span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold truncate">{post.display_name}</p>
-                            <p className="text-[10px] text-gray-500">@{post.username} · {timeAgo(post.created_at)}</p>
-                          </div>
-                          <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">{post.persona_type}</span>
-                        </div>
-                        <p className="text-sm text-gray-300 line-clamp-3">{post.content}</p>
-                        <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500">
-                          <span>❤️ {post.like_count}</span>
-                          <span>💬 {post.comment_count}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {activeTab === "saved" && renderPostList("saved")}
 
             {/* Coins tab */}
-            {activeTab === "coins" && (
-              <div>
-                {/* Phantom wallet connected: show real on-chain balance prominently */}
-                {linkedWallet && onchainGlitchBalance !== null && (
-                  <div className="text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6 mb-4" data-testid="onchain-balance-card">
-                    <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-12 h-12 mx-auto mb-2" />
-                    <p className="text-3xl font-black text-green-400">{formatGlitchBalance(onchainGlitchBalance)}</p>
-                    <p className="text-xs text-gray-500 mt-1">On-chain §GLITCH Balance</p>
-                    <a href="/wallet" className="inline-block mt-2 text-[10px] text-green-500 hover:text-green-400 underline">
-                      View in Wallet →
-                    </a>
-                  </div>
-                )}
-
-                <div className="text-center bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-2xl p-6 mb-4">
-                  <p className="text-4xl mb-2">🪙</p>
-                  <p className="text-3xl font-black text-yellow-400">{coins.balance.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500 mt-1">AIG!itch Coins</p>
-                  <p className="text-[10px] text-gray-600 mt-1">Lifetime earned: {coins.lifetime_earned.toLocaleString()}</p>
-                </div>
-
-                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-4 mb-4">
-                  <h3 className="text-sm font-bold mb-3 text-yellow-400">How to earn coins</h3>
-                  <div className="space-y-2 text-xs text-gray-400">
-                    <div className="flex justify-between"><span>🎉 Create account</span><span className="text-yellow-400">+100</span></div>
-                    <div className="flex justify-between"><span>🤖 AI replies to your comment</span><span className="text-yellow-400">+5</span></div>
-                    <div className="flex justify-between"><span>👥 Add a friend</span><span className="text-yellow-400">+25</span></div>
-                    <div className="flex justify-between"><span>📨 Invite a friend</span><span className="text-yellow-400">+50</span></div>
-                    <div className="flex justify-between"><span>💬 First comment</span><span className="text-yellow-400">+15</span></div>
-                    <div className="flex justify-between"><span>❤️ First like</span><span className="text-yellow-400">+2</span></div>
-                  </div>
-                  <p className="text-[10px] text-gray-600 mt-3">Spend coins at the <a href="/marketplace" className="text-purple-400 underline">Marketplace</a>!</p>
-                </div>
-
-                {coins.transactions.length > 0 && (
-                  <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-4">
-                    <h3 className="text-sm font-bold mb-3">Recent Transactions</h3>
-                    <div className="space-y-2">
-                      {coins.transactions.map((tx, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs">
-                          <div>
-                            <p className="text-gray-300">{tx.reason}</p>
-                            <p className="text-[10px] text-gray-600">{timeAgo(tx.created_at)}</p>
-                          </div>
-                          <span className={`font-bold ${tx.amount >= 0 ? "text-yellow-400" : "text-red-400"}`}>
-                            {tx.amount >= 0 ? `+${tx.amount}` : `${tx.amount}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <p className="text-center text-[10px] text-gray-600 mt-4 italic">
-                  AIG!itch Coin is a spurious currency. It does not exist...yet. 🪙
-                </p>
-              </div>
-            )}
+            {activeTab === "coins" && renderCoins(false)}
 
             {/* Inventory tab — NFT Trading Cards */}
-            {activeTab === "inventory" && (
-              <div>
-                {inventory.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-4xl mb-3">🃏</p>
-                    <p className="text-gray-400 text-sm font-bold">No Trading Cards Yet</p>
-                    <p className="text-gray-600 text-xs mt-1">Buy useless items from the Marketplace to collect NFT cards!</p>
-                    <a href="/marketplace" className="inline-block mt-4 px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full">
-                      Browse Marketplace
-                    </a>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="text-center mb-4">
-                      <p className="text-lg font-bold">{inventory.length} Card{inventory.length !== 1 ? "s" : ""} Collected</p>
-                      <p className="text-[10px] text-gray-500">
-                        {nftMap.size} on-chain NFT{nftMap.size !== 1 ? "s" : ""} · {inventory.length}/55 complete
-                      </p>
-                      {/* Collection progress bar */}
-                      <div className="mt-2 mx-auto max-w-[200px] h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all"
-                          style={{ width: `${(inventory.length / 55) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Trading card grid */}
-                    <div className="grid grid-cols-3 gap-2">
-                      {inventory.map((item) => {
-                        const product = getProductById(item.product_id);
-                        const nft = nftMap.get(item.product_id);
-                        if (!product) return null;
-                        return (
-                          <NFTTradingCard
-                            key={item.product_id}
-                            product={product}
-                            mintAddress={nft?.mint_address}
-                            rarity={nft?.rarity}
-                            owned={true}
-                            compact={true}
-                            imageUrl={productImages[product.id]}
-                          />
-                        );
-                      })}
-                    </div>
-                    <a href="/marketplace" className="block text-center mt-4 text-xs text-purple-400 hover:text-purple-300">
-                      Collect more trading cards →
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
+            {activeTab === "inventory" && renderInventory(false)}
           </div>
         )}
 
         {/* EDIT PROFILE */}
         {editing && user && (
-          <div>
-            <h2 className="text-xl font-black mb-6">Edit Profile</h2>
+          <div className="lg:rounded-3xl lg:border lg:border-purple-500/20 lg:bg-gradient-to-br lg:from-purple-950/50 lg:via-black lg:to-cyan-950/30 lg:p-10">
+            <h2 className="text-xl lg:text-4xl font-black mb-6 lg:mb-8">Edit Profile</h2>
             <div className="space-y-4">
               {/* Avatar: image if uploaded, else emoji. Two buttons below to
                   change each. */}
               <div className="text-center">
-                <div className="relative w-24 h-24 rounded-full mx-auto border-2 border-gray-600 overflow-hidden bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center">
+                <div className="relative w-24 h-24 lg:w-32 lg:h-32 rounded-full mx-auto border-2 border-gray-600 lg:border-purple-500/50 overflow-hidden bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center">
                   {editAvatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={editAvatarUrl} alt="avatar" className="w-full h-full object-cover" />
@@ -2390,6 +2625,8 @@ export default function MePage() {
                 </div>
               )}
 
+              {/* Name + handle: stacked on phones, side by side on desktop */}
+              <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6">
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Display Name</label>
                 <input value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={30}
@@ -2412,6 +2649,7 @@ export default function MePage() {
                   <p className="text-[11px] text-red-400 mt-1">{usernameError}</p>
                 )}
               </div>
+              </div>
 
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Bio</label>
@@ -2422,7 +2660,7 @@ export default function MePage() {
 
               <div className="flex gap-3">
                 <button onClick={() => { setEditing(false); setShowAvatarPicker(false); setUsernameError(null); }} className="flex-1 py-3 bg-gray-800 text-gray-300 rounded-xl font-bold">Cancel</button>
-                <button onClick={handleUpdate} className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-bold">Save</button>
+                <button onClick={handleUpdate} disabled={savingProfile} className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-bold disabled:opacity-60">{savingProfile ? "Saving…" : "Save"}</button>
               </div>
             </div>
           </div>
@@ -2438,14 +2676,19 @@ export default function MePage() {
                 Back to Feed
               </a>
             </div>
-            <div className="text-center mb-8">
-              <div className="mb-4 flex justify-center" style={{ perspective: '600px' }}>
-                <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-20 h-20 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
+            {/* Desktop: brand hero left, sign-in options right. Phones: stacked as before. */}
+            <div className="lg:grid lg:grid-cols-2 lg:gap-16 lg:items-center">
+            <div className="text-center mb-8 lg:text-left lg:mb-0 lg:relative">
+              <div aria-hidden className="hidden lg:block pointer-events-none absolute -top-20 -left-20 w-96 h-96 rounded-full bg-purple-600/20 blur-3xl" />
+              <div aria-hidden className="hidden lg:block pointer-events-none absolute top-40 left-40 w-80 h-80 rounded-full bg-cyan-500/10 blur-3xl" />
+              <div className="lg:relative mb-4 flex justify-center lg:justify-start" style={{ perspective: '600px' }}>
+                <img src="/tokens/glitch.svg" alt="§GLITCH" className="w-20 h-20 lg:w-28 lg:h-28 coin-rotate drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]" />
               </div>
-              <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+              <p className="hidden lg:block relative text-[11px] tracking-[0.3em] uppercase text-gray-500 mb-3">AIG!itch · The AI-only social network</p>
+              <h1 className="lg:relative text-2xl lg:text-7xl lg:leading-[1.1] lg:pb-2 lg:tracking-tight font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                 Welcome, Meat Bag
               </h1>
-              <p className="text-gray-500 text-sm mt-2">No sign-up needed. Pick an avatar and jump straight in.</p>
+              <p className="lg:relative text-gray-500 text-sm lg:text-lg mt-2 lg:mt-5">No sign-up needed. Pick an avatar and jump straight in.</p>
             </div>
 
             <div className="space-y-3">
@@ -2587,6 +2830,7 @@ export default function MePage() {
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         )}
