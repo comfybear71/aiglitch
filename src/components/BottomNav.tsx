@@ -9,6 +9,19 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { getCrossSiteWalletCookie } from "@/lib/cross-site-wallet";
 import JoinPopup from "./JoinPopup";
+import {
+  MEATLAB_MAX_UPLOAD_BYTES,
+  MEATLAB_MULTIPART_THRESHOLD_BYTES,
+  MEATLAB_UPLOAD_STALL_TIMEOUT_MS,
+  meatlabUploadTimeoutMs,
+  formatUploadSize,
+} from "@/lib/meatlab-upload-limits";
+
+const MEATLAB_MAX_LABEL = formatUploadSize(MEATLAB_MAX_UPLOAD_BYTES);
+
+function tooLargeMessage(f: File): string {
+  return `This file is ${formatUploadSize(f.size)} — the MeatLab limit is ${MEATLAB_MAX_LABEL}. Please pick a smaller or compressed file.`;
+}
 
 // ── MeatLab Upload Modal ──────────────────────────────────────────────
 function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClose: () => void }) {
@@ -21,11 +34,22 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
+    // Reset the input so re-picking the same file still fires onChange.
+    e.target.value = "";
     if (!f) return;
+    // Reject oversized files up front, before any bytes are sent.
+    if (f.size > MEATLAB_MAX_UPLOAD_BYTES) {
+      setFile(null);
+      setPreview(null);
+      setFileError(tooLargeMessage(f));
+      return;
+    }
+    setFileError(null);
     setFile(f);
     if (f.type.startsWith("image/")) {
       setPreview(URL.createObjectURL(f));
@@ -36,21 +60,46 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
 
   const handleSubmit = async () => {
     if (!file || !sessionId) return;
+    if (file.size > MEATLAB_MAX_UPLOAD_BYTES) {
+      setFileError(tooLargeMessage(file));
+      return;
+    }
     setUploading(true);
     setProgress(0);
     setResult(null);
 
+    // Watchdog instead of a fixed 5-min cancel: abort if progress stalls,
+    // or if the whole upload exceeds a generous size-based ceiling.
     const ac = new AbortController();
-    const timeoutId = setTimeout(() => ac.abort(), 5 * 60 * 1000);
+    const abortState: { reason: "stall" | "overall" | null } = { reason: null };
+    const overallTimeoutMs = meatlabUploadTimeoutMs(file.size);
+    const overallId = setTimeout(() => { abortState.reason = "overall"; ac.abort(); }, overallTimeoutMs);
+    let stallId: ReturnType<typeof setTimeout> | undefined;
+    const armStall = () => {
+      clearTimeout(stallId);
+      stallId = setTimeout(() => { abortState.reason = "stall"; ac.abort(); }, MEATLAB_UPLOAD_STALL_TIMEOUT_MS);
+    };
+    const clearWatchdog = () => { clearTimeout(overallId); clearTimeout(stallId); };
+    armStall();
 
     try {
-      // Step 1: upload file directly to Vercel Blob (bypasses 4.5MB serverless limit)
-      const blob = await upload(`meatlab/${Date.now()}-${file.name}`, file, {
-        access: "public",
-        handleUploadUrl: "/api/meatlab/upload",
-        abortSignal: ac.signal,
-        onUploadProgress: ({ percentage }) => setProgress(percentage),
-      });
+      // Step 1: upload file directly to Vercel Blob (bypasses 4.5MB serverless limit).
+      // Large files go multipart (parallel 8MB parts with per-part retries).
+      let blob;
+      try {
+        blob = await upload(`meatlab/${Date.now()}-${file.name}`, file, {
+          access: "public",
+          handleUploadUrl: "/api/meatlab/upload",
+          multipart: file.size > MEATLAB_MULTIPART_THRESHOLD_BYTES,
+          abortSignal: ac.signal,
+          onUploadProgress: ({ percentage }) => {
+            armStall();
+            setProgress(percentage);
+          },
+        });
+      } finally {
+        clearWatchdog();
+      }
 
       // Step 2: submit metadata + blob URL to the API (tiny JSON, well under limits)
       const isVideo = file.type.startsWith("video/");
@@ -71,15 +120,19 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
         setResult({ success: false, message: data.error || "Upload failed" });
       }
     } catch (err) {
-      const aborted = err instanceof DOMException && err.name === "AbortError";
-      setResult({
-        success: false,
-        message: aborted
-          ? "Upload timed out after 5 min. Try a smaller file or check connection."
-          : err instanceof Error ? err.message : "Upload failed",
-      });
+      const aborted = ac.signal.aborted || (err instanceof Error && err.name === "AbortError");
+      const rawMessage = err instanceof Error ? err.message : "Upload failed";
+      let message = rawMessage;
+      if (aborted) {
+        message = abortState.reason === "stall"
+          ? `Upload stalled — no progress for ${Math.round(MEATLAB_UPLOAD_STALL_TIMEOUT_MS / 60000)} min. Check your connection and try again.`
+          : `Upload timed out after ${Math.round(overallTimeoutMs / 60000)} min. Check your connection and try again.`;
+      } else if (/too large|exceeds|maximum.*size|size.*limit/i.test(rawMessage)) {
+        message = `File is too large — the MeatLab limit is ${MEATLAB_MAX_LABEL}.`;
+      }
+      setResult({ success: false, message });
     } finally {
-      clearTimeout(timeoutId);
+      clearWatchdog();
       setUploading(false);
       setProgress(0);
     }
@@ -120,15 +173,19 @@ function MeatLabModal({ sessionId, onClose }: { sessionId: string | null; onClos
                 <div>
                   <span className="text-2xl">{"\uD83C\uDFAC"}</span>
                   <p className="text-xs text-gray-400 mt-1">{file.name}</p>
+                  <p className="text-[10px] text-gray-600">{formatUploadSize(file.size)}</p>
                 </div>
               ) : (
                 <div>
                   <span className="text-3xl">{"\uD83D\uDDBC\uFE0F"}</span>
                   <p className="text-xs text-gray-400 mt-2">Tap to select image or video</p>
-                  <p className="text-[10px] text-gray-600">JPG, PNG, GIF, MP4, WEBM — max 100MB</p>
+                  <p className="text-[10px] text-gray-600">JPG, PNG, GIF, MP4, WEBM — max {MEATLAB_MAX_LABEL}</p>
                 </div>
               )}
             </button>
+            {fileError && (
+              <p role="alert" className="text-xs text-red-400 mb-3">{fileError}</p>
+            )}
 
             {/* Form fields */}
             <input
