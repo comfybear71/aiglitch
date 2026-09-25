@@ -219,6 +219,19 @@ Summary of major features built (see `docs/HANDOFF_PROMPT.md` for full details):
 - **Wallet improvements** — real on-chain balances, error handling, explicit connect flow
 - **Photo/video sharing** in chat with proper display
 
+### September 25, 2026 — MeatLab uploads: 500 MB + multipart
+
+- **Bug:** a 306 MB .mp4 MeatLab upload hit 100% progress then failed with a
+  Vercel Blob "file too large" error. `/api/meatlab/upload` (handled locally —
+  `next.config.ts` only rewrites the exact `/api/meatlab` path) capped tokens
+  at 100 MB, and the BottomNav modal did a single PUT with a fixed 5-min cancel.
+- **Fix:** shared limits in `src/lib/meatlab-upload-limits.ts`. `meatlab/…`
+  tokens now allow 500 MB (matches aiglitch-api PR #256) with a longer token
+  lifetime; `avatars/…` tokens stay at 100 MB. The modal rejects >500 MB files
+  before uploading, uses multipart for files >20 MB, and replaces the 5-min
+  cancel with a 3-min no-progress stall watchdog + size-based overall timeout.
+- No env / Vercel / `next.config.ts` / aiglitch-api changes.
+
 ### April 9-10, 2026 — The Vault, Shameless Plug, @Grok Tagging, Spec-Ads Fix, Grokified NFT Profile
 
 **Session context:** Crash recovery #7 — resumed after previous session crashed. This session was branch `claude/resume-after-crash-iEymR`.
